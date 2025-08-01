@@ -1,0 +1,838 @@
+# GitHub Projects GraphQL Query Templates
+# Collection of useful GraphQL queries for GitHub Projects v2
+# Use with: gh api graphql -H X-Github-Next-Global-ID:1 -f query='<QUERY>'
+
+discovery:
+  current_user_info:
+    description: "Get current user ID and login for GraphQL queries"
+    query: |
+      query {
+        viewer {
+          id
+          login
+          name
+          email
+        }
+      }
+    
+  user_projects:
+    description: "List all projects for the current user"
+    query: |
+      query {
+        viewer {
+          projectsV2(first: 20) {
+            nodes {
+              id
+              number
+              title
+              shortDescription
+              closed
+              createdAt
+              updatedAt
+              items(first: 1) {
+                totalCount
+              }
+            }
+          }
+        }
+      }
+
+  organization_projects:
+    description: "List projects for organizations the user belongs to"
+    query: |
+      query {
+        viewer {
+          login
+          organizations(first: 10) {
+            nodes {
+              login
+              name
+              projectsV2(first: 10) {
+                nodes {
+                  id
+                  number
+                  title
+                  shortDescription
+                  closed
+                  items(first: 1) {
+                    totalCount
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+  specific_organization_projects:
+    description: "List projects for a specific organization"
+    parameters:
+      - name: "orgLogin"
+        type: "String!"
+        description: "Organization login name"
+    query: |
+      query($orgLogin: String!) {
+        organization(login: $orgLogin) {
+          login
+          name
+          projectsV2(first: 20) {
+            nodes {
+              id
+              number
+              title
+              shortDescription
+              closed
+              createdAt
+              updatedAt
+              items(first: 1) {
+                totalCount
+              }
+            }
+          }
+        }
+      }
+
+  repository_projects:
+    description: "List projects linked to a specific repository"
+    parameters:
+      - name: "owner"
+        type: "String!"
+        description: "Repository owner"
+      - name: "name"
+        type: "String!"
+        description: "Repository name"
+    query: |
+      query($owner: String!, $name: String!) {
+        repository(owner: $owner, name: $name) {
+          name
+          owner {
+            login
+          }
+          projectsV2(first: 20) {
+            nodes {
+              id
+              number
+              title
+              shortDescription
+              closed
+              items(first: 1) {
+                totalCount
+              }
+            }
+          }
+        }
+      }
+
+project_structure:
+  project_fields:
+    description: "Get all fields and their types for a project"
+    parameters:
+      - name: "projectNumber"
+        type: "Int!"
+        description: "Project number"
+    query: |
+      query($projectNumber: Int!) {
+        viewer {
+          projectV2(number: $projectNumber) {
+            id
+            title
+            fields(first: 50) {
+              nodes {
+                ... on ProjectV2Field {
+                  id
+                  name
+                  dataType
+                }
+                ... on ProjectV2SingleSelectField {
+                  id
+                  name
+                  dataType
+                  options {
+                    id
+                    name
+                    color
+                    description
+                  }
+                }
+                ... on ProjectV2IterationField {
+                  id
+                  name
+                  dataType
+                  configuration {
+                    duration
+                    startDay
+                    iterations {
+                      id
+                      title
+                      startDate
+                      duration
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+  organization_project_fields:
+    description: "Get all fields for an organization project"
+    parameters:
+      - name: "orgLogin"
+        type: "String!"
+        description: "Organization login"
+      - name: "projectNumber"
+        type: "Int!"
+        description: "Project number"
+    query: |
+      query($orgLogin: String!, $projectNumber: Int!) {
+        organization(login: $orgLogin) {
+          projectV2(number: $projectNumber) {
+            id
+            title
+            fields(first: 50) {
+              nodes {
+                ... on ProjectV2Field {
+                  id
+                  name
+                  dataType
+                }
+                ... on ProjectV2SingleSelectField {
+                  id
+                  name
+                  dataType
+                  options {
+                    id
+                    name
+                    color
+                    description
+                  }
+                }
+                ... on ProjectV2IterationField {
+                  id
+                  name
+                  dataType
+                  configuration {
+                    duration
+                    startDay
+                    iterations {
+                      id
+                      title
+                      startDate
+                      duration
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+item_queries:
+  user_project_items_full:
+    description: "Get all items with full field data for a user project"
+    parameters:
+      - name: "projectNumber"
+        type: "Int!"
+        description: "Project number"
+    query: |
+      query($projectNumber: Int!) {
+        viewer {
+          projectV2(number: $projectNumber) {
+            id
+            title
+            items(first: 100) {
+              nodes {
+                id
+                content {
+                  ... on Issue {
+                    title
+                    number
+                    body
+                    state
+                    repository {
+                      name
+                      owner {
+                        login
+                      }
+                    }
+                    assignees(first: 10) {
+                      nodes {
+                        login
+                        name
+                      }
+                    }
+                    labels(first: 10) {
+                      nodes {
+                        name
+                        color
+                      }
+                    }
+                  }
+                  ... on PullRequest {
+                    title
+                    number
+                    body
+                    state
+                    repository {
+                      name
+                      owner {
+                        login
+                      }
+                    }
+                    assignees(first: 10) {
+                      nodes {
+                        login
+                        name
+                      }
+                    }
+                    labels(first: 10) {
+                      nodes {
+                        name
+                        color
+                      }
+                    }
+                  }
+                  ... on DraftIssue {
+                    title
+                    body
+                  }
+                }
+                fieldValues(first: 30) {
+                  nodes {
+                    ... on ProjectV2ItemFieldSingleSelectValue {
+                      name
+                      color
+                      description
+                      field {
+                        ... on ProjectV2SingleSelectField {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldTextValue {
+                      text
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldNumberValue {
+                      number
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldUserValue {
+                      users(first: 10) {
+                        nodes {
+                          login
+                          name
+                        }
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldDateValue {
+                      date
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldIterationValue {
+                      title
+                      startDate
+                      duration
+                      field {
+                        ... on ProjectV2IterationField {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldLabelValue {
+                      labels(first: 10) {
+                        nodes {
+                          name
+                          color
+                        }
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldRepositoryValue {
+                      repository {
+                        name
+                        owner {
+                          login
+                        }
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+  organization_project_items_full:
+    description: "Get all items with full field data for an organization project"
+    parameters:
+      - name: "orgLogin"
+        type: "String!"
+        description: "Organization login"
+      - name: "projectNumber"
+        type: "Int!"
+        description: "Project number"
+    query: |
+      query($orgLogin: String!, $projectNumber: Int!) {
+        organization(login: $orgLogin) {
+          projectV2(number: $projectNumber) {
+            id
+            title
+            items(first: 100) {
+              nodes {
+                id
+                content {
+                  ... on Issue {
+                    title
+                    number
+                    body
+                    state
+                    repository {
+                      name
+                      owner {
+                        login
+                      }
+                    }
+                    assignees(first: 10) {
+                      nodes {
+                        login
+                        name
+                      }
+                    }
+                    labels(first: 10) {
+                      nodes {
+                        name
+                        color
+                      }
+                    }
+                  }
+                  ... on PullRequest {
+                    title
+                    number
+                    body
+                    state
+                    repository {
+                      name
+                      owner {
+                        login
+                      }
+                    }
+                    assignees(first: 10) {
+                      nodes {
+                        login
+                        name
+                      }
+                    }
+                    labels(first: 10) {
+                      nodes {
+                        name
+                        color
+                      }
+                    }
+                  }
+                  ... on DraftIssue {
+                    title
+                    body
+                  }
+                }
+                fieldValues(first: 30) {
+                  nodes {
+                    ... on ProjectV2ItemFieldSingleSelectValue {
+                      name
+                      color
+                      description
+                      field {
+                        ... on ProjectV2SingleSelectField {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldTextValue {
+                      text
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldNumberValue {
+                      number
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldUserValue {
+                      users(first: 10) {
+                        nodes {
+                          login
+                          name
+                        }
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldDateValue {
+                      date
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldIterationValue {
+                      title
+                      startDate
+                      duration
+                      field {
+                        ... on ProjectV2IterationField {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldLabelValue {
+                      labels(first: 10) {
+                        nodes {
+                          name
+                          color
+                        }
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldRepositoryValue {
+                      repository {
+                        name
+                        owner {
+                          login
+                        }
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+filtering:
+  items_by_repository:
+    description: "Get project items filtered by repository (post-process with jq)"
+    note: "Use jq to filter: | jq '.data.viewer.projectV2.items.nodes[] | select(.content.repository.name == \"repo-name\")'"
+    parameters:
+      - name: "projectNumber"
+        type: "Int!"
+        description: "Project number"
+    query: |
+      query($projectNumber: Int!) {
+        viewer {
+          projectV2(number: $projectNumber) {
+            id
+            title
+            items(first: 100) {
+              nodes {
+                id
+                content {
+                  ... on Issue {
+                    title
+                    number
+                    repository {
+                      name
+                      owner { login }
+                    }
+                  }
+                  ... on PullRequest {
+                    title
+                    number
+                    repository {
+                      name
+                      owner { login }
+                    }
+                  }
+                }
+                fieldValues(first: 20) {
+                  nodes {
+                    ... on ProjectV2ItemFieldSingleSelectValue {
+                      name
+                      field {
+                        ... on ProjectV2SingleSelectField {
+                          name
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+  items_by_assignee:
+    description: "Get project items filtered by assignee (post-process with jq)"
+    note: "Use jq to filter: | jq '.data.viewer.projectV2.items.nodes[] | select(.content.assignees.nodes[].login == \"username\")'"
+    parameters:
+      - name: "projectNumber"
+        type: "Int!"
+        description: "Project number"
+    query: |
+      query($projectNumber: Int!) {
+        viewer {
+          projectV2(number: $projectNumber) {
+            id
+            title
+            items(first: 100) {
+              nodes {
+                id
+                content {
+                  ... on Issue {
+                    title
+                    number
+                    assignees(first: 10) {
+                      nodes {
+                        login
+                        name
+                      }
+                    }
+                  }
+                  ... on PullRequest {
+                    title
+                    number
+                    assignees(first: 10) {
+                      nodes {
+                        login
+                        name
+                      }
+                    }
+                  }
+                }
+                fieldValues(first: 20) {
+                  nodes {
+                    ... on ProjectV2ItemFieldSingleSelectValue {
+                      name
+                      field {
+                        ... on ProjectV2SingleSelectField {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldUserValue {
+                      users(first: 10) {
+                        nodes {
+                          login
+                          name
+                        }
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+  items_by_status:
+    description: "Get project items filtered by status (post-process with jq)"
+    note: "Use jq to filter: | jq '.data.viewer.projectV2.items.nodes[] | select(.fieldValues.nodes[] | select(.field.name == \"Status\" and .name == \"Done\"))'"
+    parameters:
+      - name: "projectNumber"
+        type: "Int!"
+        description: "Project number"
+    query: |
+      query($projectNumber: Int!) {
+        viewer {
+          projectV2(number: $projectNumber) {
+            id
+            title
+            items(first: 100) {
+              nodes {
+                id
+                content {
+                  ... on Issue {
+                    title
+                    number
+                  }
+                  ... on PullRequest {
+                    title
+                    number
+                  }
+                }
+                fieldValues(first: 20) {
+                  nodes {
+                    ... on ProjectV2ItemFieldSingleSelectValue {
+                      name
+                      field {
+                        ... on ProjectV2SingleSelectField {
+                          name
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+utilities:
+  project_by_id:
+    description: "Get project details by GitHub node ID"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+        description: "Project node ID (e.g., PVT_kwHOA-ytfM4A9dGS)"
+    query: |
+      query($projectId: ID!) {
+        node(id: $projectId) {
+          ... on ProjectV2 {
+            id
+            number
+            title
+            shortDescription
+            closed
+            createdAt
+            updatedAt
+            owner {
+              ... on User {
+                login
+                name
+              }
+              ... on Organization {
+                login
+                name
+              }
+            }
+            items(first: 1) {
+              totalCount
+            }
+          }
+        }
+      }
+
+  project_summary:
+    description: "Get a quick summary of project items by status"
+    parameters:
+      - name: "projectNumber"
+        type: "Int!"
+        description: "Project number"
+    query: |
+      query($projectNumber: Int!) {
+        viewer {
+          projectV2(number: $projectNumber) {
+            id
+            title
+            items(first: 100) {
+              totalCount
+              nodes {
+                fieldValues(first: 10) {
+                  nodes {
+                    ... on ProjectV2ItemFieldSingleSelectValue {
+                      name
+                      field {
+                        ... on ProjectV2SingleSelectField {
+                          name
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+# Usage Examples:
+examples:
+  basic_user_projects:
+    command: 'gh api graphql -H X-Github-Next-Global-ID:1 -f query="$(cat github-projects-graphql-queries.yaml | yq .discovery.user_projects.query)"'
+    description: "List all user projects"
+
+  organization_projects:
+    command: 'gh api graphql -H X-Github-Next-Global-ID:1 -f query="$(cat github-projects-graphql-queries.yaml | yq .discovery.specific_organization_projects.query)" -f orgLogin="mountainash-io"'
+    description: "List projects for mountainash-io organization"
+
+  project_items_with_filtering:
+    command: 'gh api graphql -H X-Github-Next-Global-ID:1 -f query="$(cat github-projects-graphql-queries.yaml | yq .item_queries.user_project_items_full.query)" -f projectNumber=3 | jq ".data.viewer.projectV2.items.nodes[] | select(.fieldValues.nodes[] | select(.field.name == \"Priority\" and .name == \"P0\"))"'
+    description: "Get P0 priority items from project 3"
+
+  repository_filter:
+    command: 'gh api graphql -H X-Github-Next-Global-ID:1 -f query="$(cat github-projects-graphql-queries.yaml | yq .filtering.items_by_repository.query)" -f projectNumber=3 | jq ".data.viewer.projectV2.items.nodes[] | select(.content.repository.name == \"radio-waves-curated-streams\")"'
+    description: "Filter items by repository name"
+
+# Field Types Reference:
+field_types:
+  available_types:
+    - TITLE: "Built-in title field"
+    - ASSIGNEES: "Built-in assignees field"
+    - LABELS: "Built-in labels field"
+    - MILESTONE: "Built-in milestone field"
+    - REPOSITORY: "Built-in repository field"
+    - REVIEWERS: "Built-in reviewers field"
+    - LINKED_PULL_REQUESTS: "Built-in linked PRs field"
+    - PARENT_ISSUE: "Built-in parent issue field"
+    - SUB_ISSUES_PROGRESS: "Built-in sub-issues progress field"
+    - TEXT: "Custom text field"
+    - NUMBER: "Custom number field"
+    - DATE: "Custom date field"
+    - SINGLE_SELECT: "Custom single-select dropdown"
+    - ITERATION: "Custom iteration field"
+
+  field_value_types:
+    - ProjectV2ItemFieldSingleSelectValue: "Single-select field values"
+    - ProjectV2ItemFieldTextValue: "Text field values"
+    - ProjectV2ItemFieldNumberValue: "Number field values"
+    - ProjectV2ItemFieldUserValue: "User field values"
+    - ProjectV2ItemFieldDateValue: "Date field values"
+    - ProjectV2ItemFieldIterationValue: "Iteration field values"
+    - ProjectV2ItemFieldLabelValue: "Label field values"
+    - ProjectV2ItemFieldRepositoryValue: "Repository field values"
