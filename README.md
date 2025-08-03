@@ -182,7 +182,7 @@ fetch_org_project 2 "acme-corp" | apply_repo_filter "main-app" | list_assignees
 
 ### Option 1: Clone and Use Directly
 
-1. Clone this repository to your local machine:
+1. Clone this repository to your local machine or directly into your project:
 ```bash
 git clone https://github.com/yourusername/hiivmind-github-projects.git
 cd hiivmind-github-projects
@@ -298,6 +298,9 @@ fetch_org_project 2 "acme-corp" | jq -r '
 
 3. **"yq: command not found"**
    - Install yq: `brew install yq` (macOS) or download from https://github.com/mikefarah/yq
+   - Tested with v4.47.1 installed via direct binary download from https://github.com/mikefarah/yq
+   - The snap install may have permission issues depending on where you install the bash and yaml files
+
 
 4. **Empty results**
    - Check project number and organization name

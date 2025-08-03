@@ -304,7 +304,7 @@ discovery_filters:
         context: "all",
         user: .data.viewer.login,
         personalProjects: [
-          .data.viewer.projectsV2.nodes[] | {
+          (.data.viewer.projectsV2.nodes // [])[] | {
             number: .number,
             title: .title,
             description: (.shortDescription // "No description"),
@@ -329,10 +329,10 @@ discovery_filters:
           }
         ],
         summary: {
-          totalPersonal: (.data.viewer.projectsV2.nodes | length),
+          totalPersonal: ((.data.viewer.projectsV2.nodes // []) | length),
           totalOrganizations: (.data.viewer.organizations.nodes | length),
-          totalOrgProjects: [.data.viewer.organizations.nodes[].projectsV2.nodes[] | length] | add // 0,
-          totalProjects: ((.data.viewer.projectsV2.nodes | length) + ([.data.viewer.organizations.nodes[].projectsV2.nodes[] | length] | add // 0))
+          totalOrgProjects: ([.data.viewer.organizations.nodes[].projectsV2.nodes[]] | length),
+          totalProjects: (((.data.viewer.projectsV2.nodes // []) | length) + ([.data.viewer.organizations.nodes[].projectsV2.nodes[]] | length))
         }
       }
 

@@ -1,5 +1,10 @@
-# GitHub Project Explorer Command
+---
+command: hv-gh-project-explorer
+allowed-tools: Bash(source .hiivmind/:*)
+description: Comprehensive GitHub Projects v2 analysis tool with filtering, discovery, field inspection, and multiple output formats using YAML template imports.
+---
 
+# GitHub Project Explorer Command
 Comprehensive GitHub Projects v2 analysis tool with filtering, discovery, field inspection, and multiple output formats using YAML template imports.
 
 **Default Behavior**: Lists all project items with summary format output. Use `--help` for additional options and related commands.
@@ -11,7 +16,7 @@ Comprehensive GitHub Projects v2 analysis tool with filtering, discovery, field 
 /hv-gh-project-explorer --help
 ```
 
-### Parameters
+### Command Parameters
 
 - `project_number`: Project number (required)
 - `owner`: Organization/user name (defaults to current user)
@@ -40,32 +45,39 @@ Comprehensive GitHub Projects v2 analysis tool with filtering, discovery, field 
 - `--count-only`: Show only filtered item count
 - `--help`: Show usage examples, available flags, and related commands
 
-### Examples
+### Further Usage Examples
 
 ```claude-code
 # Show help with all options and related commands
 /hv-gh-project-explorer --help
 
-# Basic dashboard - shows all items with summary format (default behavior)
-/hv-gh-project-explorer 2 mountainash-io org
+# Basic project dashboard - shows all items with summary format (default behavior)
+/hv-gh-project-explorer 2 my-org-name org
 
 # Show project team assignees
-/hv-gh-project-explorer 2 mountainash-io org --list-assignees
+/hv-gh-project-explorer 2 my-org-name org --list-assignees
 
 # Inspect project structure
-/hv-gh-project-explorer 2 mountainash-io org --list-fields
+/hv-gh-project-explorer 2 my-org-name org --list-fields
 
 # Filter by assignee with JSON output
-/hv-gh-project-explorer 2 mountainash-io org --assignee=discreteds --format=json
+/hv-gh-project-explorer 2 my-org-name org --assignee=my_username --format=json
 
 # Multiple filters with count
-/hv-gh-project-explorer 2 mountainash-io org --assignee=discreteds --status=Backlog --count-only
+/hv-gh-project-explorer 2 my-org-name org --assignee=my_username --status=Backlog --count-only
 
 # Table view with limit
-/hv-gh-project-explorer 2 mountainash-io org --format=table --limit=20
+/hv-gh-project-explorer 2 my-org-name org --format=table --limit=20
 
-# Complex analysis
-/hv-gh-project-explorer 2 mountainash-io org --repo=mountainash-acrds-core --assignee=discreteds --format=summary
+# Focussed summary analysis
+/hv-gh-project-explorer 2 my-org-name org --repo=hiivmind-mcp --assignee=my_username --format=summary
+
+# Repository-specific analysis as a table
+/hv-gh-project-explorer 2 myorg org --repo=myrepo --format=table
+
+# Count high-priority backlog
+/hv-gh-project-explorer 2 myorg org --status=Backlog --priority=P1 --count-only
+
 ```
 
 ## Help Information (--help flag)
@@ -80,6 +92,12 @@ When using `--help`, display this information instead of running any analysis:
 ```
 
 **Default Behavior:** Lists all project items with summary format. No additional flags needed for basic project overview.
+
+### Command Parameters
+
+- `project_number`: Project number (required)
+- `owner`: Organization/user name (defaults to current user)
+- `context`: `user` (default) or `org`
 
 ### All Available Flags
 
@@ -102,24 +120,12 @@ When using `--help`, display this information instead of running any analysis:
 - `--format=table` - Human-readable table
 - `--count-only` - Show only filtered item count
 - `--limit=N` - Limit number of items (max 100)
+- `--help`: Show usage examples, available flags, and related commands
 
 ### Common Usage Patterns
 
 ```claude-code
-# Project overview with summary
-/hv-gh-project-explorer 2 myorg org
 
-# Team discovery
-/hv-gh-project-explorer 2 myorg org --show-assignees
-
-# Filter specific user's work
-/hv-gh-project-explorer 2 myorg org --assignee=username
-
-# Repository-specific analysis
-/hv-gh-project-explorer 2 myorg org --repo=myrepo --format=table
-
-# Count high-priority backlog
-/hv-gh-project-explorer 2 myorg org --status=Backlog --priority=P1 --count-only
 ```
 
 ### Related Commands
@@ -132,16 +138,25 @@ When using `--help`, display this information instead of running any analysis:
 - **Combine Filters**: Most flags can be used together for precise analysis
 - **Use Discovery**: Try `--list-*` flags to understand available values before filtering
 - **Format for Purpose**: Use `--format=summary` for insights, `--format=json` for processing, `--format=table` for viewing
+- **Paramater Inference**: Parameters such as owner and project_number may be inferred from recent chat history, or set in CLAUDE.md
 
 ---
 
 ## LLM Implementation Reference
 
+### Parameter Resolution
+Ensure that command Parameters are provided or inferable from:
+- User's natural language instructions
+- Recent chat history
+- Set in CLAUDE.md
+
+
 ### Core Pattern: Bash Functions with YAML Templates
+
 
 **✅ PRODUCTION APPROACH**: Use bash functions that leverage YAML templates for clean, pipeable commands:
 
-1. **Step 1**: Source the helper functions: `source .hiivmind/gh-project-functions.sh`
+1. **Step 1**: Source the helper functions: `source ~/.hiivmind/github/scripts/gh-project-functions.sh`
 2. **Step 2**: Use pipeable functions for data fetching and processing
 3. **Functions handle**: YAML template extraction, command substitution issues, and data flow
 
@@ -151,7 +166,7 @@ When using `--help`, display this information instead of running any analysis:
 
 ```bash
 # Source helper functions (once per session)
-source .hiivmind/gh-project-functions.sh
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
 
 # Basic organization project analysis
 fetch_org_project PROJECT_NUM "ORG_NAME" | apply_universal_filter "" "" "" ""
@@ -206,18 +221,18 @@ fetch_org_project PROJECT_NUM "ORG_NAME" | apply_assignee_filter "USERNAME" | li
 
 ## Working Examples
 
-### Example 1: Basic Dashboard Analysis
+### Example 1: Basic Explorer Analysis
 
 ```bash
 # Source functions and fetch project data
-source .hiivmind/gh-project-functions.sh
-fetch_org_project 2 "mountainash-io" | apply_universal_filter "" "" "" ""
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
+fetch_org_project 2 "my-org-name" | apply_universal_filter "" "" "" ""
 ```
 
 **Expected JSON Output:**
 ```json
 {
-  "project": "MountainAsh ACRDS",
+  "project": "My Project",
   "description": null,
   "status": false,
   "created": "2024-03-19T04:57:16Z",
@@ -238,16 +253,16 @@ fetch_org_project 2 "mountainash-io" | apply_universal_filter "" "" "" ""
 
 ```bash
 # List project assignees
-source .hiivmind/gh-project-functions.sh
-fetch_org_project 2 "mountainash-io" | list_assignees
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
+fetch_org_project 2 "my-org-name" | list_assignees
 ```
 
 **Expected JSON Output:**
 ```json
 {
-  "project": "MountainAsh ACRDS",
+  "project": "My Project",
   "assignees": [
-    "discreteds"
+    "my_username"
   ]
 }
 ```
@@ -256,19 +271,17 @@ fetch_org_project 2 "mountainash-io" | list_assignees
 
 ```bash
 # List all repositories
-source .hiivmind/gh-project-functions.sh
-fetch_org_project 2 "mountainash-io" | list_repositories
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
+fetch_org_project 2 "my-org-name" | list_repositories
 ```
 
 **Expected JSON Output:**
 ```json
 {
-  "project": "MountainAsh ACRDS",
+  "project": "My Project",
   "repositories": [
-    "mountainash-acrds-core",
-    "mountainash-acrds-dagster",
-    "mountainash-settings",
-    "mountainash-utils-ssh"
+    "hiivmind",
+    "hiivmind-mcp",
   ]
 }
 ```
@@ -277,17 +290,17 @@ fetch_org_project 2 "mountainash-io" | list_repositories
 
 ```bash
 # Filter by assignee
-source .hiivmind/gh-project-functions.sh
-fetch_org_project 2 "mountainash-io" | apply_assignee_filter "discreteds"
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
+fetch_org_project 2 "my-org-name" | apply_assignee_filter "my_username"
 ```
 
 **Expected JSON Output:**
 ```json
 {
-  "project": "MountainAsh ACRDS",
+  "project": "My Project",
   "totalItems": 118,
   "filters": {
-    "assignee": "discreteds"
+    "assignee": "my_username"
   },
   "filteredItems": [...],
   "filteredCount": 30
@@ -298,14 +311,14 @@ fetch_org_project 2 "mountainash-io" | apply_assignee_filter "discreteds"
 
 ```bash
 # Show all status values
-source .hiivmind/gh-project-functions.sh
-fetch_org_project 2 "mountainash-io" | list_statuses
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
+fetch_org_project 2 "my-org-name" | list_statuses
 ```
 
 **Expected JSON Output:**
 ```json
 {
-  "project": "MountainAsh ACRDS",
+  "project": "My Project",
   "statuses": [
     "Backlog",
     "Housekeeping",
@@ -320,16 +333,16 @@ fetch_org_project 2 "mountainash-io" | list_statuses
 
 ```bash
 # Multiple criteria with universal filter
-source .hiivmind/gh-project-functions.sh
-fetch_org_project 2 "mountainash-io" | apply_universal_filter "mountainash-acrds-core" "discreteds" "Backlog" "P1"
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
+fetch_org_project 2 "my-org-name" | apply_universal_filter "hiivmind-mcp" "my_username" "Backlog" "P1"
 ```
 
 ### Example 7: Count Analysis
 
 ```bash
 # Get filtered count only
-source .hiivmind/gh-project-functions.sh
-fetch_org_project 2 "mountainash-io" | apply_assignee_filter "discreteds" | get_count
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
+fetch_org_project 2 "my-org-name" | apply_assignee_filter "my_username" | get_count
 ```
 
 **Expected Output:**
@@ -341,8 +354,8 @@ fetch_org_project 2 "mountainash-io" | apply_assignee_filter "discreteds" | get_
 
 ```bash
 # Discovery on filtered data
-source .hiivmind/gh-project-functions.sh
-fetch_org_project 2 "mountainash-io" | apply_assignee_filter "discreteds" | list_repositories
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
+fetch_org_project 2 "my-org-name" | apply_assignee_filter "my_username" | list_repositories
 ```
 
 ---
@@ -353,9 +366,9 @@ fetch_org_project 2 "mountainash-io" | apply_assignee_filter "discreteds" | list
 
 | Flag | Function Pattern | Example |
 |------|------------------|---------|
-| `--assignee=discreteds` | `apply_assignee_filter "discreteds"` | Filter by user |
+| `--assignee=my_username` | `apply_assignee_filter "my_username"` | Filter by user |
 | `--status=Backlog` | `apply_status_filter "Backlog"` | Filter by status |
-| `--repo=mountainash-core` | `apply_repo_filter "mountainash-core"` | Filter by repository |
+| `--repo=hiivmind-mcp` | `apply_repo_filter "hiivmind-mcp"` | Filter by repository |
 | `--priority=P1` | Universal filter with priority | Filter by priority |
 
 ### Discovery Flags → Function Calls
@@ -389,40 +402,40 @@ fetch_org_project 2 "mountainash-io" | apply_assignee_filter "discreteds" | list
 
 ```bash
 # 1. Discover team members
-source .hiivmind/gh-project-functions.sh
-fetch_org_project 2 "mountainash-io" | list_assignees
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
+fetch_org_project 2 "my-org-name" | list_assignees
 
 # 2. Analyze each team member's work
-fetch_org_project 2 "mountainash-io" | apply_assignee_filter "discreteds" | list_statuses
+fetch_org_project 2 "my-org-name" | apply_assignee_filter "my_username" | list_statuses
 
 # 3. Find high-priority backlog for user
-fetch_org_project 2 "mountainash-io" | apply_universal_filter "" "discreteds" "Backlog" "P0"
+fetch_org_project 2 "my-org-name" | apply_universal_filter "" "my_username" "Backlog" "P0"
 ```
 
 ### Repository Focus Analysis
 
 ```bash
 # 1. Find all repositories
-source .hiivmind/gh-project-functions.sh
-fetch_org_project 2 "mountainash-io" | list_repositories
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
+fetch_org_project 2 "my-org-name" | list_repositories
 
 # 2. Analyze specific repository
-fetch_org_project 2 "mountainash-io" | apply_repo_filter "mountainash-acrds-core"
+fetch_org_project 2 "my-org-name" | apply_repo_filter "hiivmind-mcp"
 
 # 3. Find repository team
-fetch_org_project 2 "mountainash-io" | apply_repo_filter "mountainash-acrds-core" | list_assignees
+fetch_org_project 2 "my-org-name" | apply_repo_filter "hiivmind-mcp" | list_assignees
 ```
 
 ### Status Flow Analysis
 
 ```bash
 # 1. Show status distribution
-source .hiivmind/gh-project-functions.sh
-fetch_org_project 2 "mountainash-io" | list_statuses
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
+fetch_org_project 2 "my-org-name" | list_statuses
 
 # 2. Count items in each status
 for status in "Backlog" "Ready" "Shipped"; do
-  count=$(fetch_org_project 2 "mountainash-io" | apply_status_filter "$status" | get_count)
+  count=$(fetch_org_project 2 "my-org-name" | apply_status_filter "$status" | get_count)
   echo "$status: $count items"
 done
 ```
@@ -436,9 +449,9 @@ done
 | Template | Replace With | Example |
 |----------|--------------|---------|
 | `PROJECT_NUM` | Project number | `2` |
-| `ORG_NAME` | Organization login | `"mountainash-io"` |
-| `USERNAME` | Assignee username | `"discreteds"` |
-| `REPO` | Repository name | `"mountainash-acrds-core"` |
+| `ORG_NAME` | Organization login | `"my-org-name"` |
+| `USERNAME` | Assignee username | `"my_username"` |
+| `REPO` | Repository name | `"hiivmind-mcp"` |
 | `STATUS` | Status value | `"Backlog"` |
 | `PRIORITY` | Priority value | `"P1"` |
 
@@ -480,7 +493,7 @@ done
 ```bash
 # Standard usage pattern for LLM implementation:
 # 1. Source functions once per session
-source .hiivmind/gh-project-functions.sh
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
 
 # 2. Execute appropriate bash pipeline to get JSON data
 fetch_org_project PROJECT_NUM "ORG_NAME" | [filter_functions]
@@ -501,8 +514,8 @@ fetch_org_project PROJECT_NUM "ORG_NAME" | [filter_functions]
 **Step 1: Execute Bash Pipeline**
 ```bash
 # Get JSON data using appropriate bash functions
-source .hiivmind/gh-project-functions.sh
-result=$(fetch_org_project 2 "mountainash-io" | apply_assignee_filter "discreteds")
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
+result=$(fetch_org_project 2 "my-org-name" | apply_assignee_filter "my_username")
 ```
 
 **Step 2: Format According to Flag**
@@ -512,7 +525,7 @@ result=$(fetch_org_project 2 "mountainash-io" | apply_assignee_filter "discreted
 - `--count-only` → Extract count number only using `get_count`
 
 **Step 3: Present Results**
-- **Summary**: "The project has 30 items assigned to discreteds, with 15 in Backlog status and 8 high-priority (P1/P2) items..."
+- **Summary**: "The project has 30 items assigned to my_username, with 15 in Backlog status and 8 high-priority (P1/P2) items..."
 - **JSON**: Return raw JSON structure
 - **Table**: Create properly aligned table with columns and headers
 - **Count**: "30"
@@ -545,7 +558,7 @@ result=$(fetch_org_project 2 "org" | apply_filters)
 
 - **Consolidates 4 previous commands** into single interface
 - **Backwards compatible** through function layer (existing scripts still work)
-- **All examples tested** with real project data (mountainash-io project #2)
+- **All examples tested** with real project data (my-org-name project #2)
 - **Pipeline architecture validated** with process substitution and proper error handling
 - **Universal filter handles** all parameter combinations with empty string logic
 - **Discovery commands integrated** with consistent `--list-*` flag pattern
@@ -554,7 +567,7 @@ result=$(fetch_org_project 2 "org" | apply_filters)
 - **Memory efficient** streaming eliminates intermediate file storage
 - **Clean flag system** replaces complex parameter variations
 
-## Available Functions Reference
+## Available Bash Functions Reference
 
 ### Core Functions
 - `fetch_org_project PROJECT_NUM "ORG_NAME"` - Fetch organization project data
@@ -567,7 +580,6 @@ result=$(fetch_org_project 2 "org" | apply_filters)
 - `apply_status_filter "STATUS"` - Filter by status
 
 ### Discovery Functions
-<!-- - `list_items` - List all assignees (`--list-items`) -->
 - `list_assignees` - List all assignees (`--list-assignees`)
 - `list_repositories` - List all repositories (`--list-repos`)
 - `list_statuses` - List all status values (`--list-statuses`)

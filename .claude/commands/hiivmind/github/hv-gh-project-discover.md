@@ -1,3 +1,8 @@
+---
+command: hv-gh-project-discover
+allowed-tools: Bash(source ~/.hiivmind/github/scripts/gh-project-functions.sh), Bash(open ~/.hiivmind/github/scripts/config/gh-project-jq-filters.yaml), Bash(open ~/.hiivmind/github/scripts/config/gh-project-graphql-queries.yaml)
+description: Analyze current Git workflow state and provide intelligent next-step recommendations. Based on GitFlow conventions and best practices.
+---
 # GitHub Project Discovery Command
 
 Discover GitHub Projects across user, organization, and repository contexts using YAML template imports.
@@ -21,17 +26,17 @@ Discover GitHub Projects across user, organization, and repository contexts usin
 - `repo` - List repository projects (requires owner and repository)
 - `all` - List all accessible projects (personal + organizations)
 
-### Examples
+### Usage Examples
 
 ```claude-code
 # Basic user discovery
 /hv-gh-project-discover
 
 # Organization discovery
-/hv-gh-project-discover org mountainash-io
+/hv-gh-project-discover org hiivmind
 
 # Repository discovery
-/hv-gh-project-discover repo mountainash-io mountainash-settings
+/hv-gh-project-discover repo hiivmind mountainash-settings
 
 # All accessible projects
 /hv-gh-project-discover all
@@ -45,7 +50,7 @@ Discover GitHub Projects across user, organization, and repository contexts usin
 
 **✅ PRODUCTION APPROACH**: Use bash functions that leverage YAML templates for clean, pipeable commands:
 
-1. **Step 1**: Source the helper functions: `source .hiivmind/gh-project-functions.sh`
+1. **Step 1**: Source the helper functions: `source ~/.hiivmind/github/scripts/gh-project-functions.sh`
 2. **Step 2**: Use pipeable functions for data fetching and formatting
 3. **Functions handle**: YAML template extraction, command substitution issues, and data flow
 
@@ -55,7 +60,7 @@ Discover GitHub Projects across user, organization, and repository contexts usin
 
 ```bash
 # Source helper functions (once per session)
-source .hiivmind/gh-project-functions.sh
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
 
 # Basic user project discovery
 discover_user_projects | format_user_projects
@@ -65,7 +70,7 @@ discover_user_projects | format_user_projects
 
 ```bash
 # Source helper functions (once per session)
-source .hiivmind/gh-project-functions.sh
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
 
 # Organization project discovery
 discover_org_projects "ORG_NAME" | format_org_projects "ORG_NAME"
@@ -75,7 +80,7 @@ discover_org_projects "ORG_NAME" | format_org_projects "ORG_NAME"
 
 ```bash
 # Source helper functions (once per session)
-source .hiivmind/gh-project-functions.sh
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
 
 # Repository project discovery
 discover_repo_projects "OWNER" "REPO_NAME" | format_repo_projects "OWNER" "REPO_NAME"
@@ -85,7 +90,7 @@ discover_repo_projects "OWNER" "REPO_NAME" | format_repo_projects "OWNER" "REPO_
 
 ```bash
 # Source helper functions (once per session)
-source .hiivmind/gh-project-functions.sh
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
 
 # All accessible projects discovery
 discover_all_projects | format_all_projects
@@ -99,7 +104,7 @@ discover_all_projects | format_all_projects
 
 ```bash
 # Source functions and discover user projects
-source .hiivmind/gh-project-functions.sh
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
 discover_user_projects | format_user_projects
 ```
 
@@ -107,7 +112,7 @@ discover_user_projects | format_user_projects
 ```json
 {
   "context": "user",
-  "user": "discreteds",
+  "user": "my_username",
   "projects": [
     {
       "number": 7,
@@ -136,8 +141,8 @@ discover_user_projects | format_user_projects
 
 ```bash
 # Source functions and discover organization projects
-source .hiivmind/gh-project-functions.sh
-discover_org_projects "mountainash-io" | format_org_projects "mountainash-io"
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
+discover_org_projects "hiivmind" | format_org_projects "hiivmind"
 ```
 
 **Expected JSON Output:**
@@ -146,7 +151,7 @@ discover_org_projects "mountainash-io" | format_org_projects "mountainash-io"
   "context": "organization",
   "organization": {
     "name": "MountainAsh",
-    "login": "mountainash-io"
+    "login": "hiivmind"
   },
   "projects": [
     {
@@ -176,8 +181,8 @@ discover_org_projects "mountainash-io" | format_org_projects "mountainash-io"
 
 ```bash
 # Source functions and discover repository projects
-source .hiivmind/gh-project-functions.sh
-discover_repo_projects "mountainash-io" "mountainash-settings" | format_repo_projects "mountainash-io" "mountainash-settings"
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
+discover_repo_projects "hiivmind" "mountainash-settings" | format_repo_projects "hiivmind" "mountainash-settings"
 ```
 
 **Expected JSON Output:**
@@ -186,8 +191,8 @@ discover_repo_projects "mountainash-io" "mountainash-settings" | format_repo_pro
   "context": "repository",
   "repository": {
     "name": "mountainash-settings",
-    "owner": "mountainash-io",
-    "fullName": "mountainash-io/mountainash-settings"
+    "owner": "hiivmind",
+    "fullName": "hiivmind/mountainash-settings"
   },
   "projects": [
     {
@@ -206,7 +211,7 @@ discover_repo_projects "mountainash-io" "mountainash-settings" | format_repo_pro
 
 ```bash
 # Source functions and discover all accessible projects
-source .hiivmind/gh-project-functions.sh
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
 discover_all_projects | format_all_projects
 ```
 
@@ -214,7 +219,7 @@ discover_all_projects | format_all_projects
 ```json
 {
   "context": "all",
-  "user": "discreteds",
+  "user": "my_username",
   "personalProjects": [
     {
       "number": 7,
@@ -235,7 +240,7 @@ discover_all_projects | format_all_projects
       "context": "organization",
       "organization": {
         "name": "MountainAsh",
-        "login": "mountainash-io"
+        "login": "hiivmind"
       }
     }
   ],
@@ -252,16 +257,16 @@ discover_all_projects | format_all_projects
 
 ```bash
 # Count user projects
-source .hiivmind/gh-project-functions.sh
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
 discover_user_projects | format_user_projects | jq '.totalCount'
 
 # Get only open organization projects
-source .hiivmind/gh-project-functions.sh
-discover_org_projects "mountainash-io" | format_org_projects "mountainash-io" | jq '.projects[] | select(.status == "OPEN")'
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
+discover_org_projects "hiivmind" | format_org_projects "hiivmind" | jq '.projects[] | select(.status == "OPEN")'
 
 # Extract project numbers for organization
-source .hiivmind/gh-project-functions.sh
-discover_org_projects "mountainash-io" | format_org_projects "mountainash-io" | jq '.projects[].number'
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
+discover_org_projects "hiivmind" | format_org_projects "hiivmind" | jq '.projects[].number'
 ```
 
 ---
@@ -272,8 +277,8 @@ discover_org_projects "mountainash-io" | format_org_projects "mountainash-io" | 
 
 | Template | Replace With | Example |
 |----------|--------------|---------|
-| `ORG_NAME` | Organization login | `"mountainash-io"` |
-| `OWNER` | Repository owner | `"mountainash-io"` |
+| `ORG_NAME` | Organization login | `"hiivmind"` |
+| `OWNER` | Repository owner | `"hiivmind"` |
 | `REPO_NAME` | Repository name | `"mountainash-settings"` |
 
 ### YAML Template Paths
@@ -341,6 +346,8 @@ All commands return structured JSON that LLMs can interpret and present in vario
 
 ## Available Functions Reference
 
+IMPORTANT: Before execution, ensure that the constructed command is based on these available functions!
+
 ### Discovery Functions
 - `discover_user_projects` - Discover current user's projects
 - `discover_org_projects "ORG_NAME"` - Discover organization projects
@@ -359,98 +366,92 @@ All commands return structured JSON that LLMs can interpret and present in vario
 - **Filtered Results**: `discover_org_projects "org" | format_org_projects "org" | jq '.projects[] | select(.status == "OPEN")'`
 - **Data Extraction**: `discover_all_projects | format_all_projects | jq '.summary.totalProjects'`
 
-## Next Steps: Using Projects with Dashboard Command
+## Next Steps: Using Projects with Explorer Command
 
-After discovering projects, use the **project numbers** with the dashboard command for detailed analysis:
+After discovering projects, use the **project numbers** with the explorer command for detailed analysis:
 
-### From Discovery Results to Dashboard Analysis
+### From Discovery Results to Explorer Analysis
 
 ```bash
 # 1. Discover projects first
-source .hiivmind/gh-project-functions.sh
-discover_org_projects "mountainash-io" | format_org_projects "mountainash-io"
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
+discover_org_projects "hiivmind" | format_org_projects "hiivmind"
 
-# 2. Use project numbers from results with dashboard command
+# 2. Use project numbers from results with explorer command
 # For project #2 (MountainAsh ACRDS):
-/hv-gh-project-explorer 2 mountainash-io org
+/hv-gh-project-explorer 2 hiivmind org
 
 # For project #6 (HiivMind):
-/hv-gh-project-explorer 6 mountainash-io org
+/hv-gh-project-explorer 6 hiivmind org
 
 # For project #7 (HiivMind MCP):
-/hv-gh-project-explorer 7 mountainash-io org
+/hv-gh-project-explorer 7 hiivmind org
 ```
 
-### Common Discovery → Dashboard Workflows
+### Common Discovery → Explorer Workflows
 
 #### 1. Find Largest Project for Analysis
 ```bash
 # Discover and extract largest project
-source .hiivmind/gh-project-functions.sh
-PROJECT_NUM=$(discover_org_projects "mountainash-io" | format_org_projects "mountainash-io" | jq -r '.projects | max_by(.items) | .number')
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
+PROJECT_NUM=$(discover_org_projects "hiivmind" | format_org_projects "hiivmind" | jq -r '.projects | max_by(.items) | .number')
 echo "Analyzing largest project #$PROJECT_NUM"
 
-# Use in dashboard
-/hv-gh-project-explorer $PROJECT_NUM mountainash-io org
+# Use in explorer
+/hv-gh-project-explorer $PROJECT_NUM hiivmind org
 ```
 
 #### 2. Analyze All Active Projects
 ```bash
 # Get all open project numbers
-source .hiivmind/gh-project-functions.sh
-discover_org_projects "mountainash-io" | format_org_projects "mountainash-io" | jq -r '.projects[] | select(.status == "OPEN") | "#\(.number) - \(.title) (\(.items) items)"'
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
+discover_org_projects "hiivmind" | format_org_projects "hiivmind" | jq -r '.projects[] | select(.status == "OPEN") | "#\(.number) - \(.title) (\(.items) items)"'
 
-# Then analyze each with dashboard:
-# /hv-gh-project-explorer 2 mountainash-io org
-# /hv-gh-project-explorer 5 mountainash-io org
-# /hv-gh-project-explorer 6 mountainash-io org
-# /hv-gh-project-explorer 7 mountainash-io org
+# Then analyze each with explorer:
+# /hv-gh-project-explorer 2 hiivmind org
+# /hv-gh-project-explorer 5 hiivmind org
 ```
 
 #### 3. Quick Project Reference Guide
 ```bash
-# Generate dashboard command templates for all projects
-source .hiivmind/gh-project-functions.sh
-discover_org_projects "mountainash-io" | format_org_projects "mountainash-io" | jq -r '.projects[] | select(.status == "OPEN") | "/hv-gh-project-explorer \(.number) mountainash-io org  # \(.title) (\(.items) items)"'
+# Generate explorer command templates for all projects
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
+discover_org_projects "hiivmind" | format_org_projects "hiivmind" | jq -r '.projects[] | select(.status == "OPEN") | "/hv-gh-project-explorer \(.number) hiivmind org  # \(.title) (\(.items) items)"'
 ```
 
 **Example Output (Ready-to-Use Commands):**
 ```bash
-/hv-gh-project-explorer 7 mountainash-io org  # HiivMind MCP (7 items)
-/hv-gh-project-explorer 6 mountainash-io org  # HiivMind (13 items)
-/hv-gh-project-explorer 5 mountainash-io org  # MountainAsh MCP - Typescript (11 items)
-/hv-gh-project-explorer 2 mountainash-io org  # MountainAsh ACRDS (118 items)
+/hv-gh-project-explorer 2 hiivmind org  # HiivMind MCP (7 items)
+/hv-gh-project-explorer 5 hiivmind org  # HiivMind (13 items)
 ```
 
-### Dashboard Command Reference
+### Explorer Command Reference
 
 Once you have project numbers from discovery, use these patterns:
 
-| Discovery Result | Dashboard Command | Purpose |
+| Discovery Result | Explorer Command | Purpose |
 |------------------|-------------------|---------|
-| Project #2 (118 items) | `/hv-gh-project-explorer 2 mountainash-io org` | Analyze MountainAsh ACRDS |
-| Project #5 (11 items) | `/hv-gh-project-explorer 5 mountainash-io org` | Analyze MountainAsh MCP - Typescript |
-| Project #6 (13 items) | `/hv-gh-project-explorer 6 mountainash-io org` | Analyze HiivMind |
-| Project #7 (7 items) | `/hv-gh-project-explorer 7 mountainash-io org` | Analyze HiivMind MCP |
+| Project #6 (13 items) | `/hv-gh-project-explorer 6 hiivmind org` | Analyze HiivMind |
+| Project #7 (7 items) | `/hv-gh-project-explorer 7 hiivmind org` | Analyze HiivMind MCP |
 
 ### Advanced Integration Patterns
 
 ```bash
-# Pipeline: Discovery → Dashboard Analysis → Filtering
-source .hiivmind/gh-project-functions.sh
+# Pipeline: Discovery → Explorer Analysis → Filtering
+source ~/.hiivmind/github/scripts/gh-project-functions.sh
 
 # 1. Find active projects
-ACTIVE_PROJECTS=$(discover_org_projects "mountainash-io" | format_org_projects "mountainash-io" | jq -r '.projects[] | select(.status == "OPEN") | .number')
+ACTIVE_PROJECTS=$(discover_org_projects "hiivmind" | format_org_projects "hiivmind" | jq -r '.projects[] | select(.status == "OPEN") | .number')
 
 # 2. Analyze each project's backlog
 for PROJECT in $ACTIVE_PROJECTS; do
     echo "=== Project #$PROJECT Backlog ==="
-    fetch_org_project $PROJECT "mountainash-io" | apply_status_filter "Backlog" | get_count
+    fetch_org_project $PROJECT "hiivmind" | apply_status_filter "Backlog" | get_count
 done
 
 # 3. Find assignee distribution across projects
 for PROJECT in $ACTIVE_PROJECTS; do
     echo "=== Project #$PROJECT Assignees ==="
-    fetch_org_project $PROJECT "mountainash-io" | list_assignees
+    fetch_org_project $PROJECT "hiivmind" | list_assignees
 done
 ```
