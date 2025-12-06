@@ -4,16 +4,16 @@
     "name": "Discrete Data Systems"
   },
   "metadata": {
-    "description": "Comprehensive GitHub API toolkit for Projects, Milestones, and REST operations",
-    "version": "2.0.0"
+    "description": "Comprehensive GitHub API toolkit for Projects, Milestones, Branch Protection, and REST operations",
+    "version": "2.1.0"
   },
   "plugins": [
     {
       "name": "github-cli-toolkit",
       "source": "./",
-      "description": "Pipeline-based toolkit for GitHub API operations including Projects v2, Milestones, Status Updates, Views, and REST API",
-      "version": "2.0.0",
-      "keywords": ["github", "projects", "milestones", "graphql", "rest-api", "analytics"]
+      "description": "Pipeline-based toolkit for GitHub API operations including Projects v2, Milestones, Branch Protection, Rulesets, Status Updates, Views, and REST API",
+      "version": "2.1.0",
+      "keywords": ["github", "projects", "milestones", "branch-protection", "rulesets", "graphql", "rest-api", "analytics"]
     }
   ]
 }

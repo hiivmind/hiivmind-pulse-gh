@@ -6,17 +6,19 @@ A Claude Code plugin that enables comprehensive GitHub API operations via GraphQ
 
 - **GitHub Projects v2** - Full support for project boards, items, status updates, views, fields, and repository linking
 - **Milestones** - Query, set on issues/PRs (GraphQL), create/update/close (REST)
+- **Branch Protection** - Per-branch protection rules and modern repository rulesets
 - **REST API** - Foundation for operations not available via GraphQL
 
 ## How It Works
 
-This plugin provides Claude with three **skills** - specialized knowledge that Claude invokes automatically:
+This plugin provides Claude with four **skills** - specialized knowledge that Claude invokes automatically:
 
 | Skill | Use Case |
 |-------|----------|
 | `github-projects` | "Show me the project board", "Filter by assignee", "Create a status update" |
 | `github-milestones` | "List milestones", "Set milestone on this issue", "Close the v1.0 milestone" |
-| `github-rest-api` | "Create a new milestone", "Update branch protection" |
+| `github-branch-protection` | "Protect main branch", "Set up branch naming rules", "List rulesets" |
+| `github-rest-api` | "Create a new milestone", "Get repository info" |
 
 ## Installation
 
@@ -62,13 +64,15 @@ github-cli-toolkit/
 ├── skills/
 │   ├── github-projects/         # Projects v2 skill
 │   ├── github-milestones/       # Milestones skill
+│   ├── github-branch-protection/# Branch protection skill
 │   └── github-rest-api/         # REST API skill
 ├── lib/github/
 │   ├── gh-project-functions.sh      # GraphQL shell functions
 │   ├── gh-project-graphql-queries.yaml
 │   ├── gh-project-jq-filters.yaml
 │   ├── gh-rest-functions.sh         # REST shell functions
-│   └── gh-rest-endpoints.yaml
+│   ├── gh-rest-endpoints.yaml
+│   └── gh-branch-protection-templates.yaml  # Protection presets
 └── docs/
 ```
 
@@ -88,6 +92,12 @@ create_status_update "PVT_xxx" "ON_TRACK" "Sprint going well"
 list_milestones "acme" "api" | format_milestones
 create_milestone "acme" "api" "v2.0" "Q1 Release" "2025-03-31T00:00:00Z"
 set_issue_milestone "I_xxx" "MI_xxx"
+
+# Branch Protection
+apply_main_branch_protection "acme" "api"    # Auto-detects org/personal
+apply_branch_naming_ruleset "acme" "api"     # Enforce naming conventions
+get_branch_protection "acme" "api" "main" | format_branch_protection
+list_rulesets "acme" "api" | format_rulesets
 ```
 
 ## Key Capabilities
@@ -105,9 +115,17 @@ set_issue_milestone "I_xxx" "MI_xxx"
 - Set milestones on issues/PRs via GraphQL
 - Create/update/close milestones via REST (no GraphQL mutation exists)
 
+### Branch Protection (REST)
+- Per-branch protection rules (main, develop)
+- Repository rulesets for pattern-based protection (feature/*, release/*)
+- Preset templates for org and personal repositories
+- Branch naming convention enforcement
+- Smart auto-detection of repo type
+
 ### REST API
 - Milestone management
-- Extensible for branch protection, webhooks, labels, etc.
+- Branch and repository operations
+- Extensible for webhooks, labels, etc.
 
 ## Troubleshooting
 

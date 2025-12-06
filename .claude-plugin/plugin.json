@@ -1,7 +1,7 @@
 {
   "name": "github-cli-toolkit",
-  "description": "Comprehensive GitHub API toolkit with pipeline-based functions for Projects v2, Milestones, and REST API operations",
-  "version": "2.0.0",
+  "description": "Comprehensive GitHub API toolkit with pipeline-based functions for Projects v2, Milestones, Branch Protection, Rulesets, and REST API operations",
+  "version": "2.1.0",
   "author": {
     "name": "Discrete Data Systems"
   },
@@ -9,6 +9,8 @@
     "github",
     "projects",
     "milestones",
+    "branch-protection",
+    "rulesets",
     "graphql",
     "rest-api",
     "project-management",

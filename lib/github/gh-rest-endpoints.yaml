@@ -109,12 +109,244 @@ milestones:
     note: "EXCLUDED for safety - not implemented in shell functions"
 
 # =============================================================================
+# BRANCH PROTECTION - Per-branch protection rules (Legacy API)
+# =============================================================================
+# Note: Branch protection applies to specific branches (main, develop, etc.)
+# For pattern-based protection (feature/*, release/*), use Rulesets below.
+
+branch_protection:
+  get:
+    description: "Get branch protection rules for a specific branch"
+    method: GET
+    endpoint: "repos/{owner}/{repo}/branches/{branch}/protection"
+    parameters:
+      - name: "owner"
+        required: true
+        description: "Repository owner"
+      - name: "repo"
+        required: true
+        description: "Repository name"
+      - name: "branch"
+        required: true
+        description: "Branch name (e.g., main, develop)"
+
+  set:
+    description: "Set branch protection rules (creates or replaces)"
+    method: PUT
+    endpoint: "repos/{owner}/{repo}/branches/{branch}/protection"
+    parameters:
+      - name: "owner"
+        required: true
+      - name: "repo"
+        required: true
+      - name: "branch"
+        required: true
+    body:
+      - name: "required_status_checks"
+        required: false
+        description: "Status checks config: {strict: bool, contexts: []}"
+      - name: "enforce_admins"
+        required: true
+        description: "Enforce for admins (true/false)"
+      - name: "required_pull_request_reviews"
+        required: false
+        description: "PR review requirements"
+      - name: "restrictions"
+        required: true
+        description: "Push restrictions (null for non-org repos)"
+      - name: "required_linear_history"
+        required: false
+        description: "Require linear history (no merge commits)"
+      - name: "allow_force_pushes"
+        required: false
+        description: "Allow force pushes (default: false)"
+      - name: "allow_deletions"
+        required: false
+        description: "Allow branch deletion (default: false)"
+      - name: "required_conversation_resolution"
+        required: false
+        description: "Require conversation resolution before merge"
+      - name: "required_signatures"
+        required: false
+        description: "Require signed commits (org repos only)"
+      - name: "lock_branch"
+        required: false
+        description: "Lock branch (read-only)"
+      - name: "allow_fork_syncing"
+        required: false
+        description: "Allow fork syncing"
+
+  delete:
+    description: "Remove branch protection from a branch"
+    method: DELETE
+    endpoint: "repos/{owner}/{repo}/branches/{branch}/protection"
+    parameters:
+      - name: "owner"
+        required: true
+      - name: "repo"
+        required: true
+      - name: "branch"
+        required: true
+    note: "EXCLUDED for safety - not implemented in shell functions"
+
+# =============================================================================
+# RULESETS - Modern pattern-based protection (GitHub Rulesets API)
+# =============================================================================
+# Note: Rulesets are the modern replacement for branch protection rules.
+# They support pattern matching (feature/*, release/*) and more rule types.
+# Only available for repositories in organizations (not personal repos).
+
+rulesets:
+  list:
+    description: "List all rulesets for a repository"
+    method: GET
+    endpoint: "repos/{owner}/{repo}/rulesets"
+    parameters:
+      - name: "owner"
+        required: true
+        description: "Repository owner"
+      - name: "repo"
+        required: true
+        description: "Repository name"
+      - name: "includes_parents"
+        required: false
+        default: "true"
+        description: "Include rulesets from parent (org-level)"
+
+  get:
+    description: "Get a specific ruleset by ID"
+    method: GET
+    endpoint: "repos/{owner}/{repo}/rulesets/{ruleset_id}"
+    parameters:
+      - name: "owner"
+        required: true
+      - name: "repo"
+        required: true
+      - name: "ruleset_id"
+        required: true
+        description: "Ruleset ID (numeric)"
+
+  create:
+    description: "Create a new ruleset"
+    method: POST
+    endpoint: "repos/{owner}/{repo}/rulesets"
+    parameters:
+      - name: "owner"
+        required: true
+      - name: "repo"
+        required: true
+    body:
+      - name: "name"
+        required: true
+        description: "Ruleset name"
+      - name: "target"
+        required: true
+        description: "Target type: branch or tag"
+      - name: "enforcement"
+        required: true
+        description: "Enforcement level: active, evaluate, or disabled"
+      - name: "conditions"
+        required: true
+        description: "Conditions object with ref_name include/exclude patterns"
+      - name: "rules"
+        required: true
+        description: "Array of rule objects"
+      - name: "bypass_actors"
+        required: false
+        description: "Actors who can bypass the ruleset"
+
+  update:
+    description: "Update an existing ruleset"
+    method: PUT
+    endpoint: "repos/{owner}/{repo}/rulesets/{ruleset_id}"
+    parameters:
+      - name: "owner"
+        required: true
+      - name: "repo"
+        required: true
+      - name: "ruleset_id"
+        required: true
+    body:
+      - name: "name"
+        required: false
+      - name: "target"
+        required: false
+      - name: "enforcement"
+        required: false
+      - name: "conditions"
+        required: false
+      - name: "rules"
+        required: false
+      - name: "bypass_actors"
+        required: false
+
+  delete:
+    description: "Delete a ruleset"
+    method: DELETE
+    endpoint: "repos/{owner}/{repo}/rulesets/{ruleset_id}"
+    parameters:
+      - name: "owner"
+        required: true
+      - name: "repo"
+        required: true
+      - name: "ruleset_id"
+        required: true
+    note: "EXCLUDED for safety - not implemented in shell functions"
+
+# =============================================================================
+# BRANCHES - Branch listing and info
+# =============================================================================
+
+branches:
+  list:
+    description: "List branches for a repository"
+    method: GET
+    endpoint: "repos/{owner}/{repo}/branches"
+    parameters:
+      - name: "owner"
+        required: true
+      - name: "repo"
+        required: true
+      - name: "protected"
+        required: false
+        description: "Filter by protected status (true/false)"
+      - name: "per_page"
+        required: false
+        default: "100"
+
+  get:
+    description: "Get a specific branch"
+    method: GET
+    endpoint: "repos/{owner}/{repo}/branches/{branch}"
+    parameters:
+      - name: "owner"
+        required: true
+      - name: "repo"
+        required: true
+      - name: "branch"
+        required: true
+
+# =============================================================================
+# REPOSITORY - Repository info helpers
+# =============================================================================
+
+repository:
+  get:
+    description: "Get repository information"
+    method: GET
+    endpoint: "repos/{owner}/{repo}"
+    parameters:
+      - name: "owner"
+        required: true
+      - name: "repo"
+        required: true
+
+# =============================================================================
 # Future REST-only endpoints can be added here
 # =============================================================================
 # Examples of other REST-only operations:
 # - Repository topics
 # - GitHub Actions workflows
 # - Repository secrets
-# - Branch protection rules (some operations)
 # - Repository webhooks
 # - Release assets

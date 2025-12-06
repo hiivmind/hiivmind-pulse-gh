@@ -8,16 +8,18 @@ This is the **GitHub CLI Toolkit** - a Claude Code plugin providing comprehensiv
 
 - **GitHub Projects v2** - Full project management, status updates, views, fields
 - **Milestones** - Repository-level milestone management
+- **Branch Protection** - Per-branch rules and repository rulesets
 - **REST API** - Operations not available via GraphQL
 
 ## Skills
 
-The toolkit provides three domain-specific skills:
+The toolkit provides four domain-specific skills:
 
 | Skill | Purpose |
 |-------|---------|
 | `github-projects` | Projects v2 - items, filtering, status updates, views, fields |
 | `github-milestones` | Milestone queries and management |
+| `github-branch-protection` | Branch protection rules and repository rulesets |
 | `github-rest-api` | REST API operations (creating milestones, etc.) |
 
 ## Quick Start
@@ -42,13 +44,15 @@ github-cli-toolkit/
 ├── skills/
 │   ├── github-projects/         # Projects v2 skill
 │   ├── github-milestones/       # Milestones skill
+│   ├── github-branch-protection/# Branch protection skill
 │   └── github-rest-api/         # REST API skill
 ├── lib/github/
 │   ├── gh-project-functions.sh      # GraphQL shell functions
 │   ├── gh-project-graphql-queries.yaml  # GraphQL templates
 │   ├── gh-project-jq-filters.yaml   # jq filter templates
 │   ├── gh-rest-functions.sh         # REST shell functions
-│   └── gh-rest-endpoints.yaml       # REST endpoint templates
+│   ├── gh-rest-endpoints.yaml       # REST endpoint templates
+│   └── gh-branch-protection-templates.yaml  # Protection presets
 └── docs/
 ```
 
@@ -67,9 +71,16 @@ github-cli-toolkit/
 - `set_issue_milestone`, `set_pr_milestone` - Set via GraphQL
 - `create_milestone`, `update_milestone`, `close_milestone` - Manage via REST
 
+### Branch Protection (REST)
+- `get_branch_protection`, `set_branch_protection` - Per-branch rules
+- `list_rulesets`, `create_ruleset`, `update_ruleset` - Repository rulesets
+- `apply_main_branch_protection`, `apply_develop_branch_protection` - Smart templates
+- `apply_branch_naming_ruleset` - Naming convention enforcement
+
 ### REST API
 - `list_milestones`, `get_milestone` - REST queries
 - `create_milestone`, `update_milestone` - REST mutations
+- `detect_repo_type`, `list_branches` - Helper functions
 - Direct `gh api` usage for other operations
 
 ## Pipeline Pattern
