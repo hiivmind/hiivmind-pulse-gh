@@ -1,178 +1,117 @@
 # GitHub Projects Explorer
 
-A Claude Code plugin for exploring, filtering, and analyzing GitHub Projects v2 data. Provides a pipeline-based toolkit with bash functions, GraphQL queries, and jq filters optimized for LLM interpretation.
+A Claude Code plugin that enables intelligent exploration and analysis of GitHub Projects v2. When installed, Claude automatically understands how to query, filter, and analyze your project boards.
 
-## Features
+## How It Works
 
-- **Project Discovery**: Find projects across user, organization, and repository contexts
-- **Advanced Filtering**: Filter by repository, assignee, status, priority, or any combination
-- **Team Analytics**: Analyze assignee workload and repository distribution
-- **Pipeline Architecture**: Composable bash functions for custom workflows
-- **Memory Efficient**: Streaming data processing with no temporary files
-- **LLM-Optimized**: JSON output designed for Claude Code interpretation
+This plugin provides Claude with a **skill** - specialized knowledge about GitHub Projects v2 that Claude can invoke automatically when you ask questions like:
+
+- "What's the status of our project board?"
+- "Show me John's backlog items"
+- "How many high-priority issues are in the API repository?"
+- "Who's working on the frontend?"
+
+Claude reads the skill documentation and executes the appropriate bash pipelines to fetch and analyze your project data.
 
 ## Installation
 
 ### As Claude Code Plugin
 
 ```bash
-# Add the marketplace
-/plugin marketplace add your-org/github-projects-explorer
-
-# Install the plugin
-/plugin install github-projects-explorer@github-projects-explorer
+# Install from marketplace (when published)
+claude plugin add your-org/github-projects-explorer
 ```
 
 ### Prerequisites
 
+The following tools must be installed on your system:
+
 - **GitHub CLI (`gh`)**: Authenticated with your GitHub account
 - **jq**: JSON processor (1.6+)
 - **yq**: YAML processor (4.0+)
-- **Bash**: With process substitution support
-
-## Quick Start
 
 ```bash
-# Source the functions (once per session)
-source lib/github/gh-project-functions.sh
-
-# Discover your projects
-discover_user_projects | format_user_projects
-
-# Analyze an organization project
-fetch_org_project 2 "your-org" | apply_universal_filter "" "" "" ""
-
-# Filter by assignee
-fetch_org_project 2 "your-org" | apply_assignee_filter "username"
-
-# List team members
-fetch_org_project 2 "your-org" | list_assignees
+# Verify prerequisites
+gh auth status
+jq --version
+yq --version
 ```
 
-## Plugin Structure
+## Usage
+
+Once installed, simply ask Claude about your GitHub Projects:
+
+```
+> What projects do I have access to?
+
+> Show me all items in project 2 for acme-corp
+
+> Filter the project to show only John's items in the Backlog
+
+> How many items are assigned to each team member?
+
+> What repositories are represented in this project?
+```
+
+Claude will automatically source the functions, execute the queries, and present the results.
+
+## Plugin Architecture
 
 ```
 github-projects-explorer/
 ├── .claude-plugin/
 │   ├── plugin.json              # Plugin manifest
-│   └── marketplace.json         # Marketplace manifest
+│   └── marketplace.json         # Marketplace distribution
 ├── skills/
 │   └── github-projects-explorer/
-│       └── SKILL.md             # Claude skill documentation
+│       └── SKILL.md             # Skill knowledge (auto-invoked by Claude)
 ├── lib/github/
-│   ├── gh-project-functions.sh  # Core bash functions
+│   ├── gh-project-functions.sh  # Bash pipeline functions
 │   ├── gh-project-graphql-queries.yaml
 │   └── gh-project-jq-filters.yaml
-├── docs/
-└── README.md
+└── docs/
+    └── PROJECT_OVERVIEW.md      # Architecture documentation
 ```
 
-## Function Reference
+### The Skill
 
-### Data Fetching
+The `SKILL.md` file contains comprehensive documentation that Claude reads to understand:
 
-| Function | Description |
-|----------|-------------|
-| `fetch_org_project NUM "ORG"` | Fetch organization project data |
-| `fetch_user_project NUM` | Fetch user project data |
-| `fetch_org_project_fields NUM "ORG"` | Get project field structure |
+- Available functions and their parameters
+- Pipeline patterns for composing queries
+- Output formats and how to interpret results
+- Common workflows and best practices
 
-### Filtering
+### The Pipeline Library
 
-| Function | Description |
-|----------|-------------|
-| `apply_universal_filter "REPO" "USER" "STATUS" "PRIORITY"` | Multi-criteria filter (use "" to skip) |
-| `apply_assignee_filter "USER"` | Filter by assignee |
-| `apply_repo_filter "REPO"` | Filter by repository |
-| `apply_status_filter "STATUS"` | Filter by status |
+The `lib/github/` directory contains the actual implementation:
 
-### Discovery
+| File | Purpose |
+|------|---------|
+| `gh-project-functions.sh` | Bash functions for fetching and filtering |
+| `gh-project-graphql-queries.yaml` | GraphQL query templates |
+| `gh-project-jq-filters.yaml` | jq filter definitions |
 
-| Function | Description |
-|----------|-------------|
-| `list_assignees` | List all project assignees |
-| `list_repositories` | List all repositories |
-| `list_statuses` | List all status values |
-| `list_priorities` | List all priority values |
-| `list_fields` | List project field structure |
+## Manual Usage
 
-### Project Discovery
-
-| Function | Description |
-|----------|-------------|
-| `discover_user_projects` | Find user's projects |
-| `discover_org_projects "ORG"` | Find organization projects |
-| `discover_repo_projects "OWNER" "REPO"` | Find repository projects |
-| `discover_all_projects` | Find all accessible projects |
-
-### Utilities
-
-| Function | Description |
-|----------|-------------|
-| `get_count` | Extract filtered item count |
-| `get_items` | Extract items array |
-
-## Common Workflows
-
-### Team Workload Analysis
+You can also use the functions directly in bash:
 
 ```bash
+# Source the functions
 source lib/github/gh-project-functions.sh
 
-# List team members
+# Discover projects
+discover_user_projects | format_user_projects
+discover_org_projects "acme-corp" | format_org_projects "acme-corp"
+
+# Fetch and filter project items
+fetch_org_project 2 "acme-corp" | apply_assignee_filter "john"
+fetch_org_project 2 "acme-corp" | apply_universal_filter "api" "" "Backlog" ""
+
+# Discovery functions
 fetch_org_project 2 "acme-corp" | list_assignees
-
-# Count items per assignee
-for user in alice bob charlie; do
-  count=$(fetch_org_project 2 "acme-corp" | apply_assignee_filter "$user" | get_count)
-  echo "$user: $count items"
-done
-```
-
-### Status Distribution
-
-```bash
-source lib/github/gh-project-functions.sh
-
-# See all statuses
-fetch_org_project 2 "acme-corp" | list_statuses
-
-# Count by status
-for status in "Backlog" "In Progress" "Done"; do
-  count=$(fetch_org_project 2 "acme-corp" | apply_status_filter "$status" | get_count)
-  echo "$status: $count"
-done
-```
-
-### Repository Focus
-
-```bash
-source lib/github/gh-project-functions.sh
-
-# List repositories in project
 fetch_org_project 2 "acme-corp" | list_repositories
-
-# Analyze specific repo
-fetch_org_project 2 "acme-corp" | apply_repo_filter "frontend" | list_assignees
-```
-
-## Output Format
-
-All functions return structured JSON:
-
-```json
-{
-  "project": "My Project",
-  "totalItems": 118,
-  "filters": {
-    "repository": "",
-    "assignee": "john",
-    "status": "",
-    "priority": ""
-  },
-  "filteredItems": [...],
-  "filteredCount": 30
-}
+fetch_org_project 2 "acme-corp" | list_statuses
 ```
 
 ## Troubleshooting
@@ -183,25 +122,26 @@ Install GitHub CLI: https://cli.github.com/
 ### "yq: command not found"
 Install yq v4+: `brew install yq` or https://github.com/mikefarah/yq
 
-### Empty results
-1. Check project number and org name
-2. Verify access with `gh project list --owner ORG`
-3. Use `list_*` functions to discover valid filter values
-
 ### Permission errors
-Ensure token has `read:project` scope:
+Ensure your token has the `read:project` scope:
 ```bash
 gh auth refresh -s read:project
 ```
 
-## License
-
-MIT
+### Empty results
+1. Verify project number and organization name
+2. Check access with `gh project list --owner ORG`
+3. Use discovery functions to find valid filter values
 
 ## Contributing
 
-Contributions welcome! The system is designed to be extensible:
+The system is designed to be extensible:
 
 1. **New Filters**: Add to `lib/github/gh-project-jq-filters.yaml`
 2. **New Functions**: Add to `lib/github/gh-project-functions.sh`
 3. **New Queries**: Add to `lib/github/gh-project-graphql-queries.yaml`
+4. **Skill Updates**: Enhance `skills/github-projects-explorer/SKILL.md`
+
+## License
+
+MIT
