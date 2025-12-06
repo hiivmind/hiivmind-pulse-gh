@@ -1,153 +1,182 @@
 # GitHub CLI Toolkit
 
-A Claude Code plugin that enables comprehensive GitHub API operations via GraphQL and REST. When installed, Claude automatically understands how to manage Projects v2, Milestones, Branch Protection, and other GitHub resources.
+A Claude Code plugin providing deep GitHub Projects v2 automation through structured wrappers around the GitHub CLI (`gh`).
 
-## Features
+## What This Is
 
-- **GitHub Projects v2** - Full support for project boards, items, status updates, views, fields, and repository linking
-- **Milestones** - Query, set on issues/PRs (GraphQL), create/update/close (REST)
-- **Branch Protection** - Per-branch protection rules and modern repository rulesets
-- **REST API** - Foundation for operations not available via GraphQL
+This toolkit provides **shell functions that wrap `gh` CLI commands** — giving Claude the ability to perform complex GitHub operations through your already-authenticated GitHub CLI installation.
 
-## How It Works
+```
+┌─────────────────────────────────────────────────┐
+│  Claude Code                                    │
+│  └─► Skill (loads on demand)                    │
+│      └─► Shell functions                        │
+│          └─► gh CLI (your existing auth)        │
+│              └─► GitHub API                     │
+└─────────────────────────────────────────────────┘
+```
 
-This plugin provides Claude with four **skills** - specialized knowledge that Claude invokes automatically:
+**This is deliberately NOT an MCP server.** The design prioritizes:
 
-| Skill | Use Case |
-|-------|----------|
-| `github-projects` | "Show me the project board", "Filter by assignee", "Create a status update" |
-| `github-milestones` | "List milestones", "Set milestone on this issue", "Close the v1.0 milestone" |
-| `github-branch-protection` | "Protect main branch", "Set up branch naming rules", "List rulesets" |
-| `github-rest-api` | "Create a new milestone", "Get repository info" |
+- **Context efficiency** — Skills load on-demand. Unlike MCP servers that expose all tools upfront, Claude only loads what it needs.
+- **Zero authentication overhead** — Inherits your existing `gh` CLI authentication. No tokens to configure, no OAuth flows, no secrets management.
+- **Composability** — Pipeline-based functions that work with standard Unix tools and existing scripts.
+- **Simplicity** — No server process, no transport layer. Just shell functions calling `gh`.
+
+## What You Get
+
+Deep coverage of GitHub features that are underserved by other tools:
+
+| Feature | Coverage | Why It Matters |
+|---------|----------|----------------|
+| **GitHub Projects v2** | ~95 functions | Most tools have minimal Projects v2 support |
+| **Milestones** | Full lifecycle | GraphQL queries + REST mutations |
+| **Branch Protection** | Legacy + Rulesets | Both APIs with smart templates |
+| **REST API** | Foundation layer | Extensible for other operations |
+
+## Prerequisites
+
+**Required tools must be installed and working before using this plugin:**
+
+| Tool | Purpose | Install | Verify |
+|------|---------|---------|--------|
+| **gh** | GitHub CLI (authenticated) | [cli.github.com](https://cli.github.com/) | `gh auth status` |
+| **jq** | JSON processing (1.6+) | `apt install jq` / `brew install jq` | `jq --version` |
+| **yq** | YAML processing (4.0+) | [github.com/mikefarah/yq](https://github.com/mikefarah/yq) | `yq --version` |
+
+```bash
+# Quick verification
+gh auth status && jq --version && yq --version
+```
+
+### GitHub CLI Authentication
+
+Your `gh` CLI must be authenticated with sufficient scopes:
+
+```bash
+# Check current auth
+gh auth status
+
+# Add required scopes if needed
+gh auth refresh -s read:project -s project -s repo
+```
+
+## Limitations
+
+- **Claude Code only** — This is a Claude Code plugin, not an MCP server. It won't work with VS Code Copilot, Cursor, or other LLM tools.
+- **Requires local tools** — `gh`, `jq`, and `yq` must be installed on the machine where Claude Code runs.
+- **Inherits gh permissions** — Can only access what your `gh` CLI can access. No elevation, no bypass.
+- **No deletion operations** — Destructive operations (delete project, delete ruleset) are intentionally excluded for safety.
 
 ## Installation
 
-### As Claude Code Plugin
-
 ```bash
-# Install from GitHub
-claude mcp add-from-claude-plugin https://github.com/hiivmind/hiivmind-github-projects
+# Install the plugin
+claude plugin add https://github.com/hiivmind/hiivmind-github-projects
 ```
 
-### Prerequisites
+## Skills
 
-- **GitHub CLI (`gh`)**: Authenticated with your GitHub account
-- **jq**: JSON processor (1.6+)
-- **yq**: YAML processor (4.0+)
+This plugin provides four skills that Claude invokes on-demand:
 
-```bash
-# Verify prerequisites
-gh auth status
-jq --version
-yq --version
-```
+| Skill | Trigger Examples |
+|-------|------------------|
+| `github-projects` | "Show me project 2", "Filter by assignee", "Create a status update" |
+| `github-milestones` | "List milestones", "Set milestone on issue #42", "Create v2.0 milestone" |
+| `github-branch-protection` | "Protect main branch", "Set up branch naming rules", "List rulesets" |
+
+Skills load only when needed — Claude doesn't carry the full function library in context until you ask for something relevant.
 
 ## Usage
 
-Once installed, simply ask Claude about your GitHub resources:
+Once installed, ask Claude about your GitHub resources in natural language:
 
 ```
-> What projects do I have access to?
-> Show me all items in project 2 for acme-corp
-> Create a status update saying we're on track
-> List milestones for the api repository
-> Set the v2.0 milestone on issue #123
+> What projects do I have in acme-org?
+> Show me all in-progress items assigned to @john in project 2
+> Create a status update for the project saying we're on track for the release
+> List open milestones for acme/api-server
+> Protect the main branch with required reviews
 ```
 
-## Plugin Architecture
+## Direct Shell Usage
 
-```
-github-cli-toolkit/
-├── .claude-plugin/
-│   ├── plugin.json              # Plugin manifest
-│   └── marketplace.json         # Marketplace distribution
-├── skills/
-│   ├── github-projects/         # Projects v2 skill
-│   ├── github-milestones/       # Milestones skill
-│   ├── github-branch-protection/# Branch protection skill
-│   └── github-rest-api/         # REST API skill
-├── lib/github/
-│   ├── gh-project-functions.sh      # GraphQL shell functions
-│   ├── gh-project-graphql-queries.yaml
-│   ├── gh-project-jq-filters.yaml
-│   ├── gh-rest-functions.sh         # REST shell functions
-│   ├── gh-rest-endpoints.yaml
-│   └── gh-branch-protection-templates.yaml  # Protection presets
-└── docs/
-```
-
-## Manual Usage
+The functions can also be used directly in scripts or terminals:
 
 ```bash
 # Source the functions
 source lib/github/gh-project-functions.sh
 source lib/github/gh-rest-functions.sh
 
-# Projects v2
+# Pipeline pattern: fetch | filter | format
 fetch_org_project 2 "acme-corp" | apply_assignee_filter "john"
-fetch_project_views "PVT_xxx"
-create_status_update "PVT_xxx" "ON_TRACK" "Sprint going well"
+fetch_org_project 2 "acme-corp" | list_repositories
 
 # Milestones
 list_milestones "acme" "api" | format_milestones
-create_milestone "acme" "api" "v2.0" "Q1 Release" "2025-03-31T00:00:00Z"
-set_issue_milestone "I_xxx" "MI_xxx"
+create_milestone "acme" "api" "v2.0" "Q1 Release" "2025-03-31"
 
-# Branch Protection
-apply_main_branch_protection "acme" "api"    # Auto-detects org/personal
-apply_branch_naming_ruleset "acme" "api"     # Enforce naming conventions
-get_branch_protection "acme" "api" "main" | format_branch_protection
-list_rulesets "acme" "api" | format_rulesets
+# Branch Protection (auto-detects org vs personal repo)
+apply_main_branch_protection "acme" "api"
+apply_branch_naming_ruleset "acme" "api"
 ```
 
 ## Key Capabilities
 
 ### Projects v2 (GraphQL)
-- Fetch and filter project items
+- Fetch and filter project items by assignee, status, repository, priority
 - Status updates (ON_TRACK, AT_RISK, OFF_TRACK, COMPLETE, INACTIVE)
 - View management (TABLE, BOARD, ROADMAP)
 - Field management and single-select options
 - Repository linking
-- Server-side sorting and pagination
+- Pagination with auto-fetch variants
 
 ### Milestones (Mixed GraphQL/REST)
-- Query milestones via GraphQL
-- Set milestones on issues/PRs via GraphQL
-- Create/update/close milestones via REST (no GraphQL mutation exists)
+- Query via GraphQL, create/update/close via REST
+- Set milestones on issues and PRs
+- Progress tracking
 
 ### Branch Protection (REST)
-- Per-branch protection rules (main, develop)
-- Repository rulesets for pattern-based protection (feature/*, release/*)
-- Preset templates for org and personal repositories
-- Branch naming convention enforcement
-- Smart auto-detection of repo type
+- Per-branch protection rules with preset templates
+- Repository rulesets for pattern-based protection (`feature/*`, `release/*`)
+- Auto-detection of org vs personal repository differences
 
-### REST API
-- Milestone management
-- Branch and repository operations
-- Extensible for webhooks, labels, etc.
+## Architecture
+
+```
+lib/github/
+├── gh-project-functions.sh          # Shell functions (pipeable)
+├── gh-project-graphql-queries.yaml  # GraphQL query templates
+├── gh-project-jq-filters.yaml       # jq filter templates
+├── gh-rest-functions.sh             # REST wrapper functions
+├── gh-rest-endpoints.yaml           # REST endpoint documentation
+└── gh-branch-protection-templates.yaml  # Protection presets
+```
+
+Functions follow a pipeline pattern — they read JSON from stdin and write to stdout:
+
+```bash
+fetch_org_project 2 "org" | apply_status_filter "In Progress" | list_assignees
+```
 
 ## Troubleshooting
 
-### "gh: command not found"
-Install GitHub CLI: https://cli.github.com/
-
-### "yq: command not found"
-Install yq v4+: `brew install yq` or https://github.com/mikefarah/yq
-
-### Permission errors
-Ensure your token has appropriate scopes:
-```bash
-gh auth refresh -s read:project -s repo
-```
+| Problem | Solution |
+|---------|----------|
+| `gh: command not found` | Install GitHub CLI: [cli.github.com](https://cli.github.com/) |
+| `yq: command not found` | Install yq v4+: [github.com/mikefarah/yq](https://github.com/mikefarah/yq) |
+| `jq: command not found` | `apt install jq` or `brew install jq` |
+| Permission/scope errors | `gh auth refresh -s read:project -s project -s repo` |
+| "Resource not accessible" | Check you have access to the org/repo via `gh repo view owner/repo` |
 
 ## Contributing
 
-The system is designed to be extensible:
-
-1. **GraphQL Operations**: Add to `lib/github/gh-project-*.yaml` and `gh-project-functions.sh`
-2. **REST Operations**: Add to `lib/github/gh-rest-*.yaml` and `gh-rest-functions.sh`
-3. **Skills**: Add new skills in `skills/` or enhance existing ones
+```
+lib/github/gh-project-*.yaml     → GraphQL queries and jq filters
+lib/github/gh-*-functions.sh     → Shell function implementations
+lib/github/gh-rest-*.yaml        → REST endpoints and templates
+skills/*/SKILL.md                → Skill documentation
+```
 
 ## License
 

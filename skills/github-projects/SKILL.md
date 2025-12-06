@@ -184,4 +184,4 @@ create_project_view "PVT_xxx" "Sprint Board" "BOARD"
 ## Related Skills
 
 - **github-milestones** - Milestone management (repository-level)
-- **github-rest-api** - REST API operations (creating milestones, etc.)
+- **github-branch-protection** - Branch protection rules and rulesets

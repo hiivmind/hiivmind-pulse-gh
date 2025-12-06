@@ -186,4 +186,4 @@ close_milestone "acme" "api" 3
 ## Related Skills
 
 - **github-projects** - Project management (status updates, views, fields)
-- **github-rest-api** - Other REST API operations
+- **github-branch-protection** - Branch protection rules and rulesets

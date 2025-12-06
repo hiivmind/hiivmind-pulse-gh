@@ -20,7 +20,6 @@ The toolkit provides four domain-specific skills:
 | `github-projects` | Projects v2 - items, filtering, status updates, views, fields |
 | `github-milestones` | Milestone queries and management |
 | `github-branch-protection` | Branch protection rules and repository rulesets |
-| `github-rest-api` | REST API operations (creating milestones, etc.) |
 
 ## Quick Start
 
@@ -44,8 +43,7 @@ github-cli-toolkit/
 ├── skills/
 │   ├── github-projects/         # Projects v2 skill
 │   ├── github-milestones/       # Milestones skill
-│   ├── github-branch-protection/# Branch protection skill
-│   └── github-rest-api/         # REST API skill
+│   └── github-branch-protection/# Branch protection skill
 ├── lib/github/
 │   ├── gh-project-functions.sh      # GraphQL shell functions
 │   ├── gh-project-graphql-queries.yaml  # GraphQL templates

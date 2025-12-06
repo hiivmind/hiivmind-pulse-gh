@@ -218,4 +218,3 @@ gh auth refresh -s repo -s admin:repo_hook
 
 - **github-projects** - Project management (status updates, views, fields)
 - **github-milestones** - Milestone management
-- **github-rest-api** - Other REST API operations
