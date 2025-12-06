@@ -1,16 +1,18 @@
 {
-  "name": "github-projects-explorer",
-  "description": "Pipeline-based toolkit for exploring, filtering, and analyzing GitHub Projects v2 via GraphQL API",
-  "version": "1.0.0",
+  "name": "github-cli-toolkit",
+  "description": "Comprehensive GitHub API toolkit with pipeline-based functions for Projects v2, Milestones, and REST API operations",
+  "version": "2.0.0",
   "author": {
     "name": "Discrete Data Systems"
   },
   "keywords": [
     "github",
     "projects",
+    "milestones",
     "graphql",
+    "rest-api",
     "project-management",
     "analytics"
   ],
-  "repository": "https://github.com/your-org/github-projects-explorer"
+  "repository": "https://github.com/your-org/github-cli-toolkit"
 }

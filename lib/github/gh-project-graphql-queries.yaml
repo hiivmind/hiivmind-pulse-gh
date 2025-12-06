@@ -26,7 +26,10 @@ discovery:
               number
               title
               shortDescription
+              readme
               closed
+              public
+              url
               createdAt
               updatedAt
               items(first: 1) {
@@ -54,6 +57,8 @@ discovery:
                   title
                   shortDescription
                   closed
+                  public
+                  url
                   items(first: 1) {
                     totalCount
                   }
@@ -81,7 +86,10 @@ discovery:
               number
               title
               shortDescription
+              readme
               closed
+              public
+              url
               createdAt
               updatedAt
               items(first: 1) {
@@ -115,6 +123,8 @@ discovery:
               title
               shortDescription
               closed
+              public
+              url
               items(first: 1) {
                 totalCount
               }
@@ -243,14 +253,20 @@ item_queries:
             id
             title
             items(first: 100) {
+              totalCount
               nodes {
                 id
+                isArchived
                 content {
                   ... on Issue {
                     title
                     number
                     body
                     state
+                    url
+                    createdAt
+                    updatedAt
+                    closedAt
                     repository {
                       name
                       owner {
@@ -269,12 +285,22 @@ item_queries:
                         color
                       }
                     }
+                    milestone {
+                      title
+                      dueOn
+                    }
                   }
                   ... on PullRequest {
                     title
                     number
                     body
                     state
+                    url
+                    createdAt
+                    updatedAt
+                    closedAt
+                    merged
+                    mergedAt
                     repository {
                       name
                       owner {
@@ -297,6 +323,8 @@ item_queries:
                   ... on DraftIssue {
                     title
                     body
+                    createdAt
+                    updatedAt
                   }
                 }
                 fieldValues(first: 30) {
@@ -376,6 +404,51 @@ item_queries:
                         name
                         owner {
                           login
+                        }
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldMilestoneValue {
+                      milestone {
+                        title
+                        dueOn
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldReviewersValue {
+                      reviewers(first: 10) {
+                        nodes {
+                          ... on User {
+                            login
+                            name
+                          }
+                          ... on Team {
+                            name
+                            slug
+                          }
+                        }
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldPullRequestsValue {
+                      pullRequests(first: 10) {
+                        nodes {
+                          number
+                          title
+                          state
+                          url
                         }
                       }
                       field {
@@ -408,14 +481,20 @@ item_queries:
             id
             title
             items(first: 100) {
+              totalCount
               nodes {
                 id
+                isArchived
                 content {
                   ... on Issue {
                     title
                     number
                     body
                     state
+                    url
+                    createdAt
+                    updatedAt
+                    closedAt
                     repository {
                       name
                       owner {
@@ -434,12 +513,22 @@ item_queries:
                         color
                       }
                     }
+                    milestone {
+                      title
+                      dueOn
+                    }
                   }
                   ... on PullRequest {
                     title
                     number
                     body
                     state
+                    url
+                    createdAt
+                    updatedAt
+                    closedAt
+                    merged
+                    mergedAt
                     repository {
                       name
                       owner {
@@ -462,6 +551,8 @@ item_queries:
                   ... on DraftIssue {
                     title
                     body
+                    createdAt
+                    updatedAt
                   }
                 }
                 fieldValues(first: 30) {
@@ -549,6 +640,51 @@ item_queries:
                         }
                       }
                     }
+                    ... on ProjectV2ItemFieldMilestoneValue {
+                      milestone {
+                        title
+                        dueOn
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldReviewersValue {
+                      reviewers(first: 10) {
+                        nodes {
+                          ... on User {
+                            login
+                            name
+                          }
+                          ... on Team {
+                            name
+                            slug
+                          }
+                        }
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldPullRequestsValue {
+                      pullRequests(first: 10) {
+                        nodes {
+                          number
+                          title
+                          state
+                          url
+                        }
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
                   }
                 }
               }
@@ -572,12 +708,16 @@ filtering:
             id
             title
             items(first: 100) {
+              totalCount
               nodes {
                 id
+                isArchived
                 content {
                   ... on Issue {
                     title
                     number
+                    state
+                    url
                     repository {
                       name
                       owner { login }
@@ -586,10 +726,16 @@ filtering:
                   ... on PullRequest {
                     title
                     number
+                    state
+                    url
+                    merged
                     repository {
                       name
                       owner { login }
                     }
+                  }
+                  ... on DraftIssue {
+                    title
                   }
                 }
                 fieldValues(first: 20) {
@@ -624,12 +770,16 @@ filtering:
             id
             title
             items(first: 100) {
+              totalCount
               nodes {
                 id
+                isArchived
                 content {
                   ... on Issue {
                     title
                     number
+                    state
+                    url
                     assignees(first: 10) {
                       nodes {
                         login
@@ -640,12 +790,18 @@ filtering:
                   ... on PullRequest {
                     title
                     number
+                    state
+                    url
+                    merged
                     assignees(first: 10) {
                       nodes {
                         login
                         name
                       }
                     }
+                  }
+                  ... on DraftIssue {
+                    title
                   }
                 }
                 fieldValues(first: 20) {
@@ -693,16 +849,26 @@ filtering:
             id
             title
             items(first: 100) {
+              totalCount
               nodes {
                 id
+                isArchived
                 content {
                   ... on Issue {
                     title
                     number
+                    state
+                    url
                   }
                   ... on PullRequest {
                     title
                     number
+                    state
+                    url
+                    merged
+                  }
+                  ... on DraftIssue {
+                    title
                   }
                 }
                 fieldValues(first: 20) {
@@ -739,6 +905,8 @@ utilities:
             title
             shortDescription
             closed
+            public
+            url
             createdAt
             updatedAt
             owner {
@@ -791,6 +959,291 @@ utilities:
         }
       }
 
+  project_readme:
+    description: "Get full project README content"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+        description: "Project node ID"
+    query: |
+      query($projectId: ID!) {
+        node(id: $projectId) {
+          ... on ProjectV2 {
+            id
+            number
+            title
+            shortDescription
+            readme
+            url
+          }
+        }
+      }
+
+# =============================================================================
+# MILESTONES - Repository-level milestone queries
+# =============================================================================
+# Note: Milestones are Issue/PR properties, NOT ProjectV2 fields.
+# ProjectV2ItemFieldMilestoneValue is read-only - reflects the issue's milestone.
+# To set milestones, use updateIssue or updatePullRequest mutations.
+
+milestones:
+  repository_milestones:
+    description: "List all milestones in a repository"
+    parameters:
+      - name: "owner"
+        type: "String!"
+        description: "Repository owner"
+      - name: "repo"
+        type: "String!"
+        description: "Repository name"
+      - name: "states"
+        type: "[MilestoneState!]"
+        description: "OPEN, CLOSED, or both"
+    query: |
+      query($owner: String!, $repo: String!, $states: [MilestoneState!] = [OPEN]) {
+        repository(owner: $owner, name: $repo) {
+          milestones(first: 100, states: $states) {
+            nodes {
+              id
+              number
+              title
+              description
+              dueOn
+              state
+              closed
+              closedAt
+              createdAt
+              updatedAt
+              url
+              progressPercentage
+              issues(first: 1) { totalCount }
+              pullRequests(first: 1) { totalCount }
+            }
+          }
+        }
+      }
+
+  milestone_by_number:
+    description: "Get specific milestone by number"
+    parameters:
+      - name: "owner"
+        type: "String!"
+      - name: "repo"
+        type: "String!"
+      - name: "number"
+        type: "Int!"
+    query: |
+      query($owner: String!, $repo: String!, $number: Int!) {
+        repository(owner: $owner, name: $repo) {
+          milestone(number: $number) {
+            id
+            number
+            title
+            description
+            dueOn
+            state
+            closed
+            closedAt
+            createdAt
+            updatedAt
+            url
+            progressPercentage
+            issues(first: 1) { totalCount }
+            pullRequests(first: 1) { totalCount }
+          }
+        }
+      }
+
+# =============================================================================
+# STATUS UPDATES - Project health tracking (added June 2024)
+# =============================================================================
+# Status values: ON_TRACK, AT_RISK, OFF_TRACK, COMPLETE, INACTIVE
+
+status_updates:
+  project_status_updates:
+    description: "Get all status updates for a project"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+        description: "Project node ID"
+    query: |
+      query($projectId: ID!) {
+        node(id: $projectId) {
+          ... on ProjectV2 {
+            id
+            title
+            statusUpdates(first: 20, orderBy: {field: CREATED_AT, direction: DESC}) {
+              nodes {
+                id
+                body
+                bodyHTML
+                status
+                startDate
+                targetDate
+                createdAt
+                updatedAt
+                creator {
+                  login
+                  ... on User {
+                    name
+                  }
+                }
+              }
+              totalCount
+            }
+          }
+        }
+      }
+
+  latest_status_update:
+    description: "Get the most recent status update for a project"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+    query: |
+      query($projectId: ID!) {
+        node(id: $projectId) {
+          ... on ProjectV2 {
+            id
+            title
+            statusUpdates(first: 1, orderBy: {field: CREATED_AT, direction: DESC}) {
+              nodes {
+                id
+                body
+                status
+                startDate
+                targetDate
+                createdAt
+                creator {
+                  login
+                }
+              }
+            }
+          }
+        }
+      }
+
+# =============================================================================
+# PROJECT VIEWS - Table, Board, Roadmap views
+# =============================================================================
+# Layout types: TABLE, BOARD, ROADMAP
+
+views:
+  project_views:
+    description: "Get all views for a project"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+        description: "Project node ID"
+    query: |
+      query($projectId: ID!) {
+        node(id: $projectId) {
+          ... on ProjectV2 {
+            id
+            title
+            views(first: 50) {
+              nodes {
+                id
+                number
+                name
+                layout
+                filter
+                sortBy {
+                  field {
+                    ... on ProjectV2Field { name }
+                    ... on ProjectV2SingleSelectField { name }
+                    ... on ProjectV2IterationField { name }
+                  }
+                  direction
+                }
+                groupBy {
+                  ... on ProjectV2Field { name }
+                  ... on ProjectV2SingleSelectField { name }
+                  ... on ProjectV2IterationField { name }
+                }
+                createdAt
+                updatedAt
+              }
+              totalCount
+            }
+          }
+        }
+      }
+
+  project_view_by_number:
+    description: "Get a specific view by number"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+      - name: "viewNumber"
+        type: "Int!"
+    query: |
+      query($projectId: ID!, $viewNumber: Int!) {
+        node(id: $projectId) {
+          ... on ProjectV2 {
+            id
+            title
+            view(number: $viewNumber) {
+              id
+              number
+              name
+              layout
+              filter
+              sortBy {
+                field {
+                  ... on ProjectV2Field { name }
+                  ... on ProjectV2SingleSelectField { name }
+                  ... on ProjectV2IterationField { name }
+                }
+                direction
+              }
+              groupBy {
+                ... on ProjectV2Field { name }
+                ... on ProjectV2SingleSelectField { name }
+                ... on ProjectV2IterationField { name }
+              }
+              createdAt
+              updatedAt
+            }
+          }
+        }
+      }
+
+# =============================================================================
+# REPOSITORY LINKING - Link repos to projects for easier access
+# =============================================================================
+
+repository_linking:
+  project_linked_repositories:
+    description: "Get repositories linked to a project"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+        description: "Project node ID"
+    query: |
+      query($projectId: ID!) {
+        node(id: $projectId) {
+          ... on ProjectV2 {
+            id
+            title
+            repositories(first: 100) {
+              nodes {
+                id
+                name
+                nameWithOwner
+                url
+                owner {
+                  login
+                }
+                isPrivate
+                description
+              }
+              totalCount
+            }
+          }
+        }
+      }
+
 # Usage Examples:
 examples:
   basic_user_projects:
@@ -808,6 +1261,1464 @@ examples:
   repository_filter:
     command: 'gh api graphql -H X-Github-Next-Global-ID:1 -f query="$(cat github-projects-graphql-queries.yaml | yq .filtering.items_by_repository.query)" -f projectNumber=1 | jq ".data.viewer.projectV2.items.nodes[] | select(.content.repository.name == \"my-repo\")"'
     description: "Filter items by repository name"
+
+pagination:
+  user_project_items_paginated:
+    description: "Get project items with pagination support for large projects"
+    parameters:
+      - name: "projectNumber"
+        type: "Int!"
+        description: "Project number"
+      - name: "first"
+        type: "Int"
+        description: "Number of items per page (default 100, max 100)"
+      - name: "after"
+        type: "String"
+        description: "Cursor for pagination"
+    query: |
+      query($projectNumber: Int!, $first: Int = 100, $after: String) {
+        viewer {
+          projectV2(number: $projectNumber) {
+            id
+            title
+            items(first: $first, after: $after) {
+              totalCount
+              pageInfo {
+                hasNextPage
+                hasPreviousPage
+                startCursor
+                endCursor
+              }
+              nodes {
+                id
+                content {
+                  ... on Issue {
+                    title
+                    number
+                    body
+                    state
+                    url
+                    createdAt
+                    updatedAt
+                    closedAt
+                    repository {
+                      name
+                      owner {
+                        login
+                      }
+                    }
+                    assignees(first: 10) {
+                      nodes {
+                        login
+                        name
+                      }
+                    }
+                    labels(first: 10) {
+                      nodes {
+                        name
+                        color
+                      }
+                    }
+                    milestone {
+                      title
+                      dueOn
+                    }
+                  }
+                  ... on PullRequest {
+                    title
+                    number
+                    body
+                    state
+                    url
+                    createdAt
+                    updatedAt
+                    closedAt
+                    merged
+                    mergedAt
+                    repository {
+                      name
+                      owner {
+                        login
+                      }
+                    }
+                    assignees(first: 10) {
+                      nodes {
+                        login
+                        name
+                      }
+                    }
+                    labels(first: 10) {
+                      nodes {
+                        name
+                        color
+                      }
+                    }
+                  }
+                  ... on DraftIssue {
+                    title
+                    body
+                    createdAt
+                    updatedAt
+                  }
+                }
+                fieldValues(first: 30) {
+                  nodes {
+                    ... on ProjectV2ItemFieldSingleSelectValue {
+                      name
+                      color
+                      description
+                      field {
+                        ... on ProjectV2SingleSelectField {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldTextValue {
+                      text
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldNumberValue {
+                      number
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldUserValue {
+                      users(first: 10) {
+                        nodes {
+                          login
+                          name
+                        }
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldDateValue {
+                      date
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldIterationValue {
+                      title
+                      startDate
+                      duration
+                      field {
+                        ... on ProjectV2IterationField {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldLabelValue {
+                      labels(first: 10) {
+                        nodes {
+                          name
+                          color
+                        }
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldRepositoryValue {
+                      repository {
+                        name
+                        owner {
+                          login
+                        }
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldMilestoneValue {
+                      milestone {
+                        title
+                        dueOn
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldReviewersValue {
+                      reviewers(first: 10) {
+                        nodes {
+                          ... on User {
+                            login
+                            name
+                          }
+                          ... on Team {
+                            name
+                            slug
+                          }
+                        }
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldPullRequestsValue {
+                      pullRequests(first: 10) {
+                        nodes {
+                          number
+                          title
+                          state
+                          url
+                        }
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+  organization_project_items_paginated:
+    description: "Get organization project items with pagination support"
+    parameters:
+      - name: "orgLogin"
+        type: "String!"
+        description: "Organization login"
+      - name: "projectNumber"
+        type: "Int!"
+        description: "Project number"
+      - name: "first"
+        type: "Int"
+        description: "Number of items per page (default 100, max 100)"
+      - name: "after"
+        type: "String"
+        description: "Cursor for pagination"
+    query: |
+      query($orgLogin: String!, $projectNumber: Int!, $first: Int = 100, $after: String) {
+        organization(login: $orgLogin) {
+          projectV2(number: $projectNumber) {
+            id
+            title
+            items(first: $first, after: $after) {
+              totalCount
+              pageInfo {
+                hasNextPage
+                hasPreviousPage
+                startCursor
+                endCursor
+              }
+              nodes {
+                id
+                content {
+                  ... on Issue {
+                    title
+                    number
+                    body
+                    state
+                    url
+                    createdAt
+                    updatedAt
+                    closedAt
+                    repository {
+                      name
+                      owner {
+                        login
+                      }
+                    }
+                    assignees(first: 10) {
+                      nodes {
+                        login
+                        name
+                      }
+                    }
+                    labels(first: 10) {
+                      nodes {
+                        name
+                        color
+                      }
+                    }
+                    milestone {
+                      title
+                      dueOn
+                    }
+                  }
+                  ... on PullRequest {
+                    title
+                    number
+                    body
+                    state
+                    url
+                    createdAt
+                    updatedAt
+                    closedAt
+                    merged
+                    mergedAt
+                    repository {
+                      name
+                      owner {
+                        login
+                      }
+                    }
+                    assignees(first: 10) {
+                      nodes {
+                        login
+                        name
+                      }
+                    }
+                    labels(first: 10) {
+                      nodes {
+                        name
+                        color
+                      }
+                    }
+                  }
+                  ... on DraftIssue {
+                    title
+                    body
+                    createdAt
+                    updatedAt
+                  }
+                }
+                fieldValues(first: 30) {
+                  nodes {
+                    ... on ProjectV2ItemFieldSingleSelectValue {
+                      name
+                      color
+                      description
+                      field {
+                        ... on ProjectV2SingleSelectField {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldTextValue {
+                      text
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldNumberValue {
+                      number
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldUserValue {
+                      users(first: 10) {
+                        nodes {
+                          login
+                          name
+                        }
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldDateValue {
+                      date
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldIterationValue {
+                      title
+                      startDate
+                      duration
+                      field {
+                        ... on ProjectV2IterationField {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldLabelValue {
+                      labels(first: 10) {
+                        nodes {
+                          name
+                          color
+                        }
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldRepositoryValue {
+                      repository {
+                        name
+                        owner {
+                          login
+                        }
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldMilestoneValue {
+                      milestone {
+                        title
+                        dueOn
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldReviewersValue {
+                      reviewers(first: 10) {
+                        nodes {
+                          ... on User {
+                            login
+                            name
+                          }
+                          ... on Team {
+                            name
+                            slug
+                          }
+                        }
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                    ... on ProjectV2ItemFieldPullRequestsValue {
+                      pullRequests(first: 10) {
+                        nodes {
+                          number
+                          title
+                          state
+                          url
+                        }
+                      }
+                      field {
+                        ... on ProjectV2Field {
+                          name
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+  user_project_items_sorted:
+    description: "Get user project items with server-side sorting"
+    parameters:
+      - name: "projectNumber"
+        type: "Int!"
+        description: "Project number"
+      - name: "first"
+        type: "Int"
+        description: "Number of items per page (default 100, max 100)"
+      - name: "after"
+        type: "String"
+        description: "Cursor for pagination"
+      - name: "orderField"
+        type: "ProjectV2ItemOrderField"
+        description: "Sort field: POSITION, CREATED_AT, UPDATED_AT"
+      - name: "orderDirection"
+        type: "OrderDirection"
+        description: "Sort direction: ASC or DESC"
+    query: |
+      query($projectNumber: Int!, $first: Int = 100, $after: String, $orderField: ProjectV2ItemOrderField = POSITION, $orderDirection: OrderDirection = ASC) {
+        viewer {
+          projectV2(number: $projectNumber) {
+            id
+            title
+            items(first: $first, after: $after, orderBy: {field: $orderField, direction: $orderDirection}) {
+              totalCount
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+              nodes {
+                id
+                isArchived
+                content {
+                  ... on Issue {
+                    title
+                    number
+                    state
+                    url
+                    createdAt
+                    updatedAt
+                    repository {
+                      name
+                      owner { login }
+                    }
+                    assignees(first: 10) {
+                      nodes { login name }
+                    }
+                  }
+                  ... on PullRequest {
+                    title
+                    number
+                    state
+                    url
+                    createdAt
+                    updatedAt
+                    merged
+                    repository {
+                      name
+                      owner { login }
+                    }
+                    assignees(first: 10) {
+                      nodes { login name }
+                    }
+                  }
+                  ... on DraftIssue {
+                    title
+                    createdAt
+                    updatedAt
+                  }
+                }
+                fieldValues(first: 20) {
+                  nodes {
+                    ... on ProjectV2ItemFieldSingleSelectValue {
+                      name
+                      field { ... on ProjectV2SingleSelectField { name } }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+  organization_project_items_sorted:
+    description: "Get organization project items with server-side sorting"
+    parameters:
+      - name: "orgLogin"
+        type: "String!"
+        description: "Organization login"
+      - name: "projectNumber"
+        type: "Int!"
+        description: "Project number"
+      - name: "first"
+        type: "Int"
+        description: "Number of items per page (default 100, max 100)"
+      - name: "after"
+        type: "String"
+        description: "Cursor for pagination"
+      - name: "orderField"
+        type: "ProjectV2ItemOrderField"
+        description: "Sort field: POSITION, CREATED_AT, UPDATED_AT"
+      - name: "orderDirection"
+        type: "OrderDirection"
+        description: "Sort direction: ASC or DESC"
+    query: |
+      query($orgLogin: String!, $projectNumber: Int!, $first: Int = 100, $after: String, $orderField: ProjectV2ItemOrderField = POSITION, $orderDirection: OrderDirection = ASC) {
+        organization(login: $orgLogin) {
+          projectV2(number: $projectNumber) {
+            id
+            title
+            items(first: $first, after: $after, orderBy: {field: $orderField, direction: $orderDirection}) {
+              totalCount
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+              nodes {
+                id
+                isArchived
+                content {
+                  ... on Issue {
+                    title
+                    number
+                    state
+                    url
+                    createdAt
+                    updatedAt
+                    repository {
+                      name
+                      owner { login }
+                    }
+                    assignees(first: 10) {
+                      nodes { login name }
+                    }
+                  }
+                  ... on PullRequest {
+                    title
+                    number
+                    state
+                    url
+                    createdAt
+                    updatedAt
+                    merged
+                    repository {
+                      name
+                      owner { login }
+                    }
+                    assignees(first: 10) {
+                      nodes { login name }
+                    }
+                  }
+                  ... on DraftIssue {
+                    title
+                    createdAt
+                    updatedAt
+                  }
+                }
+                fieldValues(first: 20) {
+                  nodes {
+                    ... on ProjectV2ItemFieldSingleSelectValue {
+                      name
+                      field { ... on ProjectV2SingleSelectField { name } }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+mutations:
+  update_item_field_single_select:
+    description: "Update a single-select field value for a project item"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+        description: "Project node ID"
+      - name: "itemId"
+        type: "ID!"
+        description: "Item node ID"
+      - name: "fieldId"
+        type: "ID!"
+        description: "Field node ID"
+      - name: "optionId"
+        type: "String!"
+        description: "Option ID for single-select"
+    query: |
+      mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+        updateProjectV2ItemFieldValue(input: {
+          projectId: $projectId
+          itemId: $itemId
+          fieldId: $fieldId
+          value: { singleSelectOptionId: $optionId }
+        }) {
+          projectV2Item {
+            id
+          }
+        }
+      }
+
+  update_item_field_text:
+    description: "Update a text field value for a project item"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+        description: "Project node ID"
+      - name: "itemId"
+        type: "ID!"
+        description: "Item node ID"
+      - name: "fieldId"
+        type: "ID!"
+        description: "Field node ID"
+      - name: "text"
+        type: "String!"
+        description: "Text value"
+    query: |
+      mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $text: String!) {
+        updateProjectV2ItemFieldValue(input: {
+          projectId: $projectId
+          itemId: $itemId
+          fieldId: $fieldId
+          value: { text: $text }
+        }) {
+          projectV2Item {
+            id
+          }
+        }
+      }
+
+  update_item_field_number:
+    description: "Update a number field value for a project item"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+        description: "Project node ID"
+      - name: "itemId"
+        type: "ID!"
+        description: "Item node ID"
+      - name: "fieldId"
+        type: "ID!"
+        description: "Field node ID"
+      - name: "number"
+        type: "Float!"
+        description: "Number value"
+    query: |
+      mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $number: Float!) {
+        updateProjectV2ItemFieldValue(input: {
+          projectId: $projectId
+          itemId: $itemId
+          fieldId: $fieldId
+          value: { number: $number }
+        }) {
+          projectV2Item {
+            id
+          }
+        }
+      }
+
+  update_item_field_date:
+    description: "Update a date field value for a project item"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+        description: "Project node ID"
+      - name: "itemId"
+        type: "ID!"
+        description: "Item node ID"
+      - name: "fieldId"
+        type: "ID!"
+        description: "Field node ID"
+      - name: "date"
+        type: "Date!"
+        description: "Date value (ISO 8601 format)"
+    query: |
+      mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $date: Date!) {
+        updateProjectV2ItemFieldValue(input: {
+          projectId: $projectId
+          itemId: $itemId
+          fieldId: $fieldId
+          value: { date: $date }
+        }) {
+          projectV2Item {
+            id
+          }
+        }
+      }
+
+  update_item_field_iteration:
+    description: "Update an iteration field value for a project item"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+        description: "Project node ID"
+      - name: "itemId"
+        type: "ID!"
+        description: "Item node ID"
+      - name: "fieldId"
+        type: "ID!"
+        description: "Field node ID"
+      - name: "iterationId"
+        type: "String!"
+        description: "Iteration ID"
+    query: |
+      mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $iterationId: String!) {
+        updateProjectV2ItemFieldValue(input: {
+          projectId: $projectId
+          itemId: $itemId
+          fieldId: $fieldId
+          value: { iterationId: $iterationId }
+        }) {
+          projectV2Item {
+            id
+          }
+        }
+      }
+
+  clear_item_field:
+    description: "Clear a field value for a project item"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+        description: "Project node ID"
+      - name: "itemId"
+        type: "ID!"
+        description: "Item node ID"
+      - name: "fieldId"
+        type: "ID!"
+        description: "Field node ID"
+    query: |
+      mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!) {
+        clearProjectV2ItemFieldValue(input: {
+          projectId: $projectId
+          itemId: $itemId
+          fieldId: $fieldId
+        }) {
+          projectV2Item {
+            id
+          }
+        }
+      }
+
+  add_item_by_id:
+    description: "Add an existing issue or PR to a project"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+        description: "Project node ID"
+      - name: "contentId"
+        type: "ID!"
+        description: "Issue or PR node ID"
+    query: |
+      mutation($projectId: ID!, $contentId: ID!) {
+        addProjectV2ItemById(input: {
+          projectId: $projectId
+          contentId: $contentId
+        }) {
+          item {
+            id
+          }
+        }
+      }
+
+  add_draft_issue:
+    description: "Create a draft issue in a project"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+        description: "Project node ID"
+      - name: "title"
+        type: "String!"
+        description: "Draft issue title"
+      - name: "body"
+        type: "String"
+        description: "Draft issue body"
+    query: |
+      mutation($projectId: ID!, $title: String!, $body: String) {
+        addProjectV2DraftIssue(input: {
+          projectId: $projectId
+          title: $title
+          body: $body
+        }) {
+          projectItem {
+            id
+          }
+        }
+      }
+
+  convert_draft_to_issue:
+    description: "Convert a draft issue to a real issue"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+        description: "Project node ID"
+      - name: "itemId"
+        type: "ID!"
+        description: "Draft item node ID"
+      - name: "repositoryId"
+        type: "ID!"
+        description: "Repository node ID for the new issue"
+    query: |
+      mutation($projectId: ID!, $itemId: ID!, $repositoryId: ID!) {
+        convertProjectV2DraftIssueItemToIssue(input: {
+          projectId: $projectId
+          itemId: $itemId
+          repositoryId: $repositoryId
+        }) {
+          item {
+            id
+            content {
+              ... on Issue {
+                id
+                number
+                url
+              }
+            }
+          }
+        }
+      }
+
+  archive_item:
+    description: "Archive an item in a project"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+        description: "Project node ID"
+      - name: "itemId"
+        type: "ID!"
+        description: "Item node ID"
+    query: |
+      mutation($projectId: ID!, $itemId: ID!) {
+        archiveProjectV2Item(input: {
+          projectId: $projectId
+          itemId: $itemId
+        }) {
+          item {
+            id
+            isArchived
+          }
+        }
+      }
+
+  unarchive_item:
+    description: "Unarchive an item in a project"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+        description: "Project node ID"
+      - name: "itemId"
+        type: "ID!"
+        description: "Item node ID"
+    query: |
+      mutation($projectId: ID!, $itemId: ID!) {
+        unarchiveProjectV2Item(input: {
+          projectId: $projectId
+          itemId: $itemId
+        }) {
+          item {
+            id
+            isArchived
+          }
+        }
+      }
+
+  create_project:
+    description: "Create a new project"
+    parameters:
+      - name: "ownerId"
+        type: "ID!"
+        description: "Owner node ID (user or organization)"
+      - name: "title"
+        type: "String!"
+        description: "Project title"
+    query: |
+      mutation($ownerId: ID!, $title: String!) {
+        createProjectV2(input: {
+          ownerId: $ownerId
+          title: $title
+        }) {
+          projectV2 {
+            id
+            number
+            title
+            url
+          }
+        }
+      }
+
+  update_project:
+    description: "Update project settings"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+        description: "Project node ID"
+      - name: "title"
+        type: "String"
+        description: "New project title"
+      - name: "shortDescription"
+        type: "String"
+        description: "New project description"
+      - name: "closed"
+        type: "Boolean"
+        description: "Whether project is closed"
+      - name: "public"
+        type: "Boolean"
+        description: "Whether project is public"
+    query: |
+      mutation($projectId: ID!, $title: String, $shortDescription: String, $closed: Boolean, $public: Boolean) {
+        updateProjectV2(input: {
+          projectId: $projectId
+          title: $title
+          shortDescription: $shortDescription
+          closed: $closed
+          public: $public
+        }) {
+          projectV2 {
+            id
+            title
+            shortDescription
+            closed
+            public
+            url
+          }
+        }
+      }
+
+  copy_project:
+    description: "Copy an existing project"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+        description: "Source project node ID"
+      - name: "ownerId"
+        type: "ID!"
+        description: "Owner node ID for the new project"
+      - name: "title"
+        type: "String!"
+        description: "New project title"
+      - name: "includeDraftIssues"
+        type: "Boolean"
+        description: "Include draft issues in copy"
+    query: |
+      mutation($projectId: ID!, $ownerId: ID!, $title: String!, $includeDraftIssues: Boolean = false) {
+        copyProjectV2(input: {
+          projectId: $projectId
+          ownerId: $ownerId
+          title: $title
+          includeDraftIssues: $includeDraftIssues
+        }) {
+          projectV2 {
+            id
+            number
+            title
+            url
+          }
+        }
+      }
+
+  create_field:
+    description: "Create a new custom field in a project"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+        description: "Project node ID"
+      - name: "dataType"
+        type: "ProjectV2CustomFieldType!"
+        description: "Field type: TEXT, NUMBER, DATE, SINGLE_SELECT, ITERATION"
+      - name: "name"
+        type: "String!"
+        description: "Field name"
+      - name: "singleSelectOptions"
+        type: "[ProjectV2SingleSelectFieldOptionInput!]"
+        description: "Options for single-select fields"
+    query: |
+      mutation($projectId: ID!, $dataType: ProjectV2CustomFieldType!, $name: String!, $singleSelectOptions: [ProjectV2SingleSelectFieldOptionInput!]) {
+        createProjectV2Field(input: {
+          projectId: $projectId
+          dataType: $dataType
+          name: $name
+          singleSelectOptions: $singleSelectOptions
+        }) {
+          projectV2Field {
+            ... on ProjectV2Field {
+              id
+              name
+              dataType
+            }
+            ... on ProjectV2SingleSelectField {
+              id
+              name
+              dataType
+              options {
+                id
+                name
+                color
+              }
+            }
+            ... on ProjectV2IterationField {
+              id
+              name
+              dataType
+            }
+          }
+        }
+      }
+
+  # Field Management Mutations
+  update_field:
+    description: "Update field settings (name)"
+    parameters:
+      - name: "fieldId"
+        type: "ID!"
+        description: "Field node ID"
+      - name: "name"
+        type: "String"
+        description: "New field name"
+    query: |
+      mutation($fieldId: ID!, $name: String) {
+        updateProjectV2Field(input: {
+          fieldId: $fieldId
+          name: $name
+        }) {
+          projectV2Field {
+            ... on ProjectV2Field {
+              id
+              name
+              dataType
+            }
+            ... on ProjectV2SingleSelectField {
+              id
+              name
+              dataType
+              options {
+                id
+                name
+                color
+              }
+            }
+            ... on ProjectV2IterationField {
+              id
+              name
+              dataType
+            }
+          }
+        }
+      }
+
+  create_single_select_option:
+    description: "Add a new option to a single-select field"
+    parameters:
+      - name: "fieldId"
+        type: "ID!"
+        description: "Single-select field node ID"
+      - name: "name"
+        type: "String!"
+        description: "Option name"
+      - name: "color"
+        type: "ProjectV2SingleSelectFieldOptionColor!"
+        description: "Option color (GRAY, BLUE, GREEN, YELLOW, ORANGE, RED, PINK, PURPLE)"
+      - name: "description"
+        type: "String"
+        description: "Option description"
+    query: |
+      mutation($fieldId: ID!, $name: String!, $color: ProjectV2SingleSelectFieldOptionColor!, $description: String) {
+        createProjectV2FieldOption(input: {
+          fieldId: $fieldId
+          name: $name
+          color: $color
+          description: $description
+        }) {
+          projectV2FieldOption {
+            id
+            name
+            color
+            description
+          }
+        }
+      }
+
+  update_single_select_option:
+    description: "Update a single-select option (name, color, description)"
+    parameters:
+      - name: "optionId"
+        type: "ID!"
+        description: "Option node ID"
+      - name: "name"
+        type: "String"
+        description: "New option name"
+      - name: "color"
+        type: "ProjectV2SingleSelectFieldOptionColor"
+        description: "New color (GRAY, BLUE, GREEN, YELLOW, ORANGE, RED, PINK, PURPLE)"
+      - name: "description"
+        type: "String"
+        description: "New description"
+    query: |
+      mutation($optionId: ID!, $name: String, $color: ProjectV2SingleSelectFieldOptionColor, $description: String) {
+        updateProjectV2FieldOption(input: {
+          optionId: $optionId
+          name: $name
+          color: $color
+          description: $description
+        }) {
+          projectV2FieldOption {
+            id
+            name
+            color
+            description
+          }
+        }
+      }
+
+  update_project_readme:
+    description: "Update project README content"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+        description: "Project node ID"
+      - name: "readme"
+        type: "String!"
+        description: "README content (markdown)"
+    query: |
+      mutation($projectId: ID!, $readme: String!) {
+        updateProjectV2(input: {
+          projectId: $projectId
+          readme: $readme
+        }) {
+          projectV2 {
+            id
+            title
+            readme
+            url
+          }
+        }
+      }
+
+  # Issue/PR Milestone Mutations
+  # Note: Milestones are set on issues/PRs, NOT on ProjectV2 items
+  set_issue_milestone:
+    description: "Set or clear milestone on an issue"
+    parameters:
+      - name: "issueId"
+        type: "ID!"
+        description: "Issue node ID (from project item content)"
+      - name: "milestoneId"
+        type: "ID"
+        description: "Milestone node ID (null to clear)"
+    query: |
+      mutation($issueId: ID!, $milestoneId: ID) {
+        updateIssue(input: {
+          id: $issueId
+          milestoneId: $milestoneId
+        }) {
+          issue {
+            id
+            number
+            title
+            milestone {
+              id
+              number
+              title
+            }
+          }
+        }
+      }
+
+  set_pr_milestone:
+    description: "Set or clear milestone on a pull request"
+    parameters:
+      - name: "prId"
+        type: "ID!"
+        description: "Pull request node ID"
+      - name: "milestoneId"
+        type: "ID"
+        description: "Milestone node ID (null to clear)"
+    query: |
+      mutation($prId: ID!, $milestoneId: ID) {
+        updatePullRequest(input: {
+          pullRequestId: $prId
+          milestoneId: $milestoneId
+        }) {
+          pullRequest {
+            id
+            number
+            title
+            milestone {
+              id
+              number
+              title
+            }
+          }
+        }
+      }
+
+  # Status Update Mutations
+  # Status values: ON_TRACK, AT_RISK, OFF_TRACK, COMPLETE, INACTIVE
+  create_status_update:
+    description: "Create a new status update for a project"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+        description: "Project node ID"
+      - name: "status"
+        type: "ProjectV2StatusUpdateStatus"
+        description: "ON_TRACK, AT_RISK, OFF_TRACK, COMPLETE, or INACTIVE"
+      - name: "body"
+        type: "String"
+        description: "Status update message (markdown)"
+      - name: "startDate"
+        type: "Date"
+        description: "Start date (YYYY-MM-DD)"
+      - name: "targetDate"
+        type: "Date"
+        description: "Target date (YYYY-MM-DD)"
+    query: |
+      mutation($projectId: ID!, $status: ProjectV2StatusUpdateStatus, $body: String, $startDate: Date, $targetDate: Date) {
+        createProjectV2StatusUpdate(input: {
+          projectId: $projectId
+          status: $status
+          body: $body
+          startDate: $startDate
+          targetDate: $targetDate
+        }) {
+          statusUpdate {
+            id
+            body
+            status
+            startDate
+            targetDate
+            createdAt
+            creator {
+              login
+            }
+          }
+        }
+      }
+
+  update_status_update:
+    description: "Update an existing status update"
+    parameters:
+      - name: "statusUpdateId"
+        type: "ID!"
+        description: "Status update node ID"
+      - name: "status"
+        type: "ProjectV2StatusUpdateStatus"
+        description: "ON_TRACK, AT_RISK, OFF_TRACK, COMPLETE, or INACTIVE"
+      - name: "body"
+        type: "String"
+        description: "Updated message (markdown)"
+      - name: "startDate"
+        type: "Date"
+        description: "Updated start date"
+      - name: "targetDate"
+        type: "Date"
+        description: "Updated target date"
+    query: |
+      mutation($statusUpdateId: ID!, $status: ProjectV2StatusUpdateStatus, $body: String, $startDate: Date, $targetDate: Date) {
+        updateProjectV2StatusUpdate(input: {
+          statusUpdateId: $statusUpdateId
+          status: $status
+          body: $body
+          startDate: $startDate
+          targetDate: $targetDate
+        }) {
+          statusUpdate {
+            id
+            body
+            status
+            startDate
+            targetDate
+            updatedAt
+          }
+        }
+      }
+
+  # Repository Linking Mutations
+  link_repository:
+    description: "Link a repository to a project"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+        description: "Project node ID"
+      - name: "repositoryId"
+        type: "ID!"
+        description: "Repository node ID"
+    query: |
+      mutation($projectId: ID!, $repositoryId: ID!) {
+        linkProjectV2ToRepository(input: {
+          projectId: $projectId
+          repositoryId: $repositoryId
+        }) {
+          repository {
+            id
+            name
+            nameWithOwner
+            url
+          }
+        }
+      }
+
+  unlink_repository:
+    description: "Unlink a repository from a project"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+        description: "Project node ID"
+      - name: "repositoryId"
+        type: "ID!"
+        description: "Repository node ID"
+    query: |
+      mutation($projectId: ID!, $repositoryId: ID!) {
+        unlinkProjectV2FromRepository(input: {
+          projectId: $projectId
+          repositoryId: $repositoryId
+        }) {
+          repository {
+            id
+            name
+            nameWithOwner
+          }
+        }
+      }
+
+  # View Mutations
+  # Layout types: TABLE, BOARD, ROADMAP
+  create_view:
+    description: "Create a new project view"
+    parameters:
+      - name: "projectId"
+        type: "ID!"
+        description: "Project node ID"
+      - name: "name"
+        type: "String!"
+        description: "View name"
+      - name: "layout"
+        type: "ProjectV2ViewLayout"
+        description: "TABLE, BOARD, or ROADMAP (default: TABLE)"
+    query: |
+      mutation($projectId: ID!, $name: String!, $layout: ProjectV2ViewLayout = TABLE) {
+        createProjectV2View(input: {
+          projectId: $projectId
+          name: $name
+          layout: $layout
+        }) {
+          projectV2View {
+            id
+            number
+            name
+            layout
+          }
+        }
+      }
+
+  update_view:
+    description: "Update view settings (name, layout)"
+    parameters:
+      - name: "viewId"
+        type: "ID!"
+        description: "View node ID"
+      - name: "name"
+        type: "String"
+        description: "New view name"
+      - name: "layout"
+        type: "ProjectV2ViewLayout"
+        description: "New layout: TABLE, BOARD, or ROADMAP"
+    query: |
+      mutation($viewId: ID!, $name: String, $layout: ProjectV2ViewLayout) {
+        updateProjectV2View(input: {
+          viewId: $viewId
+          name: $name
+          layout: $layout
+        }) {
+          projectV2View {
+            id
+            number
+            name
+            layout
+          }
+        }
+      }
 
 # Field Types Reference:
 field_types:

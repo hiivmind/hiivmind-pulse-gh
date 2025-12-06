@@ -196,6 +196,31 @@ discovery_filters:
         priorities: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | .fieldValues.nodes[]? | select(.field.name == "Priority") | .name] | unique | sort
       }
 
+  list_reviewers:
+    description: "Extract unique reviewers (users and teams) from project items"
+    filter: |
+      {
+        project: (.data.organization.projectV2 // .data.viewer.projectV2).title,
+        reviewers: {
+          users: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | .fieldValues.nodes[]? | select(.reviewers) | .reviewers.nodes[]? | select(.login) | {login: .login, name: .name}] | unique_by(.login) | sort_by(.login),
+          teams: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | .fieldValues.nodes[]? | select(.reviewers) | .reviewers.nodes[]? | select(.slug) | {name: .name, slug: .slug}] | unique_by(.slug) | sort_by(.slug)
+        }
+      }
+
+  list_linked_prs:
+    description: "Extract linked pull requests from project items"
+    filter: |
+      {
+        project: (.data.organization.projectV2 // .data.viewer.projectV2).title,
+        linkedPullRequests: [
+          (.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] |
+          .fieldValues.nodes[]? |
+          select(.pullRequests) |
+          .pullRequests.nodes[]? |
+          {number: .number, title: .title, state: .state, url: .url}
+        ] | unique_by(.url)
+      }
+
   list_fields:
     description: "Extract project field structure and types"
     filter: |
@@ -373,8 +398,219 @@ examples:
       cat project_data.json | jq '{{ .discovery_filters.list_assignees.filter }}'
     description: "List all available assignees"
 
+# =============================================================================
+# VIEW FILTERS
+# =============================================================================
+
+view_filters:
+  list_views:
+    description: "Format project views list"
+    filter: |
+      {
+        project: .data.node.title,
+        viewCount: .data.node.views.totalCount,
+        views: [
+          .data.node.views.nodes[] | {
+            id: .id,
+            number: .number,
+            name: .name,
+            layout: .layout,
+            filter: (.filter // ""),
+            sortBy: (if .sortBy then {
+              field: (.sortBy.field.name // null),
+              direction: .sortBy.direction
+            } else null end),
+            groupBy: (.groupBy.name // null),
+            createdAt: .createdAt,
+            updatedAt: .updatedAt
+          }
+        ]
+      }
+
+  format_view_config:
+    description: "Format single view configuration"
+    filter: |
+      {
+        project: .data.node.title,
+        view: (
+          .data.node.view | {
+            id: .id,
+            number: .number,
+            name: .name,
+            layout: .layout,
+            filter: (.filter // "No filter"),
+            sortBy: (if .sortBy then {
+              field: (.sortBy.field.name // null),
+              direction: .sortBy.direction
+            } else "Not sorted" end),
+            groupBy: (.groupBy.name // "Not grouped"),
+            createdAt: .createdAt,
+            updatedAt: .updatedAt
+          }
+        )
+      }
+
+# =============================================================================
+# REPOSITORY LINKING FILTERS
+# =============================================================================
+
+repository_filters:
+  list_linked_repositories:
+    description: "Format linked repositories from a project"
+    filter: |
+      {
+        project: .data.node.title,
+        repositoryCount: .data.node.repositories.totalCount,
+        repositories: [
+          .data.node.repositories.nodes[] | {
+            id: .id,
+            name: .name,
+            fullName: .nameWithOwner,
+            owner: .owner.login,
+            url: .url,
+            isPrivate: .isPrivate,
+            description: (.description // "")
+          }
+        ]
+      }
+
+# =============================================================================
+# STATUS UPDATE FILTERS
+# =============================================================================
+# Filters for project status update data
+
+status_update_filters:
+  format_status_updates:
+    description: "Format status updates for display"
+    filter: |
+      {
+        project: .data.node.title,
+        totalUpdates: .data.node.statusUpdates.totalCount,
+        updates: [
+          .data.node.statusUpdates.nodes[] | {
+            id: .id,
+            status: .status,
+            body: (.body // ""),
+            startDate: (.startDate // "Not set"),
+            targetDate: (.targetDate // "Not set"),
+            createdAt: .createdAt,
+            updatedAt: .updatedAt,
+            creator: .creator.login
+          }
+        ]
+      }
+
+  filter_by_status:
+    description: "Filter updates by status value"
+    parameters:
+      - name: "status"
+        description: "ON_TRACK, AT_RISK, OFF_TRACK, COMPLETE, or INACTIVE"
+    filter: |
+      {
+        project: .data.node.title,
+        filterStatus: $status,
+        updates: [
+          .data.node.statusUpdates.nodes[] |
+          select(.status == $status) | {
+            id: .id,
+            status: .status,
+            body: (.body // ""),
+            startDate: (.startDate // "Not set"),
+            targetDate: (.targetDate // "Not set"),
+            createdAt: .createdAt,
+            creator: .creator.login
+          }
+        ],
+        count: [.data.node.statusUpdates.nodes[] | select(.status == $status)] | length
+      }
+
+  latest_status:
+    description: "Extract just the latest status update"
+    filter: |
+      {
+        project: .data.node.title,
+        latestUpdate: (
+          .data.node.statusUpdates.nodes[0] // null |
+          if . then {
+            status: .status,
+            body: (.body // "No message"),
+            startDate: (.startDate // "Not set"),
+            targetDate: (.targetDate // "Not set"),
+            createdAt: .createdAt,
+            creator: .creator.login
+          } else null end
+        )
+      }
+
+# =============================================================================
+# MILESTONE FILTERS
+# =============================================================================
+# Filters for milestone data from both GraphQL and REST API responses
+
+milestone_filters:
+  # For GraphQL response from repository_milestones query
+  list_milestones_graphql:
+    description: "Format milestone list from GraphQL response"
+    filter: |
+      {
+        repository: {
+          owner: .data.repository.owner.login,
+          name: .data.repository.name
+        },
+        milestones: [
+          .data.repository.milestones.nodes[] | {
+            id: .id,
+            number: .number,
+            title: .title,
+            description: (.description // ""),
+            state: .state,
+            dueOn: (.dueOn // "No due date"),
+            progress: .progressPercentage,
+            issueCount: .issues.totalCount,
+            prCount: .pullRequests.totalCount,
+            url: .url
+          }
+        ],
+        count: (.data.repository.milestones.nodes | length)
+      }
+
+  # For REST API response from list_milestones
+  list_milestones_rest:
+    description: "Format milestone list from REST API response"
+    filter: |
+      [.[] | {
+        number: .number,
+        title: .title,
+        description: (.description // ""),
+        state: .state,
+        dueOn: (.due_on // "No due date"),
+        openIssues: .open_issues,
+        closedIssues: .closed_issues,
+        progress: (if (.open_issues + .closed_issues) > 0
+                   then ((.closed_issues / (.open_issues + .closed_issues)) * 100 | floor)
+                   else 0 end),
+        url: .html_url
+      }]
+
+  milestone_progress:
+    description: "Show milestone completion statistics"
+    filter: |
+      {
+        title: .title,
+        state: .state,
+        openIssues: .open_issues,
+        closedIssues: .closed_issues,
+        total: (.open_issues + .closed_issues),
+        progressPercent: (if (.open_issues + .closed_issues) > 0
+                         then ((.closed_issues / (.open_issues + .closed_issues)) * 100 | floor)
+                         else 0 end),
+        dueOn: (.due_on // "No due date"),
+        isOverdue: (if .due_on then (.due_on | fromdateiso8601) < now else false end)
+      }
+
 # Notes:
 # - All filters return JSON data for LLM interpretation
 # - Use empty strings ("") to skip optional parameters in universal filter
 # - Discovery filters help identify available filter values
+# - Milestone filters work with both GraphQL and REST API responses
 # - Filters are designed to work with both user and organization project data

@@ -4,57 +4,73 @@ This file provides guidance to Claude Code when working with this repository.
 
 ## System Overview
 
-This is the **GitHub Projects Explorer** - a Claude Code plugin providing pipeline-based functions for querying, filtering, and analyzing GitHub Projects v2 data via GraphQL.
+This is the **GitHub CLI Toolkit** - a Claude Code plugin providing comprehensive GitHub API operations via GraphQL and REST APIs. It includes support for:
+
+- **GitHub Projects v2** - Full project management, status updates, views, fields
+- **Milestones** - Repository-level milestone management
+- **REST API** - Operations not available via GraphQL
+
+## Skills
+
+The toolkit provides three domain-specific skills:
+
+| Skill | Purpose |
+|-------|---------|
+| `github-projects` | Projects v2 - items, filtering, status updates, views, fields |
+| `github-milestones` | Milestone queries and management |
+| `github-rest-api` | REST API operations (creating milestones, etc.) |
 
 ## Quick Start
 
 ```bash
 # Source functions (once per session)
-source lib/github/gh-project-functions.sh
+source lib/github/gh-project-functions.sh  # GraphQL operations
+source lib/github/gh-rest-functions.sh     # REST operations
 
 # Fetch and analyze a project
 fetch_org_project 2 "org-name" | apply_universal_filter "" "" "" ""
+
+# List milestones
+list_milestones "owner" "repo" | format_milestones
 ```
-
-## Key Commands
-
-### Data Fetching
-- `fetch_org_project PROJECT_NUM "ORG"` - Fetch organization project
-- `fetch_user_project PROJECT_NUM` - Fetch user project
-
-### Filtering
-- `apply_universal_filter "REPO" "ASSIGNEE" "STATUS" "PRIORITY"` - Multi-filter (use "" to skip)
-- `apply_assignee_filter "USER"` - Filter by assignee
-- `apply_repo_filter "REPO"` - Filter by repository
-- `apply_status_filter "STATUS"` - Filter by status
-
-### Discovery
-- `list_assignees` - List all assignees
-- `list_repositories` - List all repositories
-- `list_statuses` - List all status values
-- `list_priorities` - List all priority values
-
-### Project Discovery
-- `discover_org_projects "ORG" | format_org_projects "ORG"` - Find org projects
-- `discover_user_projects | format_user_projects` - Find user projects
-
-### Output
-- `get_count` - Extract filtered count
-- `get_items` - Extract items array
 
 ## File Structure
 
 ```
-github-projects-explorer/
-├── .claude-plugin/          # Plugin manifests
-├── skills/                  # Claude skills
-├── commands/                # Slash commands
-├── lib/github/              # Core implementation
-│   ├── gh-project-functions.sh
-│   ├── gh-project-graphql-queries.yaml
-│   └── gh-project-jq-filters.yaml
+github-cli-toolkit/
+├── .claude-plugin/              # Plugin manifests
+├── skills/
+│   ├── github-projects/         # Projects v2 skill
+│   ├── github-milestones/       # Milestones skill
+│   └── github-rest-api/         # REST API skill
+├── lib/github/
+│   ├── gh-project-functions.sh      # GraphQL shell functions
+│   ├── gh-project-graphql-queries.yaml  # GraphQL templates
+│   ├── gh-project-jq-filters.yaml   # jq filter templates
+│   ├── gh-rest-functions.sh         # REST shell functions
+│   └── gh-rest-endpoints.yaml       # REST endpoint templates
 └── docs/
 ```
+
+## Key Function Groups
+
+### Projects v2 (GraphQL)
+- `fetch_org_project`, `fetch_user_project` - Fetch project data
+- `apply_*_filter` - Filter project items
+- `list_*` - Discovery functions
+- `fetch_project_status_updates`, `create_status_update` - Status updates
+- `fetch_project_views`, `create_project_view` - View management
+- `fetch_linked_repositories`, `link_repo_to_project` - Repository linking
+
+### Milestones (Mixed)
+- `fetch_repo_milestones` - Query via GraphQL
+- `set_issue_milestone`, `set_pr_milestone` - Set via GraphQL
+- `create_milestone`, `update_milestone`, `close_milestone` - Manage via REST
+
+### REST API
+- `list_milestones`, `get_milestone` - REST queries
+- `create_milestone`, `update_milestone` - REST mutations
+- Direct `gh api` usage for other operations
 
 ## Pipeline Pattern
 
@@ -66,6 +82,6 @@ fetch_org_project 2 "org" | apply_assignee_filter "user" | list_repositories
 
 ## Dependencies
 
-- GitHub CLI (`gh`) - authenticated
+- GitHub CLI (`gh`) - authenticated with appropriate scopes
 - jq (1.6+)
 - yq (4.0+)

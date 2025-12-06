@@ -1,0 +1,120 @@
+# GitHub REST API Endpoint Templates
+# Collection of REST API endpoints for operations not available via GraphQL
+# Use with: gh api [endpoint] [options]
+
+# =============================================================================
+# MILESTONES - Repository-level milestone management
+# =============================================================================
+# Note: Creating/updating/closing milestones requires REST API.
+# GraphQL only supports reading milestones and setting them on issues/PRs.
+
+milestones:
+  list:
+    description: "List milestones for a repository"
+    method: GET
+    endpoint: "repos/{owner}/{repo}/milestones"
+    parameters:
+      - name: "owner"
+        required: true
+        description: "Repository owner"
+      - name: "repo"
+        required: true
+        description: "Repository name"
+      - name: "state"
+        required: false
+        default: "open"
+        description: "State filter: open, closed, or all"
+      - name: "sort"
+        required: false
+        default: "due_on"
+        description: "Sort by: due_on or completeness"
+      - name: "direction"
+        required: false
+        default: "asc"
+        description: "Sort direction: asc or desc"
+
+  get:
+    description: "Get a specific milestone"
+    method: GET
+    endpoint: "repos/{owner}/{repo}/milestones/{milestone_number}"
+    parameters:
+      - name: "owner"
+        required: true
+      - name: "repo"
+        required: true
+      - name: "milestone_number"
+        required: true
+        description: "Milestone number (not ID)"
+
+  create:
+    description: "Create a new milestone"
+    method: POST
+    endpoint: "repos/{owner}/{repo}/milestones"
+    parameters:
+      - name: "owner"
+        required: true
+      - name: "repo"
+        required: true
+    body:
+      - name: "title"
+        required: true
+        description: "Milestone title"
+      - name: "state"
+        required: false
+        default: "open"
+        description: "State: open or closed"
+      - name: "description"
+        required: false
+        description: "Milestone description"
+      - name: "due_on"
+        required: false
+        description: "Due date (ISO 8601: YYYY-MM-DDTHH:MM:SSZ)"
+
+  update:
+    description: "Update an existing milestone"
+    method: PATCH
+    endpoint: "repos/{owner}/{repo}/milestones/{milestone_number}"
+    parameters:
+      - name: "owner"
+        required: true
+      - name: "repo"
+        required: true
+      - name: "milestone_number"
+        required: true
+    body:
+      - name: "title"
+        required: false
+        description: "New milestone title"
+      - name: "state"
+        required: false
+        description: "State: open or closed"
+      - name: "description"
+        required: false
+        description: "New description"
+      - name: "due_on"
+        required: false
+        description: "New due date (ISO 8601)"
+
+  delete:
+    description: "Delete a milestone"
+    method: DELETE
+    endpoint: "repos/{owner}/{repo}/milestones/{milestone_number}"
+    parameters:
+      - name: "owner"
+        required: true
+      - name: "repo"
+        required: true
+      - name: "milestone_number"
+        required: true
+    note: "EXCLUDED for safety - not implemented in shell functions"
+
+# =============================================================================
+# Future REST-only endpoints can be added here
+# =============================================================================
+# Examples of other REST-only operations:
+# - Repository topics
+# - GitHub Actions workflows
+# - Repository secrets
+# - Branch protection rules (some operations)
+# - Repository webhooks
+# - Release assets
