@@ -3,6 +3,7 @@
   "owner": {
     "name": "Discrete Data Systems"
   },
+  "repository": "https://github.com/hiivmind/hiivmind-github-projects",
   "metadata": {
     "description": "Comprehensive GitHub API toolkit for Projects, Milestones, Branch Protection, and REST operations",
     "version": "2.1.0"

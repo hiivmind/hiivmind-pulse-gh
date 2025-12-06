@@ -1,6 +1,6 @@
 # GitHub CLI Toolkit
 
-A Claude Code plugin that enables comprehensive GitHub API operations via GraphQL and REST. When installed, Claude automatically understands how to manage Projects v2, Milestones, and other GitHub resources.
+A Claude Code plugin that enables comprehensive GitHub API operations via GraphQL and REST. When installed, Claude automatically understands how to manage Projects v2, Milestones, Branch Protection, and other GitHub resources.
 
 ## Features
 
@@ -25,8 +25,8 @@ This plugin provides Claude with four **skills** - specialized knowledge that Cl
 ### As Claude Code Plugin
 
 ```bash
-# Install from marketplace (when published)
-claude plugin add your-org/github-cli-toolkit
+# Install from GitHub
+claude mcp add-from-claude-plugin https://github.com/hiivmind/hiivmind-github-projects
 ```
 
 ### Prerequisites
