@@ -1,0 +1,19 @@
+{
+  "name": "github-projects-explorer",
+  "owner": {
+    "name": "Discrete Data Systems"
+  },
+  "metadata": {
+    "description": "GitHub Projects v2 exploration and analytics toolkit",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "github-projects-explorer",
+      "source": "./",
+      "description": "Pipeline-based toolkit for exploring, filtering, and analyzing GitHub Projects v2 via GraphQL API",
+      "version": "1.0.0",
+      "keywords": ["github", "projects", "graphql", "analytics"]
+    }
+  ]
+}

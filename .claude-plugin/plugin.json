@@ -1,0 +1,16 @@
+{
+  "name": "github-projects-explorer",
+  "description": "Pipeline-based toolkit for exploring, filtering, and analyzing GitHub Projects v2 via GraphQL API",
+  "version": "1.0.0",
+  "author": {
+    "name": "Discrete Data Systems"
+  },
+  "keywords": [
+    "github",
+    "projects",
+    "graphql",
+    "project-management",
+    "analytics"
+  ],
+  "repository": "https://github.com/discreteds/hiivmind-github-projects"
+}

@@ -1,6 +1,6 @@
 ---
 command: hv-gh-project-discover
-allowed-tools: Bash(source ~/.hiivmind/github/scripts/gh-project-functions.sh), Bash(open ~/.hiivmind/github/scripts/config/gh-project-jq-filters.yaml), Bash(open ~/.hiivmind/github/scripts/config/gh-project-graphql-queries.yaml)
+allowed-tools: Bash(source lib/:*)
 description: Analyze current Git workflow state and provide intelligent next-step recommendations. Based on GitFlow conventions and best practices.
 ---
 # GitHub Project Discovery Command
@@ -50,7 +50,7 @@ Discover GitHub Projects across user, organization, and repository contexts usin
 
 **✅ PRODUCTION APPROACH**: Use bash functions that leverage YAML templates for clean, pipeable commands:
 
-1. **Step 1**: Source the helper functions: `source ~/.hiivmind/github/scripts/gh-project-functions.sh`
+1. **Step 1**: Source the helper functions: `source lib/github/gh-project-functions.sh`
 2. **Step 2**: Use pipeable functions for data fetching and formatting
 3. **Functions handle**: YAML template extraction, command substitution issues, and data flow
 
@@ -60,7 +60,7 @@ Discover GitHub Projects across user, organization, and repository contexts usin
 
 ```bash
 # Source helper functions (once per session)
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 
 # Basic user project discovery
 discover_user_projects | format_user_projects
@@ -70,7 +70,7 @@ discover_user_projects | format_user_projects
 
 ```bash
 # Source helper functions (once per session)
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 
 # Organization project discovery
 discover_org_projects "ORG_NAME" | format_org_projects "ORG_NAME"
@@ -80,7 +80,7 @@ discover_org_projects "ORG_NAME" | format_org_projects "ORG_NAME"
 
 ```bash
 # Source helper functions (once per session)
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 
 # Repository project discovery
 discover_repo_projects "OWNER" "REPO_NAME" | format_repo_projects "OWNER" "REPO_NAME"
@@ -90,7 +90,7 @@ discover_repo_projects "OWNER" "REPO_NAME" | format_repo_projects "OWNER" "REPO_
 
 ```bash
 # Source helper functions (once per session)
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 
 # All accessible projects discovery
 discover_all_projects | format_all_projects
@@ -104,7 +104,7 @@ discover_all_projects | format_all_projects
 
 ```bash
 # Source functions and discover user projects
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 discover_user_projects | format_user_projects
 ```
 
@@ -141,7 +141,7 @@ discover_user_projects | format_user_projects
 
 ```bash
 # Source functions and discover organization projects
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 discover_org_projects "hiivmind" | format_org_projects "hiivmind"
 ```
 
@@ -181,7 +181,7 @@ discover_org_projects "hiivmind" | format_org_projects "hiivmind"
 
 ```bash
 # Source functions and discover repository projects
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 discover_repo_projects "hiivmind" "mountainash-settings" | format_repo_projects "hiivmind" "mountainash-settings"
 ```
 
@@ -211,7 +211,7 @@ discover_repo_projects "hiivmind" "mountainash-settings" | format_repo_projects 
 
 ```bash
 # Source functions and discover all accessible projects
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 discover_all_projects | format_all_projects
 ```
 
@@ -257,15 +257,15 @@ discover_all_projects | format_all_projects
 
 ```bash
 # Count user projects
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 discover_user_projects | format_user_projects | jq '.totalCount'
 
 # Get only open organization projects
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 discover_org_projects "hiivmind" | format_org_projects "hiivmind" | jq '.projects[] | select(.status == "OPEN")'
 
 # Extract project numbers for organization
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 discover_org_projects "hiivmind" | format_org_projects "hiivmind" | jq '.projects[].number'
 ```
 
@@ -285,12 +285,12 @@ discover_org_projects "hiivmind" | format_org_projects "hiivmind" | jq '.project
 
 | Component | YAML Path |
 |-----------|-----------|
-| **GraphQL Queries** | `.hiivmind/github-projects-graphql-queries.yaml` |
+| **GraphQL Queries** | `lib/github/gh-project-graphql-queries.yaml` |
 | User projects query | `.discovery.user_projects.query` |
 | Org projects query | `.discovery.specific_organization_projects.query` |
 | Repo projects query | `.discovery.repository_projects.query` |
 | All projects query | `.discovery.organization_projects.query` |
-| **jq Filters** | `.hiivmind/github-projects-jq-filters.yaml` |
+| **jq Filters** | `lib/github/gh-project-jq-filters.yaml` |
 | Format user projects | `.discovery_filters.format_user_projects.filter` |
 | Format org projects | `.discovery_filters.format_org_projects.filter` |
 | Format repo projects | `.discovery_filters.format_repo_projects.filter` |
@@ -374,7 +374,7 @@ After discovering projects, use the **project numbers** with the explorer comman
 
 ```bash
 # 1. Discover projects first
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 discover_org_projects "hiivmind" | format_org_projects "hiivmind"
 
 # 2. Use project numbers from results with explorer command
@@ -393,7 +393,7 @@ discover_org_projects "hiivmind" | format_org_projects "hiivmind"
 #### 1. Find Largest Project for Analysis
 ```bash
 # Discover and extract largest project
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 PROJECT_NUM=$(discover_org_projects "hiivmind" | format_org_projects "hiivmind" | jq -r '.projects | max_by(.items) | .number')
 echo "Analyzing largest project #$PROJECT_NUM"
 
@@ -404,7 +404,7 @@ echo "Analyzing largest project #$PROJECT_NUM"
 #### 2. Analyze All Active Projects
 ```bash
 # Get all open project numbers
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 discover_org_projects "hiivmind" | format_org_projects "hiivmind" | jq -r '.projects[] | select(.status == "OPEN") | "#\(.number) - \(.title) (\(.items) items)"'
 
 # Then analyze each with explorer:
@@ -415,7 +415,7 @@ discover_org_projects "hiivmind" | format_org_projects "hiivmind" | jq -r '.proj
 #### 3. Quick Project Reference Guide
 ```bash
 # Generate explorer command templates for all projects
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 discover_org_projects "hiivmind" | format_org_projects "hiivmind" | jq -r '.projects[] | select(.status == "OPEN") | "/hv-gh-project-explorer \(.number) hiivmind org  # \(.title) (\(.items) items)"'
 ```
 
@@ -438,7 +438,7 @@ Once you have project numbers from discovery, use these patterns:
 
 ```bash
 # Pipeline: Discovery → Explorer Analysis → Filtering
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 
 # 1. Find active projects
 ACTIVE_PROJECTS=$(discover_org_projects "hiivmind" | format_org_projects "hiivmind" | jq -r '.projects[] | select(.status == "OPEN") | .number')

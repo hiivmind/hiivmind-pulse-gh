@@ -1,6 +1,6 @@
 ---
 command: hv-gh-project-explorer
-allowed-tools: Bash(source .hiivmind/:*)
+allowed-tools: Bash(source lib/:*)
 description: Comprehensive GitHub Projects v2 analysis tool with filtering, discovery, field inspection, and multiple output formats using YAML template imports.
 ---
 
@@ -156,7 +156,7 @@ Ensure that command Parameters are provided or inferable from:
 
 **✅ PRODUCTION APPROACH**: Use bash functions that leverage YAML templates for clean, pipeable commands:
 
-1. **Step 1**: Source the helper functions: `source ~/.hiivmind/github/scripts/gh-project-functions.sh`
+1. **Step 1**: Source the helper functions: `source lib/github/gh-project-functions.sh`
 2. **Step 2**: Use pipeable functions for data fetching and processing
 3. **Functions handle**: YAML template extraction, command substitution issues, and data flow
 
@@ -166,7 +166,7 @@ Ensure that command Parameters are provided or inferable from:
 
 ```bash
 # Source helper functions (once per session)
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 
 # Basic organization project analysis
 fetch_org_project PROJECT_NUM "ORG_NAME" | apply_universal_filter "" "" "" ""
@@ -225,7 +225,7 @@ fetch_org_project PROJECT_NUM "ORG_NAME" | apply_assignee_filter "USERNAME" | li
 
 ```bash
 # Source functions and fetch project data
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 fetch_org_project 2 "my-org-name" | apply_universal_filter "" "" "" ""
 ```
 
@@ -253,7 +253,7 @@ fetch_org_project 2 "my-org-name" | apply_universal_filter "" "" "" ""
 
 ```bash
 # List project assignees
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 fetch_org_project 2 "my-org-name" | list_assignees
 ```
 
@@ -271,7 +271,7 @@ fetch_org_project 2 "my-org-name" | list_assignees
 
 ```bash
 # List all repositories
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 fetch_org_project 2 "my-org-name" | list_repositories
 ```
 
@@ -290,7 +290,7 @@ fetch_org_project 2 "my-org-name" | list_repositories
 
 ```bash
 # Filter by assignee
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 fetch_org_project 2 "my-org-name" | apply_assignee_filter "my_username"
 ```
 
@@ -311,7 +311,7 @@ fetch_org_project 2 "my-org-name" | apply_assignee_filter "my_username"
 
 ```bash
 # Show all status values
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 fetch_org_project 2 "my-org-name" | list_statuses
 ```
 
@@ -333,7 +333,7 @@ fetch_org_project 2 "my-org-name" | list_statuses
 
 ```bash
 # Multiple criteria with universal filter
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 fetch_org_project 2 "my-org-name" | apply_universal_filter "hiivmind-mcp" "my_username" "Backlog" "P1"
 ```
 
@@ -341,7 +341,7 @@ fetch_org_project 2 "my-org-name" | apply_universal_filter "hiivmind-mcp" "my_us
 
 ```bash
 # Get filtered count only
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 fetch_org_project 2 "my-org-name" | apply_assignee_filter "my_username" | get_count
 ```
 
@@ -354,7 +354,7 @@ fetch_org_project 2 "my-org-name" | apply_assignee_filter "my_username" | get_co
 
 ```bash
 # Discovery on filtered data
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 fetch_org_project 2 "my-org-name" | apply_assignee_filter "my_username" | list_repositories
 ```
 
@@ -402,7 +402,7 @@ fetch_org_project 2 "my-org-name" | apply_assignee_filter "my_username" | list_r
 
 ```bash
 # 1. Discover team members
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 fetch_org_project 2 "my-org-name" | list_assignees
 
 # 2. Analyze each team member's work
@@ -416,7 +416,7 @@ fetch_org_project 2 "my-org-name" | apply_universal_filter "" "my_username" "Bac
 
 ```bash
 # 1. Find all repositories
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 fetch_org_project 2 "my-org-name" | list_repositories
 
 # 2. Analyze specific repository
@@ -430,7 +430,7 @@ fetch_org_project 2 "my-org-name" | apply_repo_filter "hiivmind-mcp" | list_assi
 
 ```bash
 # 1. Show status distribution
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 fetch_org_project 2 "my-org-name" | list_statuses
 
 # 2. Count items in each status
@@ -493,7 +493,7 @@ done
 ```bash
 # Standard usage pattern for LLM implementation:
 # 1. Source functions once per session
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 
 # 2. Execute appropriate bash pipeline to get JSON data
 fetch_org_project PROJECT_NUM "ORG_NAME" | [filter_functions]
@@ -514,7 +514,7 @@ fetch_org_project PROJECT_NUM "ORG_NAME" | [filter_functions]
 **Step 1: Execute Bash Pipeline**
 ```bash
 # Get JSON data using appropriate bash functions
-source ~/.hiivmind/github/scripts/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 result=$(fetch_org_project 2 "my-org-name" | apply_assignee_filter "my_username")
 ```
 

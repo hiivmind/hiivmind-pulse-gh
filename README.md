@@ -1,21 +1,27 @@
-# GitHub Projects Explorer System
+# GitHub Projects Explorer
 
-A powerful command-line system for exploring, filtering, and analyzing GitHub Projects v2 data. Designed specifically for Claude Code integration, this tool provides a virtual CLI experience for managing and understanding your GitHub Projects.
+A Claude Code plugin for exploring, filtering, and analyzing GitHub Projects v2 data. Provides a pipeline-based toolkit with bash functions, GraphQL queries, and jq filters optimized for LLM interpretation.
 
-## Overview
+## Features
 
-The GitHub Projects Explorer System transforms GitHub Projects v2 data into actionable insights through a modular, pipeline-based architecture. Whether you're tracking issues across repositories, monitoring team workload, or analyzing project progress, this system provides the tools you need in a Claude Code-friendly format.
+- **Project Discovery**: Find projects across user, organization, and repository contexts
+- **Advanced Filtering**: Filter by repository, assignee, status, priority, or any combination
+- **Team Analytics**: Analyze assignee workload and repository distribution
+- **Pipeline Architecture**: Composable bash functions for custom workflows
+- **Memory Efficient**: Streaming data processing with no temporary files
+- **LLM-Optimized**: JSON output designed for Claude Code interpretation
 
-### Key Features
+## Installation
 
-- **🔍 Project Discovery**: Find projects across user, organization, and repository contexts
-- **📊 Advanced Filtering**: Filter by repository, assignee, status, priority, or any combination
-- **👥 Team Analytics**: Analyze assignee workload and repository distribution
-- **🚀 Pipeline Architecture**: Composable bash functions for custom workflows
-- **💾 Memory Efficient**: Streaming data processing with no temporary files
-- **🤖 LLM-Optimized**: JSON output designed for Claude Code interpretation
+### As Claude Code Plugin
 
-## Quick Start
+```bash
+# Add the marketplace
+/plugin marketplace add discreteds/hiivmind-github-projects
+
+# Install the plugin
+/plugin install github-projects-explorer@github-projects-explorer
+```
 
 ### Prerequisites
 
@@ -24,126 +30,100 @@ The GitHub Projects Explorer System transforms GitHub Projects v2 data into acti
 - **yq**: YAML processor (4.0+)
 - **Bash**: With process substitution support
 
-### Basic Usage
+## Quick Start
 
-1. **Source the functions** (once per session):
 ```bash
-source .hiivmind/gh-project-functions.sh
-```
+# Source the functions (once per session)
+source lib/github/gh-project-functions.sh
 
-2. **Explore your projects**:
-```bash
-# Discover all your projects
+# Discover your projects
 discover_user_projects | format_user_projects
 
-# Discover organization projects
-discover_org_projects "your-org" | format_org_projects "your-org"
-```
-
-3. **Analyze a specific project**:
-```bash
-# Get all items from project #2
+# Analyze an organization project
 fetch_org_project 2 "your-org" | apply_universal_filter "" "" "" ""
 
 # Filter by assignee
 fetch_org_project 2 "your-org" | apply_assignee_filter "username"
 
-# See who's working on what
+# List team members
 fetch_org_project 2 "your-org" | list_assignees
 ```
 
-## Architecture
-
-### System Components
+## Plugin Structure
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    GitHub Projects API                          │
-└─────────────────────┬───────────────────────────────────────────┘
-                      │ GraphQL Queries
-                      ▼
-┌─────────────────────────────────────────────────────────────────┐
-│              gh-project-functions.sh                            │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
-│  │ Data Fetching   │  │ Filter Pipeline │  │ Discovery Tools │ │
-│  │ Functions       │  │ Functions       │  │ Functions       │ │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘ │
-└─────────────────────┬───────────────────────────────────────────┘
-                      │ Bash Pipeline Processing
-                      ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    JSON Output                                  │
-│          (Structured for LLM Interpretation)                    │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### File Structure
-
-```
-hiivmind-github-projects/
-├── README.md                           # This file
-├── .claude/commands/                   # Claude Code command documentation
-│   ├── hv-gh-project-explorer.md      # Main explorer command
-│   └── hv-gh-project-discover.md      # Discovery command
-├── .hiivmind/                         # Core implementation
-│   ├── gh-project-functions.sh        # Bash pipeline functions
-│   ├── gh-project-graphql-queries.yaml # GraphQL query templates
-│   └── gh-project-jq-filters.yaml     # jq filter templates
-└── hv-gh-project-system-architecture.md # Detailed architecture docs
+github-projects-explorer/
+├── .claude-plugin/
+│   ├── plugin.json              # Plugin manifest
+│   └── marketplace.json         # Marketplace manifest
+├── skills/
+│   └── github-projects-explorer/
+│       └── SKILL.md             # Claude skill documentation
+├── commands/
+│   └── hiivmind/github/
+│       ├── hv-gh-project-explorer.md
+│       └── hv-gh-project-discover.md
+├── lib/github/
+│   ├── gh-project-functions.sh  # Core bash functions
+│   ├── gh-project-graphql-queries.yaml
+│   └── gh-project-jq-filters.yaml
+├── docs/
+└── README.md
 ```
 
 ## Function Reference
 
-### Data Fetching Functions
+### Data Fetching
 
-| Function | Description | Example |
-|----------|-------------|---------|
-| `fetch_org_project PROJECT_NUM "ORG"` | Fetch organization project data | `fetch_org_project 2 "acme-corp"` |
-| `fetch_user_project PROJECT_NUM` | Fetch user project data | `fetch_user_project 7` |
+| Function | Description |
+|----------|-------------|
+| `fetch_org_project NUM "ORG"` | Fetch organization project data |
+| `fetch_user_project NUM` | Fetch user project data |
+| `fetch_org_project_fields NUM "ORG"` | Get project field structure |
 
-### Filter Functions
+### Filtering
 
-| Function | Description | Example |
-|----------|-------------|---------|
-| `apply_universal_filter "REPO" "USER" "STATUS" "PRIORITY"` | Apply multiple filters | `apply_universal_filter "" "alice" "Backlog" "P1"` |
-| `apply_assignee_filter "USER"` | Filter by assignee | `apply_assignee_filter "bob"` |
-| `apply_repo_filter "REPO"` | Filter by repository | `apply_repo_filter "main-app"` |
-| `apply_status_filter "STATUS"` | Filter by status | `apply_status_filter "In Progress"` |
+| Function | Description |
+|----------|-------------|
+| `apply_universal_filter "REPO" "USER" "STATUS" "PRIORITY"` | Multi-criteria filter (use "" to skip) |
+| `apply_assignee_filter "USER"` | Filter by assignee |
+| `apply_repo_filter "REPO"` | Filter by repository |
+| `apply_status_filter "STATUS"` | Filter by status |
 
-### Discovery Functions
+### Discovery
 
-| Function | Description | Example |
-|----------|-------------|---------|
-| `list_assignees` | List all project assignees | `fetch_org_project 2 "org" \| list_assignees` |
-| `list_repositories` | List all repositories | `fetch_org_project 2 "org" \| list_repositories` |
-| `list_statuses` | List all status values | `fetch_org_project 2 "org" \| list_statuses` |
-| `list_priorities` | List all priority values | `fetch_org_project 2 "org" \| list_priorities` |
+| Function | Description |
+|----------|-------------|
+| `list_assignees` | List all project assignees |
+| `list_repositories` | List all repositories |
+| `list_statuses` | List all status values |
+| `list_priorities` | List all priority values |
+| `list_fields` | List project field structure |
 
-### Utility Functions
+### Project Discovery
 
-| Function | Description | Example |
-|----------|-------------|---------|
-| `get_count` | Extract filtered item count | `... \| apply_filter \| get_count` |
-| `get_items` | Extract items array | `... \| apply_filter \| get_items` |
+| Function | Description |
+|----------|-------------|
+| `discover_user_projects` | Find user's projects |
+| `discover_org_projects "ORG"` | Find organization projects |
+| `discover_repo_projects "OWNER" "REPO"` | Find repository projects |
+| `discover_all_projects` | Find all accessible projects |
+
+### Utilities
+
+| Function | Description |
+|----------|-------------|
+| `get_count` | Extract filtered item count |
+| `get_items` | Extract items array |
 
 ## Common Workflows
 
-### 1. Project Discovery Workflow
+### Team Workload Analysis
 
 ```bash
-# Find all accessible projects
-source .hiivmind/gh-project-functions.sh
-discover_all_projects | format_all_projects
+source lib/github/gh-project-functions.sh
 
-# Extract project numbers for further analysis
-discover_org_projects "acme-corp" | format_org_projects "acme-corp" | jq '.projects[].number'
-```
-
-### 2. Team Workload Analysis
-
-```bash
-# See who's assigned to what
-source .hiivmind/gh-project-functions.sh
+# List team members
 fetch_org_project 2 "acme-corp" | list_assignees
 
 # Count items per assignee
@@ -153,184 +133,86 @@ for user in alice bob charlie; do
 done
 ```
 
-### 3. Status Flow Analysis
+### Status Distribution
 
 ```bash
-# Check project status distribution
-source .hiivmind/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
+
+# See all statuses
 fetch_org_project 2 "acme-corp" | list_statuses
 
-# Count items by status
+# Count by status
 for status in "Backlog" "In Progress" "Done"; do
   count=$(fetch_org_project 2 "acme-corp" | apply_status_filter "$status" | get_count)
-  echo "$status: $count items"
+  echo "$status: $count"
 done
 ```
 
-### 4. Repository-Focused Analysis
+### Repository Focus
 
 ```bash
-# Find which repositories are in the project
-source .hiivmind/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
+
+# List repositories in project
 fetch_org_project 2 "acme-corp" | list_repositories
 
-# Analyze a specific repository
-fetch_org_project 2 "acme-corp" | apply_repo_filter "main-app" | list_assignees
+# Analyze specific repo
+fetch_org_project 2 "acme-corp" | apply_repo_filter "frontend" | list_assignees
 ```
 
-## Deployment in Claude Code
+## Output Format
 
-### Option 1: Clone and Use Directly
+All functions return structured JSON:
 
-1. Clone this repository to your local machine or directly into your project:
-```bash
-git clone https://github.com/yourusername/hiivmind-github-projects.git
-cd hiivmind-github-projects
+```json
+{
+  "project": "My Project",
+  "totalItems": 118,
+  "filters": {
+    "repository": "",
+    "assignee": "john",
+    "status": "",
+    "priority": ""
+  },
+  "filteredItems": [...],
+  "filteredCount": 30
+}
 ```
-
-2. Source the functions in your Claude Code session:
-```bash
-source .hiivmind/gh-project-functions.sh
-```
-
-3. Start exploring your projects!
-
-### Option 2: Add to Existing Project
-
-1. Copy the `.hiivmind` directory to your project:
-```bash
-cp -r /path/to/hiivmind-github-projects/.hiivmind your-project/
-```
-
-2. (Optional) Copy the Claude command documentation:
-```bash
-cp -r /path/to/hiivmind-github-projects/.claude your-project/
-```
-
-3. Source and use the functions as needed.
-
-### Option 3: Global Installation
-
-1. Add to your shell profile (e.g., `~/.bashrc` or `~/.zshrc`):
-```bash
-export HIIVMIND_GH_PROJECTS="/path/to/hiivmind-github-projects"
-alias gh-project-init="source $HIIVMIND_GH_PROJECTS/.hiivmind/gh-project-functions.sh"
-```
-
-2. Use `gh-project-init` in any Claude Code session to enable the functions.
 
 ## Claude Code Commands
 
-When using Claude Code, you can leverage the built-in command documentation:
+The plugin includes slash commands:
 
-- `/hv-gh-project-explorer` - Main project exploration interface
-- `/hv-gh-project-discover` - Project discovery across contexts
-
-These commands provide a user-friendly interface that internally uses the bash functions.
-
-## Advanced Usage
-
-### Custom Filter Pipelines
-
-Create complex filter chains by combining functions:
-
-```bash
-# High-priority items assigned to alice in the backend repo
-fetch_org_project 2 "acme-corp" \
-  | apply_repo_filter "backend" \
-  | apply_assignee_filter "alice" \
-  | apply_status_filter "In Progress" \
-  | jq '.filteredItems[] | select(.fieldValues.nodes[] | select(.field.name == "Priority" and .name == "P1"))'
-```
-
-### Batch Processing
-
-Process multiple projects programmatically:
-
-```bash
-# Analyze all organization projects
-source .hiivmind/gh-project-functions.sh
-PROJECT_NUMBERS=$(discover_org_projects "acme-corp" | format_org_projects "acme-corp" | jq -r '.projects[].number')
-
-for num in $PROJECT_NUMBERS; do
-  echo "=== Project #$num ==="
-  fetch_org_project $num "acme-corp" | jq '{
-    project: .project,
-    total: .totalItems,
-    backlog: ([.items[] | select(.fieldValues.nodes[] | select(.field.name == "Status" and .name == "Backlog"))] | length)
-  }'
-done
-```
-
-### Export to CSV
-
-Convert project data to CSV format:
-
-```bash
-fetch_org_project 2 "acme-corp" | jq -r '
-  ["Title", "Repository", "Assignee", "Status", "Priority"],
-  (.items[] | [
-    .content.title,
-    .content.repository.name,
-    (.content.assignees.nodes[0].login // "Unassigned"),
-    (.fieldValues.nodes[] | select(.field.name == "Status") | .name) // "No Status",
-    (.fieldValues.nodes[] | select(.field.name == "Priority") | .name) // "No Priority"
-  ]) | @csv'
-```
-
-## Performance Considerations
-
-- **Single API Call**: Each fetch operation makes one GraphQL query
-- **Streaming Processing**: Data flows through pipes without temporary files
-- **Memory Efficient**: Handles large projects through streaming architecture
-- **Cache Friendly**: GitHub CLI caches authentication tokens
+- `/hv-gh-project-explorer` - Comprehensive project analysis with filtering
+- `/hv-gh-project-discover` - Find projects across contexts
 
 ## Troubleshooting
 
-### Common Issues
+### "gh: command not found"
+Install GitHub CLI: https://cli.github.com/
 
-1. **"gh: command not found"**
-   - Install GitHub CLI: https://cli.github.com/
-   - Authenticate: `gh auth login`
+### "yq: command not found"
+Install yq v4+: `brew install yq` or https://github.com/mikefarah/yq
 
-2. **"jq: command not found"**
-   - Install jq: `brew install jq` (macOS) or `apt-get install jq` (Ubuntu)
+### Empty results
+1. Check project number and org name
+2. Verify access with `gh project list --owner ORG`
+3. Use `list_*` functions to discover valid filter values
 
-3. **"yq: command not found"**
-   - Install yq: `brew install yq` (macOS) or download from https://github.com/mikefarah/yq
-   - Tested with v4.47.1 installed via direct binary download from https://github.com/mikefarah/yq
-   - The snap install may have permission issues depending on where you install the bash and yaml files
-
-
-4. **Empty results**
-   - Check project number and organization name
-   - Verify you have access to the project
-   - Try the discovery functions first
-
-### Debug Mode
-
-Enable verbose output for troubleshooting:
-
+### Permission errors
+Ensure token has `read:project` scope:
 ```bash
-# See the raw GraphQL response
-fetch_org_project 2 "acme-corp" | jq '.'
-
-# Check available field values
-fetch_org_project 2 "acme-corp" | jq '.items[0].fieldValues'
+gh auth refresh -s read:project
 ```
-
-## Contributing
-
-Contributions are welcome! The system is designed to be extensible:
-
-1. **New Filters**: Add to `.hiivmind/gh-project-jq-filters.yaml`
-2. **New Functions**: Add to `.hiivmind/gh-project-functions.sh`
-3. **New Queries**: Add to `.hiivmind/gh-project-graphql-queries.yaml`
 
 ## License
 
-This project is open source and available under the MIT License.
+MIT
 
-## Acknowledgments
+## Contributing
 
-Built specifically for Claude Code users who need powerful GitHub Projects analytics without leaving their development environment. Special thanks to the GitHub GraphQL API team for comprehensive Projects v2 support.
+Contributions welcome! The system is designed to be extensible:
+
+1. **New Filters**: Add to `lib/github/gh-project-jq-filters.yaml`
+2. **New Functions**: Add to `lib/github/gh-project-functions.sh`
+3. **New Queries**: Add to `lib/github/gh-project-graphql-queries.yaml`
