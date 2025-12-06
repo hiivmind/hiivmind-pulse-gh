@@ -17,7 +17,7 @@ A Claude Code plugin for exploring, filtering, and analyzing GitHub Projects v2 
 
 ```bash
 # Add the marketplace
-/plugin marketplace add discreteds/hiivmind-github-projects
+/plugin marketplace add your-org/github-projects-explorer
 
 # Install the plugin
 /plugin install github-projects-explorer@github-projects-explorer
@@ -59,10 +59,6 @@ github-projects-explorer/
 ├── skills/
 │   └── github-projects-explorer/
 │       └── SKILL.md             # Claude skill documentation
-├── commands/
-│   └── hiivmind/github/
-│       ├── hv-gh-project-explorer.md
-│       └── hv-gh-project-discover.md
 ├── lib/github/
 │   ├── gh-project-functions.sh  # Core bash functions
 │   ├── gh-project-graphql-queries.yaml
@@ -178,13 +174,6 @@ All functions return structured JSON:
   "filteredCount": 30
 }
 ```
-
-## Claude Code Commands
-
-The plugin includes slash commands:
-
-- `/hv-gh-project-explorer` - Comprehensive project analysis with filtering
-- `/hv-gh-project-discover` - Find projects across contexts
 
 ## Troubleshooting
 

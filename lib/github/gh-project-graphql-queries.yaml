@@ -798,15 +798,15 @@ examples:
     description: "List all user projects"
 
   organization_projects:
-    command: 'gh api graphql -H X-Github-Next-Global-ID:1 -f query="$(cat github-projects-graphql-queries.yaml | yq .discovery.specific_organization_projects.query)" -f orgLogin="mountainash-io"'
-    description: "List projects for mountainash-io organization"
+    command: 'gh api graphql -H X-Github-Next-Global-ID:1 -f query="$(cat github-projects-graphql-queries.yaml | yq .discovery.specific_organization_projects.query)" -f orgLogin="my-org"'
+    description: "List projects for an organization"
 
   project_items_with_filtering:
-    command: 'gh api graphql -H X-Github-Next-Global-ID:1 -f query="$(cat github-projects-graphql-queries.yaml | yq .item_queries.user_project_items_full.query)" -f projectNumber=3 | jq ".data.viewer.projectV2.items.nodes[] | select(.fieldValues.nodes[] | select(.field.name == \"Priority\" and .name == \"P0\"))"'
-    description: "Get P0 priority items from project 3"
+    command: 'gh api graphql -H X-Github-Next-Global-ID:1 -f query="$(cat github-projects-graphql-queries.yaml | yq .item_queries.user_project_items_full.query)" -f projectNumber=1 | jq ".data.viewer.projectV2.items.nodes[] | select(.fieldValues.nodes[] | select(.field.name == \"Priority\" and .name == \"P0\"))"'
+    description: "Get P0 priority items from a project"
 
   repository_filter:
-    command: 'gh api graphql -H X-Github-Next-Global-ID:1 -f query="$(cat github-projects-graphql-queries.yaml | yq .filtering.items_by_repository.query)" -f projectNumber=3 | jq ".data.viewer.projectV2.items.nodes[] | select(.content.repository.name == \"radio-waves-curated-streams\")"'
+    command: 'gh api graphql -H X-Github-Next-Global-ID:1 -f query="$(cat github-projects-graphql-queries.yaml | yq .filtering.items_by_repository.query)" -f projectNumber=1 | jq ".data.viewer.projectV2.items.nodes[] | select(.content.repository.name == \"my-repo\")"'
     description: "Filter items by repository name"
 
 # Field Types Reference:

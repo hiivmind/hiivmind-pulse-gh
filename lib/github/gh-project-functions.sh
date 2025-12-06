@@ -203,14 +203,14 @@ format_all_projects() {
 }
 
 # Pipeline usage examples (commented out):
-# fetch_org_project 2 "mountainash-io" | apply_universal_filter "" "discreteds" "" ""
-# fetch_org_project 2 "mountainash-io" | apply_assignee_filter "discreteds" | get_count
-# fetch_org_project 2 "mountainash-io" | list_repositories
-# fetch_org_project 2 "mountainash-io" | apply_repo_filter "mountainash-settings" | apply_assignee_filter "discreteds"
-# fetch_org_project_fields 2 "mountainash-io" | list_fields
+# fetch_org_project 2 "my-org" | apply_universal_filter "" "username" "" ""
+# fetch_org_project 2 "my-org" | apply_assignee_filter "username" | get_count
+# fetch_org_project 2 "my-org" | list_repositories
+# fetch_org_project 2 "my-org" | apply_repo_filter "my-repo" | apply_assignee_filter "username"
+# fetch_org_project_fields 2 "my-org" | list_fields
 
 # Discovery usage examples (commented out):
 # discover_user_projects | format_user_projects
-# discover_org_projects "mountainash-io" | format_org_projects "mountainash-io"
-# discover_repo_projects "mountainash-io" "mountainash-settings" | format_repo_projects "mountainash-io" "mountainash-settings"
+# discover_org_projects "my-org" | format_org_projects "my-org"
+# discover_repo_projects "my-org" "my-repo" | format_repo_projects "my-org" "my-repo"
 # discover_all_projects | format_all_projects

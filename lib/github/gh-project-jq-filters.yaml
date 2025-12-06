@@ -345,22 +345,22 @@ examples:
 
   repository_filter:
     command: |
-      cat project_data.json | jq --arg repo "mountainash-settings" '{{ .basic_filters.repository_filter.filter }}'
+      cat project_data.json | jq --arg repo "my-repo" '{{ .basic_filters.repository_filter.filter }}'
     description: "Filter items by repository name"
 
   assignee_filter:
     command: |
-      cat project_data.json | jq --arg assignee "discreteds" '{{ .basic_filters.assignee_filter.filter }}'
+      cat project_data.json | jq --arg assignee "username" '{{ .basic_filters.assignee_filter.filter }}'
     description: "Filter items by assignee username"
 
   multiple_filters:
     command: |
-      cat project_data.json | jq --arg repo "mountainash-acrds-dagster" --arg assignee "discreteds" '{{ .combined_filters.repo_and_assignee.filter }}'
+      cat project_data.json | jq --arg repo "my-repo" --arg assignee "username" '{{ .combined_filters.repo_and_assignee.filter }}'
     description: "Filter by both repository and assignee"
 
   universal_filter:
     command: |
-      cat project_data.json | jq --arg repo "mountainash-settings" --arg assignee "" --arg status "Backlog" --arg priority "" '{{ .combined_filters.universal_filter.filter }}'
+      cat project_data.json | jq --arg repo "my-repo" --arg assignee "" --arg status "Backlog" --arg priority "" '{{ .combined_filters.universal_filter.filter }}'
     description: "Apply universal filter with conditional logic"
 
   discovery_repos:

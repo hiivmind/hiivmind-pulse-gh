@@ -45,10 +45,10 @@ The GitHub Project Dashboard System is a modular, pipeline-based architecture fo
 
 ## Core Components
 
-### 1. GraphQL Query Layer (`.hiivmind/github-projects-graphql-queries.yaml`)
+### 1. GraphQL Query Layer (`lib/github/github-projects-graphql-queries.yaml`)
 
 **Purpose**: Centralized GraphQL query templates for GitHub Projects v2 API
-**Location**: `.hiivmind/github-projects-graphql-queries.yaml`
+**Location**: `lib/github/github-projects-graphql-queries.yaml`
 
 ```yaml
 item_queries:
@@ -78,7 +78,7 @@ item_queries:
 - Optimized for single API call efficiency
 - Includes nested relationships (assignees, repositories, field values)
 
-### 2. Bash Function Pipeline (`.hiivmind/gh-project-functions.sh`)
+### 2. Bash Function Pipeline (`lib/github/gh-project-functions.sh`)
 
 **Purpose**: Executable functions providing pipeable data processing
 **Location**: `gh-project-functions.sh`
@@ -126,10 +126,10 @@ get_items        # Extract items array
 - **Composable**: Chain functions with Unix pipes for complex operations
 - **Error Safe**: Proper handling of YAML extraction and shell escaping
 
-### 3. jq Filter Templates (`.hiivmind/github-projects-jq-filters.yaml`)
+### 3. jq Filter Templates (`lib/github/github-projects-jq-filters.yaml`)
 
 **Purpose**: Centralized jq filter definitions for JSON data transformation
-**Location**: `.hiivmind/github-projects-jq-filters.yaml`
+**Location**: `lib/github/github-projects-jq-filters.yaml`
 
 #### Basic Filters
 ```yaml
@@ -208,16 +208,16 @@ discovery_filters:
 #### Implementation Patterns
 ```bash
 # Basic usage pattern
-source .hiivmind/gh-project-functions.sh
-fetch_org_project 2 "mountainash-io" | apply_assignee_filter "discreteds"
+source lib/github/gh-project-functions.sh
+fetch_org_project 2 "my-org" | apply_assignee_filter "username"
 
 # Chained filtering
-fetch_org_project 2 "mountainash-io" \
-  | apply_repo_filter "mountainash-settings" \
-  | apply_assignee_filter "discreteds"
+fetch_org_project 2 "my-org" \
+  | apply_repo_filter "my-repo" \
+  | apply_assignee_filter "username"
 
 # Discovery workflow
-fetch_org_project 2 "mountainash-io" | list_repositories
+fetch_org_project 2 "my-org" | list_repositories
 ```
 
 **Key Features**:
@@ -275,7 +275,7 @@ Raw JSON → Fetch Function → Discovery Function → Available Values → User
 ### Standard Pipeline Pattern
 ```bash
 # 1. Source functions (once per session)
-source .hiivmind/gh-project-functions.sh
+source lib/github/gh-project-functions.sh
 
 # 2. Fetch data with appropriate function
 fetch_org_project PROJECT_NUM "ORG_NAME"
@@ -291,23 +291,23 @@ fetch_org_project PROJECT_NUM "ORG_NAME"
 ### Discovery Pattern
 ```bash
 # Discover available values before filtering
-fetch_org_project 2 "mountainash-io" | list_assignees
-fetch_org_project 2 "mountainash-io" | list_repositories
+fetch_org_project 2 "my-org" | list_assignees
+fetch_org_project 2 "my-org" | list_repositories
 
 # Apply discovery to filtered data
-fetch_org_project 2 "mountainash-io" \
-  | apply_assignee_filter "discreteds" \
+fetch_org_project 2 "my-org" \
+  | apply_assignee_filter "username" \
   | list_repositories
 ```
 
 ### Universal Filter Pattern
 ```bash
 # Apply multiple filters in single operation
-fetch_org_project 2 "mountainash-io" \
+fetch_org_project 2 "my-org" \
   | apply_universal_filter "repo-name" "username" "status" "priority"
 
 # Use empty strings to skip specific filters
-fetch_org_project 2 "mountainash-io" \
+fetch_org_project 2 "my-org" \
   | apply_universal_filter "" "username" "Shipped" ""
 ```
 
@@ -330,8 +330,8 @@ hv-gh-project-dashboard.md
 
 ## Extensibility Points
 
-1. **New Filters**: Add filter definitions to `.hiivmind/github-projects-jq-filters.yaml`
-2. **New Functions**: Add pipeline functions to `.hiivmind/gh-project-functions.sh`
+1. **New Filters**: Add filter definitions to `lib/github/github-projects-jq-filters.yaml`
+2. **New Functions**: Add pipeline functions to `lib/github/gh-project-functions.sh`
 3. **New Queries**: Add GraphQL templates to query YAML file
 4. **New Commands**: Extend command interface with additional patterns
 
