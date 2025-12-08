@@ -5,16 +5,16 @@
   },
   "repository": "https://github.com/hiivmind/hiivmind-github-projects",
   "metadata": {
-    "description": "Comprehensive GitHub API toolkit for Projects, Milestones, Branch Protection, and REST operations",
-    "version": "2.1.0"
+    "description": "Comprehensive GitHub API toolkit for Projects, Milestones, Branch Protection, and REST operations. Includes workspace configuration for caching org structure.",
+    "version": "2.2.0"
   },
   "plugins": [
     {
       "name": "github-cli-toolkit",
       "source": "./",
-      "description": "Pipeline-based toolkit for GitHub API operations including Projects v2, Milestones, Branch Protection, Rulesets, Status Updates, Views, and REST API",
-      "version": "2.1.0",
-      "keywords": ["github", "projects", "milestones", "branch-protection", "rulesets", "graphql", "rest-api", "analytics"]
+      "description": "Pipeline-based toolkit for GitHub API operations including Projects v2, Milestones, Branch Protection, Rulesets, and REST API. Features meta-skills for workspace configuration that cache org/project structure for simplified commands.",
+      "version": "2.2.0",
+      "keywords": ["github", "projects", "milestones", "branch-protection", "rulesets", "graphql", "rest-api", "workspace", "configuration"]
     }
   ]
 }
