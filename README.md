@@ -50,13 +50,14 @@ gh auth refresh -s read:project -s project -s repo
 ### 2. Install the Plugin
 
 ```bash
-claude mcp add-json github-cli-toolkit '{
-  "type": "url",
-  "url": "https://github.com/hiivmind/hiivmind-github-projects"
-}'
+# Add the marketplace
+/plugin marketplace add hiivmind/hiivmind-github-projects
+
+# Install the plugin
+/plugin install github-cli-toolkit@hiivmind-github-projects
 ```
 
-Or add to your Claude Code settings manually.
+Run these commands in Claude Code (not in a terminal).
 
 ## Skills
 
@@ -301,10 +302,10 @@ list_rulesets "acme" "api" | format_rulesets
 
 ## Limitations
 
-- **Claude Code only** — Not an MCP server. Won't work with other LLM tools.
-- **Requires local tools** — `gh`, `jq`, `yq` must be installed.
-- **Inherits gh permissions** — Can only access what your `gh` CLI can access.
-- **No destructive operations** — Delete operations intentionally excluded.
+- **Claude Code only** — This is a Claude Code plugin (skills), not an MCP server. Won't work with VS Code Copilot, Cursor, or other LLM tools.
+- **Requires local tools** — `gh`, `jq`, `yq` must be installed on the machine where Claude Code runs.
+- **Inherits gh permissions** — Can only access what your `gh` CLI can access. No elevation, no bypass.
+- **No destructive operations** — Delete operations (delete project, delete ruleset) intentionally excluded for safety.
 
 ## Contributing
 
