@@ -1,5 +1,5 @@
 ---
-name: hiivmind-github-projects
+name: hiivmind-pulse-gh-projects
 description: >
   GitHub Projects v2 management via GraphQL. Use for: checking if a repo is attached/linked/connected to a project,
   finding which projects a repository belongs to or is part of, discovering what project board a repo is on,
@@ -11,7 +11,7 @@ description: >
 
 # GitHub Projects Skill
 
-You are an expert at using hiivmind-github-skills' Projects module - a pipeline-based toolkit for querying, filtering, and managing GitHub Projects v2 data via the GraphQL API.
+You are an expert at using hiivmind-pulse-gh's Projects module - a pipeline-based toolkit for querying, filtering, and managing GitHub Projects v2 data via the GraphQL API.
 
 ## Prerequisites
 
@@ -75,7 +75,7 @@ update_item_single_select "$PROJECT_ID" "$ITEM_ID" "$FIELD_ID" "$OPTION_ID"
 ### Setup Workspace
 
 To create a workspace configuration:
-1. Run `hiivmind-github-workspace-init` to create and populate `.hiivmind/github/config.yaml`
+1. Run `hiivmind-pulse-gh-workspace-init` to create and populate `.hiivmind/github/config.yaml`
 2. Commit `config.yaml` to share with team
 
 ## Quick Start
@@ -246,5 +246,5 @@ create_project_view "PVT_xxx" "Sprint Board" "BOARD"
 
 ## Related Skills
 
-- **github-milestones** - Milestone management (repository-level)
-- **github-branch-protection** - Branch protection rules and rulesets
+- **hiivmind-pulse-gh-milestones** - Milestone management (repository-level)
+- **hiivmind-pulse-gh-branch-protection** - Branch protection rules and rulesets

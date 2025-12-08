@@ -1,16 +1,16 @@
 {
-  "name": "hiivmind-github-skills",
+  "name": "hiivmind-pulse-gh",
   "owner": {
     "name": "Discrete Data Systems"
   },
-  "repository": "https://github.com/hiivmind/hiivmind-github-skills",
+  "repository": "https://github.com/hiivmind/hiivmind-pulse-gh",
   "metadata": {
     "description": "GitHub skills for Claude Code - Projects v2, Milestones, Branch Protection. Check if repos are linked to projects, manage kanban boards, configure branch rules.",
     "version": "3.0.0"
   },
   "plugins": [
     {
-      "name": "hiivmind-github-skills",
+      "name": "hiivmind-pulse-gh",
       "source": "./",
       "description": "GitHub skills for Claude Code. Check if a repo is attached/linked to a project, find which projects a repository belongs to, discover project boards, manage kanban items, filter by assignee/status, handle milestones, configure branch protection and rulesets. Includes workspace caching for org structure.",
       "version": "3.0.0",

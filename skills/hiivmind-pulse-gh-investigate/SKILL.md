@@ -1,5 +1,5 @@
 ---
-name: hiivmind-github-investigate
+name: hiivmind-pulse-gh-investigate
 description: >
   Deep-dive investigation of GitHub entities. Starting from an issue, PR, or project item,
   traverse all relationships to build full context: linked issues, pull requests, comments,
@@ -14,7 +14,7 @@ Deep-dive investigation tool that traverses GitHub entity relationships to build
 
 ## Purpose
 
-Unlike `hiivmind-github-workspace-refresh` (which syncs structural metadata), this skill **explores entities on-demand** to answer questions like:
+Unlike `hiivmind-pulse-gh-workspace-refresh` (which syncs structural metadata), this skill **explores entities on-demand** to answer questions like:
 
 - "What's the full story on issue #42?"
 - "Who's involved in this PR and what's blocking it?"
@@ -522,6 +522,6 @@ Claude: [Runs analyze focusing on timeline]
 
 ## Reference
 
-- Refresh workspace: `skills/github-workspace-refresh/SKILL.md`
-- Initialize workspace: `skills/github-workspace-init/SKILL.md`
-- Projects operations: `skills/github-projects/SKILL.md`
+- Refresh workspace: `skills/hiivmind-pulse-gh-workspace-refresh/SKILL.md`
+- Initialize workspace: `skills/hiivmind-pulse-gh-workspace-init/SKILL.md`
+- Projects operations: `skills/hiivmind-pulse-gh-projects/SKILL.md`

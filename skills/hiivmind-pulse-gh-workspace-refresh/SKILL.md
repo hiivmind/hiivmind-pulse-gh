@@ -1,5 +1,5 @@
 ---
-name: hiivmind-github-workspace-refresh
+name: hiivmind-pulse-gh-workspace-refresh
 description: >
   Quick structural sync of workspace configuration. Validates cached IDs for projects, fields, options,
   repositories, and milestones. Detects renamed/added/removed fields and warns about breaking changes.
@@ -33,7 +33,7 @@ USER_CONFIG_PATH=".hiivmind/github/user.yaml"
 
 if [[ ! -f "$CONFIG_PATH" ]]; then
     echo "No workspace configuration found."
-    echo "Run github-workspace-init first."
+    echo "Run hiivmind-pulse-gh-workspace-init first."
     exit 1
 fi
 
@@ -298,7 +298,7 @@ check_config_freshness() {
 
     local last_synced=$(yq '.cache.last_synced_at' "$config_path")
     if [[ "$last_synced" == "null" ]]; then
-        echo "⚠ Workspace config incomplete. Run hiivmind-github-workspace-init."
+        echo "⚠ Workspace config incomplete. Run hiivmind-pulse-gh-workspace-init."
         return 1
     fi
 
@@ -320,7 +320,7 @@ The cached field ID may be outdated. This can happen when:
   - The project structure was reset
 
 Recommended action:
-  Run: github-workspace-refresh
+  Run: hiivmind-pulse-gh-workspace-refresh
 
 To continue without cached IDs:
   Specify field by name instead of using cached ID
@@ -328,6 +328,6 @@ To continue without cached IDs:
 
 ## Reference
 
-- Initialize workspace: `skills/github-workspace-init/SKILL.md`
-- Investigate entities: `skills/github-investigate/SKILL.md`
+- Initialize workspace: `skills/hiivmind-pulse-gh-workspace-init/SKILL.md`
+- Investigate entities: `skills/hiivmind-pulse-gh-investigate/SKILL.md`
 - Architecture: `docs/meta-skill-architecture.md`

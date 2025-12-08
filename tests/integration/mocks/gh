@@ -1,0 +1,58 @@
+#!/bin/bash
+# Mock gh CLI - returns fixtures based on arguments
+# Used for integration testing without hitting real GitHub API
+
+MOCK_DIR="$(dirname "$0")"
+FIXTURES_DIR="$MOCK_DIR/../fixtures"
+
+# Log the call for debugging (optional)
+# echo "Mock gh called with: $*" >&2
+
+case "$*" in
+    # GraphQL queries for projects
+    *"graphql"*"projectV2"*|*"graphql"*"organization"*"projectV2"*)
+        cat "$FIXTURES_DIR/project_response.json"
+        ;;
+
+    # GraphQL queries for user projects
+    *"graphql"*"viewer"*"projectsV2"*)
+        cat "$FIXTURES_DIR/project_response.json"
+        ;;
+
+    # REST API - milestones (various formats)
+    *"api"*"repos/"*"/milestones"*)
+        cat "$FIXTURES_DIR/milestones.json"
+        ;;
+
+    # REST API - branches (various formats)
+    *"api"*"repos/"*"/branches"*)
+        cat "$FIXTURES_DIR/branches.json"
+        ;;
+
+    # REST API - branch protection
+    *"api"*"/repos/"*"/branches/"*"/protection"*)
+        echo '{"required_status_checks": null, "enforce_admins": {"enabled": true}}'
+        ;;
+
+    # REST API - org info
+    *"api"*"orgs/"*)
+        echo '{"login": "test-org", "id": 12345}'
+        ;;
+
+    # REST API - user info
+    *"api"*"user"*)
+        echo '{"login": "test-user", "id": 67890, "name": "Test User", "email": "test@example.com"}'
+        ;;
+
+    # Auth status check
+    *"auth"*"status"*)
+        echo "github.com"
+        echo "  Logged in to github.com as test-user"
+        ;;
+
+    # Catch-all for unhandled cases
+    *)
+        echo "Mock gh: unhandled args: $*" >&2
+        exit 1
+        ;;
+esac

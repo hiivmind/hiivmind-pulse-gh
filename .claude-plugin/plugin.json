@@ -1,5 +1,5 @@
 {
-  "name": "hiivmind-github-skills",
+  "name": "hiivmind-pulse-gh",
   "description": "GitHub skills for Claude Code - Projects v2, Milestones, Branch Protection, and workspace configuration. Check if repos are linked to projects, manage kanban boards, configure branch rules.",
   "version": "3.0.0",
   "author": {
@@ -30,5 +30,5 @@
     "views",
     "roadmap"
   ],
-  "repository": "https://github.com/hiivmind/hiivmind-github-skills"
+  "repository": "https://github.com/hiivmind/hiivmind-pulse-gh"
 }

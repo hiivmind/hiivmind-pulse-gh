@@ -1,0 +1,229 @@
+{
+  "data": {
+    "organization": {
+      "projectV2": {
+        "id": "PVT_kwDOtest123",
+        "number": 2,
+        "title": "Test Project",
+        "url": "https://github.com/orgs/test-org/projects/2",
+        "closed": false,
+        "items": {
+          "totalCount": 5,
+          "nodes": [
+            {
+              "id": "PVTI_item1",
+              "content": {
+                "__typename": "Issue",
+                "title": "Fix authentication bug",
+                "number": 42,
+                "state": "OPEN",
+                "repository": {
+                  "name": "api",
+                  "owner": {"login": "test-org"}
+                },
+                "assignees": {
+                  "nodes": [{"login": "octocat"}]
+                }
+              },
+              "fieldValues": {
+                "nodes": [
+                  {
+                    "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                    "name": "In Progress",
+                    "field": {"name": "Status"}
+                  },
+                  {
+                    "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                    "name": "P1 - High",
+                    "field": {"name": "Priority"}
+                  },
+                  {
+                    "__typename": "ProjectV2ItemFieldUserValue",
+                    "users": {"nodes": [{"login": "octocat"}]},
+                    "field": {"name": "Assignees"}
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PVTI_item2",
+              "content": {
+                "__typename": "Issue",
+                "title": "Add user profile page",
+                "number": 43,
+                "state": "OPEN",
+                "repository": {
+                  "name": "frontend",
+                  "owner": {"login": "test-org"}
+                },
+                "assignees": {
+                  "nodes": [{"login": "alice"}]
+                }
+              },
+              "fieldValues": {
+                "nodes": [
+                  {
+                    "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                    "name": "Backlog",
+                    "field": {"name": "Status"}
+                  },
+                  {
+                    "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                    "name": "P2 - Medium",
+                    "field": {"name": "Priority"}
+                  },
+                  {
+                    "__typename": "ProjectV2ItemFieldUserValue",
+                    "users": {"nodes": [{"login": "alice"}]},
+                    "field": {"name": "Assignees"}
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PVTI_item3",
+              "content": {
+                "__typename": "PullRequest",
+                "title": "Implement retry logic",
+                "number": 87,
+                "state": "OPEN",
+                "repository": {
+                  "name": "api",
+                  "owner": {"login": "test-org"}
+                },
+                "assignees": {
+                  "nodes": [{"login": "octocat"}]
+                }
+              },
+              "fieldValues": {
+                "nodes": [
+                  {
+                    "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                    "name": "In Review",
+                    "field": {"name": "Status"}
+                  },
+                  {
+                    "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                    "name": "P1 - High",
+                    "field": {"name": "Priority"}
+                  },
+                  {
+                    "__typename": "ProjectV2ItemFieldUserValue",
+                    "users": {"nodes": [{"login": "octocat"}]},
+                    "field": {"name": "Assignees"}
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PVTI_item4",
+              "content": {
+                "__typename": "Issue",
+                "title": "Update documentation",
+                "number": 44,
+                "state": "CLOSED",
+                "repository": {
+                  "name": "docs",
+                  "owner": {"login": "test-org"}
+                },
+                "assignees": {
+                  "nodes": [{"login": "bob"}]
+                }
+              },
+              "fieldValues": {
+                "nodes": [
+                  {
+                    "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                    "name": "Done",
+                    "field": {"name": "Status"}
+                  },
+                  {
+                    "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                    "name": "P3 - Low",
+                    "field": {"name": "Priority"}
+                  },
+                  {
+                    "__typename": "ProjectV2ItemFieldUserValue",
+                    "users": {"nodes": [{"login": "bob"}]},
+                    "field": {"name": "Assignees"}
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PVTI_item5",
+              "content": {
+                "__typename": "Issue",
+                "title": "Performance optimization",
+                "number": 45,
+                "state": "OPEN",
+                "repository": {
+                  "name": "api",
+                  "owner": {"login": "test-org"}
+                },
+                "assignees": {
+                  "nodes": [{"login": "octocat"}, {"login": "alice"}]
+                }
+              },
+              "fieldValues": {
+                "nodes": [
+                  {
+                    "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                    "name": "In Progress",
+                    "field": {"name": "Status"}
+                  },
+                  {
+                    "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                    "name": "P0 - Critical",
+                    "field": {"name": "Priority"}
+                  },
+                  {
+                    "__typename": "ProjectV2ItemFieldUserValue",
+                    "users": {"nodes": [{"login": "octocat"}, {"login": "alice"}]},
+                    "field": {"name": "Assignees"}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "fields": {
+          "nodes": [
+            {
+              "id": "PVTF_title",
+              "name": "Title",
+              "dataType": "TITLE"
+            },
+            {
+              "id": "PVTSSF_status",
+              "name": "Status",
+              "dataType": "SINGLE_SELECT",
+              "options": [
+                {"id": "PVTSSFO_backlog", "name": "Backlog"},
+                {"id": "PVTSSFO_inprogress", "name": "In Progress"},
+                {"id": "PVTSSFO_inreview", "name": "In Review"},
+                {"id": "PVTSSFO_done", "name": "Done"}
+              ]
+            },
+            {
+              "id": "PVTSSF_priority",
+              "name": "Priority",
+              "dataType": "SINGLE_SELECT",
+              "options": [
+                {"id": "PVTSSFO_p0", "name": "P0 - Critical"},
+                {"id": "PVTSSFO_p1", "name": "P1 - High"},
+                {"id": "PVTSSFO_p2", "name": "P2 - Medium"},
+                {"id": "PVTSSFO_p3", "name": "P3 - Low"}
+              ]
+            },
+            {
+              "id": "PVTF_assignees",
+              "name": "Assignees",
+              "dataType": "ASSIGNEES"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

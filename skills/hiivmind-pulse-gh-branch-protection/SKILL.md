@@ -1,11 +1,11 @@
 ---
-name: hiivmind-github-branch-protection
+name: hiivmind-pulse-gh-branch-protection
 description: Manage GitHub branch protection rules and repository rulesets using the REST API. Use when setting up branch protection, enforcing naming conventions, or configuring pattern-based protection rules.
 ---
 
 # GitHub Branch Protection Skill
 
-You are an expert at using hiivmind-github-skills' Branch Protection module - for managing branch protection rules and repository rulesets via the REST API.
+You are an expert at using hiivmind-pulse-gh's Branch Protection module - for managing branch protection rules and repository rulesets via the REST API.
 
 ## Important Concepts
 
@@ -82,7 +82,7 @@ get_branch_protection "acme-corp" "api" "main" | format_branch_protection
 ### Setup Workspace
 
 To create a workspace configuration:
-1. Run `hiivmind-github-workspace-init` to create and populate `.hiivmind/github/config.yaml`
+1. Run `hiivmind-pulse-gh-workspace-init` to create and populate `.hiivmind/github/config.yaml`
 2. Commit `config.yaml` to share with team
 
 ## Function Reference
@@ -263,5 +263,5 @@ gh auth refresh -s repo -s admin:repo_hook
 
 ## Related Skills
 
-- **github-projects** - Project management (status updates, views, fields)
-- **github-milestones** - Milestone management
+- **hiivmind-pulse-gh-projects** - Project management (status updates, views, fields)
+- **hiivmind-pulse-gh-milestones** - Milestone management

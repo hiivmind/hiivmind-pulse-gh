@@ -1,0 +1,111 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bats jq
+          # Install yq
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Verify dependencies
+        run: |
+          bats --version
+          jq --version
+          yq --version
+
+      - name: Run unit tests
+        run: bats tests/unit/
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bats jq
+          # Install yq
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Make mock gh executable
+        run: chmod +x tests/integration/mocks/gh
+
+      - name: Run integration tests
+        run: bats tests/integration/
+
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    # Only run on main branch pushes, not PRs (to protect secrets)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [unit-tests, integration-tests]  # Run after other tests pass
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bats jq gh
+          # Install yq
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Run E2E tests
+        env:
+          GITHUB_TOKEN: ${{ secrets.TEST_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.TEST_GITHUB_TOKEN }}
+          TEST_ORG: ${{ vars.TEST_ORG }}
+          TEST_PROJECT_NUMBER: ${{ vars.TEST_PROJECT_NUMBER }}
+          TEST_REPO: ${{ vars.TEST_REPO }}
+        run: |
+          # Only run if we have the required secrets/vars
+          if [ -n "$GITHUB_TOKEN" ] && [ -n "$TEST_ORG" ]; then
+            bats tests/e2e/
+          else
+            echo "Skipping E2E tests - required secrets/variables not configured"
+            echo "To enable E2E tests, configure:"
+            echo "  - Secret: TEST_GITHUB_TOKEN"
+            echo "  - Variable: TEST_ORG"
+            echo "  - Variable: TEST_PROJECT_NUMBER"
+            echo "  - Variable: TEST_REPO"
+          fi
+
+  lint:
+    name: Lint Shell Scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Run shellcheck on library files
+        run: |
+          shellcheck -x lib/github/*.sh || true  # Don't fail on warnings
+        continue-on-error: true  # Linting is advisory
+
+      - name: Run shellcheck on test helper
+        run: |
+          shellcheck -x tests/test_helper.bash || true
+        continue-on-error: true

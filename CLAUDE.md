@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with this repository.
 
 ## System Overview
 
-This is **hiivmind-github-skills** - a Claude Code plugin providing comprehensive GitHub API operations via GraphQL and REST APIs. It includes support for:
+This is **hiivmind-pulse-gh** - a Claude Code plugin providing comprehensive GitHub API operations via GraphQL and REST APIs. It includes support for:
 
 - **GitHub Projects v2** - Full project management, status updates, views, fields
 - **Milestones** - Repository-level milestone management
@@ -19,22 +19,22 @@ The toolkit provides six skills:
 
 | Skill | Purpose |
 |-------|---------|
-| `hiivmind-github-workspace-init` | Create config, discover projects/fields/repos, cache IDs (one-time setup) |
-| `hiivmind-github-workspace-refresh` | Sync structural metadata with current GitHub state (run periodically) |
+| `hiivmind-pulse-gh-workspace-init` | Create config, discover projects/fields/repos, cache IDs (one-time setup) |
+| `hiivmind-pulse-gh-workspace-refresh` | Sync structural metadata with current GitHub state (run periodically) |
 
 ### Investigation
 
 | Skill | Purpose |
 |-------|---------|
-| `hiivmind-github-investigate` | Deep-dive into issues, PRs, project items - traverse relationships, build context |
+| `hiivmind-pulse-gh-investigate` | Deep-dive into issues, PRs, project items - traverse relationships, build context |
 
 ### Operations
 
 | Skill | Purpose |
 |-------|---------|
-| `hiivmind-github-projects` | Projects v2 - items, filtering, status updates, views, fields, repo linking |
-| `hiivmind-github-milestones` | Milestone queries and management |
-| `hiivmind-github-branch-protection` | Branch protection rules and repository rulesets |
+| `hiivmind-pulse-gh-projects` | Projects v2 - items, filtering, status updates, views, fields, repo linking |
+| `hiivmind-pulse-gh-milestones` | Milestone queries and management |
+| `hiivmind-pulse-gh-branch-protection` | Branch protection rules and repository rulesets |
 
 ## Workspace Configuration
 
@@ -67,15 +67,15 @@ list_milestones "owner" "repo" | format_milestones
 ## File Structure
 
 ```
-hiivmind-github-skills/
+hiivmind-pulse-gh/
 ├── .claude-plugin/              # Plugin manifests
 ├── skills/
-│   ├── github-workspace-init/   # Setup: create config + discover structure
-│   ├── github-workspace-refresh/# Maintenance: sync structural metadata
-│   ├── github-investigate/      # Investigation: deep-dive into entities
-│   ├── github-projects/         # Operations: Projects v2
-│   ├── github-milestones/       # Operations: Milestones
-│   └── github-branch-protection/# Operations: Branch protection
+│   ├── hiivmind-pulse-gh-workspace-init/   # Setup: create config + discover structure
+│   ├── hiivmind-pulse-gh-workspace-refresh/# Maintenance: sync structural metadata
+│   ├── hiivmind-pulse-gh-investigate/      # Investigation: deep-dive into entities
+│   ├── hiivmind-pulse-gh-projects/         # Operations: Projects v2
+│   ├── hiivmind-pulse-gh-milestones/       # Operations: Milestones
+│   └── hiivmind-pulse-gh-branch-protection/# Operations: Branch protection
 ├── templates/                   # Config file templates
 │   ├── config.yaml.template     # Shared workspace config
 │   ├── user.yaml.template       # Personal user config

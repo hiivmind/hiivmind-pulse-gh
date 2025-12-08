@@ -4,7 +4,7 @@ This document describes the workspace configuration system that enables persiste
 
 ## Overview
 
-The hiivmind-github-skills toolkit uses a **meta-skill pattern** to discover, cache, and persist GitHub organization/project metadata. This eliminates the need for users to repeatedly specify organization names, project numbers, and field IDs.
+The hiivmind-pulse-gh toolkit uses a **meta-skill pattern** to discover, cache, and persist GitHub organization/project metadata. This eliminates the need for users to repeatedly specify organization names, project numbers, and field IDs.
 
 ### Design Principles
 
@@ -182,7 +182,7 @@ cache:
 
 Two meta-skills manage the workspace configuration lifecycle, plus one investigation skill.
 
-### hiivmind-github-workspace-init
+### hiivmind-pulse-gh-workspace-init
 
 **Purpose:** Complete workspace setup - create config structure AND discover/cache GitHub structure.
 
@@ -211,7 +211,7 @@ Two meta-skills manage the workspace configuration lifecycle, plus one investiga
     └── user.yaml      # User identity & permissions (personal)
 ```
 
-### hiivmind-github-workspace-refresh
+### hiivmind-pulse-gh-workspace-refresh
 
 **Purpose:** Quick structural sync - validate cached IDs, detect changes.
 
@@ -237,7 +237,7 @@ Two meta-skills manage the workspace configuration lifecycle, plus one investiga
 
 **Note:** Does NOT cache volatile data like issue statuses - only stable structural metadata.
 
-### hiivmind-github-investigate
+### hiivmind-pulse-gh-investigate
 
 **Purpose:** Deep-dive entity exploration - traverse relationships, build context.
 
@@ -259,7 +259,7 @@ Two meta-skills manage the workspace configuration lifecycle, plus one investiga
 
 ## Generic Skill Behavior
 
-Existing skills (`hiivmind-github-projects`, `hiivmind-github-milestones`, `hiivmind-github-branch-protection`) are updated to detect and use local config.
+Existing skills (`hiivmind-pulse-gh-projects`, `hiivmind-pulse-gh-milestones`, `hiivmind-pulse-gh-branch-protection`) are updated to detect and use local config.
 
 ### Config Detection
 
@@ -318,9 +318,9 @@ fi
 
 ### Completed
 - [x] Create `templates/` directory with config templates
-- [x] Implement `hiivmind-github-workspace-init` skill (includes discovery)
-- [x] Implement `hiivmind-github-workspace-refresh` skill
-- [x] Implement `hiivmind-github-investigate` skill (entity deep-dive)
+- [x] Implement `hiivmind-pulse-gh-workspace-init` skill (includes discovery)
+- [x] Implement `hiivmind-pulse-gh-workspace-refresh` skill
+- [x] Implement `hiivmind-pulse-gh-investigate` skill (entity deep-dive)
 - [x] Add `.hiivmind` detection to existing skills (graceful fallback)
 
 ### In Progress
@@ -341,7 +341,7 @@ fi
 When initializing a workspace, suggest adding to `.gitignore`:
 
 ```gitignore
-# hiivmind-github-skills - user-specific config
+# hiivmind-pulse-gh - user-specific config
 .hiivmind/github/user.yaml
 ```
 
@@ -350,27 +350,27 @@ When initializing a workspace, suggest adding to `.gitignore`:
 ### Config Not Found
 ```
 No workspace configuration found.
-Run `hiivmind-github-workspace-init` to set up, or specify parameters explicitly.
+Run `hiivmind-pulse-gh-workspace-init` to set up, or specify parameters explicitly.
 ```
 
 ### Stale Config Warning
 ```
 Workspace config last synced 14 days ago.
-Consider running `github-workspace-refresh` to update cached IDs.
+Consider running `hiivmind-pulse-gh-workspace-refresh` to update cached IDs.
 ```
 
 ### Permission Denied
 ```
 Cached permissions indicate read-only access to project #2.
 This operation requires write access. Refresh permissions with:
-  github-workspace-refresh
+  hiivmind-pulse-gh-workspace-refresh
 ```
 
 ### ID Not Found
 ```
 Field "Status" not found in cached config.
 The project structure may have changed. Run:
-  github-workspace-refresh
+  hiivmind-pulse-gh-workspace-refresh
 ```
 
 ## Related Documentation

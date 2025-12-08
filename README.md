@@ -1,4 +1,4 @@
-# hiivmind-github-skills
+# hiivmind-pulse-gh
 
 A Claude Code plugin for deep GitHub automation — Projects v2, Milestones, Branch Protection, and more.
 
@@ -51,10 +51,10 @@ gh auth refresh -s read:project -s project -s repo
 
 ```bash
 # Add the marketplace
-/plugin marketplace add hiivmind/hiivmind-github-skills
+/plugin marketplace add hiivmind/hiivmind-pulse-gh
 
 # Install the plugin
-/plugin install hiivmind-github-skills@hiivmind-github-skills
+/plugin install hiivmind-pulse-gh@hiivmind-pulse-gh
 ```
 
 Run these commands in Claude Code (not in a terminal).
@@ -67,22 +67,22 @@ The toolkit provides **six skills** in three categories:
 
 | Skill | Purpose | When to Use |
 |-------|---------|-------------|
-| `hiivmind-github-workspace-init` | Create config, discover projects, cache IDs | First-time setup (once per repo) |
-| `hiivmind-github-workspace-refresh` | Sync structural metadata with GitHub | Periodically, or when "ID not found" errors occur |
+| `hiivmind-pulse-gh-workspace-init` | Create config, discover projects, cache IDs | First-time setup (once per repo) |
+| `hiivmind-pulse-gh-workspace-refresh` | Sync structural metadata with GitHub | Periodically, or when "ID not found" errors occur |
 
 ### Investigation
 
 | Skill | Purpose | When to Use |
 |-------|---------|-------------|
-| `hiivmind-github-investigate` | Deep-dive into issues, PRs, project items | "What's the full story on #42?", standup prep, audits |
+| `hiivmind-pulse-gh-investigate` | Deep-dive into issues, PRs, project items | "What's the full story on #42?", standup prep, audits |
 
 ### Operations
 
 | Skill | Coverage | Example Prompts |
 |-------|----------|-----------------|
-| `hiivmind-github-projects` | Projects v2, items, fields, status updates, views | "Show items assigned to @alice", "Is this repo linked to a project?" |
-| `hiivmind-github-milestones` | Repository milestones, issue/PR assignment | "Create a v2.0 milestone for the api repo" |
-| `hiivmind-github-branch-protection` | Branch rules, rulesets, naming conventions | "Protect main with required reviews" |
+| `hiivmind-pulse-gh-projects` | Projects v2, items, fields, status updates, views | "Show items assigned to @alice", "Is this repo linked to a project?" |
+| `hiivmind-pulse-gh-milestones` | Repository milestones, issue/PR assignment | "Create a v2.0 milestone for the api repo" |
+| `hiivmind-pulse-gh-branch-protection` | Branch rules, rulesets, naming conventions | "Protect main with required reviews" |
 
 ## Quick Start
 
@@ -91,7 +91,7 @@ The toolkit provides **six skills** in three categories:
 ```
 You: Set up GitHub workspace for my current project
 
-Claude: [Runs hiivmind-github-workspace-init]
+Claude: [Runs hiivmind-pulse-gh-workspace-init]
 
         GitHub workspace initialized!
         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -118,7 +118,7 @@ Claude: [Uses cached org/project context]
 
 You: What's the full story on issue #42?
 
-Claude: [Runs hiivmind-github-investigate]
+Claude: [Runs hiivmind-pulse-gh-investigate]
 
         Issue #42: "Fix authentication timeout"
         ├── Status: In Progress | Assignee: @alice
@@ -200,7 +200,7 @@ For organizations with multiple repos, use symlinks to share config:
 # Create centralized config
 mkdir -p ~/github-workspaces/acme-corp
 cd ~/github-workspaces/acme-corp
-# Run hiivmind-github-workspace-init here
+# Run hiivmind-pulse-gh-workspace-init here
 
 # Symlink from each repository
 cd ~/projects/api
@@ -213,14 +213,14 @@ ln -s ~/github-workspaces/acme-corp .hiivmind
 ## Architecture
 
 ```
-hiivmind-github-skills/
+hiivmind-pulse-gh/
 ├── skills/
-│   ├── github-workspace-init/      # Setup: create config + discover structure
-│   ├── github-workspace-refresh/   # Maintenance: sync structural metadata
-│   ├── github-investigate/         # Investigation: deep-dive into entities
-│   ├── github-projects/            # Operations: Projects v2
-│   ├── github-milestones/          # Operations: Milestones
-│   └── github-branch-protection/   # Operations: Branch rules
+│   ├── hiivmind-pulse-gh-workspace-init/      # Setup: create config + discover structure
+│   ├── hiivmind-pulse-gh-workspace-refresh/   # Maintenance: sync structural metadata
+│   ├── hiivmind-pulse-gh-investigate/         # Investigation: deep-dive into entities
+│   ├── hiivmind-pulse-gh-projects/            # Operations: Projects v2
+│   ├── hiivmind-pulse-gh-milestones/          # Operations: Milestones
+│   └── hiivmind-pulse-gh-branch-protection/   # Operations: Branch rules
 │
 ├── templates/                      # Config file templates
 │   ├── config.yaml.template
@@ -299,8 +299,8 @@ list_rulesets "acme" "api" | format_rulesets
 
 | Problem | Solution |
 |---------|----------|
-| "No workspace configuration found" | Run `hiivmind-github-workspace-init` |
-| "Field ID not found" | Run `hiivmind-github-workspace-refresh` to sync with GitHub |
+| "No workspace configuration found" | Run `hiivmind-pulse-gh-workspace-init` |
+| "Field ID not found" | Run `hiivmind-pulse-gh-workspace-refresh` to sync with GitHub |
 | `gh: command not found` | Install GitHub CLI: [cli.github.com](https://cli.github.com/) |
 | `yq: command not found` | Install yq v4+: [github.com/mikefarah/yq](https://github.com/mikefarah/yq) |
 | Permission errors | `gh auth refresh -s read:project -s project -s repo` |

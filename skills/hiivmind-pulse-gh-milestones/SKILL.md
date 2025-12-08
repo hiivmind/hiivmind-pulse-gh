@@ -1,11 +1,11 @@
 ---
-name: hiivmind-github-milestones
+name: hiivmind-pulse-gh-milestones
 description: Manage GitHub milestones using GraphQL and REST APIs. Use when querying repository milestones, setting milestones on issues/PRs, or creating/updating/closing milestones.
 ---
 
 # GitHub Milestones Skill
 
-You are an expert at using hiivmind-github-skills' Milestones module - for managing repository-level milestones via GraphQL queries and REST API mutations.
+You are an expert at using hiivmind-pulse-gh's Milestones module - for managing repository-level milestones via GraphQL queries and REST API mutations.
 
 ## Important Concepts
 
@@ -74,7 +74,7 @@ set_issue_milestone "$ISSUE_ID" "$MILESTONE_ID"
 ### Setup Workspace
 
 To create a workspace configuration:
-1. Run `hiivmind-github-workspace-init` to create and populate `.hiivmind/github/config.yaml`
+1. Run `hiivmind-pulse-gh-workspace-init` to create and populate `.hiivmind/github/config.yaml`
 2. Commit `config.yaml` to share with team
 
 ## Function Reference
@@ -239,5 +239,5 @@ close_milestone "acme" "api" 3
 
 ## Related Skills
 
-- **github-projects** - Project management (status updates, views, fields)
-- **github-branch-protection** - Branch protection rules and rulesets
+- **hiivmind-pulse-gh-projects** - Project management (status updates, views, fields)
+- **hiivmind-pulse-gh-branch-protection** - Branch protection rules and rulesets
