@@ -11,6 +11,19 @@ description: >
 
 Complete workspace setup: create config structure, discover GitHub projects, and cache IDs for simplified operations.
 
+## Prerequisites
+
+Before running this skill, ensure your environment is properly configured:
+
+```bash
+# Run user-init skill first to verify:
+# - GitHub CLI installed and authenticated
+# - Token has required scopes (read:project, project)
+# - Dependencies installed (yq, jq)
+```
+
+**If you encounter scope errors**, run `hiivmind-pulse-gh-user-init` first.
+
 ## Process Overview
 
 ```

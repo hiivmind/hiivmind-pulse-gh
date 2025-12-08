@@ -11,6 +11,12 @@ description: >
 
 Synchronize the local workspace configuration with the current state of GitHub projects, fields, and repositories.
 
+## Prerequisites
+
+Requires:
+- User environment configured (`hiivmind-pulse-gh-user-init`)
+- Workspace initialized (`hiivmind-pulse-gh-workspace-init`)
+
 ## When to Refresh
 
 - **Periodically** - Config older than 7 days

@@ -13,12 +13,13 @@ This is **hiivmind-pulse-gh** - a Claude Code plugin providing comprehensive Git
 
 ## Skills
 
-The toolkit provides six skills:
+The toolkit provides seven skills:
 
 ### Setup & Maintenance
 
 | Skill | Purpose |
 |-------|---------|
+| `hiivmind-pulse-gh-user-init` | First-time setup: verify gh CLI, auth scopes, dependencies (prerequisite for all) |
 | `hiivmind-pulse-gh-workspace-init` | Create config, discover projects/fields/repos, cache IDs (one-time setup) |
 | `hiivmind-pulse-gh-workspace-refresh` | Sync structural metadata with current GitHub state (run periodically) |
 
@@ -70,6 +71,7 @@ list_milestones "owner" "repo" | format_milestones
 hiivmind-pulse-gh/
 ├── .claude-plugin/              # Plugin manifests
 ├── skills/
+│   ├── hiivmind-pulse-gh-user-init/        # Setup: verify CLI, auth, dependencies
 │   ├── hiivmind-pulse-gh-workspace-init/   # Setup: create config + discover structure
 │   ├── hiivmind-pulse-gh-workspace-refresh/# Maintenance: sync structural metadata
 │   ├── hiivmind-pulse-gh-investigate/      # Investigation: deep-dive into entities
@@ -131,3 +133,5 @@ fetch_org_project 2 "org" | apply_assignee_filter "user" | list_repositories
 - GitHub CLI (`gh`) - authenticated with appropriate scopes
 - jq (1.6+)
 - yq (4.0+)
+
+**Run `hiivmind-pulse-gh-user-init` to verify all dependencies are properly configured.**

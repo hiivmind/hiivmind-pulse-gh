@@ -1,6 +1,6 @@
 {
   "name": "hiivmind-pulse-gh",
-  "description": "GitHub skills for Claude Code - Projects v2, Milestones, Branch Protection, and workspace configuration. Check if repos are linked to projects, manage kanban boards, configure branch rules.",
+  "description": "GitHub skills for Claude Code - Projects v2, Milestones, Branch Protection, and workspace configuration. Includes user-init for authentication setup, workspace-init for project discovery, and operational skills for managing kanban boards and branch rules.",
   "version": "3.0.0",
   "author": {
     "name": "Discrete Data Systems"
