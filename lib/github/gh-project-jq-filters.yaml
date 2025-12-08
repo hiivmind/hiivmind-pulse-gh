@@ -608,9 +608,88 @@ milestone_filters:
         isOverdue: (if .due_on then (.due_on | fromdateiso8601) < now else false end)
       }
 
+# =============================================================================
+# WORKSPACE INITIALIZATION FILTERS
+# =============================================================================
+# Filters for workspace setup and config.yaml generation
+
+workspace_filters:
+  # Transform project fields from GraphQL response to config-ready structure
+  transform_project_fields:
+    description: "Transform project fields to config.yaml format (JSON output for yq conversion)"
+    input: "GraphQL project response with .fields.nodes array"
+    filter: |
+      .fields.nodes | map(
+        if .dataType == "SINGLE_SELECT" then
+          {
+            key: .name,
+            value: {
+              id: .id,
+              type: "single_select",
+              options: (.options | map({(.name): .id}) | add)
+            }
+          }
+        elif .dataType == "ITERATION" then
+          {
+            key: .name,
+            value: {
+              id: .id,
+              type: "iteration",
+              iterations: (.configuration.iterations | map({(.title): .id}) | add)
+            }
+          }
+        else
+          {
+            key: .name,
+            value: {
+              id: .id,
+              type: (.dataType | ascii_downcase)
+            }
+          }
+        end
+      ) | from_entries
+
+  # Extract project summary for discovery display
+  format_discovered_projects:
+    description: "Format discovered projects for display"
+    input: "Array of project nodes from discovery query"
+    filter: |
+      map({
+        number: .number,
+        id: .id,
+        title: .title,
+        url: .url,
+        status: (if .closed then "closed" else "open" end)
+      })
+
+  # Extract repository info for config
+  format_repository_for_config:
+    description: "Format repository info for config.yaml"
+    input: "Repository object from REST API"
+    filter: |
+      {
+        name: .name,
+        id: .node_id,
+        full_name: .full_name,
+        default_branch: .default_branch,
+        visibility: .visibility
+      }
+
+  # Count fields by type for summary
+  count_fields_by_type:
+    description: "Count project fields grouped by type"
+    input: "Project with .fields.nodes array"
+    filter: |
+      .fields.nodes | group_by(.dataType) | map({
+        type: .[0].dataType,
+        count: length,
+        names: [.[].name]
+      })
+
 # Notes:
 # - All filters return JSON data for LLM interpretation
 # - Use empty strings ("") to skip optional parameters in universal filter
 # - Discovery filters help identify available filter values
 # - Milestone filters work with both GraphQL and REST API responses
+# - Workspace filters help with config.yaml generation
 # - Filters are designed to work with both user and organization project data

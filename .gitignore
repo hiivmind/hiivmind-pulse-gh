@@ -17,3 +17,6 @@ Thumbs.db
 
 # Local tools downloaded to node_modules
 node_modules/.bin/yq
+
+# User-specific config (contains personal GitHub identity)
+.hiivmind/github/user.yaml

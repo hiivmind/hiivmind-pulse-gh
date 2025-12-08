@@ -25,573 +25,311 @@ Complete workspace setup: create config structure, discover GitHub projects, and
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Prerequisites
+## Quick Start
 
-**REQUIRED:** Run `hiivmind-pulse-gh-user-init` first. This skill expects:
-- `.hiivmind/github/user.yaml` to exist with user identity
-- GitHub CLI (`gh`) authenticated with required scopes
-- Dependencies installed (`jq`, `yq`)
+The simplest way to initialize a workspace using the provided functions:
 
 ```bash
-# Check for user.yaml (created by user-init)
-if [[ ! -f ".hiivmind/github/user.yaml" ]]; then
-    echo "ERROR: user.yaml not found."
-    echo "Run hiivmind-pulse-gh-user-init first."
-    exit 1
+# 1. Source the workspace functions
+source lib/github/gh-workspace-functions.sh
+
+# 2. Check prerequisites (will error if something is missing)
+check_workspace_prerequisites || exit 1
+
+# 3. Check if already initialized
+if config_exists; then
+    echo "Workspace already initialized. Use workspace-refresh to update."
+    exit 0
 fi
 
-# Read user identity from existing user.yaml
-USER_LOGIN=$(yq '.user.login' .hiivmind/github/user.yaml)
-USER_ID=$(yq '.user.id' .hiivmind/github/user.yaml)
-echo "User: $USER_LOGIN ($USER_ID)"
+# 4. Detect workspace from git remote
+WORKSPACE_LOGIN=$(detect_workspace_from_remote)
+WORKSPACE_TYPE=$(get_workspace_type "$WORKSPACE_LOGIN")
+
+echo "Detected workspace: $WORKSPACE_LOGIN ($WORKSPACE_TYPE)"
+
+# 5. Discover projects
+echo "Discovering projects..."
+PROJECTS=$(discover_projects "$WORKSPACE_LOGIN" "$WORKSPACE_TYPE")
+echo "$PROJECTS" | format_projects_list
+
+# 6. Ask user for selections (projects, default, repos)
+# ... use AskUserQuestion tool here ...
+
+# 7. Initialize with selections
+initialize_workspace "$WORKSPACE_LOGIN" "$WORKSPACE_TYPE" "$DEFAULT_PROJECT" "$PROJECT_NUMBERS" "$REPO_NAMES"
 ```
+
+---
+
+## Prerequisites
+
+**REQUIRED:** Run `hiivmind-pulse-gh-user-init` first.
+
+| Requirement | Check |
+|-------------|-------|
+| user.yaml exists | `check_workspace_prerequisites` verifies this |
+| gh CLI authenticated | `check_workspace_prerequisites` verifies this |
+| jq installed | `check_workspace_prerequisites` verifies this |
+| yq installed | `check_workspace_prerequisites` verifies this |
+
+---
 
 ## Process Overview
 
 ```
-┌────────────────────────────────────────────────────────────────────────────────┐
-│  SETUP PHASE                                                                    │
-│  1. CHECK      →  2. GATHER     →  3. VERIFY    →  4. CREATE                   │
-│     (user.yaml?)    (workspace)      (access)        (config.yaml)             │
-│                                                                                 │
-│  DISCOVERY PHASE                                                                │
-│  5. DISCOVER   →  6. SELECT     →  7. ANALYZE   →  8. ENRICH USER  →  9. SAVE │
-│     (projects)      (which ones)     (fields)        (permissions)      (all)  │
-└────────────────────────────────────────────────────────────────────────────────┘
-
-Note: User identity is read from user.yaml (created by user-init).
-      This skill only ENRICHES user.yaml with permissions, not recreates it.
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  1. SOURCE       →  2. CHECK        →  3. DETECT      →  4. DISCOVER       │
+│     (functions)      (prerequisites)    (workspace)       (projects/repos) │
+│                                                                             │
+│  5. SELECT       →  6. GENERATE     →  7. ENRICH      →  8. SUMMARY        │
+│     (ask user)       (config.yaml)      (permissions)     (display)        │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## SETUP PHASE
+## Step-by-Step Implementation
 
-### Phase 1: Check Prerequisites and Existing Config
-
-**First**, verify user-init has been run:
+### Step 1: Source Functions
 
 ```bash
-USER_CONFIG_PATH=".hiivmind/github/user.yaml"
-
-if [[ ! -f "$USER_CONFIG_PATH" ]]; then
-    echo "ERROR: user.yaml not found at $USER_CONFIG_PATH"
-    echo ""
-    echo "You must run hiivmind-pulse-gh-user-init first."
-    echo "This skill requires user.yaml to exist with your GitHub identity."
-    exit 1
-fi
-
-# Load user identity for later use
-USER_LOGIN=$(yq '.user.login' "$USER_CONFIG_PATH")
-USER_ID=$(yq '.user.id' "$USER_CONFIG_PATH")
-
-if [[ "$USER_LOGIN" == "null" || -z "$USER_LOGIN" ]]; then
-    echo "ERROR: user.yaml exists but user.login is not set."
-    echo "Re-run hiivmind-pulse-gh-user-init to populate user identity."
-    exit 1
-fi
-
-echo "User: $USER_LOGIN"
+# Source workspace functions (includes project functions)
+source lib/github/gh-workspace-functions.sh
 ```
 
-**Then**, check if workspace config already exists:
+This provides all the functions needed for workspace initialization.
+
+### Step 2: Check Prerequisites
 
 ```bash
-if [[ -f ".hiivmind/github/config.yaml" ]]; then
-    echo "Workspace already initialized."
-    echo "To reinitialize, remove .hiivmind/github/config.yaml first."
-    echo "To update, run hiivmind-pulse-gh-workspace-refresh."
-    cat .hiivmind/github/config.yaml
+if ! check_workspace_prerequisites; then
+    echo "Fix the issues above before continuing."
+    exit 1
+fi
+```
+
+This checks:
+- `gh` CLI is installed and authenticated
+- `jq` and `yq` are installed
+- `.hiivmind/github/user.yaml` exists (from user-init)
+
+### Step 3: Check Existing Config
+
+```bash
+if config_exists; then
+    echo "Workspace already initialized at .hiivmind/github/config.yaml"
+    echo "To reinitialize, remove the file first."
+    echo "To update, use hiivmind-pulse-gh-workspace-refresh."
     exit 0
 fi
 ```
 
-If a symlink exists, check where it points:
+### Step 4: Detect Workspace
+
 ```bash
-if [[ -L ".hiivmind" ]]; then
-    echo "Found symlink: .hiivmind -> $(readlink .hiivmind)"
-    echo "This repository uses shared workspace configuration."
+# Auto-detect from git remote
+WORKSPACE_LOGIN=$(detect_workspace_from_remote)
+
+# Determine if org or user
+WORKSPACE_TYPE=$(get_workspace_type "$WORKSPACE_LOGIN")
+
+echo "Workspace: $WORKSPACE_LOGIN ($WORKSPACE_TYPE)"
+```
+
+**Alternative: Ask user directly if detection fails:**
+```bash
+# If auto-detect fails, ask user
+if [[ -z "$WORKSPACE_LOGIN" ]]; then
+    # Use AskUserQuestion tool to get workspace login
 fi
 ```
 
-### Phase 2: Gather Information
-
-Collect workspace details from the user:
-
-| Input | Question | Options |
-|-------|----------|---------|
-| **Workspace Type** | "Is this for an organization or personal account?" | `organization` / `user` |
-| **Login** | "What is the organization or username?" | e.g., `acme-corp` |
-
-#### Deriving from Context
-
-If the current repository is a git repo, we can infer:
+### Step 5: Discover Projects
 
 ```bash
-# Get remote origin
-REMOTE_URL=$(git remote get-url origin 2>/dev/null)
+# Discover all projects
+PROJECTS=$(discover_projects "$WORKSPACE_LOGIN" "$WORKSPACE_TYPE")
 
-# Extract owner from GitHub URL
-# https://github.com/acme-corp/repo-name → acme-corp
-# git@github.com:acme-corp/repo-name.git → acme-corp
-if [[ "$REMOTE_URL" =~ github\.com[:/]([^/]+)/ ]]; then
-    SUGGESTED_LOGIN="${BASH_REMATCH[1]}"
-    echo "Detected GitHub owner: $SUGGESTED_LOGIN"
-fi
+# Display for user
+echo "Found projects:"
+echo "$PROJECTS" | format_projects_list
 ```
 
-**Always confirm with user** before using derived values.
+**Output:**
+```
+Found projects:
+  #1 - Bug Tracker [open]
+  #2 - Feature Planner [open]
+  #3 - Archive [closed]
+```
 
-### Phase 3: Verify Access
+### Step 6: Select Projects and Repos
 
-Confirm the user has access to the workspace:
+Ask the user which projects and repositories to include:
+
+**Questions to ask:**
+1. Which projects to include? (default: all open)
+2. Which project should be the default?
+3. Which repositories to include? (options: all, current repo only, select)
+
+**Default behavior:**
+- Include all **open** projects
+- Set the **lowest-numbered open project** as default
+- Include **current repository only** (detected from git remote)
+
+### Step 7: Initialize Workspace
+
+Use the main workflow function:
 
 ```bash
-# For organization
-gh api "orgs/${WORKSPACE_LOGIN}" --jq '.login' 2>/dev/null
-if [[ $? -ne 0 ]]; then
-    echo "Cannot access organization: ${WORKSPACE_LOGIN}"
-    echo "Check: 1) Spelling  2) gh auth status  3) Organization membership"
-    exit 1
-fi
+# Example with user selections:
+# - Projects: 1 and 2
+# - Default: 2
+# - Repos: just hiivmind-pulse-gh
 
-# For user (viewer = authenticated user)
-gh api user --jq '.login'
+initialize_workspace \
+    "$WORKSPACE_LOGIN" \
+    "$WORKSPACE_TYPE" \
+    "2" \
+    "1 2" \
+    "hiivmind-pulse-gh"
 ```
 
-Get the workspace's GraphQL node ID:
-
-```bash
-# Organization
-ORG_ID=$(gh api graphql -H X-Github-Next-Global-ID:1 \
-    -f query='query($login: String!) { organization(login: $login) { id } }' \
-    -f login="$WORKSPACE_LOGIN" --jq '.data.organization.id')
-
-# User
-USER_ID=$(gh api graphql -H X-Github-Next-Global-ID:1 \
-    -f query='{ viewer { id } }' --jq '.data.viewer.id')
-```
-
-### Phase 4: Create Directory Structure
-
-```bash
-mkdir -p .hiivmind/github
-```
+This function:
+1. Fetches workspace ID
+2. Creates `.hiivmind/github/` directory
+3. Generates `config.yaml` with all project fields
+4. Enriches `user.yaml` with permissions
+5. Prints summary
 
 ---
 
-## DISCOVERY PHASE
+## Available Functions Reference
 
-### Phase 5: Discover Projects
+### Prerequisite Checks
 
-Find all accessible projects in the workspace.
+| Function | Description |
+|----------|-------------|
+| `check_workspace_prerequisites` | Check all requirements, return 0 if OK |
+| `config_exists` | Return 0 if config.yaml exists |
 
-#### For Organizations
+### Workspace Detection
 
-```bash
-source lib/github/gh-project-functions.sh
+| Function | Description |
+|----------|-------------|
+| `detect_workspace_from_remote` | Extract owner from git remote origin |
+| `get_workspace_type LOGIN` | Return "organization" or "user" |
+| `get_workspace_id LOGIN TYPE` | Get GraphQL node ID |
 
-# Discover all org projects
-PROJECTS_JSON=$(discover_org_projects "$WORKSPACE_LOGIN")
+### Discovery
 
-# Format for display
-echo "$PROJECTS_JSON" | jq -r '
-    .data.organization.projectsV2.nodes[] |
-    "  #\(.number) - \(.title) [\(.closed | if . then "closed" else "open" end)]"
-'
-```
+| Function | Description |
+|----------|-------------|
+| `discover_projects LOGIN TYPE` | List all projects (JSON array) |
+| `fetch_project_with_fields NUM LOGIN TYPE` | Get project with all fields |
+| `discover_repositories LOGIN TYPE` | List all repositories |
+| `get_repository_info FULL_NAME` | Get single repo info |
 
-#### For Users
+### Permissions
 
-```bash
-PROJECTS_JSON=$(discover_user_projects)
+| Function | Description |
+|----------|-------------|
+| `get_org_role ORG USER` | Get user's org role |
+| `get_repo_permission REPO USER` | Get user's repo permission |
 
-echo "$PROJECTS_JSON" | jq -r '
-    .data.viewer.projectsV2.nodes[] |
-    "  #\(.number) - \(.title) [\(.closed | if . then "closed" else "open" end)]"
-'
-```
+### Config Generation
 
-#### Sample Output
+| Function | Description |
+|----------|-------------|
+| `generate_config_yaml LOGIN TYPE ID DEFAULT PROJECTS REPOS` | Output complete config.yaml |
+| `generate_project_config NUM LOGIN TYPE` | Output single project YAML |
+| `transform_fields_to_yaml` | Transform fields JSON to YAML (stdin) |
+| `enrich_user_permissions LOGIN TYPE PROJECTS REPOS` | Update user.yaml permissions |
 
-```
-Found 3 projects in acme-corp:
-  #1 - Engineering Backlog [open]
-  #2 - Product Roadmap [open]
-  #5 - Archive 2024 [closed]
-```
+### Display
 
-### Phase 6: Select Projects
+| Function | Description |
+|----------|-------------|
+| `format_projects_list` | Format projects for display (stdin) |
+| `format_repos_list` | Format repos for display (stdin) |
+| `print_workspace_summary LOGIN TYPE PROJ_COUNT REPO_COUNT` | Show final summary |
 
-Ask user which projects to include in the workspace catalog:
+### Main Workflow
 
-| Question | Options |
-|----------|---------|
-| "Which projects should be included?" | List discovered projects |
-| "Which project should be the default?" | One of the selected |
+| Function | Description |
+|----------|-------------|
+| `initialize_workspace LOGIN TYPE DEFAULT PROJECTS REPOS` | Complete initialization |
 
-**Include open projects by default, ask about closed.**
+---
 
-Example interaction:
-```
-Include project #1 - Engineering Backlog? [Y/n] y
-Include project #2 - Product Roadmap? [Y/n] y
-Include project #5 - Archive 2024 (closed)? [y/N] n
+## Output Files
 
-Default project number: 2
-```
+### config.yaml (Shared)
 
-### Phase 7: Analyze Selected Projects
-
-For each selected project, discover complete field structure.
-
-#### Fetch Project Details
-
-```bash
-PROJECT_NUMBER=2
-
-# Get project with all fields
-FIELDS_JSON=$(fetch_org_project_fields "$PROJECT_NUMBER" "$WORKSPACE_LOGIN")
-
-# Extract project info
-PROJECT_ID=$(echo "$FIELDS_JSON" | jq -r '.data.organization.projectV2.id')
-PROJECT_TITLE=$(echo "$FIELDS_JSON" | jq -r '.data.organization.projectV2.title')
-PROJECT_URL=$(echo "$FIELDS_JSON" | jq -r '.data.organization.projectV2.url')
-```
-
-#### Parse Fields
-
-Extract field definitions with their types and options:
-
-```bash
-echo "$FIELDS_JSON" | jq '
-    .data.organization.projectV2.fields.nodes | map(
-        if .dataType == "SINGLE_SELECT" then
-            {
-                name: .name,
-                id: .id,
-                type: "single_select",
-                options: (.options | map({(.name): .id}) | add)
-            }
-        elif .dataType == "ITERATION" then
-            {
-                name: .name,
-                id: .id,
-                type: "iteration",
-                iterations: (.configuration.iterations | map({(.title): .id}) | add)
-            }
-        else
-            {
-                name: .name,
-                id: .id,
-                type: (.dataType | ascii_downcase)
-            }
-        end
-    )
-'
-```
-
-#### Sample Field Output
+Generated at `.hiivmind/github/config.yaml`:
 
 ```yaml
-fields:
-  Status:
-    id: PVTSSF_lADOxxxxxxx
-    type: single_select
-    options:
-      Backlog: PVTSSFO_xxxxxxx1
-      Ready: PVTSSFO_xxxxxxx2
-      In Progress: PVTSSFO_xxxxxxx3
-      In Review: PVTSSFO_xxxxxxx4
-      Done: PVTSSFO_xxxxxxx5
-  Priority:
-    id: PVTSSF_lADOyyyyyyy
-    type: single_select
-    options:
-      P0 - Critical: PVTSSFO_yyyyyyy1
-      P1 - High: PVTSSFO_yyyyyyy2
-      P2 - Medium: PVTSSFO_yyyyyyy3
-      P3 - Low: PVTSSFO_yyyyyyy4
-  Sprint:
-    id: PVTIF_lADOzzzzzzz
-    type: iteration
-  Due Date:
-    id: PVTF_lADOaaaaaaa
-    type: date
-```
-
-#### Discover Repositories
-
-Find repositories linked to projects or accessible in the org:
-
-```bash
-# Get linked repositories from project
-LINKED_REPOS=$(fetch_linked_repositories "$PROJECT_ID")
-
-# Or list org repositories
-ORG_REPOS=$(gh api "orgs/${WORKSPACE_LOGIN}/repos" --paginate --jq '
-    .[] | {
-        name: .name,
-        id: .node_id,
-        full_name: .full_name,
-        default_branch: .default_branch,
-        visibility: .visibility
-    }
-')
-```
-
-#### Discover Milestones
-
-For each repository, fetch milestones:
-
-```bash
-REPO_NAME="api"
-
-MILESTONES=$(gh api "repos/${WORKSPACE_LOGIN}/${REPO_NAME}/milestones" --jq '
-    map({
-        number: .number,
-        id: .node_id,
-        title: .title,
-        state: .state,
-        due_on: .due_on
-    })
-')
-```
-
-### Phase 8: Enrich User Permissions
-
-The user identity already exists in `user.yaml` (created by `user-init`). This phase adds **permissions** for the workspace being initialized.
-
-#### Read User Identity (from existing user.yaml)
-
-```bash
-USER_CONFIG_PATH=".hiivmind/github/user.yaml"
-
-# User identity already populated by user-init
-USER_LOGIN=$(yq '.user.login' "$USER_CONFIG_PATH")
-USER_ID=$(yq '.user.id' "$USER_CONFIG_PATH")
-
-echo "Enriching permissions for user: $USER_LOGIN"
-```
-
-#### Organization Role
-
-```bash
-ORG_ROLE=$(gh api "orgs/${WORKSPACE_LOGIN}/memberships/${USER_LOGIN}" \
-    --jq '.role' 2>/dev/null || echo "none")
-```
-
-#### Repository Permissions
-
-```bash
-for REPO in api frontend docs; do
-    PERMISSION=$(gh api "repos/${WORKSPACE_LOGIN}/${REPO}/collaborators/${USER_LOGIN}/permission" \
-        --jq '.permission' 2>/dev/null || echo "none")
-    echo "$REPO: $PERMISSION"
-done
-```
-
-### Phase 9: Save Configurations
-
-#### config.yaml (Shared)
-
-```yaml
-# hiivmind-pulse-gh - Workspace Configuration
-# This file is shared across the team and should be committed to git.
-# Generated by hiivmind-pulse-gh-workspace-init on 2025-12-08T10:00:00Z
-
 workspace:
   type: organization
-  login: acme-corp
+  login: hiivmind
   id: O_kgDOxxxxxxx
 
 projects:
   default: 2
   catalog:
     - number: 1
-      id: PVT_kwDOxxxxxxx1
-      title: Engineering Backlog
-      url: https://github.com/orgs/acme-corp/projects/1
+      id: PVT_kwDOxxxxxxx
+      title: Bug Tracker
+      url: https://github.com/orgs/hiivmind/projects/1
       fields:
         Status:
           id: PVTSSF_xxxxxxx
           type: single_select
           options:
-            Backlog: PVTSSFO_xxx1
-            In Progress: PVTSSFO_xxx2
-            Done: PVTSSFO_xxx3
-    - number: 2
-      id: PVT_kwDOxxxxxxx2
-      title: Product Roadmap
-      url: https://github.com/orgs/acme-corp/projects/2
-      fields:
-        # ... discovered fields ...
+            Backlog: abc123
+            In Progress: def456
+            Done: ghi789
+        # ... more fields ...
 
 repositories:
-  - name: api
+  - name: hiivmind-pulse-gh
     id: R_kgDOxxxxxxx
-    full_name: acme-corp/api
+    full_name: hiivmind/hiivmind-pulse-gh
     default_branch: main
     visibility: private
-  - name: frontend
-    id: R_kgDOyyyyyyy
-    full_name: acme-corp/frontend
-    default_branch: main
-    visibility: private
-
-milestones:
-  api:
-    - number: 1
-      id: MI_xxxxxxx
-      title: v1.0.0
-      state: open
-  frontend:
-    - number: 1
-      id: MI_yyyyyyy
-      title: MVP
-      state: open
 
 cache:
-  initialized_at: "2025-12-08T10:00:00Z"
-  last_synced_at: "2025-12-08T10:00:00Z"
-  toolkit_version: "3.0.0"
+  initialized_at: "2025-12-09T10:00:00Z"
+  last_synced_at: "2025-12-09T10:00:00Z"
 ```
 
-#### user.yaml (Enriched with Permissions)
+**Commit this file** to share with your team.
 
-The `user.yaml` file was **created by user-init** with user identity. This skill **enriches** it with workspace-specific permissions:
+### user.yaml (Enriched)
 
-```bash
-USER_CONFIG_PATH=".hiivmind/github/user.yaml"
-TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-# Update permissions section (user section already populated by user-init)
-yq -i ".permissions.org_role = \"$ORG_ROLE\"" "$USER_CONFIG_PATH"
-yq -i ".permissions.project_roles.$PROJECT_NUMBER = \"$PROJECT_ROLE\"" "$USER_CONFIG_PATH"
-yq -i ".permissions.repo_roles.$REPO_NAME = \"$REPO_ROLE\"" "$USER_CONFIG_PATH"
-yq -i ".cache.permissions_checked_at = \"$TIMESTAMP\"" "$USER_CONFIG_PATH"
-```
-
-**Result (after enrichment):**
+Updated at `.hiivmind/github/user.yaml`:
 
 ```yaml
-# hiivmind-pulse-gh - User Configuration
-# Generated by hiivmind-pulse-gh-user-init on 2025-12-08T09:00:00Z
-# Permissions enriched by hiivmind-pulse-gh-workspace-init on 2025-12-08T10:00:00Z
-# Add to .gitignore: .hiivmind/github/user.yaml
-
-user:                           # ← Populated by user-init
-  login: nathanielramm
+user:
+  login: discreteds
   id: U_kgDOxxxxxxx
   name: Nathaniel Ramm
-  email: nathaniel@example.com
 
-permissions:                    # ← Enriched by workspace-init
-  org_role: member
+permissions:           # ← Added by workspace-init
+  org_role: admin
   project_roles:
-    1: write
-    2: admin
+    "1": admin
+    "2": admin
   repo_roles:
-    api: maintain
-    frontend: write
-
-preferences:
-  default_project: null
-  default_repo: null
+    hiivmind-pulse-gh: admin
 
 cache:
-  user_checked_at: "2025-12-08T09:00:00Z"          # ← Set by user-init
-  permissions_checked_at: "2025-12-08T10:00:00Z"  # ← Set by workspace-init
-  permissions_ttl_hours: 24
+  user_checked_at: "2025-12-09T09:00:00Z"
+  permissions_checked_at: "2025-12-09T10:00:00Z"  # ← Updated
 ```
 
-#### Gitignore Suggestion
-
-```bash
-GITIGNORE_LINE=".hiivmind/github/user.yaml"
-
-if [[ -f ".gitignore" ]]; then
-    if ! grep -q "$GITIGNORE_LINE" .gitignore; then
-        echo "Add to .gitignore: $GITIGNORE_LINE"
-    fi
-else
-    echo "Create .gitignore with: echo '$GITIGNORE_LINE' > .gitignore"
-fi
-```
-
----
-
-## Output Summary
-
-After successful initialization:
-
-```
-GitHub workspace initialized!
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Workspace: acme-corp (organization)
-
-Projects cached: 2
-  #1 - Engineering Backlog (5 fields)
-  #2 - Product Roadmap (7 fields) [default]
-
-Repositories cached: 3
-  acme-corp/api (2 milestones)
-  acme-corp/frontend (1 milestone)
-  acme-corp/docs (0 milestones)
-
-User: nathanielramm (from user.yaml)
-  Org role: member
-  Project #2: admin
-
-Config saved:
-  .hiivmind/github/config.yaml (shared - commit this)
-  .hiivmind/github/user.yaml (enriched with permissions)
-
-Next steps:
-  1. Commit .hiivmind/github/config.yaml to share with team
-  2. Use hiivmind-pulse-gh-workspace-refresh to keep IDs in sync
-  3. You're ready to use all hiivmind-pulse-gh skills!
-```
-
-**Note:** The `user.yaml` file was created by `user-init` and enriched with permissions by this skill. Ensure it's in your `.gitignore`.
-
----
-
-## Interactive Mode Options
-
-When run interactively, present choices clearly:
-
-1. Show discovered projects, ask which to include
-2. Ask for default project
-3. Show discovered repos, ask which to include
-4. Confirm before writing
-
-With flags for automation:
-- `--all-projects` - Include all open projects
-- `--all-repos` - Include all repositories
-- `--default-project N` - Set default project number
-
----
-
-## Multi-Repository Setup
-
-If user wants to share config across multiple repositories:
-
-```bash
-# Create centralized config location
-mkdir -p ~/github-workspaces/acme-corp
-cd ~/github-workspaces/acme-corp
-# ... run init here ...
-
-# Then in each repo:
-cd ~/projects/api
-ln -s ~/github-workspaces/acme-corp .hiivmind
-
-cd ~/projects/frontend
-ln -s ~/github-workspaces/acme-corp .hiivmind
-```
+**Keep this in .gitignore** - contains personal identity.
 
 ---
 
@@ -600,19 +338,36 @@ ln -s ~/github-workspaces/acme-corp .hiivmind
 | Error | Cause | Solution |
 |-------|-------|----------|
 | "user.yaml not found" | user-init not run | Run `hiivmind-pulse-gh-user-init` first |
-| "user.login is not set" | Corrupted user.yaml | Re-run `hiivmind-pulse-gh-user-init` |
-| "Cannot access organization" | No membership or wrong name | Verify spelling, check `gh auth status` |
-| "No projects found" | No projects or no access | Check org membership and project visibility |
-| "gh: command not found" | GitHub CLI not installed | Install from cli.github.com |
-| "gh: not logged in" | Not authenticated | Run `gh auth login` |
-| "config.yaml exists" | Previous init | Remove `.hiivmind/github/config.yaml` and retry |
-| "Rate limit exceeded" | Too many API calls | Wait or use token with higher limits |
+| "Cannot access organization" | No membership | Check `gh auth status` and org membership |
+| "No projects found" | No projects or no access | Create a project or check permissions |
+| "config.yaml exists" | Already initialized | Remove file or use workspace-refresh |
+
+---
+
+## Multi-Repository Setup
+
+Share config across repositories with symlinks:
+
+```bash
+# Create centralized config
+mkdir -p ~/workspaces/hiivmind/.hiivmind/github
+cd ~/workspaces/hiivmind
+source lib/github/gh-workspace-functions.sh
+initialize_workspace "hiivmind" "organization" "2" "1 2" "repo1 repo2"
+
+# Link from each repo
+cd ~/projects/repo1
+ln -s ~/workspaces/hiivmind/.hiivmind .hiivmind
+
+cd ~/projects/repo2
+ln -s ~/workspaces/hiivmind/.hiivmind .hiivmind
+```
 
 ---
 
 ## Reference
 
-- Refresh workspace: `skills/hiivmind-pulse-gh-workspace-refresh/SKILL.md`
-- Investigate entities: `skills/hiivmind-pulse-gh-investigate/SKILL.md`
-- Architecture: `docs/meta-skill-architecture.md`
-- Config schema: `templates/config.yaml.template`
+- **Functions library:** `lib/github/gh-workspace-functions.sh`
+- **jq filters:** `lib/github/gh-project-jq-filters.yaml` (workspace_filters section)
+- **Refresh workspace:** `skills/hiivmind-pulse-gh-workspace-refresh/SKILL.md`
+- **Config schema:** `templates/config.yaml.template`
