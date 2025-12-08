@@ -365,9 +365,40 @@ ln -s ~/workspaces/hiivmind/.hiivmind .hiivmind
 
 ---
 
+## Templates
+
+The `generate_config_yaml` function uses the template at `templates/config.yaml.template`.
+
+The template defines the expected structure:
+```yaml
+workspace:
+  type: {{workspace_type}}
+  login: {{workspace_login}}
+  id: null
+
+projects:
+  default: null
+  catalog: []
+
+repositories: []
+
+milestones: {}
+
+cache:
+  initialized_at: {{initialized_at}}
+  last_synced_at: null
+  toolkit_version: {{toolkit_version}}
+```
+
+Placeholders (`{{...}}`) are substituted during generation. Arrays are populated dynamically.
+
+If you need to modify the config.yaml structure, update the template first.
+
+---
+
 ## Reference
 
 - **Functions library:** `lib/github/gh-workspace-functions.sh`
+- **Template:** `templates/config.yaml.template`
 - **jq filters:** `lib/github/gh-project-jq-filters.yaml` (workspace_filters section)
 - **Refresh workspace:** `skills/hiivmind-pulse-gh-workspace-refresh/SKILL.md`
-- **Config schema:** `templates/config.yaml.template`
