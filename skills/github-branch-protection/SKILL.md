@@ -38,6 +38,54 @@ You are an expert at using the GitHub CLI Toolkit's Branch Protection module - f
 source lib/github/gh-rest-functions.sh
 ```
 
+## Workspace Configuration
+
+If a `.hiivmind/github/config.yaml` file exists in the repository root, use it to simplify commands:
+
+```bash
+CONFIG_PATH=".hiivmind/github/config.yaml"
+
+if [[ -f "$CONFIG_PATH" ]]; then
+    # Load workspace context
+    ORG=$(yq '.workspace.login' "$CONFIG_PATH")
+    WORKSPACE_TYPE=$(yq '.workspace.type' "$CONFIG_PATH")
+
+    # Get cached repository info
+    get_repo_default_branch() {
+        local repo_name="$1"
+        yq ".repositories[] | select(.name == \"$repo_name\") | .default_branch" "$CONFIG_PATH"
+    }
+fi
+```
+
+### With Config (Simplified)
+
+```bash
+# Apply protection using org from config
+apply_main_branch_protection "$ORG" "api"
+
+# Get default branch from config
+DEFAULT_BRANCH=$(get_repo_default_branch "api")
+get_branch_protection "$ORG" "api" "$DEFAULT_BRANCH" | format_branch_protection
+```
+
+### Without Config (Explicit)
+
+```bash
+# Must specify owner explicitly
+apply_main_branch_protection "acme-corp" "api"
+
+# Must know or look up default branch
+get_branch_protection "acme-corp" "api" "main" | format_branch_protection
+```
+
+### Setup Workspace
+
+To create a workspace configuration:
+1. Run `github-workspace-init` to create `.hiivmind/github/config.yaml`
+2. Run `github-workspace-analyze` to discover repositories
+3. Commit `config.yaml` to share with team
+
 ## Function Reference
 
 ### Branch Protection (Legacy API)

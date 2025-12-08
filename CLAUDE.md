@@ -13,13 +13,37 @@ This is the **GitHub CLI Toolkit** - a Claude Code plugin providing comprehensiv
 
 ## Skills
 
-The toolkit provides four domain-specific skills:
+The toolkit provides six skills:
+
+### Meta-Skills (Setup)
+
+| Skill | Purpose |
+|-------|---------|
+| `github-workspace-init` | Create `.hiivmind/github/` workspace config in repository |
+| `github-workspace-analyze` | Discover projects, fields, repos and cache IDs |
+| `github-workspace-refresh` | Sync cached config with current GitHub state |
+
+### Operational Skills
 
 | Skill | Purpose |
 |-------|---------|
 | `github-projects` | Projects v2 - items, filtering, status updates, views, fields |
 | `github-milestones` | Milestone queries and management |
 | `github-branch-protection` | Branch protection rules and repository rulesets |
+
+## Workspace Configuration
+
+Skills can use cached org/project structure from `.hiivmind/github/config.yaml`:
+
+```bash
+# Check for workspace config
+if [[ -f ".hiivmind/github/config.yaml" ]]; then
+    ORG=$(yq '.workspace.login' .hiivmind/github/config.yaml)
+    DEFAULT_PROJECT=$(yq '.projects.default' .hiivmind/github/config.yaml)
+fi
+```
+
+See `docs/meta-skill-architecture.md` for full schema.
 
 ## Quick Start
 
@@ -41,9 +65,16 @@ list_milestones "owner" "repo" | format_milestones
 github-cli-toolkit/
 ├── .claude-plugin/              # Plugin manifests
 ├── skills/
+│   ├── github-workspace-init/   # Meta: create workspace config
+│   ├── github-workspace-analyze/# Meta: discover & cache structure
+│   ├── github-workspace-refresh/# Meta: sync with GitHub
 │   ├── github-projects/         # Projects v2 skill
 │   ├── github-milestones/       # Milestones skill
 │   └── github-branch-protection/# Branch protection skill
+├── templates/                   # Config file templates
+│   ├── config.yaml.template     # Shared workspace config
+│   ├── user.yaml.template       # Personal user config
+│   └── gitignore.template       # Suggested gitignore entries
 ├── lib/github/
 │   ├── gh-project-functions.sh      # GraphQL shell functions
 │   ├── gh-project-graphql-queries.yaml  # GraphQL templates
@@ -52,6 +83,7 @@ github-cli-toolkit/
 │   ├── gh-rest-endpoints.yaml       # REST endpoint templates
 │   └── gh-branch-protection-templates.yaml  # Protection presets
 └── docs/
+    └── meta-skill-architecture.md   # Workspace config design
 ```
 
 ## Key Function Groups

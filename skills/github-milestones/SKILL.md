@@ -23,6 +23,61 @@ source lib/github/gh-project-functions.sh  # GraphQL functions
 source lib/github/gh-rest-functions.sh     # REST functions
 ```
 
+## Workspace Configuration
+
+If a `.hiivmind/github/config.yaml` file exists in the repository root, use it to simplify commands:
+
+```bash
+CONFIG_PATH=".hiivmind/github/config.yaml"
+
+if [[ -f "$CONFIG_PATH" ]]; then
+    # Load workspace context
+    ORG=$(yq '.workspace.login' "$CONFIG_PATH")
+
+    # Get cached repository info
+    get_repo_id() {
+        local repo_name="$1"
+        yq ".repositories[] | select(.name == \"$repo_name\") | .id" "$CONFIG_PATH"
+    }
+
+    # Get cached milestone ID
+    get_cached_milestone_id() {
+        local repo_name="$1"
+        local milestone_title="$2"
+        yq ".milestones.${repo_name}[] | select(.title == \"$milestone_title\") | .id" "$CONFIG_PATH"
+    }
+fi
+```
+
+### With Config (Simplified)
+
+```bash
+# List milestones using org from config
+list_milestones "$ORG" "api" | format_milestones
+
+# Get cached milestone ID
+MILESTONE_ID=$(get_cached_milestone_id "api" "v1.0")
+set_issue_milestone "$ISSUE_ID" "$MILESTONE_ID"
+```
+
+### Without Config (Explicit)
+
+```bash
+# Must specify owner explicitly
+list_milestones "acme-corp" "api" | format_milestones
+
+# Must look up milestone ID
+MILESTONE_ID=$(get_milestone_id "acme-corp" "api" "v1.0")
+set_issue_milestone "$ISSUE_ID" "$MILESTONE_ID"
+```
+
+### Setup Workspace
+
+To create a workspace configuration:
+1. Run `github-workspace-init` to create `.hiivmind/github/config.yaml`
+2. Run `github-workspace-analyze` to discover and cache milestones
+3. Commit `config.yaml` to share with team
+
 ## Function Reference
 
 ### GraphQL Functions (Queries)

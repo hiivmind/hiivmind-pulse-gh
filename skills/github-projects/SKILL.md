@@ -15,6 +15,64 @@ Before using these functions, ensure:
 - **yq** (4.0+) is installed for YAML processing
 - Functions are sourced: `source lib/github/gh-project-functions.sh`
 
+## Workspace Configuration
+
+If a `.hiivmind/github/config.yaml` file exists in the repository root, use it to simplify commands:
+
+```bash
+CONFIG_PATH=".hiivmind/github/config.yaml"
+
+if [[ -f "$CONFIG_PATH" ]]; then
+    # Load workspace context
+    ORG=$(yq '.workspace.login' "$CONFIG_PATH")
+    WORKSPACE_TYPE=$(yq '.workspace.type' "$CONFIG_PATH")
+    DEFAULT_PROJECT=$(yq '.projects.default' "$CONFIG_PATH")
+
+    # Get cached project ID
+    PROJECT_ID=$(yq ".projects.catalog[] | select(.number == $DEFAULT_PROJECT) | .id" "$CONFIG_PATH")
+
+    # Get cached field IDs
+    STATUS_FIELD_ID=$(yq ".projects.catalog[] | select(.number == $DEFAULT_PROJECT) | .fields.Status.id" "$CONFIG_PATH")
+
+    # Get cached option IDs
+    get_status_option_id() {
+        local status_name="$1"
+        yq ".projects.catalog[] | select(.number == $DEFAULT_PROJECT) | .fields.Status.options.\"${status_name}\"" "$CONFIG_PATH"
+    }
+fi
+```
+
+### With Config (Simplified)
+
+```bash
+# Fetch default project (org/number from config)
+fetch_org_project "$DEFAULT_PROJECT" "$ORG" | apply_universal_filter "" "" "" ""
+
+# Update item status using cached option ID
+OPTION_ID=$(get_status_option_id "In Progress")
+update_item_single_select "$PROJECT_ID" "$ITEM_ID" "$STATUS_FIELD_ID" "$OPTION_ID"
+```
+
+### Without Config (Explicit)
+
+```bash
+# Must specify org and project number
+fetch_org_project 2 "acme-corp" | apply_universal_filter "" "" "" ""
+
+# Must look up IDs manually
+PROJECT_ID=$(get_org_project_id 2 "acme-corp")
+FIELD_ID=$(get_field_id "$PROJECT_ID" "Status")
+OPTION_ID=$(get_option_id "$PROJECT_ID" "Status" "In Progress")
+update_item_single_select "$PROJECT_ID" "$ITEM_ID" "$FIELD_ID" "$OPTION_ID"
+```
+
+### Setup Workspace
+
+To create a workspace configuration:
+1. Run `github-workspace-init` to create `.hiivmind/github/config.yaml`
+2. Run `github-workspace-analyze` to discover and cache project structure
+3. Commit `config.yaml` to share with team
+
 ## Quick Start
 
 ```bash

@@ -77,7 +77,17 @@ claude plugin add https://github.com/hiivmind/hiivmind-github-projects
 
 ## Skills
 
-This plugin provides four skills that Claude invokes on-demand:
+This plugin provides six skills that Claude invokes on-demand:
+
+### Meta-Skills (Setup & Configuration)
+
+| Skill | Purpose |
+|-------|---------|
+| `github-workspace-init` | Create `.hiivmind/github/` config in your repository |
+| `github-workspace-analyze` | Discover projects, fields, repos and cache IDs |
+| `github-workspace-refresh` | Sync cached config with current GitHub state |
+
+### Operational Skills (GitHub Operations)
 
 | Skill | Trigger Examples |
 |-------|------------------|
@@ -86,6 +96,38 @@ This plugin provides four skills that Claude invokes on-demand:
 | `github-branch-protection` | "Protect main branch", "Set up branch naming rules", "List rulesets" |
 
 Skills load only when needed — Claude doesn't carry the full function library in context until you ask for something relevant.
+
+## Workspace Configuration (New)
+
+The toolkit can cache your GitHub organization structure to simplify commands:
+
+```bash
+# Initialize workspace config in your repository
+# Creates .hiivmind/github/config.yaml
+github-workspace-init
+
+# Discover and cache projects, fields, IDs
+github-workspace-analyze
+
+# Periodically sync with GitHub
+github-workspace-refresh
+```
+
+**Benefits:**
+- No need to specify org name every time
+- Cached field/option IDs eliminate lookups
+- Simplified commands: `fetch_project` instead of `fetch_org_project 2 "acme-corp"`
+- Team shares config via git; user permissions are gitignored
+
+**Config structure:**
+```
+.hiivmind/
+└── github/
+    ├── config.yaml    # Shared (committed) - org, projects, field IDs
+    └── user.yaml      # Personal (gitignored) - user, permissions
+```
+
+See [docs/meta-skill-architecture.md](docs/meta-skill-architecture.md) for details.
 
 ## Usage
 
