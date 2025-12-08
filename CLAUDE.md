@@ -63,6 +63,75 @@ fi
 
 See `docs/meta-skill-architecture.md` for full schema.
 
+## When to Use hiivmind-pulse-gh
+
+**Use the config for context, use `gh` for actions.**
+
+### Always Read Config First
+
+Before any GitHub operations in this workspace, load the context:
+
+```bash
+# Load workspace context (do this once per session)
+CONFIG=".hiivmind/github/config.yaml"
+if [[ -f "$CONFIG" ]]; then
+    OWNER=$(yq '.workspace.login' "$CONFIG")
+    DEFAULT_PROJECT=$(yq '.projects.default' "$CONFIG")
+fi
+```
+
+Then use these variables with `gh` commands instead of hardcoding:
+
+```bash
+# Good - uses config values
+gh issue create -R "$OWNER/hiivmind-pulse-gh" --title "..."
+gh project item-add "$DEFAULT_PROJECT" --owner "$OWNER" --url "..."
+
+# Bad - hardcoded values
+gh issue create -R "hiivmind/hiivmind-pulse-gh" --title "..."
+gh project item-add 2 --owner "hiivmind" --url "..."
+```
+
+### When to Use Function Libraries
+
+| Use Case | Approach |
+|----------|----------|
+| Simple issue/PR operations | Raw `gh` with config values |
+| Project item add/remove/list | Raw `gh project` with config values |
+| Complex GraphQL queries | `source lib/github/gh-project-functions.sh` |
+| Filtering project items | Use `apply_*_filter` functions |
+| Bulk field/option lookups | Use function libraries |
+| Deep issue/PR analysis | Use `investigate` skill |
+
+### When to Use Skills
+
+| Skill | Use When |
+|-------|----------|
+| `workspace-refresh` | Config is stale or operations fail with "ID not found" |
+| `investigate` | Need full context on issue/PR (comments, reviews, timeline) |
+| `projects` | Complex project queries, status updates, view management |
+| `milestones` | Milestone CRUD operations |
+| `branch-protection` | Setting up or modifying branch rules |
+
+### Workflow Example
+
+```bash
+# 1. Load context
+CONFIG=".hiivmind/github/config.yaml"
+OWNER=$(yq '.workspace.login' "$CONFIG")
+DEFAULT_PROJECT=$(yq '.projects.default' "$CONFIG")
+
+# 2. Create issue with gh (simple operation)
+ISSUE_URL=$(gh issue create -R "$OWNER/repo" --title "Feature X" --label "enhancement" --json url --jq '.url')
+
+# 3. Add to project with gh (simple operation)
+gh project item-add "$DEFAULT_PROJECT" --owner "$OWNER" --url "$ISSUE_URL"
+
+# 4. For complex queries, use function libraries
+source lib/github/gh-project-functions.sh
+fetch_org_project "$DEFAULT_PROJECT" "$OWNER" | apply_status_filter "In Progress"
+```
+
 ## Quick Start
 
 ```bash
