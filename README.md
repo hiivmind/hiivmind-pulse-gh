@@ -1,223 +1,318 @@
 # GitHub CLI Toolkit
 
-A Claude Code plugin providing deep GitHub Projects v2 automation through structured wrappers around the GitHub CLI (`gh`).
+A Claude Code plugin for deep GitHub automation — Projects v2, Milestones, Branch Protection, and more.
 
-## What This Is
+## The Problem
 
-This toolkit provides **shell functions that wrap `gh` CLI commands** — giving Claude the ability to perform complex GitHub operations through your already-authenticated GitHub CLI installation.
+GitHub's APIs are powerful but painful:
+- **GraphQL node IDs** — Every operation needs opaque IDs like `PVT_kwDOBx...`
+- **Repeated lookups** — "What's the ID for the Status field? What's the option ID for 'In Progress'?"
+- **Context amnesia** — Each Claude session starts fresh, forgetting your org structure
+
+## The Solution
+
+This toolkit takes a **discover-once, use-forever** approach:
 
 ```
-┌─────────────────────────────────────────────────┐
-│  Claude Code                                    │
-│  └─► Skill (loads on demand)                    │
-│      └─► Shell functions                        │
-│          └─► gh CLI (your existing auth)        │
-│              └─► GitHub API                     │
-└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│  1. DISCOVER                                                     │
+│     Meta-skills inspect your GitHub org structure               │
+│     → Projects, fields, options, repositories, milestones       │
+│                                                                  │
+│  2. CACHE                                                        │
+│     Store discovered IDs in .hiivmind/github/config.yaml        │
+│     → Committed to git, shared with team                        │
+│                                                                  │
+│  3. USE                                                          │
+│     Operational skills read cached config                       │
+│     → No repeated lookups, simplified commands                  │
+└─────────────────────────────────────────────────────────────────┘
 ```
-
-**This is deliberately NOT an MCP server.** The design prioritizes:
-
-- **Context efficiency** — Skills load on-demand. Unlike MCP servers that expose all tools upfront, Claude only loads what it needs.
-- **Zero authentication overhead** — Inherits your existing `gh` CLI authentication. No tokens to configure, no OAuth flows, no secrets management.
-- **Composability** — Pipeline-based functions that work with standard Unix tools and existing scripts.
-- **Simplicity** — No server process, no transport layer. Just shell functions calling `gh`.
-
-## What You Get
-
-Deep coverage of GitHub features that are underserved by other tools:
-
-| Feature | Coverage | Why It Matters |
-|---------|----------|----------------|
-| **GitHub Projects v2** | ~95 functions | Most tools have minimal Projects v2 support |
-| **Milestones** | Full lifecycle | GraphQL queries + REST mutations |
-| **Branch Protection** | Legacy + Rulesets | Both APIs with smart templates |
-| **REST API** | Foundation layer | Extensible for other operations |
-
-## Prerequisites
-
-**Required tools must be installed and working before using this plugin:**
-
-| Tool | Purpose | Install | Verify |
-|------|---------|---------|--------|
-| **gh** | GitHub CLI (authenticated) | [cli.github.com](https://cli.github.com/) | `gh auth status` |
-| **jq** | JSON processing (1.6+) | `apt install jq` / `brew install jq` | `jq --version` |
-| **yq** | YAML processing (4.0+) | [github.com/mikefarah/yq](https://github.com/mikefarah/yq) | `yq --version` |
-
-```bash
-# Quick verification
-gh auth status && jq --version && yq --version
-```
-
-### GitHub CLI Authentication
-
-Your `gh` CLI must be authenticated with sufficient scopes:
-
-```bash
-# Check current auth
-gh auth status
-
-# Add required scopes if needed
-gh auth refresh -s read:project -s project -s repo
-```
-
-## Limitations
-
-- **Claude Code only** — This is a Claude Code plugin, not an MCP server. It won't work with VS Code Copilot, Cursor, or other LLM tools.
-- **Requires local tools** — `gh`, `jq`, and `yq` must be installed on the machine where Claude Code runs.
-- **Inherits gh permissions** — Can only access what your `gh` CLI can access. No elevation, no bypass.
-- **No deletion operations** — Destructive operations (delete project, delete ruleset) are intentionally excluded for safety.
 
 ## Installation
 
+### 1. Install Prerequisites
+
+| Tool | Purpose | Install |
+|------|---------|---------|
+| **gh** | GitHub CLI | [cli.github.com](https://cli.github.com/) |
+| **jq** | JSON processing | `apt install jq` / `brew install jq` |
+| **yq** | YAML processing | [github.com/mikefarah/yq](https://github.com/mikefarah/yq) |
+
 ```bash
-# Install the plugin
-claude plugin add https://github.com/hiivmind/hiivmind-github-projects
+# Verify installation
+gh auth status && jq --version && yq --version
+
+# Ensure gh has required scopes
+gh auth refresh -s read:project -s project -s repo
 ```
+
+### 2. Install the Plugin
+
+```bash
+claude mcp add-json github-cli-toolkit '{
+  "type": "url",
+  "url": "https://github.com/hiivmind/hiivmind-github-projects"
+}'
+```
+
+Or add to your Claude Code settings manually.
 
 ## Skills
 
-This plugin provides six skills that Claude invokes on-demand:
+The toolkit provides **six skills** in two categories:
 
-### Meta-Skills (Setup & Configuration)
+### Meta-Skills (Setup & Maintenance)
 
-| Skill | Purpose |
-|-------|---------|
-| `github-workspace-init` | Create `.hiivmind/github/` config in your repository |
-| `github-workspace-analyze` | Discover projects, fields, repos and cache IDs |
-| `github-workspace-refresh` | Sync cached config with current GitHub state |
+These skills discover your GitHub structure and cache it locally:
+
+| Skill | Purpose | When to Use |
+|-------|---------|-------------|
+| `github-workspace-init` | Create `.hiivmind/github/` config structure | First-time setup in a repository |
+| `github-workspace-analyze` | Discover projects, fields, repos, cache IDs | After init, or when structure changes |
+| `github-workspace-refresh` | Sync cached config with GitHub state | Periodically, or when operations fail |
 
 ### Operational Skills (GitHub Operations)
 
-| Skill | Trigger Examples |
-|-------|------------------|
-| `github-projects` | "Show me project 2", "Filter by assignee", "Create a status update" |
-| `github-milestones` | "List milestones", "Set milestone on issue #42", "Create v2.0 milestone" |
-| `github-branch-protection` | "Protect main branch", "Set up branch naming rules", "List rulesets" |
+These skills perform GitHub operations, using cached config when available:
 
-Skills load only when needed — Claude doesn't carry the full function library in context until you ask for something relevant.
+| Skill | Coverage | Example Prompts |
+|-------|----------|-----------------|
+| `github-projects` | Projects v2, items, fields, status updates, views | "Show project items assigned to @alice" |
+| `github-milestones` | Repository milestones, issue/PR assignment | "Create a v2.0 milestone for the api repo" |
+| `github-branch-protection` | Branch rules, rulesets, naming conventions | "Protect main with required reviews" |
 
-## Workspace Configuration (New)
+## Quick Start
 
-The toolkit can cache your GitHub organization structure to simplify commands:
+### First-Time Setup
 
-```bash
-# Initialize workspace config in your repository
-# Creates .hiivmind/github/config.yaml
-github-workspace-init
+```
+You: Set up GitHub workspace for my current project
 
-# Discover and cache projects, fields, IDs
-github-workspace-analyze
+Claude: I'll initialize the workspace configuration.
+        [Runs github-workspace-init]
 
-# Periodically sync with GitHub
-github-workspace-refresh
+        Created .hiivmind/github/config.yaml
+        Workspace: acme-corp (organization)
+
+        Now discovering projects and caching structure...
+        [Runs github-workspace-analyze]
+
+        Cached:
+        - 2 projects (Engineering Backlog, Product Roadmap)
+        - 15 fields with option IDs
+        - 5 repositories with milestones
+
+        Add to .gitignore: .hiivmind/github/user.yaml
 ```
 
-**Benefits:**
-- No need to specify org name every time
-- Cached field/option IDs eliminate lookups
-- Simplified commands: `fetch_project` instead of `fetch_org_project 2 "acme-corp"`
-- Team shares config via git; user permissions are gitignored
+### Daily Usage
 
-**Config structure:**
+```
+You: Show me in-progress items in the roadmap project
+
+Claude: [Uses cached org/project context]
+        Found 12 items with status "In Progress"...
+
+You: Move issue #42 to "In Review"
+
+Claude: [Uses cached Status field ID and "In Review" option ID]
+        Updated issue #42 status to "In Review"
+```
+
+## Workspace Configuration
+
+### Philosophy
+
+The workspace config separates **shared team knowledge** from **personal user data**:
+
 ```
 .hiivmind/
 └── github/
-    ├── config.yaml    # Shared (committed) - org, projects, field IDs
-    └── user.yaml      # Personal (gitignored) - user, permissions
+    ├── config.yaml    # SHARED — commit to git
+    │                  # Org structure, project IDs, field mappings
+    │
+    └── user.yaml      # PERSONAL — add to .gitignore
+                       # Your identity, cached permissions
 ```
 
-See [docs/meta-skill-architecture.md](docs/meta-skill-architecture.md) for details.
+### What Gets Cached
 
-## Usage
+**config.yaml** (shared):
+```yaml
+workspace:
+  type: organization
+  login: acme-corp
+  id: O_kgDOxxxxxxx
 
-Once installed, ask Claude about your GitHub resources in natural language:
+projects:
+  default: 2
+  catalog:
+    - number: 2
+      id: PVT_kwDOxxxxxxx
+      title: Product Roadmap
+      fields:
+        Status:
+          id: PVTSSF_xxxxxxx
+          options:
+            Backlog: PVTSSFO_xxx1
+            In Progress: PVTSSFO_xxx2
+            Done: PVTSSFO_xxx3
 
+repositories:
+  - name: api
+    id: R_kgDOxxxxxxx
+    default_branch: main
+
+milestones:
+  api:
+    - number: 1
+      title: v1.0.0
+      id: MI_xxxxxxx
 ```
-> What projects do I have in acme-org?
-> Show me all in-progress items assigned to @john in project 2
-> Create a status update for the project saying we're on track for the release
-> List open milestones for acme/api-server
-> Protect the main branch with required reviews
+
+**user.yaml** (personal):
+```yaml
+user:
+  login: your-username
+  id: U_kgDOxxxxxxx
+
+permissions:
+  org_role: member
+  project_roles:
+    2: admin
+  repo_roles:
+    api: maintain
 ```
 
-## Direct Shell Usage
+### Multi-Repository Setup
 
-The functions can also be used directly in scripts or terminals:
+For organizations with multiple repos, use symlinks to share config:
 
 ```bash
-# Source the functions
-source lib/github/gh-project-functions.sh
-source lib/github/gh-rest-functions.sh
+# Create centralized config
+mkdir -p ~/github-workspaces/acme-corp
+cd ~/github-workspaces/acme-corp
+# Run workspace-init and workspace-analyze here
 
-# Pipeline pattern: fetch | filter | format
-fetch_org_project 2 "acme-corp" | apply_assignee_filter "john"
-fetch_org_project 2 "acme-corp" | list_repositories
+# Symlink from each repository
+cd ~/projects/api
+ln -s ~/github-workspaces/acme-corp .hiivmind
 
-# Milestones
-list_milestones "acme" "api" | format_milestones
-create_milestone "acme" "api" "v2.0" "Q1 Release" "2025-03-31"
-
-# Branch Protection (auto-detects org vs personal repo)
-apply_main_branch_protection "acme" "api"
-apply_branch_naming_ruleset "acme" "api"
+cd ~/projects/frontend
+ln -s ~/github-workspaces/acme-corp .hiivmind
 ```
-
-## Key Capabilities
-
-### Projects v2 (GraphQL)
-- Fetch and filter project items by assignee, status, repository, priority
-- Status updates (ON_TRACK, AT_RISK, OFF_TRACK, COMPLETE, INACTIVE)
-- View management (TABLE, BOARD, ROADMAP)
-- Field management and single-select options
-- Repository linking
-- Pagination with auto-fetch variants
-
-### Milestones (Mixed GraphQL/REST)
-- Query via GraphQL, create/update/close via REST
-- Set milestones on issues and PRs
-- Progress tracking
-
-### Branch Protection (REST)
-- Per-branch protection rules with preset templates
-- Repository rulesets for pattern-based protection (`feature/*`, `release/*`)
-- Auto-detection of org vs personal repository differences
 
 ## Architecture
 
 ```
-lib/github/
-├── gh-project-functions.sh          # Shell functions (pipeable)
-├── gh-project-graphql-queries.yaml  # GraphQL query templates
-├── gh-project-jq-filters.yaml       # jq filter templates
-├── gh-rest-functions.sh             # REST wrapper functions
-├── gh-rest-endpoints.yaml           # REST endpoint documentation
-└── gh-branch-protection-templates.yaml  # Protection presets
+github-cli-toolkit/
+├── skills/
+│   ├── github-workspace-init/      # Meta: create config structure
+│   ├── github-workspace-analyze/   # Meta: discover and cache
+│   ├── github-workspace-refresh/   # Meta: sync with GitHub
+│   ├── github-projects/            # Ops: Projects v2
+│   ├── github-milestones/          # Ops: Milestones
+│   └── github-branch-protection/   # Ops: Branch rules
+│
+├── templates/                      # Config file templates
+│   ├── config.yaml.template
+│   ├── user.yaml.template
+│   └── gitignore.template
+│
+├── lib/github/
+│   ├── gh-project-functions.sh     # ~95 shell functions
+│   ├── gh-project-graphql-queries.yaml
+│   ├── gh-project-jq-filters.yaml
+│   ├── gh-rest-functions.sh
+│   └── gh-branch-protection-templates.yaml
+│
+└── docs/
+    └── meta-skill-architecture.md  # Detailed design docs
 ```
 
-Functions follow a pipeline pattern — they read JSON from stdin and write to stdout:
+### Design Principles
+
+1. **Skills over MCP** — Load on-demand, not all upfront. Better context efficiency.
+2. **Shell functions over API wrappers** — Composable pipelines, Unix philosophy.
+3. **Cache structure, not data** — IDs are stable; item data changes constantly.
+4. **Shared config, personal permissions** — Team collaborates; permissions are individual.
+5. **Graceful degradation** — Works without config (explicit params required).
+
+## Function Reference
+
+### Projects v2 (GraphQL)
 
 ```bash
-fetch_org_project 2 "org" | apply_status_filter "In Progress" | list_assignees
+# Fetch and filter
+fetch_org_project 2 "acme" | apply_assignee_filter "alice"
+fetch_org_project 2 "acme" | apply_status_filter "In Progress"
+fetch_org_project 2 "acme" | list_repositories
+
+# Status updates
+create_status_update "PVT_xxx" "ON_TRACK" "Sprint on schedule"
+get_latest_status_update "PVT_xxx"
+
+# Views
+fetch_project_views "PVT_xxx"
+create_project_view "PVT_xxx" "Sprint Board" "BOARD"
+
+# Field updates (with cached IDs)
+update_item_single_select "$PROJECT_ID" "$ITEM_ID" "$FIELD_ID" "$OPTION_ID"
+```
+
+### Milestones (GraphQL + REST)
+
+```bash
+# Query
+list_milestones "acme" "api" | format_milestones
+get_milestone_progress "acme" "api" 3
+
+# Create/manage (REST)
+create_milestone "acme" "api" "v2.0" "Q1 Release" "2025-03-31"
+close_milestone "acme" "api" 3
+
+# Assign to issues (GraphQL)
+set_issue_milestone "$ISSUE_ID" "$MILESTONE_ID"
+```
+
+### Branch Protection (REST)
+
+```bash
+# Smart templates (auto-detect org vs personal)
+apply_main_branch_protection "acme" "api"
+apply_develop_branch_protection "acme" "api"
+
+# Rulesets (org repos only)
+apply_branch_naming_ruleset "acme" "api"
+list_rulesets "acme" "api" | format_rulesets
 ```
 
 ## Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
+| "No workspace configuration found" | Run `github-workspace-init` then `github-workspace-analyze` |
+| "Field ID not found" | Run `github-workspace-refresh` to sync with GitHub |
 | `gh: command not found` | Install GitHub CLI: [cli.github.com](https://cli.github.com/) |
 | `yq: command not found` | Install yq v4+: [github.com/mikefarah/yq](https://github.com/mikefarah/yq) |
-| `jq: command not found` | `apt install jq` or `brew install jq` |
-| Permission/scope errors | `gh auth refresh -s read:project -s project -s repo` |
-| "Resource not accessible" | Check you have access to the org/repo via `gh repo view owner/repo` |
+| Permission errors | `gh auth refresh -s read:project -s project -s repo` |
+| "Resource not accessible" | Check access: `gh repo view owner/repo` |
+
+## Limitations
+
+- **Claude Code only** — Not an MCP server. Won't work with other LLM tools.
+- **Requires local tools** — `gh`, `jq`, `yq` must be installed.
+- **Inherits gh permissions** — Can only access what your `gh` CLI can access.
+- **No destructive operations** — Delete operations intentionally excluded.
 
 ## Contributing
 
 ```
-lib/github/gh-project-*.yaml     → GraphQL queries and jq filters
-lib/github/gh-*-functions.sh     → Shell function implementations
-lib/github/gh-rest-*.yaml        → REST endpoints and templates
 skills/*/SKILL.md                → Skill documentation
+lib/github/*-functions.sh        → Shell function implementations
+lib/github/*.yaml                → GraphQL queries, jq filters, templates
+docs/                            → Architecture and design docs
 ```
 
 ## License
