@@ -61,12 +61,25 @@ Run these commands in Claude Code (not in a terminal).
 
 ## Skills
 
-The toolkit provides **six skills** in three categories:
+The toolkit provides **seven skills** with a clear dependency hierarchy:
+
+### Skill Hierarchy
+
+```
+hiivmind-pulse-gh-user-init          ← Run FIRST (validates env, creates user.yaml)
+       │
+       ▼
+hiivmind-pulse-gh-workspace-init     ← Run SECOND (discovers org, creates config.yaml)
+       │
+       ▼
+All other skills                     ← Require both init skills completed
+```
 
 ### Setup & Maintenance
 
 | Skill | Purpose | When to Use |
 |-------|---------|-------------|
+| `hiivmind-pulse-gh-user-init` | Validate gh CLI, auth, deps; persist user identity | First-time setup (run once globally) |
 | `hiivmind-pulse-gh-workspace-init` | Create config, discover projects, cache IDs | First-time setup (once per repo) |
 | `hiivmind-pulse-gh-workspace-refresh` | Sync structural metadata with GitHub | Periodically, or when "ID not found" errors occur |
 
@@ -88,6 +101,30 @@ The toolkit provides **six skills** in three categories:
 
 ### First-Time Setup
 
+**Step 1: User Init** (run once globally)
+```
+You: Set up my GitHub environment
+
+Claude: [Runs hiivmind-pulse-gh-user-init]
+
+        === hiivmind-pulse-gh User Setup ===
+
+        GitHub CLI (gh): gh version 2.40.0
+        jq: jq-1.7
+        yq: yq v4.40.5
+        GitHub auth: Logged in as your-username
+        Token scopes: 'read:org', 'read:project', 'repo', 'project'
+        Projects v2 access: OK
+
+        Fetching user identity...
+          Login: your-username
+          ID: U_kgDOxxxxxxx
+
+        User setup complete!
+        Created: .hiivmind/github/user.yaml
+```
+
+**Step 2: Workspace Init** (run once per repo)
 ```
 You: Set up GitHub workspace for my current project
 
@@ -105,7 +142,9 @@ Claude: [Runs hiivmind-pulse-gh-workspace-init]
           acme-corp/api (2 milestones)
           acme-corp/frontend (1 milestone)
 
-        Add to .gitignore: .hiivmind/github/user.yaml
+        Config saved:
+          .hiivmind/github/config.yaml (commit this)
+          .hiivmind/github/user.yaml (enriched with permissions)
 ```
 
 ### Daily Usage
@@ -178,13 +217,13 @@ milestones:
       id: MI_xxxxxxx
 ```
 
-**user.yaml** (personal):
+**user.yaml** (personal - created by user-init, enriched by workspace-init):
 ```yaml
-user:
+user:                           # ← Created by user-init
   login: your-username
   id: U_kgDOxxxxxxx
 
-permissions:
+permissions:                    # ← Added by workspace-init
   org_role: member
   project_roles:
     2: admin
@@ -215,7 +254,8 @@ ln -s ~/github-workspaces/acme-corp .hiivmind
 ```
 hiivmind-pulse-gh/
 ├── skills/
-│   ├── hiivmind-pulse-gh-workspace-init/      # Setup: create config + discover structure
+│   ├── hiivmind-pulse-gh-user-init/           # Setup: validate env, create user.yaml
+│   ├── hiivmind-pulse-gh-workspace-init/      # Setup: discover structure, create config.yaml
 │   ├── hiivmind-pulse-gh-workspace-refresh/   # Maintenance: sync structural metadata
 │   ├── hiivmind-pulse-gh-investigate/         # Investigation: deep-dive into entities
 │   ├── hiivmind-pulse-gh-projects/            # Operations: Projects v2

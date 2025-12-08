@@ -1,9 +1,9 @@
 ---
 name: hiivmind-pulse-gh-workspace-init
 description: >
-  Initialize and configure a GitHub workspace. Creates .hiivmind/github/ config structure,
-  discovers projects/fields/repositories, and caches IDs for simplified operations.
-  One-time setup that combines workspace creation with structure discovery.
+  Initialize and configure a GitHub workspace. Creates .hiivmind/github/config.yaml,
+  discovers projects/fields/repositories, and enriches user.yaml with permissions.
+  REQUIRES hiivmind-pulse-gh-user-init to be run first (creates user.yaml).
   Run once per repository, then use hiivmind-pulse-gh-workspace-refresh to keep in sync.
 ---
 
@@ -11,18 +11,40 @@ description: >
 
 Complete workspace setup: create config structure, discover GitHub projects, and cache IDs for simplified operations.
 
-## Prerequisites
+## Skill Hierarchy
 
-Before running this skill, ensure your environment is properly configured:
-
-```bash
-# Run user-init skill first to verify:
-# - GitHub CLI installed and authenticated
-# - Token has required scopes (read:project, project)
-# - Dependencies installed (yq, jq)
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  hiivmind-pulse-gh-user-init          ← Must run FIRST (creates user.yaml) │
+│       │                                                                     │
+│       ▼                                                                     │
+│  hiivmind-pulse-gh-workspace-init     ← YOU ARE HERE                       │
+│       │                                                                     │
+│       ▼                                                                     │
+│  All other skills                     ← Require both init skills           │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**If you encounter scope errors**, run `hiivmind-pulse-gh-user-init` first.
+## Prerequisites
+
+**REQUIRED:** Run `hiivmind-pulse-gh-user-init` first. This skill expects:
+- `.hiivmind/github/user.yaml` to exist with user identity
+- GitHub CLI (`gh`) authenticated with required scopes
+- Dependencies installed (`jq`, `yq`)
+
+```bash
+# Check for user.yaml (created by user-init)
+if [[ ! -f ".hiivmind/github/user.yaml" ]]; then
+    echo "ERROR: user.yaml not found."
+    echo "Run hiivmind-pulse-gh-user-init first."
+    exit 1
+fi
+
+# Read user identity from existing user.yaml
+USER_LOGIN=$(yq '.user.login' .hiivmind/github/user.yaml)
+USER_ID=$(yq '.user.id' .hiivmind/github/user.yaml)
+echo "User: $USER_LOGIN ($USER_ID)"
+```
 
 ## Process Overview
 
@@ -30,26 +52,55 @@ Before running this skill, ensure your environment is properly configured:
 ┌────────────────────────────────────────────────────────────────────────────────┐
 │  SETUP PHASE                                                                    │
 │  1. CHECK      →  2. GATHER     →  3. VERIFY    →  4. CREATE                   │
-│     (existing?)     (workspace)      (access)        (files)                    │
+│     (user.yaml?)    (workspace)      (access)        (config.yaml)             │
 │                                                                                 │
 │  DISCOVERY PHASE                                                                │
-│  5. DISCOVER   →  6. SELECT     →  7. ANALYZE   →  8. CACHE USER  →  9. SAVE  │
-│     (projects)      (which ones)     (fields)        (permissions)     (all)   │
+│  5. DISCOVER   →  6. SELECT     →  7. ANALYZE   →  8. ENRICH USER  →  9. SAVE │
+│     (projects)      (which ones)     (fields)        (permissions)      (all)  │
 └────────────────────────────────────────────────────────────────────────────────┘
+
+Note: User identity is read from user.yaml (created by user-init).
+      This skill only ENRICHES user.yaml with permissions, not recreates it.
 ```
 
 ---
 
 ## SETUP PHASE
 
-### Phase 1: Check Existing
+### Phase 1: Check Prerequisites and Existing Config
 
-Before proceeding, check if configuration already exists:
+**First**, verify user-init has been run:
+
+```bash
+USER_CONFIG_PATH=".hiivmind/github/user.yaml"
+
+if [[ ! -f "$USER_CONFIG_PATH" ]]; then
+    echo "ERROR: user.yaml not found at $USER_CONFIG_PATH"
+    echo ""
+    echo "You must run hiivmind-pulse-gh-user-init first."
+    echo "This skill requires user.yaml to exist with your GitHub identity."
+    exit 1
+fi
+
+# Load user identity for later use
+USER_LOGIN=$(yq '.user.login' "$USER_CONFIG_PATH")
+USER_ID=$(yq '.user.id' "$USER_CONFIG_PATH")
+
+if [[ "$USER_LOGIN" == "null" || -z "$USER_LOGIN" ]]; then
+    echo "ERROR: user.yaml exists but user.login is not set."
+    echo "Re-run hiivmind-pulse-gh-user-init to populate user identity."
+    exit 1
+fi
+
+echo "User: $USER_LOGIN"
+```
+
+**Then**, check if workspace config already exists:
 
 ```bash
 if [[ -f ".hiivmind/github/config.yaml" ]]; then
     echo "Workspace already initialized."
-    echo "To reinitialize, remove .hiivmind/github/ first."
+    echo "To reinitialize, remove .hiivmind/github/config.yaml first."
     echo "To update, run hiivmind-pulse-gh-workspace-refresh."
     cat .hiivmind/github/config.yaml
     exit 0
@@ -308,19 +359,20 @@ MILESTONES=$(gh api "repos/${WORKSPACE_LOGIN}/${REPO_NAME}/milestones" --jq '
 ')
 ```
 
-### Phase 8: Cache User Information
+### Phase 8: Enrich User Permissions
 
-Get the authenticated user's identity and permissions.
+The user identity already exists in `user.yaml` (created by `user-init`). This phase adds **permissions** for the workspace being initialized.
 
-#### User Identity
+#### Read User Identity (from existing user.yaml)
 
 ```bash
-USER_JSON=$(gh api user)
-USER_LOGIN=$(echo "$USER_JSON" | jq -r '.login')
-USER_ID=$(gh api graphql -H X-Github-Next-Global-ID:1 \
-    -f query='{ viewer { id } }' --jq '.data.viewer.id')
-USER_NAME=$(echo "$USER_JSON" | jq -r '.name')
-USER_EMAIL=$(echo "$USER_JSON" | jq -r '.email')
+USER_CONFIG_PATH=".hiivmind/github/user.yaml"
+
+# User identity already populated by user-init
+USER_LOGIN=$(yq '.user.login' "$USER_CONFIG_PATH")
+USER_ID=$(yq '.user.id' "$USER_CONFIG_PATH")
+
+echo "Enriching permissions for user: $USER_LOGIN"
 ```
 
 #### Organization Role
@@ -406,20 +458,36 @@ cache:
   toolkit_version: "3.0.0"
 ```
 
-#### user.yaml (Personal)
+#### user.yaml (Enriched with Permissions)
+
+The `user.yaml` file was **created by user-init** with user identity. This skill **enriches** it with workspace-specific permissions:
+
+```bash
+USER_CONFIG_PATH=".hiivmind/github/user.yaml"
+TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+# Update permissions section (user section already populated by user-init)
+yq -i ".permissions.org_role = \"$ORG_ROLE\"" "$USER_CONFIG_PATH"
+yq -i ".permissions.project_roles.$PROJECT_NUMBER = \"$PROJECT_ROLE\"" "$USER_CONFIG_PATH"
+yq -i ".permissions.repo_roles.$REPO_NAME = \"$REPO_ROLE\"" "$USER_CONFIG_PATH"
+yq -i ".cache.permissions_checked_at = \"$TIMESTAMP\"" "$USER_CONFIG_PATH"
+```
+
+**Result (after enrichment):**
 
 ```yaml
 # hiivmind-pulse-gh - User Configuration
-# This file contains user-specific settings and should NOT be committed to git.
+# Generated by hiivmind-pulse-gh-user-init on 2025-12-08T09:00:00Z
+# Permissions enriched by hiivmind-pulse-gh-workspace-init on 2025-12-08T10:00:00Z
 # Add to .gitignore: .hiivmind/github/user.yaml
 
-user:
+user:                           # ← Populated by user-init
   login: nathanielramm
   id: U_kgDOxxxxxxx
   name: Nathaniel Ramm
   email: nathaniel@example.com
 
-permissions:
+permissions:                    # ← Enriched by workspace-init
   org_role: member
   project_roles:
     1: write
@@ -433,7 +501,8 @@ preferences:
   default_repo: null
 
 cache:
-  permissions_checked_at: "2025-12-08T10:00:00Z"
+  user_checked_at: "2025-12-08T09:00:00Z"          # ← Set by user-init
+  permissions_checked_at: "2025-12-08T10:00:00Z"  # ← Set by workspace-init
   permissions_ttl_hours: 24
 ```
 
@@ -472,19 +541,21 @@ Repositories cached: 3
   acme-corp/frontend (1 milestone)
   acme-corp/docs (0 milestones)
 
-User: nathanielramm
+User: nathanielramm (from user.yaml)
   Org role: member
   Project #2: admin
 
 Config saved:
   .hiivmind/github/config.yaml (shared - commit this)
-  .hiivmind/github/user.yaml (personal - add to .gitignore)
+  .hiivmind/github/user.yaml (enriched with permissions)
 
 Next steps:
-  1. Add to .gitignore: .hiivmind/github/user.yaml
-  2. Commit .hiivmind/github/config.yaml to share with team
-  3. Use hiivmind-pulse-gh-workspace-refresh to keep IDs in sync
+  1. Commit .hiivmind/github/config.yaml to share with team
+  2. Use hiivmind-pulse-gh-workspace-refresh to keep IDs in sync
+  3. You're ready to use all hiivmind-pulse-gh skills!
 ```
+
+**Note:** The `user.yaml` file was created by `user-init` and enriched with permissions by this skill. Ensure it's in your `.gitignore`.
 
 ---
 
@@ -528,11 +599,13 @@ ln -s ~/github-workspaces/acme-corp .hiivmind
 
 | Error | Cause | Solution |
 |-------|-------|----------|
+| "user.yaml not found" | user-init not run | Run `hiivmind-pulse-gh-user-init` first |
+| "user.login is not set" | Corrupted user.yaml | Re-run `hiivmind-pulse-gh-user-init` |
 | "Cannot access organization" | No membership or wrong name | Verify spelling, check `gh auth status` |
 | "No projects found" | No projects or no access | Check org membership and project visibility |
 | "gh: command not found" | GitHub CLI not installed | Install from cli.github.com |
 | "gh: not logged in" | Not authenticated | Run `gh auth login` |
-| "Directory exists" | Previous init | Remove `.hiivmind/github/` and retry |
+| "config.yaml exists" | Previous init | Remove `.hiivmind/github/config.yaml` and retry |
 | "Rate limit exceeded" | Too many API calls | Wait or use token with higher limits |
 
 ---

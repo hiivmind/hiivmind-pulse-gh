@@ -13,29 +13,41 @@ This is **hiivmind-pulse-gh** - a Claude Code plugin providing comprehensive Git
 
 ## Skills
 
-The toolkit provides seven skills:
+The toolkit provides seven skills with a clear dependency hierarchy:
+
+### Skill Hierarchy
+
+```
+hiivmind-pulse-gh-user-init          ← Run FIRST (validates env, creates user.yaml)
+       │
+       ▼
+hiivmind-pulse-gh-workspace-init     ← Run SECOND (discovers org, creates config.yaml)
+       │
+       ▼
+All other skills                     ← Require both init skills completed
+```
 
 ### Setup & Maintenance
 
-| Skill | Purpose |
-|-------|---------|
-| `hiivmind-pulse-gh-user-init` | First-time setup: verify gh CLI, auth scopes, dependencies (prerequisite for all) |
-| `hiivmind-pulse-gh-workspace-init` | Create config, discover projects/fields/repos, cache IDs (one-time setup) |
-| `hiivmind-pulse-gh-workspace-refresh` | Sync structural metadata with current GitHub state (run periodically) |
+| Skill | Purpose | Creates |
+|-------|---------|---------|
+| `hiivmind-pulse-gh-user-init` | Verify gh CLI, auth scopes, deps; persist user identity | `user.yaml` |
+| `hiivmind-pulse-gh-workspace-init` | Discover projects/repos, cache IDs, enrich user permissions | `config.yaml` |
+| `hiivmind-pulse-gh-workspace-refresh` | Sync structural metadata with current GitHub state | Updates both |
 
 ### Investigation
 
-| Skill | Purpose |
-|-------|---------|
-| `hiivmind-pulse-gh-investigate` | Deep-dive into issues, PRs, project items - traverse relationships, build context |
+| Skill | Purpose | Requires |
+|-------|---------|----------|
+| `hiivmind-pulse-gh-investigate` | Deep-dive into issues, PRs, project items | Both init skills |
 
 ### Operations
 
-| Skill | Purpose |
-|-------|---------|
-| `hiivmind-pulse-gh-projects` | Projects v2 - items, filtering, status updates, views, fields, repo linking |
-| `hiivmind-pulse-gh-milestones` | Milestone queries and management |
-| `hiivmind-pulse-gh-branch-protection` | Branch protection rules and repository rulesets |
+| Skill | Purpose | Requires |
+|-------|---------|----------|
+| `hiivmind-pulse-gh-projects` | Projects v2 - items, filtering, status updates, views | Both init skills |
+| `hiivmind-pulse-gh-milestones` | Milestone queries and management | Both init skills |
+| `hiivmind-pulse-gh-branch-protection` | Branch protection rules and repository rulesets | Both init skills |
 
 ## Workspace Configuration
 

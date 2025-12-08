@@ -15,7 +15,11 @@ You are an expert at using hiivmind-pulse-gh's Projects module - a pipeline-base
 
 ## Prerequisites
 
-Before using these functions, ensure:
+**Required setup (run once):**
+1. `hiivmind-pulse-gh-user-init` - Validates environment, creates `user.yaml`
+2. `hiivmind-pulse-gh-workspace-init` - Discovers projects, creates `config.yaml`
+
+**Runtime requirements:**
 - **GitHub CLI** (`gh`) is installed and authenticated
 - **jq** (1.6+) is installed for JSON processing
 - **yq** (4.0+) is installed for YAML processing

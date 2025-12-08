@@ -17,6 +17,11 @@ You are an expert at using hiivmind-pulse-gh's Milestones module - for managing 
 
 ## Prerequisites
 
+**Required setup (run once):**
+1. `hiivmind-pulse-gh-user-init` - Validates environment, creates `user.yaml`
+2. `hiivmind-pulse-gh-workspace-init` - Discovers repos/milestones, creates `config.yaml`
+
+**Runtime requirements:**
 ```bash
 # Source both function files
 source lib/github/gh-project-functions.sh  # GraphQL functions

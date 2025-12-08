@@ -33,6 +33,11 @@ You are an expert at using hiivmind-pulse-gh's Branch Protection module - for ma
 
 ## Prerequisites
 
+**Required setup (run once):**
+1. `hiivmind-pulse-gh-user-init` - Validates environment, creates `user.yaml`
+2. `hiivmind-pulse-gh-workspace-init` - Discovers repos, creates `config.yaml`
+
+**Runtime requirements:**
 ```bash
 # Source the REST functions
 source lib/github/gh-rest-functions.sh

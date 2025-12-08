@@ -20,6 +20,14 @@ Unlike `hiivmind-pulse-gh-workspace-refresh` (which syncs structural metadata), 
 - "Who's involved in this PR and what's blocking it?"
 - "Show me everything related to this project item"
 
+## Prerequisites
+
+**Required setup (run once):**
+1. `hiivmind-pulse-gh-user-init` - Validates environment, creates `user.yaml`
+2. `hiivmind-pulse-gh-workspace-init` - Discovers projects/repos, creates `config.yaml`
+
+**Note:** This skill can work without workspace config (explicit params required), but config simplifies commands by providing cached org/repo context.
+
 ## Key Principles
 
 1. **No caching** - Entity data changes rapidly; always fetch fresh

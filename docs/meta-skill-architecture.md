@@ -143,15 +143,19 @@ cache:
 
 Gitignored. Contains user-specific identity and cached permissions.
 
+**Creation workflow:**
+1. `hiivmind-pulse-gh-user-init` creates this file with user identity
+2. `hiivmind-pulse-gh-workspace-init` enriches it with permissions
+
 ```yaml
-# User identification
+# User identification (populated by user-init)
 user:
   login: nathanielramm
   id: U_kgDOxxxxxxx
   name: Nathaniel Ramm
   email: nathaniel@example.com
 
-# Cached permissions (avoids repeated API calls)
+# Cached permissions (populated by workspace-init)
 permissions:
   # Organization-level role
   org_role: member             # owner, admin, member, billing_manager
@@ -174,41 +178,78 @@ preferences:
 
 # Cache metadata
 cache:
-  permissions_checked_at: 2025-12-08T10:00:00Z
+  user_checked_at: 2025-12-08T09:00:00Z      # Set by user-init
+  permissions_checked_at: 2025-12-08T10:00:00Z  # Set by workspace-init
   permissions_ttl_hours: 24    # Re-check after this period
 ```
 
 ## Meta-Skills
 
-Two meta-skills manage the workspace configuration lifecycle, plus one investigation skill.
+Three meta-skills manage the workspace configuration lifecycle, plus one investigation skill.
+
+### Skill Dependency Hierarchy
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  hiivmind-pulse-gh-user-init          ← Run FIRST (creates user.yaml)      │
+│       │                                                                     │
+│       ▼                                                                     │
+│  hiivmind-pulse-gh-workspace-init     ← Run SECOND (creates config.yaml)   │
+│       │                                                                     │
+│       ▼                                                                     │
+│  All other skills                     ← Require both init skills           │
+│  (projects, milestones, investigate, branch-protection, workspace-refresh) │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### hiivmind-pulse-gh-user-init
+
+**Purpose:** Validate environment and persist user identity. This is a **prerequisite for ALL other skills**.
+
+**Workflow:**
+1. Check GitHub CLI (`gh`) is installed
+2. Check jq and yq are installed
+3. Verify `gh auth status` is authenticated
+4. Check token has required scopes (read:project, project, repo, read:org)
+5. Test Projects v2 API access
+6. Fetch user identity from GitHub API (login, id, name, email)
+7. Create `.hiivmind/github/user.yaml` with user identity
+8. Report status and next steps
+
+**Output:**
+```
+.hiivmind/
+└── github/
+    └── user.yaml      # User identity (login, id, name, email)
+```
 
 ### hiivmind-pulse-gh-workspace-init
 
-**Purpose:** Complete workspace setup - create config structure AND discover/cache GitHub structure.
+**Purpose:** Discover workspace structure and enrich user.yaml with permissions.
+
+**Prerequisite:** `hiivmind-pulse-gh-user-init` must be run first (user.yaml must exist).
 
 **Workflow:**
-1. Check if `.hiivmind/github/config.yaml` already exists
-2. Prompt user for workspace type (organization or user)
-3. Prompt for organization/user login
-4. Create directory structure
-5. Discover all projects in the organization/user account
-6. For each project, fetch:
-   - Field definitions with IDs
-   - Single-select option IDs
-   - Iteration configurations
-7. Discover linked/accessible repositories
-8. For each repository, fetch milestones
-9. Fetch current user's identity and permissions
-10. Generate `config.yaml` with complete structure
-11. Generate `user.yaml` with user info and permissions
-12. Suggest `.gitignore` addition
+1. Check `user.yaml` exists (created by user-init)
+2. Read user identity from existing `user.yaml`
+3. Check if `config.yaml` already exists
+4. Prompt user for workspace type (organization or user)
+5. Prompt for organization/user login
+6. Discover all projects in the organization/user account
+7. For each project, fetch field definitions and IDs
+8. Discover linked/accessible repositories
+9. For each repository, fetch milestones
+10. Fetch user's permissions for this workspace
+11. Generate `config.yaml` with complete structure
+12. **Enrich** `user.yaml` with permissions (don't recreate it)
+13. Suggest `.gitignore` addition
 
 **Output:**
 ```
 .hiivmind/
 └── github/
     ├── config.yaml    # Complete workspace structure (shared)
-    └── user.yaml      # User identity & permissions (personal)
+    └── user.yaml      # User identity + permissions (enriched)
 ```
 
 ### hiivmind-pulse-gh-workspace-refresh

@@ -13,9 +13,11 @@ Synchronize the local workspace configuration with the current state of GitHub p
 
 ## Prerequisites
 
-Requires:
-- User environment configured (`hiivmind-pulse-gh-user-init`)
-- Workspace initialized (`hiivmind-pulse-gh-workspace-init`)
+**Required setup (must be completed first):**
+1. `hiivmind-pulse-gh-user-init` - Validates environment, creates `user.yaml`
+2. `hiivmind-pulse-gh-workspace-init` - Discovers projects/repos, creates `config.yaml`
+
+This skill updates existing configuration files. If they don't exist, run the init skills first.
 
 ## When to Refresh
 
