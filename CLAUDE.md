@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with this repository.
 
 ## System Overview
 
-This is the **GitHub CLI Toolkit** - a Claude Code plugin providing comprehensive GitHub API operations via GraphQL and REST APIs. It includes support for:
+This is **hiivmind-github-skills** - a Claude Code plugin providing comprehensive GitHub API operations via GraphQL and REST APIs. It includes support for:
 
 - **GitHub Projects v2** - Full project management, status updates, views, fields
 - **Milestones** - Repository-level milestone management
@@ -19,17 +19,17 @@ The toolkit provides six skills:
 
 | Skill | Purpose |
 |-------|---------|
-| `github-workspace-init` | Create `.hiivmind/github/` workspace config in repository |
-| `github-workspace-analyze` | Discover projects, fields, repos and cache IDs |
-| `github-workspace-refresh` | Sync cached config with current GitHub state |
+| `hiivmind-github-workspace-init` | Create `.hiivmind/github/` workspace config in repository |
+| `hiivmind-github-workspace-analyze` | Discover projects, fields, repos and cache IDs |
+| `hiivmind-github-workspace-refresh` | Sync cached config with current GitHub state |
 
 ### Operational Skills
 
 | Skill | Purpose |
 |-------|---------|
-| `github-projects` | Projects v2 - items, filtering, status updates, views, fields |
-| `github-milestones` | Milestone queries and management |
-| `github-branch-protection` | Branch protection rules and repository rulesets |
+| `hiivmind-github-projects` | Projects v2 - items, filtering, status updates, views, fields, repo linking |
+| `hiivmind-github-milestones` | Milestone queries and management |
+| `hiivmind-github-branch-protection` | Branch protection rules and repository rulesets |
 
 ## Workspace Configuration
 
@@ -62,7 +62,7 @@ list_milestones "owner" "repo" | format_milestones
 ## File Structure
 
 ```
-github-cli-toolkit/
+hiivmind-github-skills/
 ├── .claude-plugin/              # Plugin manifests
 ├── skills/
 │   ├── github-workspace-init/   # Meta: create workspace config

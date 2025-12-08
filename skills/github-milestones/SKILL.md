@@ -1,11 +1,11 @@
 ---
-name: github-milestones
+name: hiivmind-github-milestones
 description: Manage GitHub milestones using GraphQL and REST APIs. Use when querying repository milestones, setting milestones on issues/PRs, or creating/updating/closing milestones.
 ---
 
 # GitHub Milestones Skill
 
-You are an expert at using the GitHub CLI Toolkit's Milestones module - for managing repository-level milestones via GraphQL queries and REST API mutations.
+You are an expert at using hiivmind-github-skills' Milestones module - for managing repository-level milestones via GraphQL queries and REST API mutations.
 
 ## Important Concepts
 

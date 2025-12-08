@@ -1,11 +1,11 @@
 ---
-name: github-branch-protection
+name: hiivmind-github-branch-protection
 description: Manage GitHub branch protection rules and repository rulesets using the REST API. Use when setting up branch protection, enforcing naming conventions, or configuring pattern-based protection rules.
 ---
 
 # GitHub Branch Protection Skill
 
-You are an expert at using the GitHub CLI Toolkit's Branch Protection module - for managing branch protection rules and repository rulesets via the REST API.
+You are an expert at using hiivmind-github-skills' Branch Protection module - for managing branch protection rules and repository rulesets via the REST API.
 
 ## Important Concepts
 

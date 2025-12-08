@@ -1,4 +1,4 @@
-# GitHub CLI Toolkit
+# hiivmind-github-skills
 
 A Claude Code plugin for deep GitHub automation — Projects v2, Milestones, Branch Protection, and more.
 
@@ -51,10 +51,10 @@ gh auth refresh -s read:project -s project -s repo
 
 ```bash
 # Add the marketplace
-/plugin marketplace add hiivmind/hiivmind-github-projects
+/plugin marketplace add hiivmind/hiivmind-github-skills
 
 # Install the plugin
-/plugin install github-cli-toolkit@hiivmind-github-projects
+/plugin install hiivmind-github-skills@hiivmind-github-skills
 ```
 
 Run these commands in Claude Code (not in a terminal).
@@ -69,9 +69,9 @@ These skills discover your GitHub structure and cache it locally:
 
 | Skill | Purpose | When to Use |
 |-------|---------|-------------|
-| `github-workspace-init` | Create `.hiivmind/github/` config structure | First-time setup in a repository |
-| `github-workspace-analyze` | Discover projects, fields, repos, cache IDs | After init, or when structure changes |
-| `github-workspace-refresh` | Sync cached config with GitHub state | Periodically, or when operations fail |
+| `hiivmind-github-workspace-init` | Create `.hiivmind/github/` config structure | First-time setup in a repository |
+| `hiivmind-github-workspace-analyze` | Discover projects, fields, repos, cache IDs | After init, or when structure changes |
+| `hiivmind-github-workspace-refresh` | Sync cached config with GitHub state | Periodically, or when operations fail |
 
 ### Operational Skills (GitHub Operations)
 
@@ -79,9 +79,9 @@ These skills perform GitHub operations, using cached config when available:
 
 | Skill | Coverage | Example Prompts |
 |-------|----------|-----------------|
-| `github-projects` | Projects v2, items, fields, status updates, views | "Show project items assigned to @alice" |
-| `github-milestones` | Repository milestones, issue/PR assignment | "Create a v2.0 milestone for the api repo" |
-| `github-branch-protection` | Branch rules, rulesets, naming conventions | "Protect main with required reviews" |
+| `hiivmind-github-projects` | Projects v2, items, fields, status updates, views | "Show project items assigned to @alice", "Is this repo linked to a project?" |
+| `hiivmind-github-milestones` | Repository milestones, issue/PR assignment | "Create a v2.0 milestone for the api repo" |
+| `hiivmind-github-branch-protection` | Branch rules, rulesets, naming conventions | "Protect main with required reviews" |
 
 ## Quick Start
 
@@ -91,13 +91,13 @@ These skills perform GitHub operations, using cached config when available:
 You: Set up GitHub workspace for my current project
 
 Claude: I'll initialize the workspace configuration.
-        [Runs github-workspace-init]
+        [Runs hiivmind-github-workspace-init]
 
         Created .hiivmind/github/config.yaml
         Workspace: acme-corp (organization)
 
         Now discovering projects and caching structure...
-        [Runs github-workspace-analyze]
+        [Runs hiivmind-github-workspace-analyze]
 
         Cached:
         - 2 projects (Engineering Backlog, Product Roadmap)
@@ -194,7 +194,7 @@ For organizations with multiple repos, use symlinks to share config:
 # Create centralized config
 mkdir -p ~/github-workspaces/acme-corp
 cd ~/github-workspaces/acme-corp
-# Run workspace-init and workspace-analyze here
+# Run hiivmind-github-workspace-init and hiivmind-github-workspace-analyze here
 
 # Symlink from each repository
 cd ~/projects/api
@@ -207,7 +207,7 @@ ln -s ~/github-workspaces/acme-corp .hiivmind
 ## Architecture
 
 ```
-github-cli-toolkit/
+hiivmind-github-skills/
 ├── skills/
 │   ├── github-workspace-init/      # Meta: create config structure
 │   ├── github-workspace-analyze/   # Meta: discover and cache
@@ -293,8 +293,8 @@ list_rulesets "acme" "api" | format_rulesets
 
 | Problem | Solution |
 |---------|----------|
-| "No workspace configuration found" | Run `github-workspace-init` then `github-workspace-analyze` |
-| "Field ID not found" | Run `github-workspace-refresh` to sync with GitHub |
+| "No workspace configuration found" | Run `hiivmind-github-workspace-init` then `hiivmind-github-workspace-analyze` |
+| "Field ID not found" | Run `hiivmind-github-workspace-refresh` to sync with GitHub |
 | `gh: command not found` | Install GitHub CLI: [cli.github.com](https://cli.github.com/) |
 | `yq: command not found` | Install yq v4+: [github.com/mikefarah/yq](https://github.com/mikefarah/yq) |
 | Permission errors | `gh auth refresh -s read:project -s project -s repo` |

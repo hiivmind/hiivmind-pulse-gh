@@ -1,20 +1,34 @@
 {
-  "name": "github-cli-toolkit",
-  "description": "Comprehensive GitHub API toolkit with pipeline-based functions for Projects v2, Milestones, Branch Protection, and Rulesets. Includes workspace configuration for caching org structure and simplified commands.",
-  "version": "2.2.0",
+  "name": "hiivmind-github-skills",
+  "description": "GitHub skills for Claude Code - Projects v2, Milestones, Branch Protection, and workspace configuration. Check if repos are linked to projects, manage kanban boards, configure branch rules.",
+  "version": "3.0.0",
   "author": {
     "name": "Discrete Data Systems"
   },
   "keywords": [
     "github",
     "projects",
+    "project-board",
+    "kanban",
+    "attached",
+    "linked",
+    "connected",
+    "belongs-to",
+    "part-of",
+    "tracked",
+    "associated",
+    "membership",
+    "discover-projects",
+    "find-projects",
     "milestones",
     "branch-protection",
     "rulesets",
     "graphql",
     "rest-api",
     "project-management",
-    "analytics"
+    "status-updates",
+    "views",
+    "roadmap"
   ],
-  "repository": "https://github.com/hiivmind/hiivmind-github-projects"
+  "repository": "https://github.com/hiivmind/hiivmind-github-skills"
 }

@@ -4,7 +4,7 @@ This document describes the workspace configuration system that enables persiste
 
 ## Overview
 
-The GitHub CLI Toolkit uses a **meta-skill pattern** to discover, cache, and persist GitHub organization/project metadata. This eliminates the need for users to repeatedly specify organization names, project numbers, and field IDs.
+The hiivmind-github-skills toolkit uses a **meta-skill pattern** to discover, cache, and persist GitHub organization/project metadata. This eliminates the need for users to repeatedly specify organization names, project numbers, and field IDs.
 
 ### Design Principles
 
@@ -252,7 +252,7 @@ Three meta-skills manage the workspace configuration lifecycle.
 
 ## Generic Skill Behavior
 
-Existing skills (`github-projects`, `github-milestones`, `github-branch-protection`) are updated to detect and use local config.
+Existing skills (`hiivmind-github-projects`, `hiivmind-github-milestones`, `hiivmind-github-branch-protection`) are updated to detect and use local config.
 
 ### Config Detection
 
@@ -334,7 +334,7 @@ fi
 When initializing a workspace, suggest adding to `.gitignore`:
 
 ```gitignore
-# GitHub CLI Toolkit - user-specific config
+# hiivmind-github-skills - user-specific config
 .hiivmind/github/user.yaml
 ```
 

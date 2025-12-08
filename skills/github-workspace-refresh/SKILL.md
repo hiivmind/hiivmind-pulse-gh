@@ -1,5 +1,5 @@
 ---
-name: github-workspace-refresh
+name: hiivmind-github-workspace-refresh
 description: Sync workspace configuration with current GitHub state. Detects changes to projects, fields, repositories, and milestones. Updates cached IDs and warns about breaking changes. Run periodically or when operations fail.
 ---
 

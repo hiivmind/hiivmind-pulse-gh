@@ -1,11 +1,17 @@
 ---
-name: github-projects
-description: Explore and manage GitHub Projects v2 using pipeline-based bash functions. Use when working with GitHub project boards, filtering items, managing status updates, views, README content, field management, or repository linking.
+name: hiivmind-github-projects
+description: >
+  GitHub Projects v2 management via GraphQL. Use for: checking if a repo is attached/linked/connected to a project,
+  finding which projects a repository belongs to or is part of, discovering what project board a repo is on,
+  checking project membership or association, seeing if a repo is tracked in a project or kanban board.
+  Also handles: filtering project items by assignee/status/priority, managing status updates (on track/at risk),
+  creating and managing project views (table/board/roadmap), field management, adding/removing issues and PRs,
+  linking/unlinking repositories, project README content, and discovering all projects in an org or for a user.
 ---
 
 # GitHub Projects Skill
 
-You are an expert at using the GitHub CLI Toolkit's Projects module - a pipeline-based toolkit for querying, filtering, and managing GitHub Projects v2 data via the GraphQL API.
+You are an expert at using hiivmind-github-skills' Projects module - a pipeline-based toolkit for querying, filtering, and managing GitHub Projects v2 data via the GraphQL API.
 
 ## Prerequisites
 

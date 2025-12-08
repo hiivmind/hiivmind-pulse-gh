@@ -1,20 +1,20 @@
 {
-  "name": "github-cli-toolkit",
+  "name": "hiivmind-github-skills",
   "owner": {
     "name": "Discrete Data Systems"
   },
-  "repository": "https://github.com/hiivmind/hiivmind-github-projects",
+  "repository": "https://github.com/hiivmind/hiivmind-github-skills",
   "metadata": {
-    "description": "Comprehensive GitHub API toolkit for Projects, Milestones, Branch Protection, and REST operations. Includes workspace configuration for caching org structure.",
-    "version": "2.2.0"
+    "description": "GitHub skills for Claude Code - Projects v2, Milestones, Branch Protection. Check if repos are linked to projects, manage kanban boards, configure branch rules.",
+    "version": "3.0.0"
   },
   "plugins": [
     {
-      "name": "github-cli-toolkit",
+      "name": "hiivmind-github-skills",
       "source": "./",
-      "description": "Pipeline-based toolkit for GitHub API operations including Projects v2, Milestones, Branch Protection, Rulesets, and REST API. Features meta-skills for workspace configuration that cache org/project structure for simplified commands.",
-      "version": "2.2.0",
-      "keywords": ["github", "projects", "milestones", "branch-protection", "rulesets", "graphql", "rest-api", "workspace", "configuration"]
+      "description": "GitHub skills for Claude Code. Check if a repo is attached/linked to a project, find which projects a repository belongs to, discover project boards, manage kanban items, filter by assignee/status, handle milestones, configure branch protection and rulesets. Includes workspace caching for org structure.",
+      "version": "3.0.0",
+      "keywords": ["hiivmind", "github", "skills", "projects", "project-board", "kanban", "attached", "linked", "connected", "belongs-to", "tracked", "discover", "find", "milestones", "branch-protection", "rulesets", "graphql", "rest-api", "workspace", "configuration", "status-updates", "roadmap"]
     }
   ]
 }

@@ -1,6 +1,6 @@
 ---
-name: github-workspace-analyze
-description: Discover and cache GitHub organization structure including projects, fields, repositories, and milestones. Populates .hiivmind/github/config.yaml with cached IDs for simplified operations. Run after github-workspace-init.
+name: hiivmind-github-workspace-analyze
+description: Discover and cache GitHub organization structure including projects, fields, repositories, and milestones. Populates .hiivmind/github/config.yaml with cached IDs for simplified operations. Run after hiivmind-github-workspace-init.
 ---
 
 # GitHub Workspace Analyzer
