@@ -15,15 +15,20 @@ This is **hiivmind-github-skills** - a Claude Code plugin providing comprehensiv
 
 The toolkit provides six skills:
 
-### Meta-Skills (Setup)
+### Setup & Maintenance
 
 | Skill | Purpose |
 |-------|---------|
-| `hiivmind-github-workspace-init` | Create `.hiivmind/github/` workspace config in repository |
-| `hiivmind-github-workspace-analyze` | Discover projects, fields, repos and cache IDs |
-| `hiivmind-github-workspace-refresh` | Sync cached config with current GitHub state |
+| `hiivmind-github-workspace-init` | Create config, discover projects/fields/repos, cache IDs (one-time setup) |
+| `hiivmind-github-workspace-refresh` | Sync structural metadata with current GitHub state (run periodically) |
 
-### Operational Skills
+### Investigation
+
+| Skill | Purpose |
+|-------|---------|
+| `hiivmind-github-investigate` | Deep-dive into issues, PRs, project items - traverse relationships, build context |
+
+### Operations
 
 | Skill | Purpose |
 |-------|---------|
@@ -65,12 +70,12 @@ list_milestones "owner" "repo" | format_milestones
 hiivmind-github-skills/
 ├── .claude-plugin/              # Plugin manifests
 ├── skills/
-│   ├── github-workspace-init/   # Meta: create workspace config
-│   ├── github-workspace-analyze/# Meta: discover & cache structure
-│   ├── github-workspace-refresh/# Meta: sync with GitHub
-│   ├── github-projects/         # Projects v2 skill
-│   ├── github-milestones/       # Milestones skill
-│   └── github-branch-protection/# Branch protection skill
+│   ├── github-workspace-init/   # Setup: create config + discover structure
+│   ├── github-workspace-refresh/# Maintenance: sync structural metadata
+│   ├── github-investigate/      # Investigation: deep-dive into entities
+│   ├── github-projects/         # Operations: Projects v2
+│   ├── github-milestones/       # Operations: Milestones
+│   └── github-branch-protection/# Operations: Branch protection
 ├── templates/                   # Config file templates
 │   ├── config.yaml.template     # Shared workspace config
 │   ├── user.yaml.template       # Personal user config

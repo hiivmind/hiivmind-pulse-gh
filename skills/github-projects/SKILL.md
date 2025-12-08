@@ -75,9 +75,8 @@ update_item_single_select "$PROJECT_ID" "$ITEM_ID" "$FIELD_ID" "$OPTION_ID"
 ### Setup Workspace
 
 To create a workspace configuration:
-1. Run `github-workspace-init` to create `.hiivmind/github/config.yaml`
-2. Run `github-workspace-analyze` to discover and cache project structure
-3. Commit `config.yaml` to share with team
+1. Run `hiivmind-github-workspace-init` to create and populate `.hiivmind/github/config.yaml`
+2. Commit `config.yaml` to share with team
 
 ## Quick Start
 

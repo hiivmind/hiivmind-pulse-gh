@@ -6,20 +6,20 @@
 workspace:
   type: {{workspace_type}}     # "organization" or "user"
   login: {{workspace_login}}   # GitHub org/user login
-  id: null                     # Populated by hiivmind-github-workspace-analyze
+  id: null                     # Populated by hiivmind-github-workspace-init
 
 # Project configuration
-# Populated by hiivmind-github-workspace-analyze
+# Populated by hiivmind-github-workspace-init
 projects:
   default: null                # Default project number
   catalog: []
 
 # Repository catalog
-# Populated by hiivmind-github-workspace-analyze
+# Populated by hiivmind-github-workspace-init
 repositories: []
 
 # Milestone catalog (keyed by repository name)
-# Populated by hiivmind-github-workspace-analyze
+# Populated by hiivmind-github-workspace-init
 milestones: {}
 
 # Cache metadata

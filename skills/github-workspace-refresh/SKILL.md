@@ -1,6 +1,10 @@
 ---
 name: hiivmind-github-workspace-refresh
-description: Sync workspace configuration with current GitHub state. Detects changes to projects, fields, repositories, and milestones. Updates cached IDs and warns about breaking changes. Run periodically or when operations fail.
+description: >
+  Quick structural sync of workspace configuration. Validates cached IDs for projects, fields, options,
+  repositories, and milestones. Detects renamed/added/removed fields and warns about breaking changes.
+  Run frequently (daily/weekly) or when operations fail with "ID not found" errors.
+  Does NOT cache volatile data like issue statuses - only stable structural metadata.
 ---
 
 # GitHub Workspace Refresh
@@ -294,7 +298,7 @@ check_config_freshness() {
 
     local last_synced=$(yq '.cache.last_synced_at' "$config_path")
     if [[ "$last_synced" == "null" ]]; then
-        echo "⚠ Workspace config was never analyzed. Run github-workspace-analyze."
+        echo "⚠ Workspace config incomplete. Run hiivmind-github-workspace-init."
         return 1
     fi
 
@@ -325,5 +329,5 @@ To continue without cached IDs:
 ## Reference
 
 - Initialize workspace: `skills/github-workspace-init/SKILL.md`
-- Analyze workspace: `skills/github-workspace-analyze/SKILL.md`
+- Investigate entities: `skills/github-investigate/SKILL.md`
 - Architecture: `docs/meta-skill-architecture.md`

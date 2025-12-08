@@ -180,55 +180,40 @@ cache:
 
 ## Meta-Skills
 
-Three meta-skills manage the workspace configuration lifecycle.
+Two meta-skills manage the workspace configuration lifecycle, plus one investigation skill.
 
-### github-workspace-init
+### hiivmind-github-workspace-init
 
-**Purpose:** Create initial `.hiivmind/github/` structure and config files.
+**Purpose:** Complete workspace setup - create config structure AND discover/cache GitHub structure.
 
 **Workflow:**
 1. Check if `.hiivmind/github/config.yaml` already exists
 2. Prompt user for workspace type (organization or user)
 3. Prompt for organization/user login
 4. Create directory structure
-5. Generate initial `config.yaml` with workspace identification
-6. Generate empty `user.yaml`
-7. Suggest `.gitignore` addition
+5. Discover all projects in the organization/user account
+6. For each project, fetch:
+   - Field definitions with IDs
+   - Single-select option IDs
+   - Iteration configurations
+7. Discover linked/accessible repositories
+8. For each repository, fetch milestones
+9. Fetch current user's identity and permissions
+10. Generate `config.yaml` with complete structure
+11. Generate `user.yaml` with user info and permissions
+12. Suggest `.gitignore` addition
 
 **Output:**
 ```
 .hiivmind/
 └── github/
-    ├── config.yaml    # Basic workspace info
-    └── user.yaml      # Empty template
+    ├── config.yaml    # Complete workspace structure (shared)
+    └── user.yaml      # User identity & permissions (personal)
 ```
 
-### github-workspace-analyze
+### hiivmind-github-workspace-refresh
 
-**Purpose:** Discover and cache GitHub structure (projects, fields, repos, milestones).
-
-**Workflow:**
-1. Read workspace info from `config.yaml`
-2. Discover all projects in the organization/user account
-3. For each project, fetch:
-   - Field definitions with IDs
-   - Single-select option IDs
-   - Iteration configurations
-4. Discover linked/accessible repositories
-5. For each repository, fetch milestones
-6. Fetch current user's identity and permissions
-7. Update `config.yaml` with discovered structure
-8. Update `user.yaml` with user info and permissions
-9. Set `last_synced_at` timestamp
-
-**Interactive elements:**
-- Ask which projects to include in catalog
-- Ask which repositories to include
-- Confirm before overwriting existing config
-
-### github-workspace-refresh
-
-**Purpose:** Sync configuration with current GitHub state.
+**Purpose:** Quick structural sync - validate cached IDs, detect changes.
 
 **Workflow:**
 1. Read existing `config.yaml` and `user.yaml`
@@ -249,6 +234,28 @@ Three meta-skills manage the workspace configuration lifecycle.
 - Removed fields/options: Warn and remove from config
 - Renamed fields/options: Warn and update
 - Permission changes: Update user.yaml
+
+**Note:** Does NOT cache volatile data like issue statuses - only stable structural metadata.
+
+### hiivmind-github-investigate
+
+**Purpose:** Deep-dive entity exploration - traverse relationships, build context.
+
+**Workflow:**
+1. Accept starting point (issue number, PR number, or project item ID)
+2. Fetch entity with full context
+3. Traverse relationships:
+   - Comments and participants
+   - Linked PRs (with commits, reviews, CI status)
+   - Related issues (referenced, same labels)
+   - Project board position and field values
+   - Timeline of events
+4. Return rich context (NOT cached - data too volatile)
+
+**Use cases:**
+- "What's the full story on issue #42?"
+- Standup preparation
+- Audit trail (who touched what, when)
 
 ## Generic Skill Behavior
 
@@ -307,27 +314,27 @@ if [[ "$USER_ROLE" == "read" ]]; then
 fi
 ```
 
-## Implementation Phases
+## Implementation Status
 
-### Phase 1: Foundation
-- [ ] Create `templates/` directory with config templates
-- [ ] Implement `github-workspace-init` skill
-- [ ] Add `.hiivmind` detection to existing skills (graceful fallback)
+### Completed
+- [x] Create `templates/` directory with config templates
+- [x] Implement `hiivmind-github-workspace-init` skill (includes discovery)
+- [x] Implement `hiivmind-github-workspace-refresh` skill
+- [x] Implement `hiivmind-github-investigate` skill (entity deep-dive)
+- [x] Add `.hiivmind` detection to existing skills (graceful fallback)
 
-### Phase 2: Discovery
-- [ ] Implement `github-workspace-analyze` skill
+### In Progress
 - [ ] Add project field discovery functions to `gh-project-functions.sh`
 - [ ] Add permission checking functions to `gh-rest-functions.sh`
-
-### Phase 3: Maintenance
-- [ ] Implement `github-workspace-refresh` skill
-- [ ] Add change detection logic
+- [ ] Add change detection logic for refresh
 - [ ] Add staleness warnings (config older than N days)
 
-### Phase 4: Enhancement
+### Future
 - [ ] Add shorthand commands that use config
 - [ ] Add permission pre-flight checks
 - [ ] Add config validation on load
+- [ ] Cross-repo link traversal in investigate
+- [ ] Commit diff analysis in investigate
 
 ## Gitignore Template
 
@@ -343,7 +350,7 @@ When initializing a workspace, suggest adding to `.gitignore`:
 ### Config Not Found
 ```
 No workspace configuration found.
-Run `github-workspace-init` to set up, or specify parameters explicitly.
+Run `hiivmind-github-workspace-init` to set up, or specify parameters explicitly.
 ```
 
 ### Stale Config Warning

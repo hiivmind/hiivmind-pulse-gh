@@ -61,25 +61,26 @@ Run these commands in Claude Code (not in a terminal).
 
 ## Skills
 
-The toolkit provides **six skills** in two categories:
+The toolkit provides **six skills** in three categories:
 
-### Meta-Skills (Setup & Maintenance)
-
-These skills discover your GitHub structure and cache it locally:
+### Setup & Maintenance
 
 | Skill | Purpose | When to Use |
 |-------|---------|-------------|
-| `hiivmind-github-workspace-init` | Create `.hiivmind/github/` config structure | First-time setup in a repository |
-| `hiivmind-github-workspace-analyze` | Discover projects, fields, repos, cache IDs | After init, or when structure changes |
-| `hiivmind-github-workspace-refresh` | Sync cached config with GitHub state | Periodically, or when operations fail |
+| `hiivmind-github-workspace-init` | Create config, discover projects, cache IDs | First-time setup (once per repo) |
+| `hiivmind-github-workspace-refresh` | Sync structural metadata with GitHub | Periodically, or when "ID not found" errors occur |
 
-### Operational Skills (GitHub Operations)
+### Investigation
 
-These skills perform GitHub operations, using cached config when available:
+| Skill | Purpose | When to Use |
+|-------|---------|-------------|
+| `hiivmind-github-investigate` | Deep-dive into issues, PRs, project items | "What's the full story on #42?", standup prep, audits |
+
+### Operations
 
 | Skill | Coverage | Example Prompts |
 |-------|----------|-----------------|
-| `hiivmind-github-projects` | Projects v2, items, fields, status updates, views | "Show project items assigned to @alice", "Is this repo linked to a project?" |
+| `hiivmind-github-projects` | Projects v2, items, fields, status updates, views | "Show items assigned to @alice", "Is this repo linked to a project?" |
 | `hiivmind-github-milestones` | Repository milestones, issue/PR assignment | "Create a v2.0 milestone for the api repo" |
 | `hiivmind-github-branch-protection` | Branch rules, rulesets, naming conventions | "Protect main with required reviews" |
 
@@ -90,19 +91,19 @@ These skills perform GitHub operations, using cached config when available:
 ```
 You: Set up GitHub workspace for my current project
 
-Claude: I'll initialize the workspace configuration.
-        [Runs hiivmind-github-workspace-init]
+Claude: [Runs hiivmind-github-workspace-init]
 
-        Created .hiivmind/github/config.yaml
+        GitHub workspace initialized!
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         Workspace: acme-corp (organization)
 
-        Now discovering projects and caching structure...
-        [Runs hiivmind-github-workspace-analyze]
+        Projects cached: 2
+          #1 - Engineering Backlog (5 fields)
+          #2 - Product Roadmap (7 fields) [default]
 
-        Cached:
-        - 2 projects (Engineering Backlog, Product Roadmap)
-        - 15 fields with option IDs
-        - 5 repositories with milestones
+        Repositories cached: 3
+          acme-corp/api (2 milestones)
+          acme-corp/frontend (1 milestone)
 
         Add to .gitignore: .hiivmind/github/user.yaml
 ```
@@ -115,10 +116,15 @@ You: Show me in-progress items in the roadmap project
 Claude: [Uses cached org/project context]
         Found 12 items with status "In Progress"...
 
-You: Move issue #42 to "In Review"
+You: What's the full story on issue #42?
 
-Claude: [Uses cached Status field ID and "In Review" option ID]
-        Updated issue #42 status to "In Review"
+Claude: [Runs hiivmind-github-investigate]
+
+        Issue #42: "Fix authentication timeout"
+        ├── Status: In Progress | Assignee: @alice
+        ├── Milestone: v2.1.0 (due Jan 15)
+        ├── Comments: 5 (last: @bob, 2 hours ago)
+        └── Linked PR: #87 "Add retry logic" (draft, CI passing)
 ```
 
 ## Workspace Configuration
@@ -194,7 +200,7 @@ For organizations with multiple repos, use symlinks to share config:
 # Create centralized config
 mkdir -p ~/github-workspaces/acme-corp
 cd ~/github-workspaces/acme-corp
-# Run hiivmind-github-workspace-init and hiivmind-github-workspace-analyze here
+# Run hiivmind-github-workspace-init here
 
 # Symlink from each repository
 cd ~/projects/api
@@ -209,12 +215,12 @@ ln -s ~/github-workspaces/acme-corp .hiivmind
 ```
 hiivmind-github-skills/
 ├── skills/
-│   ├── github-workspace-init/      # Meta: create config structure
-│   ├── github-workspace-analyze/   # Meta: discover and cache
-│   ├── github-workspace-refresh/   # Meta: sync with GitHub
-│   ├── github-projects/            # Ops: Projects v2
-│   ├── github-milestones/          # Ops: Milestones
-│   └── github-branch-protection/   # Ops: Branch rules
+│   ├── github-workspace-init/      # Setup: create config + discover structure
+│   ├── github-workspace-refresh/   # Maintenance: sync structural metadata
+│   ├── github-investigate/         # Investigation: deep-dive into entities
+│   ├── github-projects/            # Operations: Projects v2
+│   ├── github-milestones/          # Operations: Milestones
+│   └── github-branch-protection/   # Operations: Branch rules
 │
 ├── templates/                      # Config file templates
 │   ├── config.yaml.template
@@ -293,7 +299,7 @@ list_rulesets "acme" "api" | format_rulesets
 
 | Problem | Solution |
 |---------|----------|
-| "No workspace configuration found" | Run `hiivmind-github-workspace-init` then `hiivmind-github-workspace-analyze` |
+| "No workspace configuration found" | Run `hiivmind-github-workspace-init` |
 | "Field ID not found" | Run `hiivmind-github-workspace-refresh` to sync with GitHub |
 | `gh: command not found` | Install GitHub CLI: [cli.github.com](https://cli.github.com/) |
 | `yq: command not found` | Install yq v4+: [github.com/mikefarah/yq](https://github.com/mikefarah/yq) |

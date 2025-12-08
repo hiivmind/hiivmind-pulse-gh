@@ -74,9 +74,8 @@ set_issue_milestone "$ISSUE_ID" "$MILESTONE_ID"
 ### Setup Workspace
 
 To create a workspace configuration:
-1. Run `github-workspace-init` to create `.hiivmind/github/config.yaml`
-2. Run `github-workspace-analyze` to discover and cache milestones
-3. Commit `config.yaml` to share with team
+1. Run `hiivmind-github-workspace-init` to create and populate `.hiivmind/github/config.yaml`
+2. Commit `config.yaml` to share with team
 
 ## Function Reference
 
