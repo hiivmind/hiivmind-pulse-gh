@@ -43,6 +43,22 @@ You are an expert at using hiivmind-pulse-gh's Branch Protection module - for ma
 source lib/github/gh-rest-functions.sh
 ```
 
+## Quick Start
+
+```bash
+# Source functions (once per session)
+source lib/github/gh-rest-functions.sh
+
+# Check current protection on main branch
+get_branch_protection "owner" "repo" "main" | format_branch_protection
+
+# Apply standard main branch protection (auto-detects org vs personal)
+apply_main_branch_protection "owner" "repo"
+
+# Set up branch naming convention (org repos only)
+apply_branch_naming_ruleset "owner" "repo"
+```
+
 ## Workspace Configuration
 
 If a `.hiivmind/github/config.yaml` file exists in the repository root, use it to simplify commands:

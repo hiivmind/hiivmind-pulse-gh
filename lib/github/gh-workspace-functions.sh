@@ -630,3 +630,310 @@ initialize_workspace() {
     # Print summary
     print_workspace_summary "$login" "$type" "$project_count" "$repo_count"
 }
+
+#==============================================================================
+# WORKSPACE REFRESH FUNCTIONS
+#==============================================================================
+
+# Get config age in days
+# Returns integer days, or -1 if no config or no timestamp
+get_config_age_days() {
+    local config_path=".hiivmind/github/config.yaml"
+
+    if [[ ! -f "$config_path" ]]; then
+        echo "-1"
+        return 1
+    fi
+
+    local last_synced
+    last_synced=$(yq '.cache.last_synced_at' "$config_path")
+
+    if [[ "$last_synced" == "null" || -z "$last_synced" ]]; then
+        echo "-1"
+        return 1
+    fi
+
+    local last_sync_epoch now_epoch
+    last_sync_epoch=$(date -d "$last_synced" +%s 2>/dev/null) || {
+        echo "-1"
+        return 1
+    }
+    now_epoch=$(date +%s)
+
+    echo $(( (now_epoch - last_sync_epoch) / 86400 ))
+}
+
+# Check if config is stale (older than threshold)
+# Args: max_age_days (default 7)
+# Returns 0 if stale, 1 if fresh
+check_config_staleness() {
+    local max_age="${1:-7}"
+    local age_days
+    age_days=$(get_config_age_days)
+
+    if [[ "$age_days" -lt 0 ]]; then
+        return 0  # No config or timestamp = stale
+    fi
+
+    if [[ "$age_days" -ge "$max_age" ]]; then
+        return 0  # Stale
+    fi
+
+    return 1  # Fresh
+}
+
+# Print config status summary
+print_config_status() {
+    local config_path=".hiivmind/github/config.yaml"
+
+    if [[ ! -f "$config_path" ]]; then
+        echo "Status: No workspace configuration found"
+        echo "Action: Run hiivmind-pulse-gh-workspace-init first"
+        return 1
+    fi
+
+    local workspace_login workspace_type last_synced age_days
+    workspace_login=$(yq '.workspace.login' "$config_path")
+    workspace_type=$(yq '.workspace.type' "$config_path")
+    last_synced=$(yq '.cache.last_synced_at' "$config_path")
+    age_days=$(get_config_age_days)
+
+    local project_count repo_count
+    project_count=$(yq '.projects.catalog | length' "$config_path")
+    repo_count=$(yq '.repositories | length' "$config_path")
+
+    echo "Workspace: $workspace_login ($workspace_type)"
+    echo "Last synced: $last_synced"
+    if [[ "$age_days" -ge 0 ]]; then
+        echo "Config age: $age_days days"
+        if [[ "$age_days" -ge 7 ]]; then
+            echo "Status: STALE (refresh recommended)"
+        else
+            echo "Status: Fresh"
+        fi
+    fi
+    echo "Projects cached: $project_count"
+    echo "Repositories cached: $repo_count"
+}
+
+# Detect changes in projects (added/removed)
+# Outputs JSON object with changes
+detect_project_changes() {
+    local config_path=".hiivmind/github/config.yaml"
+
+    local workspace_login workspace_type
+    workspace_login=$(yq '.workspace.login' "$config_path")
+    workspace_type=$(yq '.workspace.type' "$config_path")
+
+    # Get current projects from GitHub
+    local current_projects
+    current_projects=$(discover_projects "$workspace_login" "$workspace_type")
+
+    # Get cached project numbers
+    local cached_numbers
+    cached_numbers=$(yq '.projects.catalog[].number' "$config_path" | tr '\n' ' ')
+
+    # Compare and output changes
+    local added="" removed="" unchanged=""
+
+    # Check for new projects
+    for num in $(echo "$current_projects" | jq -r '.[].number'); do
+        if ! echo " $cached_numbers " | grep -q " $num "; then
+            local title
+            title=$(echo "$current_projects" | jq -r ".[] | select(.number == $num) | .title")
+            added="$added #$num:$title"
+        else
+            unchanged="$unchanged $num"
+        fi
+    done
+
+    # Check for removed projects
+    for num in $cached_numbers; do
+        if ! echo "$current_projects" | jq -e ".[] | select(.number == $num)" >/dev/null 2>&1; then
+            local title
+            title=$(yq ".projects.catalog[] | select(.number == $num) | .title" "$config_path")
+            removed="$removed #$num:$title"
+        fi
+    done
+
+    # Output as structured text
+    echo "PROJECTS"
+    if [[ -n "$added" ]]; then
+        echo "  ADDED:$added"
+    fi
+    if [[ -n "$removed" ]]; then
+        echo "  REMOVED:$removed"
+    fi
+    if [[ -z "$added" && -z "$removed" ]]; then
+        echo "  No changes"
+    fi
+}
+
+# Detect changes in fields for a specific project
+# Args: project_number
+# Outputs changes as text
+detect_field_changes() {
+    local project_number="$1"
+    local config_path=".hiivmind/github/config.yaml"
+
+    local workspace_login workspace_type
+    workspace_login=$(yq '.workspace.login' "$config_path")
+    workspace_type=$(yq '.workspace.type' "$config_path")
+
+    # Get current fields from GitHub
+    local current_project
+    current_project=$(fetch_project_with_fields "$project_number" "$workspace_login" "$workspace_type")
+
+    # Get cached field names (one per line, properly quoted)
+    local cached_fields
+    cached_fields=$(yq ".projects.catalog[] | select(.number == $project_number) | .fields | keys | .[]" "$config_path" 2>/dev/null | sort)
+
+    # Get current field names (one per line)
+    local current_fields
+    current_fields=$(echo "$current_project" | jq -r '.fields.nodes[].name' | sort)
+
+    # Use comm to find differences (requires sorted input)
+    local added removed
+    added=$(comm -13 <(echo "$cached_fields") <(echo "$current_fields") | tr '\n' ', ' | sed 's/,$//')
+    removed=$(comm -23 <(echo "$cached_fields") <(echo "$current_fields") | tr '\n' ', ' | sed 's/,$//')
+
+    echo "PROJECT #$project_number FIELDS"
+    if [[ -n "$added" ]]; then
+        echo "  ADDED: $added"
+    fi
+    if [[ -n "$removed" ]]; then
+        echo "  REMOVED: $removed"
+    fi
+    if [[ -z "$added" && -z "$removed" ]]; then
+        echo "  No changes"
+    fi
+}
+
+# Detect changes in repositories
+# Outputs changes as text
+detect_repository_changes() {
+    local config_path=".hiivmind/github/config.yaml"
+
+    local workspace_login workspace_type
+    workspace_login=$(yq '.workspace.login' "$config_path")
+    workspace_type=$(yq '.workspace.type' "$config_path")
+
+    # Get current repos from GitHub
+    local current_repos
+    current_repos=$(discover_repositories "$workspace_login" "$workspace_type" | jq -s '.')
+
+    # Get cached repo names
+    local cached_names
+    cached_names=$(yq '.repositories[].name' "$config_path" | tr '\n' ' ')
+
+    local added="" removed=""
+
+    # Check for new repos
+    for name in $(echo "$current_repos" | jq -r '.[].name'); do
+        if ! echo " $cached_names " | grep -q " $name "; then
+            added="$added $name"
+        fi
+    done
+
+    # Check for removed repos
+    for name in $cached_names; do
+        if ! echo "$current_repos" | jq -e ".[] | select(.name == \"$name\")" >/dev/null 2>&1; then
+            removed="$removed $name"
+        fi
+    done
+
+    echo "REPOSITORIES"
+    if [[ -n "$added" ]]; then
+        echo "  ADDED:$added"
+    fi
+    if [[ -n "$removed" ]]; then
+        echo "  REMOVED:$removed"
+    fi
+    if [[ -z "$added" && -z "$removed" ]]; then
+        echo "  No changes"
+    fi
+}
+
+# Generate a full refresh report
+# Outputs formatted report to stdout
+generate_refresh_report() {
+    local config_path=".hiivmind/github/config.yaml"
+
+    if [[ ! -f "$config_path" ]]; then
+        echo "ERROR: No workspace configuration found"
+        return 1
+    fi
+
+    local workspace_login
+    workspace_login=$(yq '.workspace.login' "$config_path")
+
+    echo "=== Workspace Refresh Report for $workspace_login ==="
+    echo ""
+    print_config_status
+    echo ""
+    echo "--- Change Detection ---"
+    echo ""
+    detect_project_changes
+    echo ""
+
+    # Check field changes for each cached project
+    for project_num in $(yq '.projects.catalog[].number' "$config_path"); do
+        detect_field_changes "$project_num"
+        echo ""
+    done
+
+    detect_repository_changes
+    echo ""
+    echo "=== End Report ==="
+}
+
+# Update config.yaml timestamp only (for quick sync)
+update_sync_timestamp() {
+    local config_path=".hiivmind/github/config.yaml"
+    local timestamp
+    timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    yq -i ".cache.last_synced_at = \"$timestamp\"" "$config_path"
+    echo "Updated sync timestamp: $timestamp"
+}
+
+# Full refresh: regenerate config.yaml with current GitHub state
+# Args: (optional) project_numbers, repo_names - if not provided, uses current cached list
+refresh_workspace() {
+    local config_path=".hiivmind/github/config.yaml"
+
+    if [[ ! -f "$config_path" ]]; then
+        echo "ERROR: No workspace configuration found"
+        echo "Run hiivmind-pulse-gh-workspace-init first"
+        return 1
+    fi
+
+    local workspace_login workspace_type workspace_id default_project
+    workspace_login=$(yq '.workspace.login' "$config_path")
+    workspace_type=$(yq '.workspace.type' "$config_path")
+    workspace_id=$(yq '.workspace.id' "$config_path")
+    default_project=$(yq '.projects.default' "$config_path")
+
+    # Get current cached project numbers and repo names
+    local project_numbers repo_names
+    project_numbers=$(yq '.projects.catalog[].number' "$config_path" | tr '\n' ' ')
+    repo_names=$(yq '.repositories[].name' "$config_path" | tr '\n' ' ')
+
+    echo "Refreshing workspace for $workspace_login ($workspace_type)..."
+    echo "Projects to refresh: $project_numbers"
+    echo "Repositories to refresh: $repo_names"
+    echo ""
+
+    # Regenerate config.yaml
+    echo "Regenerating config.yaml..."
+    generate_config_yaml "$workspace_login" "$workspace_type" "$workspace_id" "$default_project" "$project_numbers" "$repo_names" \
+        > .hiivmind/github/config.yaml
+
+    # Update user permissions
+    echo "Updating user permissions..."
+    enrich_user_permissions "$workspace_login" "$workspace_type" "$project_numbers" "$repo_names"
+
+    echo ""
+    echo "Workspace refresh complete!"
+    print_config_status
+}

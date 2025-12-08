@@ -28,6 +28,24 @@ source lib/github/gh-project-functions.sh  # GraphQL functions
 source lib/github/gh-rest-functions.sh     # REST functions
 ```
 
+## Quick Start
+
+```bash
+# Source functions (once per session)
+source lib/github/gh-project-functions.sh
+source lib/github/gh-rest-functions.sh
+
+# List milestones for a repo
+list_milestones "owner" "repo" | format_milestones
+
+# Create a new milestone
+create_milestone "owner" "repo" "v2.0" "Q1 Release" "2025-03-31T00:00:00Z"
+
+# Set milestone on an issue
+milestone_id=$(get_milestone_id "owner" "repo" "v2.0")
+set_issue_milestone "I_kwDOAxxx" "$milestone_id"
+```
+
 ## Workspace Configuration
 
 If a `.hiivmind/github/config.yaml` file exists in the repository root, use it to simplify commands:
