@@ -1,0 +1,276 @@
+# GitHub Milestone Domain - jq Filter Templates
+# Part of hiivmind-pulse-gh domain segmentation architecture
+#
+# Usage:
+#   fetch_repo_milestones "owner" "repo" | jq -f <(yq '.format_filters.format_milestones.filter' gh-milestone-jq-filters.yaml)
+#
+# Filters for both GraphQL and REST API responses
+
+#==============================================================================
+# FORMAT FILTERS (GraphQL)
+#==============================================================================
+# Transform GraphQL responses into clean, display-ready JSON
+
+format_filters:
+  format_milestones:
+    description: "Format milestone list from GraphQL response"
+    input: "GraphQL response from queries.repository_milestones"
+    filter: |
+      {
+        repository: {
+          owner: .data.repository.owner.login,
+          name: .data.repository.name
+        },
+        totalCount: .data.repository.milestones.totalCount,
+        milestones: [
+          .data.repository.milestones.nodes[] | {
+            id: .id,
+            number: .number,
+            title: .title,
+            description: (.description // ""),
+            state: .state,
+            dueOn: (.dueOn // "No due date"),
+            progress: .progressPercentage,
+            issueCount: .issues.totalCount,
+            prCount: .pullRequests.totalCount,
+            url: .url,
+            createdAt: .createdAt,
+            updatedAt: .updatedAt,
+            closedAt: (.closedAt // null)
+          }
+        ]
+      }
+
+  format_milestone:
+    description: "Format single milestone from GraphQL response"
+    input: "GraphQL response from queries.milestone_by_number"
+    filter: |
+      .data.repository.milestone | {
+        id: .id,
+        number: .number,
+        title: .title,
+        description: (.description // ""),
+        state: .state,
+        dueOn: (.dueOn // "No due date"),
+        progress: .progressPercentage,
+        issueCount: .issues.totalCount,
+        prCount: .pullRequests.totalCount,
+        totalItems: (.issues.totalCount + .pullRequests.totalCount),
+        url: .url,
+        createdAt: .createdAt,
+        updatedAt: .updatedAt,
+        closedAt: (.closedAt // null)
+      }
+
+  format_milestone_with_issues:
+    description: "Format milestone with its issues and PRs"
+    input: "GraphQL response from queries.milestone_with_issues"
+    filter: |
+      .data.repository.milestone | {
+        id: .id,
+        number: .number,
+        title: .title,
+        description: (.description // ""),
+        state: .state,
+        dueOn: (.dueOn // "No due date"),
+        progress: .progressPercentage,
+        issues: {
+          totalCount: .issues.totalCount,
+          items: [.issues.nodes[] | {
+            number: .number,
+            title: .title,
+            state: .state,
+            url: .url,
+            assignees: [.assignees.nodes[].login],
+            labels: [.labels.nodes[].name]
+          }]
+        },
+        pullRequests: {
+          totalCount: .pullRequests.totalCount,
+          items: [.pullRequests.nodes[] | {
+            number: .number,
+            title: .title,
+            state: .state,
+            url: .url,
+            author: .author.login
+          }]
+        }
+      }
+
+  format_milestones_summary:
+    description: "Format milestones as simple summary"
+    input: "GraphQL response from queries.repository_milestones"
+    filter: |
+      [.data.repository.milestones.nodes[] | {
+        number: .number,
+        title: .title,
+        state: .state,
+        progress: .progressPercentage,
+        dueOn: (.dueOn // "No due date")
+      }]
+
+#==============================================================================
+# FORMAT FILTERS (REST)
+#==============================================================================
+# Transform REST API responses
+
+rest_format_filters:
+  format_milestones_rest:
+    description: "Format milestone list from REST API response"
+    input: "JSON array from REST API /repos/:owner/:repo/milestones"
+    filter: |
+      [.[] | {
+        number: .number,
+        title: .title,
+        description: (.description // ""),
+        state: .state,
+        dueOn: (.due_on // "No due date"),
+        openIssues: .open_issues,
+        closedIssues: .closed_issues,
+        progress: (if (.open_issues + .closed_issues) > 0
+                   then ((.closed_issues / (.open_issues + .closed_issues)) * 100 | floor)
+                   else 0 end),
+        url: .html_url,
+        createdAt: .created_at,
+        updatedAt: .updated_at
+      }]
+
+  format_milestone_rest:
+    description: "Format single milestone from REST API response"
+    input: "JSON object from REST API /repos/:owner/:repo/milestones/:number"
+    filter: |
+      {
+        number: .number,
+        title: .title,
+        description: (.description // ""),
+        state: .state,
+        dueOn: (.due_on // "No due date"),
+        openIssues: .open_issues,
+        closedIssues: .closed_issues,
+        total: (.open_issues + .closed_issues),
+        progress: (if (.open_issues + .closed_issues) > 0
+                   then ((.closed_issues / (.open_issues + .closed_issues)) * 100 | floor)
+                   else 0 end),
+        url: .html_url,
+        createdAt: .created_at,
+        updatedAt: .updated_at,
+        closedAt: .closed_at
+      }
+
+  format_milestone_progress:
+    description: "Show milestone completion statistics"
+    input: "JSON object from REST API milestone"
+    filter: |
+      {
+        title: .title,
+        state: .state,
+        openIssues: .open_issues,
+        closedIssues: .closed_issues,
+        total: (.open_issues + .closed_issues),
+        progressPercent: (if (.open_issues + .closed_issues) > 0
+                         then ((.closed_issues / (.open_issues + .closed_issues)) * 100 | floor)
+                         else 0 end),
+        dueOn: (.due_on // "No due date"),
+        isOverdue: (if .due_on then (.due_on | fromdateiso8601) < now else false end)
+      }
+
+#==============================================================================
+# EXTRACT FILTERS
+#==============================================================================
+# Pull out specific fields from responses
+
+extract_filters:
+  extract_milestone_id:
+    description: "Extract milestone node ID from GraphQL response"
+    input: "GraphQL response from queries.milestone_by_number"
+    filter: |
+      .data.repository.milestone.id
+
+  extract_milestone_titles:
+    description: "Extract milestone titles as array"
+    input: "GraphQL response from queries.repository_milestones"
+    filter: |
+      [.data.repository.milestones.nodes[].title]
+
+  extract_milestone_numbers:
+    description: "Extract milestone numbers as array"
+    input: "GraphQL response from queries.repository_milestones"
+    filter: |
+      [.data.repository.milestones.nodes[].number]
+
+  extract_milestone_ids:
+    description: "Extract milestone node IDs as array"
+    input: "GraphQL response from queries.repository_milestones"
+    filter: |
+      [.data.repository.milestones.nodes[].id]
+
+  extract_open_milestones:
+    description: "Extract only open milestones"
+    input: "GraphQL response from queries.repository_milestones"
+    filter: |
+      [.data.repository.milestones.nodes[] | select(.state == "OPEN")]
+
+  extract_closed_milestones:
+    description: "Extract only closed milestones"
+    input: "GraphQL response from queries.repository_milestones"
+    filter: |
+      [.data.repository.milestones.nodes[] | select(.state == "CLOSED")]
+
+  extract_overdue_milestones:
+    description: "Extract milestones past their due date"
+    input: "GraphQL response from queries.repository_milestones"
+    filter: |
+      [.data.repository.milestones.nodes[] |
+        select(.state == "OPEN" and .dueOn != null and (.dueOn | fromdateiso8601) < now)]
+
+#==============================================================================
+# COMPACT/SHELL-SAFE VERSIONS
+#==============================================================================
+# Single-line versions for shell safety
+
+compact:
+  format_milestones: '{repository: {owner: .data.repository.owner.login, name: .data.repository.name}, milestones: [.data.repository.milestones.nodes[] | {number: .number, title: .title, state: .state, progress: .progressPercentage, dueOn: (.dueOn // "No due date")}]}'
+
+  format_milestone: '.data.repository.milestone | {number: .number, title: .title, state: .state, progress: .progressPercentage, dueOn: (.dueOn // "No due date")}'
+
+  extract_milestone_titles: '[.data.repository.milestones.nodes[].title]'
+
+  format_milestones_rest: '[.[] | {number: .number, title: .title, state: .state, progress: (if (.open_issues + .closed_issues) > 0 then ((.closed_issues / (.open_issues + .closed_issues)) * 100 | floor) else 0 end)}]'
+
+#==============================================================================
+# USAGE EXAMPLES
+#==============================================================================
+
+examples:
+  format_milestones:
+    description: "Format milestone list"
+    command: |
+      fetch_repo_milestones "owner" "repo" | jq -f <(yq '.format_filters.format_milestones.filter' gh-milestone-jq-filters.yaml)
+
+  extract_titles:
+    description: "Get list of milestone titles"
+    command: |
+      fetch_repo_milestones "owner" "repo" | jq -f <(yq '.extract_filters.extract_milestone_titles.filter' gh-milestone-jq-filters.yaml)
+
+  format_rest:
+    description: "Format REST API milestone list"
+    command: |
+      list_milestones_rest "owner" "repo" | jq -f <(yq '.rest_format_filters.format_milestones_rest.filter' gh-milestone-jq-filters.yaml)
+
+#==============================================================================
+# NOTES
+#==============================================================================
+
+notes:
+  graphql_vs_rest: |
+    GraphQL responses use camelCase (dueOn, progressPercentage)
+    REST responses use snake_case (due_on, open_issues, closed_issues)
+    The format filters normalize these differences.
+
+  progress_calculation: |
+    GraphQL provides progressPercentage directly.
+    REST requires calculation: closed_issues / (open_issues + closed_issues) * 100
+
+  overdue_detection: |
+    Use fromdateiso8601 to convert due_on to timestamp for comparison.
+    The isOverdue field helps identify milestones needing attention.

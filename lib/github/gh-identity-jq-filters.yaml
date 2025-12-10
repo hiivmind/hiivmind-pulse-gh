@@ -1,0 +1,279 @@
+# GitHub Identity Domain - jq Filter Templates
+# Part of hiivmind-pulse-gh domain segmentation architecture
+#
+# Usage:
+#   fetch_viewer | jq -f <(yq '.format_filters.format_viewer.filter' gh-identity-jq-filters.yaml)
+#
+# All filters expect GraphQL response JSON as input and output structured JSON
+
+#==============================================================================
+# FORMAT FILTERS
+#==============================================================================
+# Transform GraphQL responses into clean, display-ready JSON
+
+format_filters:
+  format_viewer:
+    description: "Format viewer information for display"
+    input: "GraphQL response from queries.viewer"
+    filter: |
+      .data.viewer | {
+        login: .login,
+        name: (.name // ""),
+        id: .id,
+        url: .url,
+        avatarUrl: .avatarUrl,
+        company: (.company // ""),
+        location: (.location // ""),
+        bio: (.bio // ""),
+        createdAt: .createdAt
+      }
+
+  format_viewer_summary:
+    description: "Minimal viewer summary (login, name, id only)"
+    input: "GraphQL response from queries.viewer"
+    filter: |
+      .data.viewer | {
+        login: .login,
+        name: (.name // ""),
+        id: .id
+      }
+
+  format_organizations:
+    description: "Format organization list from viewer query"
+    input: "GraphQL response from queries.viewer_with_orgs or queries.viewer_organizations"
+    filter: |
+      {
+        viewer: .data.viewer.login,
+        organizations: [.data.viewer.organizations.nodes[] | {
+          login: .login,
+          name: (.name // .login),
+          id: .id,
+          url: .url,
+          isVerified: (.isVerified // false)
+        }],
+        count: (.data.viewer.organizations.totalCount // (.data.viewer.organizations.nodes | length))
+      }
+
+  format_user:
+    description: "Format specific user information"
+    input: "GraphQL response from queries.specific_user"
+    filter: |
+      .data.user | {
+        login: .login,
+        name: (.name // ""),
+        id: .id,
+        url: .url,
+        avatarUrl: .avatarUrl,
+        company: (.company // ""),
+        location: (.location // ""),
+        bio: (.bio // ""),
+        isHireable: (.isHireable // false),
+        followers: .followers.totalCount,
+        following: .following.totalCount,
+        repositories: .repositories.totalCount,
+        starredRepositories: .starredRepositories.totalCount,
+        createdAt: .createdAt
+      }
+
+  format_user_summary:
+    description: "Minimal user summary (login, name, id only)"
+    input: "GraphQL response from queries.specific_user"
+    filter: |
+      .data.user | {
+        login: .login,
+        name: (.name // ""),
+        id: .id
+      }
+
+  format_organization:
+    description: "Format organization information"
+    input: "GraphQL response from queries.specific_organization"
+    filter: |
+      .data.organization | {
+        login: .login,
+        name: (.name // .login),
+        id: .id,
+        url: .url,
+        avatarUrl: .avatarUrl,
+        description: (.description // ""),
+        websiteUrl: (.websiteUrl // ""),
+        email: (.email // ""),
+        location: (.location // ""),
+        isVerified: (.isVerified // false),
+        memberCount: .membersWithRole.totalCount,
+        teamCount: .teams.totalCount,
+        repoCount: .repositories.totalCount,
+        projectCount: .projectsV2.totalCount,
+        createdAt: .createdAt
+      }
+
+  format_organization_summary:
+    description: "Minimal organization summary (login, name, id only)"
+    input: "GraphQL response from queries.specific_organization"
+    filter: |
+      .data.organization | {
+        login: .login,
+        name: (.name // .login),
+        id: .id
+      }
+
+  format_org_members:
+    description: "Format organization members list"
+    input: "GraphQL response from queries.organization_members"
+    filter: |
+      {
+        organization: .data.organization.login,
+        members: [.data.organization.membersWithRole.edges[] | {
+          login: .node.login,
+          name: (.node.name // ""),
+          id: .node.id,
+          role: .role
+        }],
+        totalCount: .data.organization.membersWithRole.totalCount
+      }
+
+  format_org_teams:
+    description: "Format organization teams list"
+    input: "GraphQL response from queries.organization_teams"
+    filter: |
+      {
+        organization: .data.organization.login,
+        teams: [.data.organization.teams.nodes[] | {
+          slug: .slug,
+          name: .name,
+          id: .id,
+          description: (.description // ""),
+          privacy: .privacy,
+          memberCount: .members.totalCount
+        }],
+        totalCount: .data.organization.teams.totalCount
+      }
+
+#==============================================================================
+# EXTRACT FILTERS
+#==============================================================================
+# Pull out specific fields from responses
+
+extract_filters:
+  extract_viewer_id:
+    description: "Extract just the viewer's node ID"
+    input: "GraphQL response from any viewer query"
+    filter: |
+      .data.viewer.id
+
+  extract_viewer_login:
+    description: "Extract just the viewer's login"
+    input: "GraphQL response from any viewer query"
+    filter: |
+      .data.viewer.login
+
+  extract_user_id:
+    description: "Extract just the user's node ID"
+    input: "GraphQL response from queries.specific_user"
+    filter: |
+      .data.user.id
+
+  extract_org_id:
+    description: "Extract just the organization's node ID"
+    input: "GraphQL response from queries.specific_organization"
+    filter: |
+      .data.organization.id
+
+  extract_org_logins:
+    description: "Extract organization logins as array"
+    input: "GraphQL response from queries.viewer_organizations"
+    filter: |
+      [.data.viewer.organizations.nodes[].login]
+
+  extract_member_logins:
+    description: "Extract member logins from organization"
+    input: "GraphQL response from queries.organization_members"
+    filter: |
+      [.data.organization.membersWithRole.edges[].node.login]
+
+  extract_team_slugs:
+    description: "Extract team slugs from organization"
+    input: "GraphQL response from queries.organization_teams"
+    filter: |
+      [.data.organization.teams.nodes[].slug]
+
+#==============================================================================
+# DETECTION FILTERS
+#==============================================================================
+# Determine types or states
+
+detection_filters:
+  detect_owner_type:
+    description: "Determine if login is user or organization"
+    input: "GraphQL response from queries.owner_type_check"
+    filter: |
+      if .data.organization != null then
+        "organization"
+      elif .data.user != null then
+        "user"
+      else
+        "unknown"
+      end
+
+  detect_viewer_org_admin:
+    description: "List organizations where viewer can administer"
+    input: "GraphQL response from queries.viewer_organizations"
+    filter: |
+      {
+        viewer: .data.viewer.login,
+        adminOrgs: [.data.viewer.organizations.nodes[] | select(.viewerCanAdminister == true) | .login]
+      }
+
+#==============================================================================
+# COMPACT/SHELL-SAFE VERSIONS
+#==============================================================================
+# Single-line versions for shell safety (avoid escaping issues)
+
+compact:
+  format_viewer: '.data.viewer | {login: .login, name: (.name // ""), id: .id, url: .url}'
+
+  format_user: '.data.user | {login: .login, name: (.name // ""), id: .id, url: .url}'
+
+  format_organization: '.data.organization | {login: .login, name: (.name // .login), id: .id, url: .url}'
+
+  format_organizations: '{viewer: .data.viewer.login, organizations: [.data.viewer.organizations.nodes[] | {login: .login, name: (.name // .login), id: .id}], count: (.data.viewer.organizations.nodes | length)}'
+
+  detect_owner_type: 'if .data.organization != null then "organization" elif .data.user != null then "user" else "unknown" end'
+
+#==============================================================================
+# USAGE EXAMPLES
+#==============================================================================
+
+examples:
+  format_viewer:
+    description: "Format viewer info"
+    command: |
+      fetch_viewer | jq -f <(yq '.format_filters.format_viewer.filter' gh-identity-jq-filters.yaml)
+
+  extract_org_logins:
+    description: "Get list of org logins user belongs to"
+    command: |
+      discover_viewer_organizations | jq -f <(yq '.extract_filters.extract_org_logins.filter' gh-identity-jq-filters.yaml)
+
+  detect_owner_type_inline:
+    description: "Detect owner type using compact filter"
+    command: |
+      gh api graphql -f query="..." | jq "$(yq '.compact.detect_owner_type' gh-identity-jq-filters.yaml)"
+
+#==============================================================================
+# NOTES
+#==============================================================================
+
+notes:
+  null_handling: |
+    All filters use // "" or // false to handle null values gracefully.
+    This ensures consistent output even when optional fields are missing.
+
+  compact_usage: |
+    Use compact versions when you need single-line jq filters that won't
+    have escaping issues in shell scripts. Access them via:
+    jq "$(yq '.compact.format_viewer' gh-identity-jq-filters.yaml)"
+
+  pipe_composition: |
+    These filters are designed for pipe-first composition:
+    fetch_viewer | format_viewer | jq '.login'

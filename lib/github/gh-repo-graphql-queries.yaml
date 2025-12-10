@@ -1,0 +1,443 @@
+# GitHub Repository Domain - GraphQL Query Templates
+# Part of hiivmind-pulse-gh domain segmentation architecture
+#
+# Usage:
+#   query=$(yq '.queries.repository.query' gh-repo-graphql-queries.yaml)
+#   gh api graphql -f query="$query" -f owner="owner" -f name="repo"
+#
+# All queries use X-Github-Next-Global-ID:1 header for new-format IDs
+
+queries:
+  #============================================================================
+  # REPOSITORY QUERIES
+  #============================================================================
+
+  repository:
+    description: "Get repository metadata by owner and name"
+    parameters:
+      - name: "owner"
+        type: "String!"
+        description: "Repository owner (user or org login)"
+      - name: "name"
+        type: "String!"
+        description: "Repository name"
+    query: |
+      query($owner: String!, $name: String!) {
+        repository(owner: $owner, name: $name) {
+          id
+          name
+          nameWithOwner
+          description
+          url
+          homepageUrl
+          isPrivate
+          isFork
+          isArchived
+          isTemplate
+          isEmpty
+          visibility
+          defaultBranchRef {
+            name
+          }
+          owner {
+            login
+            ... on User { id }
+            ... on Organization { id }
+          }
+          primaryLanguage {
+            name
+            color
+          }
+          languages(first: 10) {
+            nodes {
+              name
+              color
+            }
+          }
+          licenseInfo {
+            name
+            spdxId
+          }
+          stargazerCount
+          forkCount
+          watchers {
+            totalCount
+          }
+          issues(states: OPEN) {
+            totalCount
+          }
+          pullRequests(states: OPEN) {
+            totalCount
+          }
+          diskUsage
+          createdAt
+          updatedAt
+          pushedAt
+        }
+      }
+
+  repository_minimal:
+    description: "Get minimal repository info (ID and basic fields)"
+    parameters:
+      - name: "owner"
+        type: "String!"
+      - name: "name"
+        type: "String!"
+    query: |
+      query($owner: String!, $name: String!) {
+        repository(owner: $owner, name: $name) {
+          id
+          name
+          nameWithOwner
+          visibility
+          isPrivate
+          isFork
+          isArchived
+          defaultBranchRef {
+            name
+          }
+        }
+      }
+
+  repository_id_only:
+    description: "Get just the repository node ID"
+    parameters:
+      - name: "owner"
+        type: "String!"
+      - name: "name"
+        type: "String!"
+    query: |
+      query($owner: String!, $name: String!) {
+        repository(owner: $owner, name: $name) {
+          id
+        }
+      }
+
+  #============================================================================
+  # USER REPOSITORIES
+  #============================================================================
+
+  user_repositories:
+    description: "List repositories for a specific user"
+    parameters:
+      - name: "login"
+        type: "String!"
+        description: "User's login/username"
+      - name: "first"
+        type: "Int"
+        description: "Number of repositories to fetch"
+        default: 100
+    query: |
+      query($login: String!, $first: Int = 100) {
+        user(login: $login) {
+          login
+          repositories(first: $first, orderBy: {field: UPDATED_AT, direction: DESC}) {
+            totalCount
+            nodes {
+              id
+              name
+              nameWithOwner
+              description
+              isPrivate
+              isFork
+              isArchived
+              isTemplate
+              visibility
+              defaultBranchRef {
+                name
+              }
+              primaryLanguage {
+                name
+              }
+              stargazerCount
+              forkCount
+              updatedAt
+              pushedAt
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+      }
+
+  #============================================================================
+  # ORGANIZATION REPOSITORIES
+  #============================================================================
+
+  organization_repositories:
+    description: "List repositories for an organization"
+    parameters:
+      - name: "login"
+        type: "String!"
+        description: "Organization's login"
+      - name: "first"
+        type: "Int"
+        description: "Number of repositories to fetch"
+        default: 100
+    query: |
+      query($login: String!, $first: Int = 100) {
+        organization(login: $login) {
+          login
+          repositories(first: $first, orderBy: {field: UPDATED_AT, direction: DESC}) {
+            totalCount
+            nodes {
+              id
+              name
+              nameWithOwner
+              description
+              isPrivate
+              isFork
+              isArchived
+              isTemplate
+              visibility
+              defaultBranchRef {
+                name
+              }
+              primaryLanguage {
+                name
+              }
+              stargazerCount
+              forkCount
+              updatedAt
+              pushedAt
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+      }
+
+  #============================================================================
+  # VIEWER REPOSITORIES
+  #============================================================================
+
+  viewer_repositories:
+    description: "List repositories for the authenticated user"
+    parameters:
+      - name: "first"
+        type: "Int"
+        description: "Number of repositories to fetch"
+        default: 100
+    query: |
+      query($first: Int = 100) {
+        viewer {
+          login
+          repositories(first: $first, orderBy: {field: UPDATED_AT, direction: DESC}) {
+            totalCount
+            nodes {
+              id
+              name
+              nameWithOwner
+              description
+              isPrivate
+              isFork
+              isArchived
+              isTemplate
+              visibility
+              defaultBranchRef {
+                name
+              }
+              primaryLanguage {
+                name
+              }
+              stargazerCount
+              forkCount
+              updatedAt
+              pushedAt
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+      }
+
+  viewer_repositories_contributed:
+    description: "List repositories the viewer has contributed to"
+    parameters:
+      - name: "first"
+        type: "Int"
+        default: 100
+    query: |
+      query($first: Int = 100) {
+        viewer {
+          login
+          repositoriesContributedTo(first: $first, contributionTypes: [COMMIT, PULL_REQUEST, ISSUE]) {
+            totalCount
+            nodes {
+              id
+              name
+              nameWithOwner
+              description
+              isPrivate
+              owner {
+                login
+              }
+              updatedAt
+            }
+          }
+        }
+      }
+
+  #============================================================================
+  # BRANCH QUERIES
+  #============================================================================
+
+  repository_branches:
+    description: "List branches for a repository"
+    parameters:
+      - name: "owner"
+        type: "String!"
+      - name: "name"
+        type: "String!"
+      - name: "first"
+        type: "Int"
+        default: 100
+    query: |
+      query($owner: String!, $name: String!, $first: Int = 100) {
+        repository(owner: $owner, name: $name) {
+          name
+          defaultBranchRef {
+            name
+          }
+          refs(refPrefix: "refs/heads/", first: $first, orderBy: {field: ALPHABETICAL, direction: ASC}) {
+            totalCount
+            nodes {
+              name
+              target {
+                ... on Commit {
+                  oid
+                  committedDate
+                  message
+                  author {
+                    name
+                    email
+                  }
+                }
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+      }
+
+  repository_branch:
+    description: "Get a specific branch by name"
+    parameters:
+      - name: "owner"
+        type: "String!"
+      - name: "name"
+        type: "String!"
+      - name: "branch"
+        type: "String!"
+    query: |
+      query($owner: String!, $name: String!, $branch: String!) {
+        repository(owner: $owner, name: $name) {
+          ref(qualifiedName: $branch) {
+            name
+            prefix
+            target {
+              ... on Commit {
+                oid
+                committedDate
+                message
+                author {
+                  name
+                  email
+                }
+                status {
+                  state
+                }
+              }
+            }
+          }
+        }
+      }
+
+  #============================================================================
+  # REPOSITORY COLLABORATORS
+  #============================================================================
+
+  repository_collaborators:
+    description: "List collaborators for a repository"
+    parameters:
+      - name: "owner"
+        type: "String!"
+      - name: "name"
+        type: "String!"
+      - name: "first"
+        type: "Int"
+        default: 100
+    query: |
+      query($owner: String!, $name: String!, $first: Int = 100) {
+        repository(owner: $owner, name: $name) {
+          name
+          collaborators(first: $first) {
+            totalCount
+            edges {
+              permission
+              node {
+                login
+                name
+                id
+              }
+            }
+          }
+        }
+      }
+
+#==============================================================================
+# USAGE EXAMPLES
+#==============================================================================
+
+examples:
+  fetch_repo:
+    description: "Get repository metadata"
+    command: |
+      gh api graphql -H X-Github-Next-Global-ID:1 \
+        -f query="$(yq '.queries.repository.query' gh-repo-graphql-queries.yaml)" \
+        -f owner="octocat" \
+        -f name="Hello-World"
+
+  list_org_repos:
+    description: "List organization repositories"
+    command: |
+      gh api graphql -H X-Github-Next-Global-ID:1 \
+        -f query="$(yq '.queries.organization_repositories.query' gh-repo-graphql-queries.yaml)" \
+        -f login="github" \
+        -F first=50
+
+  list_branches:
+    description: "List repository branches"
+    command: |
+      gh api graphql -H X-Github-Next-Global-ID:1 \
+        -f query="$(yq '.queries.repository_branches.query' gh-repo-graphql-queries.yaml)" \
+        -f owner="octocat" \
+        -f name="Hello-World"
+
+#==============================================================================
+# NOTES
+#==============================================================================
+
+notes:
+  visibility_values: |
+    Repository visibility can be:
+    - PUBLIC: Visible to everyone
+    - PRIVATE: Visible only to authorized users
+    - INTERNAL: Visible to organization members (Enterprise only)
+
+  branch_refs: |
+    Branch queries use refs(refPrefix: "refs/heads/") to list branches.
+    For tags, use refPrefix: "refs/tags/"
+
+  pagination: |
+    All list queries support pagination via pageInfo.
+    Use endCursor with 'after' parameter for next page.

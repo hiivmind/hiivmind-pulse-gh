@@ -241,100 +241,16 @@ update_project_readme() {
 }
 
 # =============================================================================
-# MILESTONE FUNCTIONS
+# MILESTONE FUNCTIONS - MOVED TO gh-milestone-functions.sh
 # =============================================================================
-# Note: Milestones are repository-level entities assigned to issues/PRs.
-# They appear in Projects as read-only field values. To set milestones,
-# use the issue/PR mutation functions below.
-
-# Fetch all milestones for a repository
-fetch_repo_milestones() {
-    local owner="$1"
-    local repo="$2"
-    local states="${3:-OPEN}"  # OPEN, CLOSED, or "OPEN,CLOSED" for both
-    local script_dir="$(dirname "${BASH_SOURCE[0]}")"
-
-    gh api graphql -H X-Github-Next-Global-ID:1 \
-        -f query="$(yq '.milestones.repository_milestones.query' "$script_dir/gh-project-graphql-queries.yaml")" \
-        -f owner="$owner" \
-        -f repo="$repo" \
-        -f states="[$states]"
-}
-
-# Fetch a specific milestone by number
-fetch_milestone() {
-    local owner="$1"
-    local repo="$2"
-    local number="$3"
-    local script_dir="$(dirname "${BASH_SOURCE[0]}")"
-
-    gh api graphql -H X-Github-Next-Global-ID:1 \
-        -f query="$(yq '.milestones.milestone_by_number.query' "$script_dir/gh-project-graphql-queries.yaml")" \
-        -f owner="$owner" \
-        -f repo="$repo" \
-        -F number="$number"
-}
-
-# Get milestone ID by title (helper function)
-get_milestone_id() {
-    local owner="$1"
-    local repo="$2"
-    local title="$3"
-
-    fetch_repo_milestones "$owner" "$repo" "OPEN,CLOSED" | \
-        jq -r --arg title "$title" '.data.repository.milestones.nodes[] | select(.title == $title) | .id'
-}
-
-# Set milestone on an issue (GraphQL mutation)
-set_issue_milestone() {
-    local issue_id="$1"
-    local milestone_id="$2"  # Can be null/empty to clear
-    local script_dir="$(dirname "${BASH_SOURCE[0]}")"
-
-    local args=(-H X-Github-Next-Global-ID:1)
-    args+=(-f query="$(yq '.mutations.set_issue_milestone.query' "$script_dir/gh-project-graphql-queries.yaml")")
-    args+=(-f issueId="$issue_id")
-    if [[ -n "$milestone_id" ]]; then
-        args+=(-f milestoneId="$milestone_id")
-    else
-        args+=(-f milestoneId=null)
-    fi
-
-    gh api graphql "${args[@]}"
-}
-
-# Set milestone on a pull request (GraphQL mutation)
-set_pr_milestone() {
-    local pr_id="$1"
-    local milestone_id="$2"  # Can be null/empty to clear
-    local script_dir="$(dirname "${BASH_SOURCE[0]}")"
-
-    local args=(-H X-Github-Next-Global-ID:1)
-    args+=(-f query="$(yq '.mutations.set_pr_milestone.query' "$script_dir/gh-project-graphql-queries.yaml")")
-    args+=(-f prId="$pr_id")
-    if [[ -n "$milestone_id" ]]; then
-        args+=(-f milestoneId="$milestone_id")
-    else
-        args+=(-f milestoneId=null)
-    fi
-
-    gh api graphql "${args[@]}"
-}
-
-# Clear milestone from an issue (convenience wrapper)
-clear_issue_milestone() {
-    local issue_id="$1"
-    set_issue_milestone "$issue_id" ""
-}
-
-# Clear milestone from a pull request (convenience wrapper)
-clear_pr_milestone() {
-    local pr_id="$1"
-    set_pr_milestone "$pr_id" ""
-}
-
-# Note: For creating/updating/closing milestones, use REST API functions
-# in gh-rest-functions.sh (create_milestone, update_milestone, close_milestone)
+# The following functions have been moved to the Milestone domain:
+#   - fetch_repo_milestones -> source gh-milestone-functions.sh
+#   - fetch_milestone -> source gh-milestone-functions.sh
+#   - get_milestone_id -> source gh-milestone-functions.sh
+#   - set_issue_milestone -> source gh-issue-functions.sh
+#   - set_pr_milestone -> source gh-pr-functions.sh
+#   - clear_issue_milestone -> source gh-issue-functions.sh
+#   - clear_pr_milestone -> source gh-pr-functions.sh
 
 # =============================================================================
 # STATUS UPDATE FUNCTIONS
@@ -439,16 +355,8 @@ unlink_repo_from_project() {
         -f repositoryId="$repository_id"
 }
 
-# Helper: Get repository ID by owner/name
-get_repository_id() {
-    local owner="$1"
-    local name="$2"
-
-    gh api graphql -H X-Github-Next-Global-ID:1 \
-        -f query='query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { id } }' \
-        -f owner="$owner" \
-        -f name="$name" | jq -r '.data.repository.id'
-}
+# Helper: Get repository ID - MOVED TO gh-repo-functions.sh
+# Use: source gh-repo-functions.sh && get_repo_id "owner" "repo"
 
 # =============================================================================
 # VIEW FUNCTIONS
@@ -1019,75 +927,17 @@ get_user_project_id() {
         -F projectNumber="$project_number" | jq -r '.data.viewer.projectV2.id'
 }
 
-# Get user/org ID for project creation
-get_user_id() {
-    gh api graphql -H X-Github-Next-Global-ID:1 \
-        -f query='query { viewer { id } }' | jq -r '.data.viewer.id'
-}
-
-get_org_id() {
-    local org_login="$1"
-
-    gh api graphql -H X-Github-Next-Global-ID:1 \
-        -f query='query($orgLogin: String!) {
-            organization(login: $orgLogin) {
-                id
-            }
-        }' \
-        -f orgLogin="$org_login" | jq -r '.data.organization.id'
-}
-
-# Get repository ID for draft-to-issue conversion
-get_repo_id() {
-    local owner="$1"
-    local repo="$2"
-
-    gh api graphql -H X-Github-Next-Global-ID:1 \
-        -f query='query($owner: String!, $name: String!) {
-            repository(owner: $owner, name: $name) {
-                id
-            }
-        }' \
-        -f owner="$owner" \
-        -f name="$repo" | jq -r '.data.repository.id'
-}
-
-# Get issue/PR ID by number
-get_issue_id() {
-    local owner="$1"
-    local repo="$2"
-    local number="$3"
-
-    gh api graphql -H X-Github-Next-Global-ID:1 \
-        -f query='query($owner: String!, $name: String!, $number: Int!) {
-            repository(owner: $owner, name: $name) {
-                issue(number: $number) {
-                    id
-                }
-            }
-        }' \
-        -f owner="$owner" \
-        -f name="$repo" \
-        -F number="$number" | jq -r '.data.repository.issue.id'
-}
-
-get_pr_id() {
-    local owner="$1"
-    local repo="$2"
-    local number="$3"
-
-    gh api graphql -H X-Github-Next-Global-ID:1 \
-        -f query='query($owner: String!, $name: String!, $number: Int!) {
-            repository(owner: $owner, name: $name) {
-                pullRequest(number: $number) {
-                    id
-                }
-            }
-        }' \
-        -f owner="$owner" \
-        -f name="$repo" \
-        -F number="$number" | jq -r '.data.repository.pullRequest.id'
-}
+# =============================================================================
+# ID LOOKUP FUNCTIONS - MOVED TO DOMAIN FILES
+# =============================================================================
+# The following functions have been moved to domain-specific files:
+#   - get_user_id, get_org_id -> source gh-identity-functions.sh
+#   - get_repo_id -> source gh-repo-functions.sh
+#   - get_issue_id -> source gh-issue-functions.sh
+#   - get_pr_id -> source gh-pr-functions.sh
+#
+# For backwards compatibility, source the identity functions which contain
+# get_viewer_id (replaces get_user_id) and get_org_id
 
 # Get field ID by name from a project
 get_field_id() {

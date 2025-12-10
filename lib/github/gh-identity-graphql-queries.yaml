@@ -1,0 +1,358 @@
+# GitHub Identity Domain - GraphQL Query Templates
+# Part of hiivmind-pulse-gh domain segmentation architecture
+#
+# Usage:
+#   query=$(yq '.queries.viewer.query' gh-identity-graphql-queries.yaml)
+#   gh api graphql -f query="$query"
+#
+# All queries use X-Github-Next-Global-ID:1 header for new-format IDs
+
+queries:
+  #============================================================================
+  # VIEWER QUERIES (authenticated user)
+  #============================================================================
+
+  viewer:
+    description: "Get current authenticated user's basic information"
+    parameters: []
+    note: "email field omitted - requires 'user:email' or 'read:user' scope"
+    query: |
+      {
+        viewer {
+          id
+          login
+          name
+          avatarUrl
+          url
+          company
+          location
+          bio
+          twitterUsername
+          websiteUrl
+          createdAt
+          updatedAt
+        }
+      }
+
+  viewer_with_orgs:
+    description: "Get current user and their organizations"
+    parameters: []
+    query: |
+      {
+        viewer {
+          id
+          login
+          name
+          avatarUrl
+          organizations(first: 100) {
+            totalCount
+            nodes {
+              id
+              login
+              name
+              description
+              avatarUrl
+              url
+              isVerified
+            }
+          }
+        }
+      }
+
+  viewer_organizations:
+    description: "Get just the organizations the current user belongs to"
+    parameters: []
+    query: |
+      {
+        viewer {
+          login
+          organizations(first: 100) {
+            totalCount
+            nodes {
+              id
+              login
+              name
+              description
+              avatarUrl
+              url
+              isVerified
+              viewerIsAMember
+              viewerCanAdminister
+            }
+          }
+        }
+      }
+
+  viewer_id_only:
+    description: "Get just the current user's node ID (minimal query)"
+    parameters: []
+    query: |
+      {
+        viewer {
+          id
+        }
+      }
+
+  #============================================================================
+  # USER QUERIES (specific user by login)
+  #============================================================================
+
+  specific_user:
+    description: "Get a specific user by login"
+    parameters:
+      - name: "login"
+        type: "String!"
+        description: "The user's login/username"
+    note: "email field omitted - may be private or require additional scopes"
+    query: |
+      query($login: String!) {
+        user(login: $login) {
+          id
+          login
+          name
+          avatarUrl
+          url
+          company
+          location
+          bio
+          twitterUsername
+          websiteUrl
+          isHireable
+          followers {
+            totalCount
+          }
+          following {
+            totalCount
+          }
+          repositories {
+            totalCount
+          }
+          starredRepositories {
+            totalCount
+          }
+          createdAt
+          updatedAt
+        }
+      }
+
+  user_id_only:
+    description: "Get just a user's node ID by login (minimal query)"
+    parameters:
+      - name: "login"
+        type: "String!"
+        description: "The user's login/username"
+    query: |
+      query($login: String!) {
+        user(login: $login) {
+          id
+        }
+      }
+
+  user_organizations:
+    description: "Get organizations a specific user belongs to (limited by privacy settings)"
+    parameters:
+      - name: "login"
+        type: "String!"
+        description: "The user's login/username"
+    query: |
+      query($login: String!) {
+        user(login: $login) {
+          login
+          organizations(first: 100) {
+            totalCount
+            nodes {
+              id
+              login
+              name
+              avatarUrl
+            }
+          }
+        }
+      }
+
+  #============================================================================
+  # ORGANIZATION QUERIES
+  #============================================================================
+
+  specific_organization:
+    description: "Get a specific organization by login"
+    parameters:
+      - name: "login"
+        type: "String!"
+        description: "The organization's login"
+    query: |
+      query($login: String!) {
+        organization(login: $login) {
+          id
+          login
+          name
+          description
+          avatarUrl
+          url
+          websiteUrl
+          email
+          location
+          twitterUsername
+          isVerified
+          membersWithRole {
+            totalCount
+          }
+          teams {
+            totalCount
+          }
+          repositories {
+            totalCount
+          }
+          projectsV2 {
+            totalCount
+          }
+          createdAt
+          updatedAt
+        }
+      }
+
+  organization_id_only:
+    description: "Get just an organization's node ID (minimal query)"
+    parameters:
+      - name: "login"
+        type: "String!"
+        description: "The organization's login"
+    query: |
+      query($login: String!) {
+        organization(login: $login) {
+          id
+        }
+      }
+
+  organization_members:
+    description: "Get organization members (requires appropriate permissions)"
+    parameters:
+      - name: "login"
+        type: "String!"
+        description: "The organization's login"
+      - name: "first"
+        type: "Int"
+        description: "Number of members to fetch"
+        default: 100
+    query: |
+      query($login: String!, $first: Int = 100) {
+        organization(login: $login) {
+          login
+          membersWithRole(first: $first) {
+            totalCount
+            edges {
+              role
+              node {
+                id
+                login
+                name
+                avatarUrl
+              }
+            }
+          }
+        }
+      }
+
+  organization_teams:
+    description: "Get organization teams"
+    parameters:
+      - name: "login"
+        type: "String!"
+        description: "The organization's login"
+      - name: "first"
+        type: "Int"
+        description: "Number of teams to fetch"
+        default: 100
+    query: |
+      query($login: String!, $first: Int = 100) {
+        organization(login: $login) {
+          login
+          teams(first: $first) {
+            totalCount
+            nodes {
+              id
+              slug
+              name
+              description
+              privacy
+              members {
+                totalCount
+              }
+            }
+          }
+        }
+      }
+
+  #============================================================================
+  # OWNER TYPE DETECTION
+  #============================================================================
+
+  owner_type_check:
+    description: "Check if a login is a user or organization (try both)"
+    parameters:
+      - name: "login"
+        type: "String!"
+        description: "The login to check"
+    note: "One of user or organization will be null - check which one is not null"
+    query: |
+      query($login: String!) {
+        user(login: $login) {
+          id
+          __typename
+        }
+        organization(login: $login) {
+          id
+          __typename
+        }
+      }
+
+#==============================================================================
+# USAGE EXAMPLES
+#==============================================================================
+
+examples:
+  fetch_viewer:
+    description: "Get current user info"
+    command: |
+      gh api graphql -H X-Github-Next-Global-ID:1 \
+        -f query="$(yq '.queries.viewer.query' gh-identity-graphql-queries.yaml)"
+
+  fetch_user:
+    description: "Get specific user info"
+    command: |
+      gh api graphql -H X-Github-Next-Global-ID:1 \
+        -f query="$(yq '.queries.specific_user.query' gh-identity-graphql-queries.yaml)" \
+        -f login="octocat"
+
+  fetch_organization:
+    description: "Get organization info"
+    command: |
+      gh api graphql -H X-Github-Next-Global-ID:1 \
+        -f query="$(yq '.queries.specific_organization.query' gh-identity-graphql-queries.yaml)" \
+        -f login="github"
+
+  detect_owner_type:
+    description: "Check if login is user or org"
+    command: |
+      gh api graphql -H X-Github-Next-Global-ID:1 \
+        -f query="$(yq '.queries.owner_type_check.query' gh-identity-graphql-queries.yaml)" \
+        -f login="github" \
+        --jq 'if .data.organization then "organization" else "user" end'
+
+#==============================================================================
+# NOTES
+#==============================================================================
+
+notes:
+  global_id_header: |
+    All queries should include -H X-Github-Next-Global-ID:1 to get
+    the new-format global node IDs that work across GitHub's GraphQL API.
+
+  viewer_vs_user: |
+    Use 'viewer' queries for the authenticated user (no login required).
+    Use 'user' queries when you have a specific login to look up.
+
+  organization_permissions: |
+    Some organization queries (members, teams) require appropriate
+    permissions in the org. They may return partial/empty results
+    without proper access.

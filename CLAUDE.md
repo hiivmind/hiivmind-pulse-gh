@@ -135,15 +135,19 @@ fetch_org_project "$DEFAULT_PROJECT" "$OWNER" | apply_status_filter "In Progress
 ## Quick Start
 
 ```bash
-# Source functions (once per session)
-source lib/github/gh-project-functions.sh  # GraphQL operations
-source lib/github/gh-rest-functions.sh     # REST operations
+# Source domain-specific functions (Architecture v2)
+source lib/github/gh-identity-functions.sh  # Identity operations
+source lib/github/gh-repo-functions.sh      # Repository operations
+source lib/github/gh-milestone-functions.sh # Milestone operations
+source lib/github/gh-issue-functions.sh     # Issue operations
+source lib/github/gh-pr-functions.sh        # Pull request operations
+source lib/github/gh-project-functions.sh   # Project v2 operations
 
-# Fetch and analyze a project
-fetch_org_project 2 "org-name" | apply_universal_filter "" "" "" ""
-
-# List milestones
-list_milestones "owner" "repo" | format_milestones
+# Examples
+get_viewer_id                                           # Get current user ID
+fetch_repo "hiivmind" "hiivmind-pulse-gh" | format_repo # Get repo info
+discover_repo_issues "owner" "repo" | format_issues_list # List issues
+fetch_org_project 2 "org-name" | apply_status_filter "In Progress"
 ```
 
 ## File Structure
@@ -164,19 +168,74 @@ hiivmind-pulse-gh/
 │   ├── user.yaml.template       # Personal user config
 │   └── gitignore.template       # Suggested gitignore entries
 ├── lib/github/
-│   ├── gh-project-functions.sh      # GraphQL shell functions
-│   ├── gh-project-graphql-queries.yaml  # GraphQL templates
-│   ├── gh-project-jq-filters.yaml   # jq filter templates
+│   ├── # Domain-Specific Libraries (NEW - Architecture v2)
+│   ├── gh-identity-functions.sh     # Identity domain (users, orgs, auth)
+│   ├── gh-identity-graphql-queries.yaml
+│   ├── gh-identity-jq-filters.yaml
+│   ├── gh-identity-index.md
+│   ├── gh-repo-functions.sh         # Repository domain
+│   ├── gh-repo-graphql-queries.yaml
+│   ├── gh-repo-jq-filters.yaml
+│   ├── gh-repo-index.md
+│   ├── gh-milestone-functions.sh    # Milestone domain
+│   ├── gh-milestone-graphql-queries.yaml
+│   ├── gh-milestone-jq-filters.yaml
+│   ├── gh-milestone-index.md
+│   ├── gh-issue-functions.sh        # Issue domain
+│   ├── gh-issue-graphql-queries.yaml
+│   ├── gh-issue-jq-filters.yaml
+│   ├── gh-issue-index.md
+│   ├── gh-pr-functions.sh           # Pull Request domain
+│   ├── gh-pr-graphql-queries.yaml
+│   ├── gh-pr-jq-filters.yaml
+│   ├── gh-pr-index.md
+│   ├── # Project Domain (cleaned)
+│   ├── gh-project-functions.sh      # Projects v2 only
+│   ├── gh-project-graphql-queries.yaml
+│   ├── gh-project-jq-filters.yaml
+│   ├── # Legacy/Supporting
 │   ├── gh-rest-functions.sh         # REST shell functions
 │   ├── gh-rest-endpoints.yaml       # REST endpoint templates
-│   └── gh-branch-protection-templates.yaml  # Protection presets
+│   └── gh-branch-protection-templates.yaml
 └── docs/
     └── meta-skill-architecture.md   # Workspace config design
 ```
 
 ## Key Function Groups
 
-### Projects v2 (GraphQL)
+### Identity Domain (`gh-identity-functions.sh`)
+- `get_viewer_id`, `get_user_id`, `get_org_id` - Lookup IDs
+- `fetch_viewer`, `fetch_user`, `fetch_organization` - Fetch data
+- `detect_owner_type` - Determine user vs org
+- `discover_viewer_organizations` - List user's orgs
+
+### Repository Domain (`gh-repo-functions.sh`)
+- `get_repo_id` - Lookup repository ID
+- `fetch_repo`, `discover_org_repos`, `discover_user_repos` - Fetch data
+- `detect_default_branch`, `detect_repo_visibility` - Detection
+- `list_repo_branches` - List branches
+
+### Milestone Domain (`gh-milestone-functions.sh`)
+- `get_milestone_id`, `get_milestone_number` - Lookups
+- `fetch_repo_milestones`, `fetch_milestone` - GraphQL queries
+- `list_milestones_rest`, `create_milestone`, `update_milestone`, `close_milestone` - REST CRUD
+- `format_milestones`, `format_milestone_rest` - Formatting
+
+### Issue Domain (`gh-issue-functions.sh`)
+- `get_issue_id` - Lookup issue ID
+- `fetch_issue`, `discover_repo_issues` - Fetch data
+- `filter_issues_by_*` - Filter by state/label/assignee
+- `set_issue_milestone`, `add_issue_labels`, `close_issue` - Mutations
+- `format_issue`, `format_issues_list` - Formatting
+
+### Pull Request Domain (`gh-pr-functions.sh`)
+- `get_pr_id` - Lookup PR ID
+- `fetch_pr`, `discover_repo_prs` - Fetch data
+- `filter_prs_by_*` - Filter by state/label/reviewer
+- `set_pr_milestone`, `request_pr_review`, `mark_pr_ready` - Mutations
+- `format_pr`, `format_prs_list` - Formatting
+
+### Projects v2 (`gh-project-functions.sh`)
 - `fetch_org_project`, `fetch_user_project` - Fetch project data
 - `apply_*_filter` - Filter project items
 - `list_*` - Discovery functions
@@ -184,22 +243,10 @@ hiivmind-pulse-gh/
 - `fetch_project_views`, `create_project_view` - View management
 - `fetch_linked_repositories`, `link_repo_to_project` - Repository linking
 
-### Milestones (Mixed)
-- `fetch_repo_milestones` - Query via GraphQL
-- `set_issue_milestone`, `set_pr_milestone` - Set via GraphQL
-- `create_milestone`, `update_milestone`, `close_milestone` - Manage via REST
-
 ### Branch Protection (REST)
 - `get_branch_protection`, `set_branch_protection` - Per-branch rules
 - `list_rulesets`, `create_ruleset`, `update_ruleset` - Repository rulesets
 - `apply_main_branch_protection`, `apply_develop_branch_protection` - Smart templates
-- `apply_branch_naming_ruleset` - Naming convention enforcement
-
-### REST API
-- `list_milestones`, `get_milestone` - REST queries
-- `create_milestone`, `update_milestone` - REST mutations
-- `detect_repo_type`, `list_branches` - Helper functions
-- Direct `gh api` usage for other operations
 
 ## Pipeline Pattern
 
@@ -216,3 +263,25 @@ fetch_org_project 2 "org" | apply_assignee_filter "user" | list_repositories
 - yq (4.0+)
 
 **Run `hiivmind-pulse-gh-user-init` to verify all dependencies are properly configured.**
+
+## Knowledge Base
+
+Technical documentation for known issues and architectural decisions:
+
+| Document | Description |
+|----------|-------------|
+| [`knowledge/claude-code-bash-escaping.md`](knowledge/claude-code-bash-escaping.md) | Claude Code Bash tool escaping bug - affects commands with `$(...)`, variables, and pipes |
+
+### Critical: Bash Command Patterns
+
+When writing Bash commands for this plugin, **always use pipe-first patterns**:
+
+```bash
+# GOOD - pipe-first, no intermediate variables
+discover_projects "$LOGIN" "$TYPE" | format_projects_list
+
+# BAD - triggers Claude Code escaping bug when combined with pipes
+PROJECTS=$(discover_projects "$LOGIN" "$TYPE") && echo "$PROJECTS" | format_projects_list
+```
+
+See `knowledge/claude-code-bash-escaping.md` for full details on the bug and workarounds.

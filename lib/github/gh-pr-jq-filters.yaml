@@ -1,0 +1,328 @@
+# GitHub Pull Request Domain - jq Filter Templates
+# Part of hiivmind-pulse-gh domain segmentation architecture
+#
+# Usage:
+#   fetch_pr "owner" "repo" 123 | jq -f <(yq '.format_filters.format_pr.filter' gh-pr-jq-filters.yaml)
+
+#==============================================================================
+# FORMAT FILTERS (GraphQL)
+#==============================================================================
+# Transform GraphQL responses into clean, display-ready JSON
+
+format_filters:
+  format_pr:
+    description: "Format single PR from GraphQL response"
+    input: "GraphQL response from queries.pr_by_number"
+    filter: |
+      .data.repository.pullRequest | {
+        id: .id,
+        number: .number,
+        title: .title,
+        body: (.body // ""),
+        state: .state,
+        isDraft: .isDraft,
+        url: .url,
+        author: .author.login,
+        assignees: [.assignees.nodes[].login],
+        labels: [.labels.nodes[] | {name: .name, color: .color}],
+        milestone: (if .milestone then {number: .milestone.number, title: .milestone.title} else null end),
+        reviewers: {
+          requested: [.reviewRequests.nodes[].requestedReviewer | .login // .name],
+          reviews: [.reviews.nodes[] | {author: .author.login, state: .state, at: .submittedAt}]
+        },
+        branches: {
+          head: .headRefName,
+          base: .baseRefName
+        },
+        stats: {
+          additions: .additions,
+          deletions: .deletions,
+          changedFiles: .changedFiles,
+          commits: .commits.totalCount,
+          comments: .comments.totalCount
+        },
+        mergeable: .mergeable,
+        createdAt: .createdAt,
+        updatedAt: .updatedAt,
+        mergedAt: (.mergedAt // null),
+        closedAt: (.closedAt // null)
+      }
+
+  format_prs_list:
+    description: "Format PR list from GraphQL response"
+    input: "GraphQL response from queries.repository_prs or discover_repo_prs"
+    filter: |
+      {
+        totalCount: .data.repository.pullRequests.totalCount,
+        pullRequests: [
+          .data.repository.pullRequests.nodes[] | {
+            id: .id,
+            number: .number,
+            title: .title,
+            state: .state,
+            isDraft: .isDraft,
+            url: .url,
+            author: .author.login,
+            assignees: [.assignees.nodes[].login],
+            labels: [.labels.nodes[].name],
+            milestone: (.milestone.title // null),
+            branches: {
+              head: .headRefName,
+              base: .baseRefName
+            },
+            createdAt: .createdAt,
+            updatedAt: .updatedAt
+          }
+        ]
+      }
+
+  format_pr_with_reviews:
+    description: "Format PR with detailed review information"
+    input: "GraphQL response from queries.pr_with_reviews"
+    filter: |
+      .data.repository.pullRequest | {
+        id: .id,
+        number: .number,
+        title: .title,
+        state: .state,
+        isDraft: .isDraft,
+        url: .url,
+        author: .author.login,
+        reviewRequests: [.reviewRequests.nodes[].requestedReviewer | .login // .name],
+        reviews: {
+          totalCount: .reviews.totalCount,
+          items: [.reviews.nodes[] | {
+            id: .id,
+            author: .author.login,
+            state: .state,
+            body: (.body // ""),
+            submittedAt: .submittedAt,
+            comments: [.comments.nodes[] | {body: .body, path: .path, line: .line}]
+          }]
+        },
+        latestReviews: [.latestReviews.nodes[] | {
+          author: .author.login,
+          state: .state,
+          at: .submittedAt
+        }]
+      }
+
+  format_pr_files:
+    description: "Format PR files changed"
+    input: "GraphQL response from queries.pr_files_changed"
+    filter: |
+      .data.repository.pullRequest | {
+        number: .number,
+        title: .title,
+        stats: {
+          additions: .additions,
+          deletions: .deletions,
+          changedFiles: .changedFiles
+        },
+        files: [.files.nodes[] | {
+          path: .path,
+          additions: .additions,
+          deletions: .deletions,
+          changeType: .changeType
+        }]
+      }
+
+  format_prs_summary:
+    description: "Format PRs as compact summary"
+    input: "GraphQL response from queries.repository_prs"
+    filter: |
+      [.data.repository.pullRequests.nodes[] | {
+        number: .number,
+        title: .title,
+        state: .state,
+        isDraft: .isDraft,
+        author: .author.login,
+        head: .headRefName
+      }]
+
+#==============================================================================
+# FORMAT FILTERS (REST)
+#==============================================================================
+# Transform REST API responses
+
+rest_format_filters:
+  format_prs_rest:
+    description: "Format PR list from REST API response"
+    input: "JSON array from REST API /repos/:owner/:repo/pulls"
+    filter: |
+      [.[] | {
+        number: .number,
+        title: .title,
+        state: .state,
+        draft: .draft,
+        url: .html_url,
+        author: .user.login,
+        assignees: [.assignees[].login],
+        labels: [.labels[].name],
+        milestone: (.milestone.title // null),
+        headBranch: .head.ref,
+        baseBranch: .base.ref,
+        createdAt: .created_at,
+        updatedAt: .updated_at,
+        mergedAt: (.merged_at // null),
+        closedAt: (.closed_at // null)
+      }]
+
+  format_pr_rest:
+    description: "Format single PR from REST API response"
+    input: "JSON object from REST API /repos/:owner/:repo/pulls/:number"
+    filter: |
+      {
+        number: .number,
+        title: .title,
+        body: (.body // ""),
+        state: .state,
+        draft: .draft,
+        merged: .merged,
+        mergeable: .mergeable,
+        url: .html_url,
+        author: .user.login,
+        assignees: [.assignees[].login],
+        labels: [.labels[].name],
+        milestone: (if .milestone then {number: .milestone.number, title: .milestone.title} else null end),
+        headBranch: .head.ref,
+        baseBranch: .base.ref,
+        stats: {
+          additions: .additions,
+          deletions: .deletions,
+          changedFiles: .changed_files,
+          commits: .commits
+        },
+        createdAt: .created_at,
+        updatedAt: .updated_at,
+        mergedAt: (.merged_at // null),
+        closedAt: (.closed_at // null)
+      }
+
+#==============================================================================
+# EXTRACT FILTERS
+#==============================================================================
+# Pull out specific fields from responses
+
+extract_filters:
+  extract_pr_id:
+    description: "Extract PR node ID from GraphQL response"
+    input: "GraphQL response from queries.pr_by_number"
+    filter: |
+      .data.repository.pullRequest.id
+
+  extract_pr_numbers:
+    description: "Extract PR numbers as array"
+    input: "GraphQL response from queries.repository_prs"
+    filter: |
+      [.data.repository.pullRequests.nodes[].number]
+
+  extract_pr_ids:
+    description: "Extract PR node IDs as array"
+    input: "GraphQL response from queries.repository_prs"
+    filter: |
+      [.data.repository.pullRequests.nodes[].id]
+
+  extract_pr_titles:
+    description: "Extract PR titles as array"
+    input: "GraphQL response from queries.repository_prs"
+    filter: |
+      [.data.repository.pullRequests.nodes[].title]
+
+  extract_open_prs:
+    description: "Extract only open PRs"
+    input: "GraphQL response from queries.repository_prs"
+    filter: |
+      [.data.repository.pullRequests.nodes[] | select(.state == "OPEN")]
+
+  extract_merged_prs:
+    description: "Extract only merged PRs"
+    input: "GraphQL response from queries.repository_prs"
+    filter: |
+      [.data.repository.pullRequests.nodes[] | select(.state == "MERGED")]
+
+  extract_draft_prs:
+    description: "Extract only draft PRs"
+    input: "GraphQL response from queries.repository_prs"
+    filter: |
+      [.data.repository.pullRequests.nodes[] | select(.isDraft == true)]
+
+  extract_ready_prs:
+    description: "Extract only ready (non-draft) PRs"
+    input: "GraphQL response from queries.repository_prs"
+    filter: |
+      [.data.repository.pullRequests.nodes[] | select(.isDraft == false)]
+
+  extract_prs_by_author:
+    description: "Extract PRs by a specific author"
+    input: "GraphQL response from queries.repository_prs"
+    args:
+      - name: author
+        description: "Author login to filter by"
+    filter: |
+      [.data.repository.pullRequests.nodes[] | select(.author.login == $author)]
+
+  extract_prs_needing_review:
+    description: "Extract open PRs that need review"
+    input: "GraphQL response from queries.repository_prs"
+    filter: |
+      [.data.repository.pullRequests.nodes[] | select(.state == "OPEN" and .isDraft == false)]
+
+#==============================================================================
+# COMPACT/SHELL-SAFE VERSIONS
+#==============================================================================
+# Single-line versions for shell safety
+
+compact:
+  format_pr: '.data.repository.pullRequest | {number: .number, title: .title, state: .state, isDraft: .isDraft, author: .author.login, head: .headRefName, base: .baseRefName}'
+
+  format_prs_list: '{totalCount: .data.repository.pullRequests.totalCount, prs: [.data.repository.pullRequests.nodes[] | {number: .number, title: .title, state: .state, isDraft: .isDraft}]}'
+
+  extract_pr_numbers: '[.data.repository.pullRequests.nodes[].number]'
+
+  format_prs_rest: '[.[] | {number: .number, title: .title, state: .state, draft: .draft, author: .user.login}]'
+
+#==============================================================================
+# USAGE EXAMPLES
+#==============================================================================
+
+examples:
+  format_pr:
+    description: "Format a single PR"
+    command: |
+      fetch_pr "owner" "repo" 123 | jq -f <(yq '.format_filters.format_pr.filter' gh-pr-jq-filters.yaml)
+
+  filter_by_author:
+    description: "Get PRs by a specific author"
+    command: |
+      discover_repo_prs "owner" "repo" | jq --arg author "username" -f <(yq '.extract_filters.extract_prs_by_author.filter' gh-pr-jq-filters.yaml)
+
+  format_rest:
+    description: "Format REST API PR list"
+    command: |
+      list_prs_rest "owner" "repo" | jq -f <(yq '.rest_format_filters.format_prs_rest.filter' gh-pr-jq-filters.yaml)
+
+#==============================================================================
+# NOTES
+#==============================================================================
+
+notes:
+  graphql_vs_rest: |
+    GraphQL responses use camelCase (createdAt, isDraft, headRefName)
+    REST responses use snake_case (created_at, head.ref)
+    The format filters normalize these differences.
+
+  state_values: |
+    GraphQL PR states: OPEN, CLOSED, MERGED
+    REST PR states: open, closed (check .merged for merged state)
+
+  draft_detection: |
+    GraphQL: .isDraft field
+    REST: .draft field
+
+  review_states: |
+    PENDING - Review not yet submitted
+    COMMENTED - Review with comments only
+    APPROVED - Review approved
+    CHANGES_REQUESTED - Changes requested
+    DISMISSED - Review was dismissed

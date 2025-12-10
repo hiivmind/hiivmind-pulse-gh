@@ -1,0 +1,424 @@
+# GitHub Issue Domain - GraphQL Query Templates
+# Part of hiivmind-pulse-gh domain segmentation architecture
+#
+# Usage:
+#   query=$(yq '.queries.issue_by_number.query' gh-issue-graphql-queries.yaml)
+#   gh api graphql -f query="$query" -f owner="owner" -f repo="repo" -F number=123
+
+queries:
+  #============================================================================
+  # ISSUE QUERIES
+  #============================================================================
+
+  issue_by_number:
+    description: "Get a specific issue by number"
+    parameters:
+      - name: "owner"
+        type: "String!"
+      - name: "repo"
+        type: "String!"
+      - name: "number"
+        type: "Int!"
+    query: |
+      query($owner: String!, $repo: String!, $number: Int!) {
+        repository(owner: $owner, name: $repo) {
+          issue(number: $number) {
+            id
+            number
+            title
+            body
+            state
+            stateReason
+            url
+            createdAt
+            updatedAt
+            closedAt
+            author {
+              login
+            }
+            assignees(first: 10) {
+              nodes {
+                login
+                id
+              }
+            }
+            labels(first: 20) {
+              nodes {
+                name
+                color
+                id
+              }
+            }
+            milestone {
+              number
+              title
+              id
+            }
+            comments(first: 1) {
+              totalCount
+            }
+            reactions(first: 1) {
+              totalCount
+            }
+          }
+        }
+      }
+
+  issue_id_only:
+    description: "Get just the issue node ID by number"
+    parameters:
+      - name: "owner"
+        type: "String!"
+      - name: "repo"
+        type: "String!"
+      - name: "number"
+        type: "Int!"
+    query: |
+      query($owner: String!, $repo: String!, $number: Int!) {
+        repository(owner: $owner, name: $repo) {
+          issue(number: $number) {
+            id
+          }
+        }
+      }
+
+  repository_issues:
+    description: "List issues in a repository"
+    parameters:
+      - name: "owner"
+        type: "String!"
+      - name: "repo"
+        type: "String!"
+      - name: "states"
+        type: "[IssueState!]"
+        default: "[OPEN]"
+      - name: "first"
+        type: "Int"
+        default: 50
+    query: |
+      query($owner: String!, $repo: String!, $states: [IssueState!] = [OPEN], $first: Int = 50) {
+        repository(owner: $owner, name: $repo) {
+          issues(first: $first, states: $states, orderBy: {field: UPDATED_AT, direction: DESC}) {
+            totalCount
+            nodes {
+              id
+              number
+              title
+              state
+              url
+              createdAt
+              updatedAt
+              closedAt
+              author {
+                login
+              }
+              assignees(first: 10) {
+                nodes {
+                  login
+                }
+              }
+              labels(first: 10) {
+                nodes {
+                  name
+                  color
+                }
+              }
+              milestone {
+                number
+                title
+              }
+            }
+          }
+        }
+      }
+
+  issue_with_comments:
+    description: "Get issue with its comments"
+    parameters:
+      - name: "owner"
+        type: "String!"
+      - name: "repo"
+        type: "String!"
+      - name: "number"
+        type: "Int!"
+      - name: "commentFirst"
+        type: "Int"
+        default: 20
+    query: |
+      query($owner: String!, $repo: String!, $number: Int!, $commentFirst: Int = 20) {
+        repository(owner: $owner, name: $repo) {
+          issue(number: $number) {
+            id
+            number
+            title
+            body
+            state
+            url
+            author {
+              login
+            }
+            comments(first: $commentFirst, orderBy: {field: UPDATED_AT, direction: DESC}) {
+              totalCount
+              nodes {
+                id
+                body
+                createdAt
+                updatedAt
+                author {
+                  login
+                }
+              }
+            }
+          }
+        }
+      }
+
+  issue_timeline:
+    description: "Get issue with timeline events"
+    parameters:
+      - name: "owner"
+        type: "String!"
+      - name: "repo"
+        type: "String!"
+      - name: "number"
+        type: "Int!"
+      - name: "first"
+        type: "Int"
+        default: 50
+    query: |
+      query($owner: String!, $repo: String!, $number: Int!, $first: Int = 50) {
+        repository(owner: $owner, name: $repo) {
+          issue(number: $number) {
+            id
+            number
+            title
+            state
+            timelineItems(first: $first) {
+              totalCount
+              nodes {
+                __typename
+                ... on IssueComment {
+                  body
+                  author { login }
+                  createdAt
+                }
+                ... on ClosedEvent {
+                  actor { login }
+                  createdAt
+                  stateReason
+                }
+                ... on ReopenedEvent {
+                  actor { login }
+                  createdAt
+                }
+                ... on LabeledEvent {
+                  label { name }
+                  actor { login }
+                  createdAt
+                }
+                ... on UnlabeledEvent {
+                  label { name }
+                  actor { login }
+                  createdAt
+                }
+                ... on AssignedEvent {
+                  assignee { ... on User { login } }
+                  actor { login }
+                  createdAt
+                }
+                ... on UnassignedEvent {
+                  assignee { ... on User { login } }
+                  actor { login }
+                  createdAt
+                }
+              }
+            }
+          }
+        }
+      }
+
+#==============================================================================
+# MUTATIONS
+#==============================================================================
+
+mutations:
+  set_issue_milestone:
+    description: "Set or clear milestone on an issue"
+    parameters:
+      - name: "issueId"
+        type: "ID!"
+        description: "Issue node ID"
+      - name: "milestoneId"
+        type: "ID"
+        description: "Milestone node ID (null to clear)"
+    query: |
+      mutation($issueId: ID!, $milestoneId: ID) {
+        updateIssue(input: {
+          id: $issueId
+          milestoneId: $milestoneId
+        }) {
+          issue {
+            id
+            number
+            title
+            milestone {
+              id
+              number
+              title
+            }
+          }
+        }
+      }
+
+  update_issue:
+    description: "Update issue with assignees"
+    parameters:
+      - name: "issueId"
+        type: "ID!"
+      - name: "assigneeIds"
+        type: "[ID!]"
+    query: |
+      mutation($issueId: ID!, $assigneeIds: [ID!]) {
+        updateIssue(input: {
+          id: $issueId
+          assigneeIds: $assigneeIds
+        }) {
+          issue {
+            id
+            number
+            title
+            assignees(first: 10) {
+              nodes {
+                login
+              }
+            }
+          }
+        }
+      }
+
+  close_issue:
+    description: "Close an issue"
+    parameters:
+      - name: "issueId"
+        type: "ID!"
+      - name: "stateReason"
+        type: "IssueClosedStateReason"
+        description: "COMPLETED, NOT_PLANNED, or DUPLICATE"
+    query: |
+      mutation($issueId: ID!, $stateReason: IssueClosedStateReason = COMPLETED) {
+        closeIssue(input: {
+          issueId: $issueId
+          stateReason: $stateReason
+        }) {
+          issue {
+            id
+            number
+            title
+            state
+            stateReason
+          }
+        }
+      }
+
+  reopen_issue:
+    description: "Reopen a closed issue"
+    parameters:
+      - name: "issueId"
+        type: "ID!"
+    query: |
+      mutation($issueId: ID!) {
+        reopenIssue(input: {
+          issueId: $issueId
+        }) {
+          issue {
+            id
+            number
+            title
+            state
+          }
+        }
+      }
+
+  add_labels_to_labelable:
+    description: "Add labels to an issue or PR"
+    parameters:
+      - name: "labelableId"
+        type: "ID!"
+        description: "Issue or PR node ID"
+      - name: "labelIds"
+        type: "[ID!]!"
+        description: "Array of label node IDs"
+    query: |
+      mutation($labelableId: ID!, $labelIds: [ID!]!) {
+        addLabelsToLabelable(input: {
+          labelableId: $labelableId
+          labelIds: $labelIds
+        }) {
+          labelable {
+            ... on Issue {
+              id
+              number
+              labels(first: 20) {
+                nodes {
+                  name
+                }
+              }
+            }
+          }
+        }
+      }
+
+  remove_labels_from_labelable:
+    description: "Remove labels from an issue or PR"
+    parameters:
+      - name: "labelableId"
+        type: "ID!"
+        description: "Issue or PR node ID"
+      - name: "labelIds"
+        type: "[ID!]!"
+        description: "Array of label node IDs"
+    query: |
+      mutation($labelableId: ID!, $labelIds: [ID!]!) {
+        removeLabelsFromLabelable(input: {
+          labelableId: $labelableId
+          labelIds: $labelIds
+        }) {
+          labelable {
+            ... on Issue {
+              id
+              number
+              labels(first: 20) {
+                nodes {
+                  name
+                }
+              }
+            }
+          }
+        }
+      }
+
+#==============================================================================
+# NOTES
+#==============================================================================
+
+notes:
+  issue_states: |
+    IssueState enum values:
+    - OPEN: Issue is open
+    - CLOSED: Issue is closed
+
+  issue_closed_state_reason: |
+    IssueClosedStateReason enum:
+    - COMPLETED: Issue was resolved
+    - NOT_PLANNED: Issue won't be worked on
+    - DUPLICATE: Issue is a duplicate
+
+  rest_vs_graphql: |
+    Use REST API for:
+    - Simple issue creation (fewer fields to specify)
+    - Listing with pagination
+
+    Use GraphQL for:
+    - Complex queries with specific field selection
+    - Mutations (close, reopen, update)
+    - Getting node IDs for mutations

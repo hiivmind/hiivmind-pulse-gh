@@ -1,0 +1,294 @@
+# GitHub Repository Domain - jq Filter Templates
+# Part of hiivmind-pulse-gh domain segmentation architecture
+#
+# Usage:
+#   fetch_repo "owner" "repo" | jq -f <(yq '.format_filters.format_repo.filter' gh-repo-jq-filters.yaml)
+#
+# All filters expect GraphQL response JSON as input and output structured JSON
+
+#==============================================================================
+# FORMAT FILTERS
+#==============================================================================
+# Transform GraphQL responses into clean, display-ready JSON
+
+format_filters:
+  format_repo:
+    description: "Format single repository for display"
+    input: "GraphQL response from queries.repository"
+    filter: |
+      .data.repository | {
+        id: .id,
+        name: .name,
+        fullName: .nameWithOwner,
+        description: (.description // ""),
+        url: .url,
+        homepage: (.homepageUrl // ""),
+        visibility: .visibility,
+        isPrivate: .isPrivate,
+        isFork: .isFork,
+        isArchived: .isArchived,
+        isTemplate: .isTemplate,
+        isEmpty: .isEmpty,
+        defaultBranch: (.defaultBranchRef.name // ""),
+        owner: .owner.login,
+        primaryLanguage: (.primaryLanguage.name // ""),
+        languages: [.languages.nodes[].name],
+        license: (.licenseInfo.spdxId // ""),
+        stars: .stargazerCount,
+        forks: .forkCount,
+        watchers: .watchers.totalCount,
+        openIssues: .issues.totalCount,
+        openPRs: .pullRequests.totalCount,
+        diskUsageKB: .diskUsage,
+        createdAt: .createdAt,
+        updatedAt: .updatedAt,
+        pushedAt: .pushedAt
+      }
+
+  format_repo_summary:
+    description: "Format minimal repository summary"
+    input: "GraphQL response from queries.repository"
+    filter: |
+      .data.repository | {
+        name: .name,
+        fullName: .nameWithOwner,
+        visibility: .visibility,
+        defaultBranch: (.defaultBranchRef.name // ""),
+        isArchived: .isArchived
+      }
+
+  format_repos_list:
+    description: "Format repository list for display"
+    input: "GraphQL response from queries.*_repositories"
+    filter: |
+      {
+        owner: (.data.user // .data.organization // .data.viewer).login,
+        totalCount: (.data.user // .data.organization // .data.viewer).repositories.totalCount,
+        repositories: [(.data.user // .data.organization // .data.viewer).repositories.nodes[] | {
+          id: .id,
+          name: .name,
+          fullName: .nameWithOwner,
+          description: (.description // ""),
+          visibility: .visibility,
+          isPrivate: .isPrivate,
+          isFork: .isFork,
+          isArchived: .isArchived,
+          isTemplate: .isTemplate,
+          defaultBranch: (.defaultBranchRef.name // ""),
+          primaryLanguage: (.primaryLanguage.name // ""),
+          stars: .stargazerCount,
+          forks: .forkCount,
+          updatedAt: .updatedAt,
+          pushedAt: .pushedAt
+        }],
+        hasNextPage: (.data.user // .data.organization // .data.viewer).repositories.pageInfo.hasNextPage
+      }
+
+  format_repos_compact:
+    description: "Format repository list in compact form"
+    input: "GraphQL response from queries.*_repositories"
+    filter: |
+      [(.data.user // .data.organization // .data.viewer).repositories.nodes[] | {
+        name: .name,
+        fullName: .nameWithOwner,
+        visibility: .visibility,
+        language: (.primaryLanguage.name // ""),
+        stars: .stargazerCount
+      }]
+
+  format_branches:
+    description: "Format branch list for display"
+    input: "GraphQL response from queries.repository_branches"
+    filter: |
+      (.data.repository.defaultBranchRef.name // "") as $default |
+      {
+        repository: .data.repository.name,
+        defaultBranch: $default,
+        totalCount: .data.repository.refs.totalCount,
+        branches: [.data.repository.refs.nodes[] | {
+          name: .name,
+          isDefault: (.name == $default),
+          sha: .target.oid,
+          lastCommitDate: .target.committedDate,
+          lastCommitMessage: (.target.message | split("\n")[0]),
+          author: .target.author.name
+        }],
+        hasNextPage: .data.repository.refs.pageInfo.hasNextPage
+      }
+
+  format_branches_compact:
+    description: "Format branch list in compact form"
+    input: "GraphQL response from queries.repository_branches"
+    filter: |
+      [.data.repository.refs.nodes[] | {
+        name: .name,
+        sha: (.target.oid // "")[0:7],
+        date: .target.committedDate
+      }]
+
+  format_collaborators:
+    description: "Format collaborator list"
+    input: "GraphQL response from queries.repository_collaborators"
+    filter: |
+      {
+        repository: .data.repository.name,
+        totalCount: .data.repository.collaborators.totalCount,
+        collaborators: [.data.repository.collaborators.edges[] | {
+          login: .node.login,
+          name: (.node.name // ""),
+          permission: .permission
+        }]
+      }
+
+#==============================================================================
+# EXTRACT FILTERS
+#==============================================================================
+# Pull out specific fields from responses
+
+extract_filters:
+  extract_repo_id:
+    description: "Extract repository node ID"
+    input: "GraphQL response from queries.repository"
+    filter: |
+      .data.repository.id
+
+  extract_repo_names:
+    description: "Extract repository names as array"
+    input: "GraphQL response from queries.*_repositories"
+    filter: |
+      [(.data.user // .data.organization // .data.viewer).repositories.nodes[].name]
+
+  extract_repo_full_names:
+    description: "Extract repository full names (owner/repo) as array"
+    input: "GraphQL response from queries.*_repositories"
+    filter: |
+      [(.data.user // .data.organization // .data.viewer).repositories.nodes[].nameWithOwner]
+
+  extract_branch_names:
+    description: "Extract branch names as array"
+    input: "GraphQL response from queries.repository_branches"
+    filter: |
+      [.data.repository.refs.nodes[].name]
+
+  extract_default_branch:
+    description: "Extract default branch name"
+    input: "GraphQL response from queries.repository or queries.repository_branches"
+    filter: |
+      (.data.repository.defaultBranchRef.name // "")
+
+  extract_primary_language:
+    description: "Extract primary language"
+    input: "GraphQL response from queries.repository"
+    filter: |
+      (.data.repository.primaryLanguage.name // "")
+
+  extract_collaborator_logins:
+    description: "Extract collaborator logins as array"
+    input: "GraphQL response from queries.repository_collaborators"
+    filter: |
+      [.data.repository.collaborators.edges[].node.login]
+
+#==============================================================================
+# FILTER FILTERS
+#==============================================================================
+# Filter repositories based on criteria
+
+filter_filters:
+  filter_public_repos:
+    description: "Filter to only public repositories"
+    input: "GraphQL response from queries.*_repositories"
+    filter: |
+      (.data.user // .data.organization // .data.viewer).repositories.nodes |
+      map(select(.visibility == "PUBLIC"))
+
+  filter_private_repos:
+    description: "Filter to only private repositories"
+    input: "GraphQL response from queries.*_repositories"
+    filter: |
+      (.data.user // .data.organization // .data.viewer).repositories.nodes |
+      map(select(.visibility == "PRIVATE"))
+
+  filter_non_archived:
+    description: "Filter out archived repositories"
+    input: "GraphQL response from queries.*_repositories"
+    filter: |
+      (.data.user // .data.organization // .data.viewer).repositories.nodes |
+      map(select(.isArchived == false))
+
+  filter_by_language:
+    description: "Filter repositories by primary language"
+    parameters:
+      - name: "lang"
+        description: "Language name to filter by"
+    filter: |
+      (.data.user // .data.organization // .data.viewer).repositories.nodes |
+      map(select(.primaryLanguage.name == $lang))
+
+  filter_forks:
+    description: "Filter to only forked repositories"
+    input: "GraphQL response from queries.*_repositories"
+    filter: |
+      (.data.user // .data.organization // .data.viewer).repositories.nodes |
+      map(select(.isFork == true))
+
+  filter_source_repos:
+    description: "Filter to only source (non-fork) repositories"
+    input: "GraphQL response from queries.*_repositories"
+    filter: |
+      (.data.user // .data.organization // .data.viewer).repositories.nodes |
+      map(select(.isFork == false))
+
+#==============================================================================
+# COMPACT/SHELL-SAFE VERSIONS
+#==============================================================================
+# Single-line versions for shell safety
+
+compact:
+  format_repo: '.data.repository | {id: .id, name: .name, fullName: .nameWithOwner, visibility: .visibility, defaultBranch: (.defaultBranchRef.name // ""), isArchived: .isArchived}'
+
+  format_repos_list: '{owner: (.data.user // .data.organization // .data.viewer).login, repositories: [(.data.user // .data.organization // .data.viewer).repositories.nodes[] | {name: .name, fullName: .nameWithOwner, visibility: .visibility}]}'
+
+  format_branches: '[.data.repository.refs.nodes[] | {name: .name, sha: (.target.oid // "")[0:7]}]'
+
+  extract_repo_names: '[(.data.user // .data.organization // .data.viewer).repositories.nodes[].name]'
+
+  extract_branch_names: '[.data.repository.refs.nodes[].name]'
+
+#==============================================================================
+# USAGE EXAMPLES
+#==============================================================================
+
+examples:
+  format_repo:
+    description: "Format repository info"
+    command: |
+      fetch_repo "owner" "repo" | jq -f <(yq '.format_filters.format_repo.filter' gh-repo-jq-filters.yaml)
+
+  list_repo_names:
+    description: "Get list of repository names"
+    command: |
+      discover_org_repos "github" | jq -f <(yq '.extract_filters.extract_repo_names.filter' gh-repo-jq-filters.yaml)
+
+  filter_by_language:
+    description: "Filter repos by language"
+    command: |
+      discover_org_repos "github" | jq --arg lang "Python" -f <(yq '.filter_filters.filter_by_language.filter' gh-repo-jq-filters.yaml)
+
+#==============================================================================
+# NOTES
+#==============================================================================
+
+notes:
+  visibility_values: |
+    Repository visibility in GraphQL responses:
+    - "PUBLIC" (uppercase)
+    - "PRIVATE" (uppercase)
+    - "INTERNAL" (uppercase, Enterprise only)
+
+  null_handling: |
+    All filters use // "" or // null to handle missing fields gracefully.
+    Optional fields like description, homepage, primaryLanguage may be null.
+
+  pagination: |
+    List results include hasNextPage for pagination support.
+    Use with endCursor to fetch additional pages.
