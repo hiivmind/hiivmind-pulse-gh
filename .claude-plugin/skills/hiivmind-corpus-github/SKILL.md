@@ -32,21 +32,27 @@ Examples:
 
 Look up the source in `data/config.yaml` to get `repo_owner`, `repo_name`, `branch`, and `docs_root`.
 
-**If `.source/{source_id}/` exists (local clone):**
-Read directly from `.source/{source_id}/{docs_root}/{path}`
+**IMPORTANT: Always check for local clone first!**
 
-**If no local clone:**
+**Step 1 - Check for local clone:**
+Use Glob or Bash to check if `.source/{source_id}/` exists.
 
-Option A - Fetch on demand:
+**Step 2a - If local clone exists (PREFERRED):**
+Read directly from `.source/{source_id}/{docs_root}/{path}` using the Read tool.
+This is faster and works offline.
+
+**Step 2b - If NO local clone exists (fallback only):**
+Fetch from GitHub:
 ```
 https://raw.githubusercontent.com/{repo_owner}/{repo_name}/{branch}/{docs_root}/{path}
 ```
-Use WebFetch to retrieve content. No clone needed.
+Use WebFetch to retrieve content.
 
-Option B - Clone locally:
+**Tip:** If web fetching is slow or unreliable, suggest cloning locally:
 ```bash
-git clone --depth 1 {repo_url} .source/{source_id}
+git clone --depth 1 https://github.com/github/docs.git .source/github-docs
 ```
+This improves performance and enables offline access.
 
 **Staleness check for git sources:**
 After reading, compare the source's `last_commit_sha` in config to the local clone:
