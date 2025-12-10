@@ -543,70 +543,8 @@ status_update_filters:
       }
 
 # =============================================================================
-# MILESTONE FILTERS
+# NOTE: Milestone filters moved to gh-milestone-jq-filters.yaml
 # =============================================================================
-# Filters for milestone data from both GraphQL and REST API responses
-
-milestone_filters:
-  # For GraphQL response from repository_milestones query
-  list_milestones_graphql:
-    description: "Format milestone list from GraphQL response"
-    filter: |
-      {
-        repository: {
-          owner: .data.repository.owner.login,
-          name: .data.repository.name
-        },
-        milestones: [
-          .data.repository.milestones.nodes[] | {
-            id: .id,
-            number: .number,
-            title: .title,
-            description: (.description // ""),
-            state: .state,
-            dueOn: (.dueOn // "No due date"),
-            progress: .progressPercentage,
-            issueCount: .issues.totalCount,
-            prCount: .pullRequests.totalCount,
-            url: .url
-          }
-        ],
-        count: (.data.repository.milestones.nodes | length)
-      }
-
-  # For REST API response from list_milestones
-  list_milestones_rest:
-    description: "Format milestone list from REST API response"
-    filter: |
-      [.[] | {
-        number: .number,
-        title: .title,
-        description: (.description // ""),
-        state: .state,
-        dueOn: (.due_on // "No due date"),
-        openIssues: .open_issues,
-        closedIssues: .closed_issues,
-        progress: (if (.open_issues + .closed_issues) > 0
-                   then ((.closed_issues / (.open_issues + .closed_issues)) * 100 | floor)
-                   else 0 end),
-        url: .html_url
-      }]
-
-  milestone_progress:
-    description: "Show milestone completion statistics"
-    filter: |
-      {
-        title: .title,
-        state: .state,
-        openIssues: .open_issues,
-        closedIssues: .closed_issues,
-        total: (.open_issues + .closed_issues),
-        progressPercent: (if (.open_issues + .closed_issues) > 0
-                         then ((.closed_issues / (.open_issues + .closed_issues)) * 100 | floor)
-                         else 0 end),
-        dueOn: (.due_on // "No due date"),
-        isOverdue: (if .due_on then (.due_on | fromdateiso8601) < now else false end)
-      }
 
 # =============================================================================
 # WORKSPACE INITIALIZATION FILTERS
@@ -662,18 +600,7 @@ workspace_filters:
         status: (if .closed then "closed" else "open" end)
       })
 
-  # Extract repository info for config
-  format_repository_for_config:
-    description: "Format repository info for config.yaml"
-    input: "Repository object from REST API"
-    filter: |
-      {
-        name: .name,
-        id: .node_id,
-        full_name: .full_name,
-        default_branch: .default_branch,
-        visibility: .visibility
-      }
+  # NOTE: format_repository_for_config moved to gh-repo-jq-filters.yaml
 
   # Count fields by type for summary
   count_fields_by_type:
@@ -690,6 +617,6 @@ workspace_filters:
 # - All filters return JSON data for LLM interpretation
 # - Use empty strings ("") to skip optional parameters in universal filter
 # - Discovery filters help identify available filter values
-# - Milestone filters work with both GraphQL and REST API responses
 # - Workspace filters help with config.yaml generation
 # - Filters are designed to work with both user and organization project data
+# - Milestone filters moved to gh-milestone-jq-filters.yaml

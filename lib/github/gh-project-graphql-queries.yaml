@@ -3,18 +3,8 @@
 # Use with: gh api graphql -H X-Github-Next-Global-ID:1 -f query='<QUERY>'
 
 discovery:
-  current_user_info:
-    description: "Get current user ID and login for GraphQL queries"
-    query: |
-      query {
-        viewer {
-          id
-          login
-          name
-          email
-        }
-      }
-    
+  # NOTE: current_user_info moved to gh-identity-graphql-queries.yaml (viewer query)
+
   user_projects:
     description: "List all projects for the current user"
     query: |
@@ -980,79 +970,8 @@ utilities:
       }
 
 # =============================================================================
-# MILESTONES - Repository-level milestone queries
+# NOTE: Milestone queries moved to gh-milestone-graphql-queries.yaml
 # =============================================================================
-# Note: Milestones are Issue/PR properties, NOT ProjectV2 fields.
-# ProjectV2ItemFieldMilestoneValue is read-only - reflects the issue's milestone.
-# To set milestones, use updateIssue or updatePullRequest mutations.
-
-milestones:
-  repository_milestones:
-    description: "List all milestones in a repository"
-    parameters:
-      - name: "owner"
-        type: "String!"
-        description: "Repository owner"
-      - name: "repo"
-        type: "String!"
-        description: "Repository name"
-      - name: "states"
-        type: "[MilestoneState!]"
-        description: "OPEN, CLOSED, or both"
-    query: |
-      query($owner: String!, $repo: String!, $states: [MilestoneState!] = [OPEN]) {
-        repository(owner: $owner, name: $repo) {
-          milestones(first: 100, states: $states) {
-            nodes {
-              id
-              number
-              title
-              description
-              dueOn
-              state
-              closed
-              closedAt
-              createdAt
-              updatedAt
-              url
-              progressPercentage
-              issues(first: 1) { totalCount }
-              pullRequests(first: 1) { totalCount }
-            }
-          }
-        }
-      }
-
-  milestone_by_number:
-    description: "Get specific milestone by number"
-    parameters:
-      - name: "owner"
-        type: "String!"
-      - name: "repo"
-        type: "String!"
-      - name: "number"
-        type: "Int!"
-    query: |
-      query($owner: String!, $repo: String!, $number: Int!) {
-        repository(owner: $owner, name: $repo) {
-          milestone(number: $number) {
-            id
-            number
-            title
-            description
-            dueOn
-            state
-            closed
-            closedAt
-            createdAt
-            updatedAt
-            url
-            progressPercentage
-            issues(first: 1) { totalCount }
-            pullRequests(first: 1) { totalCount }
-          }
-        }
-      }
 
 # =============================================================================
 # STATUS UPDATES - Project health tracking (added June 2024)
@@ -2387,69 +2306,18 @@ mutations:
         }
       }
 
-  create_single_select_option:
-    description: "Add a new option to a single-select field"
-    parameters:
-      - name: "fieldId"
-        type: "ID!"
-        description: "Single-select field node ID"
-      - name: "name"
-        type: "String!"
-        description: "Option name"
-      - name: "color"
-        type: "ProjectV2SingleSelectFieldOptionColor!"
-        description: "Option color (GRAY, BLUE, GREEN, YELLOW, ORANGE, RED, PINK, PURPLE)"
-      - name: "description"
-        type: "String"
-        description: "Option description"
-    query: |
-      mutation($fieldId: ID!, $name: String!, $color: ProjectV2SingleSelectFieldOptionColor!, $description: String) {
-        createProjectV2FieldOption(input: {
-          fieldId: $fieldId
-          name: $name
-          color: $color
-          description: $description
-        }) {
-          projectV2FieldOption {
-            id
-            name
-            color
-            description
-          }
-        }
-      }
-
-  update_single_select_option:
-    description: "Update a single-select option (name, color, description)"
-    parameters:
-      - name: "optionId"
-        type: "ID!"
-        description: "Option node ID"
-      - name: "name"
-        type: "String"
-        description: "New option name"
-      - name: "color"
-        type: "ProjectV2SingleSelectFieldOptionColor"
-        description: "New color (GRAY, BLUE, GREEN, YELLOW, ORANGE, RED, PINK, PURPLE)"
-      - name: "description"
-        type: "String"
-        description: "New description"
-    query: |
-      mutation($optionId: ID!, $name: String, $color: ProjectV2SingleSelectFieldOptionColor, $description: String) {
-        updateProjectV2FieldOption(input: {
-          optionId: $optionId
-          name: $name
-          color: $color
-          description: $description
-        }) {
-          projectV2FieldOption {
-            id
-            name
-            color
-            description
-          }
-        }
-      }
+  # =============================================================================
+  # NOTE: Single-select option management
+  # =============================================================================
+  # There is NO createProjectV2FieldOption or updateProjectV2FieldOption mutation.
+  # To add/update options, use updateProjectV2Field with singleSelectOptions parameter.
+  # The singleSelectOptions array OVERWRITES existing options - fetch first for partial updates.
+  #
+  # Example workflow to add an option:
+  # 1. Fetch current field: get field with options via project_fields query
+  # 2. Build new options array: existing options + new option
+  # 3. Call update_field with singleSelectOptions containing ALL options
+  # =============================================================================
 
   update_project_readme:
     description: "Update project README content"
@@ -2475,63 +2343,7 @@ mutations:
         }
       }
 
-  # Issue/PR Milestone Mutations
-  # Note: Milestones are set on issues/PRs, NOT on ProjectV2 items
-  set_issue_milestone:
-    description: "Set or clear milestone on an issue"
-    parameters:
-      - name: "issueId"
-        type: "ID!"
-        description: "Issue node ID (from project item content)"
-      - name: "milestoneId"
-        type: "ID"
-        description: "Milestone node ID (null to clear)"
-    query: |
-      mutation($issueId: ID!, $milestoneId: ID) {
-        updateIssue(input: {
-          id: $issueId
-          milestoneId: $milestoneId
-        }) {
-          issue {
-            id
-            number
-            title
-            milestone {
-              id
-              number
-              title
-            }
-          }
-        }
-      }
-
-  set_pr_milestone:
-    description: "Set or clear milestone on a pull request"
-    parameters:
-      - name: "prId"
-        type: "ID!"
-        description: "Pull request node ID"
-      - name: "milestoneId"
-        type: "ID"
-        description: "Milestone node ID (null to clear)"
-    query: |
-      mutation($prId: ID!, $milestoneId: ID) {
-        updatePullRequest(input: {
-          pullRequestId: $prId
-          milestoneId: $milestoneId
-        }) {
-          pullRequest {
-            id
-            number
-            title
-            milestone {
-              id
-              number
-              title
-            }
-          }
-        }
-      }
+  # NOTE: Issue/PR milestone mutations moved to gh-issue-graphql-queries.yaml and gh-pr-graphql-queries.yaml
 
   # Status Update Mutations
   # Status values: ON_TRACK, AT_RISK, OFF_TRACK, COMPLETE, INACTIVE
@@ -2662,63 +2474,13 @@ mutations:
         }
       }
 
-  # View Mutations
-  # Layout types: TABLE, BOARD, ROADMAP
-  create_view:
-    description: "Create a new project view"
-    parameters:
-      - name: "projectId"
-        type: "ID!"
-        description: "Project node ID"
-      - name: "name"
-        type: "String!"
-        description: "View name"
-      - name: "layout"
-        type: "ProjectV2ViewLayout"
-        description: "TABLE, BOARD, or ROADMAP (default: TABLE)"
-    query: |
-      mutation($projectId: ID!, $name: String!, $layout: ProjectV2ViewLayout = TABLE) {
-        createProjectV2View(input: {
-          projectId: $projectId
-          name: $name
-          layout: $layout
-        }) {
-          projectV2View {
-            id
-            number
-            name
-            layout
-          }
-        }
-      }
-
-  update_view:
-    description: "Update view settings (name, layout)"
-    parameters:
-      - name: "viewId"
-        type: "ID!"
-        description: "View node ID"
-      - name: "name"
-        type: "String"
-        description: "New view name"
-      - name: "layout"
-        type: "ProjectV2ViewLayout"
-        description: "New layout: TABLE, BOARD, or ROADMAP"
-    query: |
-      mutation($viewId: ID!, $name: String, $layout: ProjectV2ViewLayout) {
-        updateProjectV2View(input: {
-          viewId: $viewId
-          name: $name
-          layout: $layout
-        }) {
-          projectV2View {
-            id
-            number
-            name
-            layout
-          }
-        }
-      }
+  # =============================================================================
+  # NOTE: View management
+  # =============================================================================
+  # There are NO createProjectV2View or updateProjectV2View mutations in the GraphQL API.
+  # Project views can ONLY be managed through the GitHub web UI.
+  # The API only supports READING view data via the views connection on ProjectV2.
+  # =============================================================================
 
 # Field Types Reference:
 field_types:

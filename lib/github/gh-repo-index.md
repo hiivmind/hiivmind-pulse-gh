@@ -118,6 +118,7 @@ discover_org_repos "hiivmind" | format_repos_list
 | `format_repos_compact` | repos list query | Compact list |
 | `format_branches` | branches query | Branch list |
 | `format_collaborators` | collaborators query | Collaborator list |
+| `format_repository_for_config` | REST API repo | Config-ready JSON (name, id, full_name, default_branch, visibility) |
 
 ### Extract Filters
 

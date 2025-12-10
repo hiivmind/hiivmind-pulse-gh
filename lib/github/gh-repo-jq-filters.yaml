@@ -140,6 +140,18 @@ format_filters:
         }]
       }
 
+  format_repository_for_config:
+    description: "Format repository info for config.yaml generation"
+    input: "Repository object from REST API (gh api repos/{owner}/{repo})"
+    filter: |
+      {
+        name: .name,
+        id: .node_id,
+        full_name: .full_name,
+        default_branch: .default_branch,
+        visibility: .visibility
+      }
+
 #==============================================================================
 # EXTRACT FILTERS
 #==============================================================================
