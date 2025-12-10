@@ -20,3 +20,7 @@ node_modules/.bin/yq
 
 # User-specific config (contains personal GitHub identity)
 .hiivmind/github/user.yaml
+
+# Corpus skills - cloned sources and caches
+.claude-plugin/skills/*/.source/
+.claude-plugin/skills/*/.cache/

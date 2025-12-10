@@ -1,0 +1,37 @@
+# GitHub Documentation Corpus Configuration
+schema_version: 2
+
+corpus:
+  name: "github"
+  display_name: "GitHub"
+  created_at: "2024-12-10T16:37:00Z"
+  focus_areas:
+    - graphql
+    - rest
+    - github-cli
+
+# Multiple sources - each with its own type and tracking
+sources:
+  - id: "github-docs"
+    type: "git"
+    repo_url: "https://github.com/github/docs"
+    repo_owner: "github"
+    repo_name: "docs"
+    branch: "main"
+    docs_root: "content"
+    last_commit_sha: "615f92e99b53b59b71fd973c649f1405b5072f91"
+    last_indexed_at: "2024-12-10T16:45:00Z"
+
+index:
+  format: "markdown"
+  last_updated_at: "2024-12-10T16:45:00Z"
+
+settings:
+  # Focus on GraphQL, REST API, and gh CLI documentation
+  include_patterns:
+    - "graphql/**/*.md"
+    - "rest/**/*.md"
+    - "github-cli/**/*.md"
+  exclude_patterns:
+    - "**/_*.md"
+    - "**/_snippets/**"
