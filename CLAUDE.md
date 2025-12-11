@@ -8,7 +8,7 @@ This is **hiivmind-pulse-gh** - a Claude Code plugin providing comprehensive Git
 
 - **GitHub Projects v2** - Full project management, status updates, views, fields
 - **Milestones** - Repository-level milestone management
-- **Branch Protection** - Per-branch rules and repository rulesets
+- **Protection** - Branch protection rules and repository rulesets (unified domain)
 - **REST API** - Operations not available via GraphQL
 
 ## Skills
@@ -136,18 +136,20 @@ fetch_org_project "$DEFAULT_PROJECT" "$OWNER" | apply_status_filter "In Progress
 
 ```bash
 # Source domain-specific functions (Architecture v2)
-source lib/github/gh-identity-functions.sh  # Identity operations
-source lib/github/gh-repo-functions.sh      # Repository operations
-source lib/github/gh-milestone-functions.sh # Milestone operations
-source lib/github/gh-issue-functions.sh     # Issue operations
-source lib/github/gh-pr-functions.sh        # Pull request operations
-source lib/github/gh-project-functions.sh   # Project v2 operations
+source lib/github/gh-identity-functions.sh   # Identity operations
+source lib/github/gh-repo-functions.sh       # Repository operations
+source lib/github/gh-milestone-functions.sh  # Milestone operations
+source lib/github/gh-issue-functions.sh      # Issue operations
+source lib/github/gh-pr-functions.sh         # Pull request operations
+source lib/github/gh-project-functions.sh    # Project v2 operations
+source lib/github/gh-protection-functions.sh # Protection (branch + rulesets)
 
 # Examples
 get_viewer_id                                           # Get current user ID
 fetch_repo "hiivmind" "hiivmind-pulse-gh" | format_repo # Get repo info
 discover_repo_issues "owner" "repo" | format_issues_list # List issues
 fetch_org_project 2 "org-name" | apply_status_filter "In Progress"
+get_protection_summary "owner" "repo"                   # Summary of all protections
 ```
 
 ## File Structure
@@ -193,8 +195,13 @@ hiivmind-pulse-gh/
 │   ├── gh-project-functions.sh      # Projects v2 only
 │   ├── gh-project-graphql-queries.yaml
 │   ├── gh-project-jq-filters.yaml
+│   ├── # Protection Domain
+│   ├── gh-protection-functions.sh   # Branch protection + rulesets
+│   ├── gh-protection-graphql-queries.yaml
+│   ├── gh-protection-jq-filters.yaml
+│   ├── gh-protection-index.md
 │   ├── # Legacy/Supporting
-│   ├── gh-rest-functions.sh         # REST shell functions
+│   ├── gh-rest-functions.sh         # REST shell functions (DEPRECATED)
 │   ├── gh-rest-endpoints.yaml       # REST endpoint templates
 │   └── gh-branch-protection-templates.yaml
 └── docs/
@@ -243,10 +250,13 @@ hiivmind-pulse-gh/
 - `fetch_project_views`, `create_project_view` - View management
 - `fetch_linked_repositories`, `link_repo_to_project` - Repository linking
 
-### Branch Protection (REST)
-- `get_branch_protection`, `set_branch_protection` - Per-branch rules
-- `list_rulesets`, `create_ruleset`, `update_ruleset` - Repository rulesets
-- `apply_main_branch_protection`, `apply_develop_branch_protection` - Smart templates
+### Protection Domain (`gh-protection-functions.sh`)
+- `fetch_branch_protection`, `fetch_repo_rulesets`, `fetch_ruleset_by_name` - Fetch data
+- `discover_repo_branch_protections`, `discover_rules_for_branch` - Discovery
+- `detect_branch_protection_exists`, `detect_ruleset_exists`, `detect_protection_source` - Detection
+- `set_branch_protection_rest`, `create_repo_ruleset`, `upsert_repo_ruleset` - Mutations
+- `apply_main_branch_protection`, `apply_branch_naming_ruleset`, `get_protection_summary` - Smart templates
+- `format_branch_protection`, `format_rulesets` - Formatting
 
 ## Pipeline Pattern
 

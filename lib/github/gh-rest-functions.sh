@@ -2,9 +2,22 @@
 # GitHub REST API Functions
 # Shell functions for REST API operations not available via GraphQL
 # Source this file to use: source gh-rest-functions.sh
+#
+# =============================================================================
+# DEPRECATION NOTICE
+# =============================================================================
+# This file is DEPRECATED. Functions have been moved to domain-specific files:
+#
+# - Milestone functions → gh-milestone-functions.sh
+# - Branch protection functions → gh-protection-functions.sh
+# - Repository/branch functions → gh-repo-functions.sh
+#
+# These functions remain for backward compatibility but will be removed in a
+# future version. Please update your code to use the domain-specific libraries.
+# =============================================================================
 
 # =============================================================================
-# MILESTONE FUNCTIONS
+# MILESTONE FUNCTIONS (DEPRECATED - use gh-milestone-functions.sh)
 # =============================================================================
 # Note: Creating/updating/closing milestones requires REST API.
 # For reading milestones and setting them on issues/PRs, use GraphQL functions
@@ -140,10 +153,11 @@ get_milestone_progress() {
 }
 
 # =============================================================================
-# BRANCH PROTECTION FUNCTIONS
+# BRANCH PROTECTION FUNCTIONS (DEPRECATED - use gh-protection-functions.sh)
 # =============================================================================
 # Note: Branch protection applies to specific branches (main, develop, etc.)
 # For pattern-based protection (feature/*, release/*), use Rulesets below.
+# DEPRECATED: Use gh-protection-functions.sh for all protection operations.
 
 # Get branch protection rules for a specific branch
 get_branch_protection() {
@@ -212,10 +226,11 @@ format_branch_protection() {
 }
 
 # =============================================================================
-# RULESET FUNCTIONS
+# RULESET FUNCTIONS (DEPRECATED - use gh-protection-functions.sh)
 # =============================================================================
 # Note: Rulesets are the modern replacement for branch protection rules.
 # They support pattern matching (feature/*, release/*) and more rule types.
+# DEPRECATED: Use gh-protection-functions.sh for all ruleset operations.
 
 # List all rulesets for a repository
 list_rulesets() {
@@ -319,7 +334,7 @@ format_rulesets() {
 }
 
 # =============================================================================
-# HELPER FUNCTIONS - Repository Info
+# HELPER FUNCTIONS - Repository Info (DEPRECATED - use gh-repo-functions.sh)
 # =============================================================================
 
 # Detect if repository is personal or organizational
@@ -346,7 +361,7 @@ get_repository() {
 }
 
 # =============================================================================
-# HELPER FUNCTIONS - Branches
+# HELPER FUNCTIONS - Branches (DEPRECATED - use gh-repo-functions.sh)
 # =============================================================================
 
 # List branches for a repository
@@ -394,9 +409,10 @@ format_branches() {
 }
 
 # =============================================================================
-# TEMPLATE FUNCTIONS - Branch Protection
+# TEMPLATE FUNCTIONS - Branch Protection (DEPRECATED - use gh-protection-functions.sh)
 # =============================================================================
 # Get protection templates from gh-branch-protection-templates.yaml
+# DEPRECATED: Use gh-protection-functions.sh for template functions.
 
 # Get the directory where this script is located
 _get_script_dir() {
@@ -444,9 +460,10 @@ list_ruleset_templates() {
 }
 
 # =============================================================================
-# SMART APPLICATION FUNCTIONS
+# SMART APPLICATION FUNCTIONS (DEPRECATED - use gh-protection-functions.sh)
 # =============================================================================
 # Convenience functions that auto-detect repo type and apply appropriate templates
+# DEPRECATED: Use gh-protection-functions.sh for apply_* functions.
 
 # Apply main branch protection (auto-detects org vs personal)
 apply_main_branch_protection() {

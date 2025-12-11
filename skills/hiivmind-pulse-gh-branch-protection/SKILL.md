@@ -5,7 +5,10 @@ description: Manage GitHub branch protection rules and repository rulesets using
 
 # GitHub Branch Protection Skill
 
-You are an expert at using hiivmind-pulse-gh's Branch Protection module - for managing branch protection rules and repository rulesets via the REST API.
+You are an expert at using hiivmind-pulse-gh's Protection domain - for managing branch protection rules and repository rulesets.
+
+> **Note:** This skill uses `gh-protection-functions.sh` which provides a unified interface for both
+> Legacy Branch Protection Rules (REST-primary) and Modern Repository Rulesets (GraphQL-primary).
 
 ## Important Concepts
 
@@ -39,24 +42,30 @@ You are an expert at using hiivmind-pulse-gh's Branch Protection module - for ma
 
 **Runtime requirements:**
 ```bash
-# Source the REST functions
-source lib/github/gh-rest-functions.sh
+# Source the Protection domain functions (preferred)
+source lib/github/gh-protection-functions.sh
+
+# Or for backward compatibility (deprecated):
+# source lib/github/gh-rest-functions.sh
 ```
 
 ## Quick Start
 
 ```bash
 # Source functions (once per session)
-source lib/github/gh-rest-functions.sh
+source lib/github/gh-protection-functions.sh
 
 # Check current protection on main branch
-get_branch_protection "owner" "repo" "main" | format_branch_protection
+fetch_branch_protection "owner" "repo" "main" | format_branch_protection
 
 # Apply standard main branch protection (auto-detects org vs personal)
 apply_main_branch_protection "owner" "repo"
 
 # Set up branch naming convention (org repos only)
 apply_branch_naming_ruleset "owner" "repo"
+
+# Get summary of all protections
+get_protection_summary "owner" "repo"
 ```
 
 ## Workspace Configuration
@@ -108,27 +117,30 @@ To create a workspace configuration:
 
 ## Function Reference
 
-### Branch Protection (Legacy API)
+### Branch Protection Functions
 
 | Function | Purpose | Example |
 |----------|---------|---------|
-| `get_branch_protection "OWNER" "REPO" "BRANCH"` | Get protection rules | `get_branch_protection "acme" "api" "main"` |
-| `check_branch_protection_exists "OWNER" "REPO" "BRANCH"` | Check if protected | `check_branch_protection_exists "acme" "api" "main"` |
-| `set_branch_protection "OWNER" "REPO" "BRANCH"` | Set protection (stdin) | `echo '{}' \| set_branch_protection "acme" "api" "main"` |
-| `format_branch_protection` | Format for display | `get_branch_protection "acme" "api" "main" \| format_branch_protection` |
+| `fetch_branch_protection "OWNER" "REPO" "BRANCH"` | Get protection rules (REST) | `fetch_branch_protection "acme" "api" "main"` |
+| `detect_branch_protection_exists "OWNER" "REPO" "BRANCH"` | Check if protected | `detect_branch_protection_exists "acme" "api" "main"` |
+| `set_branch_protection_rest "OWNER" "REPO" "BRANCH"` | Set protection (stdin) | `echo '{}' \| set_branch_protection_rest "acme" "api" "main"` |
+| `format_branch_protection` | Format for display | `fetch_branch_protection "acme" "api" "main" \| format_branch_protection` |
+| `discover_repo_branch_protections "OWNER" "REPO"` | List all protections | `discover_repo_branch_protections "acme" "api"` |
+| `detect_protection_source "OWNER" "REPO" "BRANCH"` | Find protection source | `detect_protection_source "acme" "api" "main"` |
 
-### Repository Rulesets (Modern API)
+### Repository Rulesets Functions
 
 | Function | Purpose | Example |
 |----------|---------|---------|
-| `list_rulesets "OWNER" "REPO"` | List all rulesets | `list_rulesets "acme" "api"` |
-| `get_ruleset "OWNER" "REPO" ID` | Get specific ruleset | `get_ruleset "acme" "api" 123` |
-| `get_ruleset_by_name "OWNER" "REPO" "NAME"` | Get by name | `get_ruleset_by_name "acme" "api" "Branch Naming"` |
-| `check_ruleset_exists "OWNER" "REPO" "NAME"` | Check if exists | `check_ruleset_exists "acme" "api" "Branch Naming"` |
-| `create_ruleset "OWNER" "REPO"` | Create (stdin) | `echo '{}' \| create_ruleset "acme" "api"` |
-| `update_ruleset "OWNER" "REPO" ID` | Update (stdin) | `echo '{}' \| update_ruleset "acme" "api" 123` |
-| `create_or_update_ruleset "OWNER" "REPO" "NAME"` | Upsert (stdin) | `echo '{}' \| create_or_update_ruleset "acme" "api" "My Rule"` |
-| `format_rulesets` | Format for display | `list_rulesets "acme" "api" \| format_rulesets` |
+| `fetch_repo_rulesets "OWNER" "REPO"` | List all rulesets | `fetch_repo_rulesets "acme" "api"` |
+| `fetch_ruleset "OWNER" "REPO" ID` | Get specific ruleset | `fetch_ruleset "acme" "api" 123` |
+| `fetch_ruleset_by_name "OWNER" "REPO" "NAME"` | Get by name | `fetch_ruleset_by_name "acme" "api" "Branch Naming"` |
+| `detect_ruleset_exists "OWNER" "REPO" "NAME"` | Check if exists | `detect_ruleset_exists "acme" "api" "Branch Naming"` |
+| `create_repo_ruleset "OWNER" "REPO"` | Create (stdin) | `echo '{}' \| create_repo_ruleset "acme" "api"` |
+| `update_repo_ruleset "OWNER" "REPO" ID` | Update (stdin) | `echo '{}' \| update_repo_ruleset "acme" "api" 123` |
+| `upsert_repo_ruleset "OWNER" "REPO" "NAME"` | Upsert (stdin) | `echo '{}' \| upsert_repo_ruleset "acme" "api" "My Rule"` |
+| `format_rulesets` | Format for display | `fetch_repo_rulesets "acme" "api" \| format_rulesets` |
+| `discover_rules_for_branch "OWNER" "REPO" "BRANCH"` | Rules for branch | `discover_rules_for_branch "acme" "api" "main"` |
 
 ### Template Functions
 
@@ -147,15 +159,8 @@ To create a workspace configuration:
 | `apply_develop_branch_protection "OWNER" "REPO"` | Auto-detect and apply | `apply_develop_branch_protection "acme" "api"` |
 | `apply_branch_naming_ruleset "OWNER" "REPO"` | Apply naming rules | `apply_branch_naming_ruleset "acme" "api"` |
 | `apply_release_branch_ruleset "OWNER" "REPO"` | Apply release rules | `apply_release_branch_ruleset "acme" "api"` |
-
-### Helper Functions
-
-| Function | Purpose | Example |
-|----------|---------|---------|
-| `detect_repo_type "OWNER" "REPO"` | Get repo type | `detect_repo_type "acme" "api"` → "organization" |
-| `list_branches "OWNER" "REPO"` | List branches | `list_branches "acme" "api"` |
-| `check_branch_exists "OWNER" "REPO" "BRANCH"` | Check if exists | `check_branch_exists "acme" "api" "main"` |
-| `format_branches` | Format for display | `list_branches "acme" "api" \| format_branches` |
+| `apply_tag_protection_ruleset "OWNER" "REPO"` | Apply tag rules | `apply_tag_protection_ruleset "acme" "api"` |
+| `get_protection_summary "OWNER" "REPO"` | Summary of all protections | `get_protection_summary "acme" "api"` |
 
 ## Available Templates
 
@@ -184,7 +189,7 @@ To create a workspace configuration:
 ### Protect Main Branch (Auto-detect)
 
 ```bash
-source lib/github/gh-rest-functions.sh
+source lib/github/gh-protection-functions.sh
 
 # Automatically applies org or personal template
 apply_main_branch_protection "acme" "api"
@@ -193,19 +198,16 @@ apply_main_branch_protection "acme" "api"
 ### Protect Main Branch (Manual)
 
 ```bash
-source lib/github/gh-rest-functions.sh
-
-# Check repo type
-detect_repo_type "acme" "api"  # → "organization"
+source lib/github/gh-protection-functions.sh
 
 # Get and apply template
-get_protection_template "main_org" | set_branch_protection "acme" "api" "main"
+get_protection_template "main_org" | set_branch_protection_rest "acme" "api" "main"
 ```
 
 ### Set Up Branch Naming Convention
 
 ```bash
-source lib/github/gh-rest-functions.sh
+source lib/github/gh-protection-functions.sh
 
 # Apply the branch naming ruleset
 apply_branch_naming_ruleset "acme" "api"
@@ -213,28 +215,34 @@ apply_branch_naming_ruleset "acme" "api"
 # Or manually with custom pattern
 get_ruleset_template "branch_naming" | \
     jq '.rules[0].parameters.pattern = "^(main|dev)|((feat|fix)/.+)$"' | \
-    create_or_update_ruleset "acme" "api" "Branch Naming Convention"
+    upsert_repo_ruleset "acme" "api" "Branch Naming Convention"
 ```
 
 ### Check Current Protection
 
 ```bash
-source lib/github/gh-rest-functions.sh
+source lib/github/gh-protection-functions.sh
+
+# Get summary of all protections
+get_protection_summary "acme" "api"
 
 # Get formatted protection info
-get_branch_protection "acme" "api" "main" | format_branch_protection
+fetch_branch_protection "acme" "api" "main" | format_branch_protection
 
 # List all rulesets
-list_rulesets "acme" "api" | format_rulesets
+fetch_repo_rulesets "acme" "api" | format_rulesets
+
+# Find what protects a specific branch
+detect_protection_source "acme" "api" "main"
 ```
 
 ### Custom Protection Configuration
 
 ```bash
-source lib/github/gh-rest-functions.sh
+source lib/github/gh-protection-functions.sh
 
 # Create custom config and apply
-cat << 'EOF' | set_branch_protection "acme" "api" "main"
+cat << 'EOF' | set_branch_protection_rest "acme" "api" "main"
 {
     "required_status_checks": {
         "strict": true,
@@ -255,7 +263,7 @@ EOF
 ### Set Up Full Repository Protection (Org)
 
 ```bash
-source lib/github/gh-rest-functions.sh
+source lib/github/gh-protection-functions.sh
 
 # Protect main and develop branches
 apply_main_branch_protection "acme" "api"
@@ -266,6 +274,9 @@ apply_branch_naming_ruleset "acme" "api"
 
 # Add release branch protection
 apply_release_branch_ruleset "acme" "api"
+
+# Add tag protection
+apply_tag_protection_ruleset "acme" "api"
 ```
 
 ## Error Handling
@@ -286,3 +297,10 @@ gh auth refresh -s repo -s admin:repo_hook
 
 - **hiivmind-pulse-gh-projects** - Project management (status updates, views, fields)
 - **hiivmind-pulse-gh-milestones** - Milestone management
+
+## Related Documentation
+
+- `lib/github/gh-protection-index.md` - Full function reference
+- `lib/github/gh-protection-graphql-queries.yaml` - GraphQL queries and mutations
+- `lib/github/gh-protection-jq-filters.yaml` - jq filter templates
+- `lib/github/gh-branch-protection-templates.yaml` - Protection and ruleset presets
