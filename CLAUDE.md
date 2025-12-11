@@ -145,6 +145,7 @@ source lib/github/gh-project-functions.sh    # Project v2 operations
 source lib/github/gh-protection-functions.sh # Protection (branch + rulesets)
 source lib/github/gh-action-functions.sh     # Actions (workflows, runs, jobs)
 source lib/github/gh-secret-functions.sh     # Secrets (encrypted secrets)
+source lib/github/gh-variable-functions.sh   # Variables (configuration variables)
 
 # Examples
 get_viewer_id                                           # Get current user ID
@@ -211,6 +212,10 @@ hiivmind-pulse-gh/
 │   ├── gh-secret-functions.sh       # Encrypted secrets
 │   ├── gh-secret-jq-filters.yaml
 │   ├── gh-secret-index.md
+│   ├── # Variable Domain
+│   ├── gh-variable-functions.sh     # Configuration variables
+│   ├── gh-variable-jq-filters.yaml
+│   ├── gh-variable-index.md
 │   ├── # Legacy/Supporting
 │   ├── gh-rest-functions.sh         # REST shell functions (DEPRECATED)
 │   ├── gh-rest-endpoints.yaml       # REST endpoint templates
@@ -286,6 +291,17 @@ hiivmind-pulse-gh/
 - `delete_repo_secret`, `delete_env_secret`, `delete_org_secret`, `delete_user_secret` - Delete secrets
 - `set_org_secret_repos`, `add_repo_to_org_secret`, `remove_repo_from_org_secret` - Repo access management
 - `filter_secrets_by_*`, `format_secrets` - Filtering and formatting
+
+### Variable Domain (`gh-variable-functions.sh`)
+- `fetch_repo_variable`, `fetch_org_variable`, `fetch_env_variable` - Fetch variable with value
+- `discover_repo_variables`, `discover_env_variables`, `discover_org_variables` - Discovery
+- `get_variable_value`, `get_variable_visibility` - Lookup value and visibility
+- `detect_repo_variable_exists`, `detect_env_variable_exists`, `detect_org_variable_exists` - Detection
+- `set_repo_variable`, `set_env_variable`, `set_org_variable` - Set variables
+- `update_repo_variable`, `update_org_variable`, `update_env_variable` - Update variables
+- `delete_repo_variable`, `delete_env_variable`, `delete_org_variable` - Delete variables
+- `set_org_variable_repos`, `add_repo_to_org_variable`, `remove_repo_from_org_variable` - Repo access management
+- `filter_variables_by_*`, `format_variables` - Filtering and formatting
 
 ## Pipeline Pattern
 

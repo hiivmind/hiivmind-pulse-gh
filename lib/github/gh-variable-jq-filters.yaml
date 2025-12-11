@@ -1,0 +1,288 @@
+# GitHub Variables jq Filters
+# Transformation and formatting filters for configuration variables
+
+# =============================================================================
+# FORMAT FILTERS
+# =============================================================================
+
+filters:
+  # Format variables as tabular list
+  format_variables_list:
+    description: Format variables array as table
+    filter: |
+      ["NAME", "VALUE", "UPDATED", "VISIBILITY"] as $headers |
+      [$headers],
+      (.[] | [
+        .name,
+        .value,
+        (.updatedAt // .updated_at),
+        (.visibility // "-")
+      ]) |
+      @tsv
+
+  # Format single variable with details
+  format_variable_detail:
+    description: Format single variable with all metadata
+    filter: |
+      "Variable Name: \(.name)",
+      "Value: \(.value)",
+      "Created: \(.created_at // .createdAt // \"N/A\")",
+      "Updated: \(.updated_at // .updatedAt)",
+      "Visibility: \(.visibility // \"N/A\")",
+      "Selected Repos: \(.num_selected_repos // .numSelectedRepos // \"N/A\")",
+      "Selected Repos URL: \(.selected_repositories_url // .selectedReposURL // \"N/A\")"
+
+  # Format repository access list
+  format_variable_repos:
+    description: Format list of repositories with access
+    filter: |
+      ["REPO_ID", "NAME", "FULL_NAME"] as $headers |
+      [$headers],
+      (.[] | [.id, .name, .full_name]) |
+      @tsv
+
+  # Format variables with truncated values
+  format_variables_compact:
+    description: Format variables with truncated values (for long values)
+    filter: |
+      ["NAME", "VALUE (truncated)", "UPDATED"] as $headers |
+      [$headers],
+      (.[] | [
+        .name,
+        (if (.value | length) > 40 then (.value[:40] + "...") else .value end),
+        (.updatedAt // .updated_at)
+      ]) |
+      @tsv
+
+  # =============================================================================
+  # EXTRACT FILTERS
+  # =============================================================================
+
+  # Extract variable names
+  extract_variable_names:
+    description: Extract array of variable names
+    filter: |
+      map(.name)
+
+  # Extract variable values
+  extract_variable_values:
+    description: Extract array of variable values
+    filter: |
+      map(.value)
+
+  # Extract name-value pairs as object
+  extract_name_value_pairs:
+    description: Extract variables as {name | value} object
+    filter: |
+      map({(.name): .value}) | add
+
+  # Extract selected repository IDs
+  extract_selected_repo_ids:
+    description: Extract repository IDs from org variable repo list
+    filter: |
+      map(.id)
+
+  # Extract variables with visibility
+  extract_by_visibility:
+    description: Extract variables grouped by visibility
+    filter: |
+      group_by(.visibility) |
+      map({visibility: .[0].visibility, variables: map(.name)})
+
+  # =============================================================================
+  # FILTER OPERATIONS
+  # =============================================================================
+
+  # Filter by visibility
+  filter_by_visibility:
+    description: Filter org variables by visibility (requires --arg visibility VALUE)
+    filter: |
+      map(select(.visibility == $visibility))
+
+  # Filter by name pattern
+  filter_by_name:
+    description: Filter variables by name pattern (requires --arg pattern VALUE)
+    filter: |
+      map(select(.name | test($pattern)))
+
+  # Filter by value pattern
+  filter_by_value:
+    description: Filter variables by value pattern (requires --arg pattern VALUE)
+    filter: |
+      map(select(.value | test($pattern)))
+
+  # Filter variables updated after date
+  filter_updated_after:
+    description: Filter variables updated after date (requires --arg date ISO8601)
+    filter: |
+      map(select(.updatedAt > $date or .updated_at > $date))
+
+  # Filter variables with selected repos
+  filter_with_selected_repos:
+    description: Keep only variables with selected repository access
+    filter: |
+      map(select(.visibility == "selected"))
+
+  # Filter by name prefix
+  filter_by_name_prefix:
+    description: Filter variables by name prefix (requires --arg prefix VALUE)
+    filter: |
+      map(select(.name | startswith($prefix)))
+
+  # Filter empty values
+  filter_empty_values:
+    description: Keep only variables with empty values
+    filter: |
+      map(select(.value == "" or .value == null))
+
+  # Filter non-empty values
+  filter_non_empty_values:
+    description: Keep only variables with non-empty values
+    filter: |
+      map(select(.value != "" and .value != null))
+
+  # =============================================================================
+  # SUMMARY FILTERS
+  # =============================================================================
+
+  # Count variables by visibility
+  count_by_visibility:
+    description: Count organization variables grouped by visibility
+    filter: |
+      group_by(.visibility) |
+      map({visibility: .[0].visibility, count: length})
+
+  # Variable summary
+  variable_summary:
+    description: Summarize variables (total count, visibility breakdown)
+    filter: |
+      {
+        total: length,
+        by_visibility: (
+          group_by(.visibility) |
+          map({visibility: .[0].visibility, count: length})
+        ),
+        recent_updates: (
+          sort_by(.updatedAt // .updated_at) |
+          reverse |
+          .[0:5] |
+          map({name: .name, value: .value, updated: (.updatedAt // .updated_at)})
+        ),
+        empty_values: (
+          map(select(.value == "" or .value == null)) |
+          length
+        )
+      }
+
+  # Count variables by name prefix
+  count_by_prefix:
+    description: Count variables grouped by name prefix (e.g., API_, DB_)
+    filter: |
+      map({name, prefix: (.name | split("_")[0])}) |
+      group_by(.prefix) |
+      map({prefix: .[0].prefix, count: length, variables: map(.name)})
+
+  # Statistics on variable values
+  variable_value_stats:
+    description: Calculate statistics on variable value lengths
+    filter: |
+      {
+        total: length,
+        avg_value_length: (map(.value | length) | add / length),
+        max_value_length: (map(.value | length) | max),
+        min_value_length: (map(.value | length) | min),
+        empty_count: (map(select(.value == "" or .value == null)) | length)
+      }
+
+  # =============================================================================
+  # TRANSFORMATION FILTERS
+  # =============================================================================
+
+  # Normalize gh CLI format to REST format
+  normalize_variable_from_cli:
+    description: Normalize gh CLI variable format to REST API format
+    filter: |
+      {
+        name: .name,
+        value: .value,
+        created_at: .createdAt,
+        updated_at: .updatedAt,
+        visibility: .visibility,
+        selected_repositories_url: .selectedReposURL,
+        num_selected_repos: .numSelectedRepos
+      }
+
+  # Add scope metadata for tracking
+  add_scope_metadata:
+    description: Add scope field to variable objects (requires --arg scope VALUE)
+    filter: |
+      map(. + {scope: $scope})
+
+  # Convert to environment file format
+  to_env_file:
+    description: Convert variables to .env file format (NAME=value)
+    filter: |
+      map("\(.name)=\(.value)") | .[]
+
+  # Convert to shell export format
+  to_shell_exports:
+    description: Convert variables to shell export format
+    filter: |
+      map("export \(.name)=\"\(.value)\"") | .[]
+
+  # Mask sensitive values (for display)
+  mask_sensitive_values:
+    description: Mask variable values for safe display (requires --arg pattern VALUE)
+    filter: |
+      map(
+        if (.name | test($pattern))
+        then .value = "***MASKED***"
+        else .
+        end
+      )
+
+  # Sort by name
+  sort_by_name:
+    description: Sort variables alphabetically by name
+    filter: |
+      sort_by(.name)
+
+  # Sort by update time
+  sort_by_updated:
+    description: Sort variables by update time (newest first)
+    filter: |
+      sort_by(.updatedAt // .updated_at) | reverse
+
+  # =============================================================================
+  # VALIDATION FILTERS
+  # =============================================================================
+
+  # Detect potentially sensitive variables
+  detect_sensitive:
+    description: Flag variables with names suggesting sensitive data
+    filter: |
+      map(
+        . + {
+          potentially_sensitive: (
+            .name | test("(?i)(token|password|secret|key|auth|credential)")
+          )
+        }
+      )
+
+  # Validate variable names
+  validate_names:
+    description: Check if variable names follow conventions (UPPER_SNAKE_CASE)
+    filter: |
+      map(
+        . + {
+          valid_name: (.name | test("^[A-Z][A-Z0-9_]*$"))
+        }
+      )
+
+  # Find duplicate variable names across scopes
+  find_duplicates:
+    description: Find variables with duplicate names (add scope first)
+    filter: |
+      group_by(.name) |
+      map(select(length > 1)) |
+      map({name: .[0].name, count: length, scopes: map(.scope)})
