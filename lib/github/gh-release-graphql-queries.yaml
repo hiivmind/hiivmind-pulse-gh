@@ -145,14 +145,13 @@ queries:
               nodes {
                 id
                 name
-                label
                 size
                 downloadCount
                 contentType
                 downloadUrl
                 createdAt
                 updatedAt
-                uploader {
+                uploadedBy {
                   login
                 }
               }
@@ -234,14 +233,13 @@ queries:
               nodes {
                 id
                 name
-                label
                 size
                 downloadCount
                 contentType
                 downloadUrl
                 createdAt
                 updatedAt
-                uploader {
+                uploadedBy {
                   login
                   avatarUrl
                 }
