@@ -143,6 +143,7 @@ source lib/github/gh-issue-functions.sh      # Issue operations
 source lib/github/gh-pr-functions.sh         # Pull request operations
 source lib/github/gh-project-functions.sh    # Project v2 operations
 source lib/github/gh-protection-functions.sh # Protection (branch + rulesets)
+source lib/github/gh-action-functions.sh     # Actions (workflows, runs, jobs)
 
 # Examples
 get_viewer_id                                           # Get current user ID
@@ -150,6 +151,7 @@ fetch_repo "hiivmind" "hiivmind-pulse-gh" | format_repo # Get repo info
 discover_repo_issues "owner" "repo" | format_issues_list # List issues
 fetch_org_project 2 "org-name" | apply_status_filter "In Progress"
 get_protection_summary "owner" "repo"                   # Summary of all protections
+discover_repo_runs "owner" "repo" | filter_runs_by_conclusion "failure" | format_runs
 ```
 
 ## File Structure
@@ -200,6 +202,10 @@ hiivmind-pulse-gh/
 │   ├── gh-protection-graphql-queries.yaml
 │   ├── gh-protection-jq-filters.yaml
 │   ├── gh-protection-index.md
+│   ├── # Action Domain
+│   ├── gh-action-functions.sh       # Workflows, runs, jobs
+│   ├── gh-action-jq-filters.yaml
+│   ├── gh-action-index.md
 │   ├── # Legacy/Supporting
 │   ├── gh-rest-functions.sh         # REST shell functions (DEPRECATED)
 │   ├── gh-rest-endpoints.yaml       # REST endpoint templates
@@ -257,6 +263,15 @@ hiivmind-pulse-gh/
 - `set_branch_protection_rest`, `create_repo_ruleset`, `upsert_repo_ruleset` - Mutations
 - `apply_main_branch_protection`, `apply_branch_naming_ruleset`, `get_protection_summary` - Smart templates
 - `format_branch_protection`, `format_rulesets` - Formatting
+
+### Action Domain (`gh-action-functions.sh`)
+- `fetch_workflow`, `fetch_run`, `fetch_job` - Fetch workflow/run/job details
+- `discover_repo_workflows`, `discover_repo_runs`, `discover_run_jobs` - Discovery
+- `detect_workflow_state`, `detect_run_status`, `detect_run_conclusion` - Detection
+- `trigger_workflow`, `cancel_run`, `rerun_workflow`, `rerun_failed_jobs` - Mutations
+- `enable_workflow`, `disable_workflow`, `delete_run_logs` - Management
+- `filter_runs_by_*`, `filter_workflows_by_*` - Filtering
+- `format_workflows`, `format_runs`, `format_jobs` - Formatting
 
 ## Pipeline Pattern
 
