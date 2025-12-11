@@ -342,6 +342,7 @@ Technical documentation for known issues and architectural decisions:
 | Document | Description |
 |----------|-------------|
 | [`knowledge/claude-code-bash-escaping.md`](knowledge/claude-code-bash-escaping.md) | Claude Code Bash tool escaping bug - affects commands with `$(...)`, variables, and pipes |
+| [`knowledge/bash-subshell-variable-tracking.md`](knowledge/bash-subshell-variable-tracking.md) | Bash subshell variable scope - why `_raw` functions are needed for resource tracking |
 
 ### Critical: Bash Command Patterns
 

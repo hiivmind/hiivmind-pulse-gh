@@ -1,0 +1,107 @@
+[
+  {
+    "id": 12345,
+    "name": "main-branch-protection",
+    "target": "branch",
+    "source_type": "Repository",
+    "source": "test-org/test-repo",
+    "enforcement": "active",
+    "bypass_actors": [
+      {
+        "actor_id": 1,
+        "actor_type": "RepositoryRole",
+        "bypass_mode": "always"
+      }
+    ],
+    "current_user_can_bypass": "always",
+    "node_id": "RRS_kwDORULESET",
+    "conditions": {
+      "ref_name": {
+        "include": ["~DEFAULT_BRANCH"],
+        "exclude": []
+      }
+    },
+    "rules": [
+      {
+        "type": "deletion"
+      },
+      {
+        "type": "non_fast_forward"
+      },
+      {
+        "type": "pull_request",
+        "parameters": {
+          "required_approving_review_count": 1,
+          "dismiss_stale_reviews_on_push": true,
+          "require_code_owner_review": true,
+          "require_last_push_approval": false,
+          "required_review_thread_resolution": true
+        }
+      },
+      {
+        "type": "required_status_checks",
+        "parameters": {
+          "strict_required_status_checks_policy": true,
+          "required_status_checks": [
+            {
+              "context": "ci/test",
+              "integration_id": null
+            },
+            {
+              "context": "ci/lint",
+              "integration_id": null
+            }
+          ]
+        }
+      }
+    ],
+    "_links": {
+      "self": {
+        "href": "https://api.github.com/repos/test-org/test-repo/rulesets/12345"
+      },
+      "html": {
+        "href": "https://github.com/test-org/test-repo/rules/12345"
+      }
+    },
+    "created_at": "2025-01-01T00:00:00Z",
+    "updated_at": "2025-01-01T00:00:00Z"
+  },
+  {
+    "id": 12346,
+    "name": "branch-naming-convention",
+    "target": "branch",
+    "source_type": "Repository",
+    "source": "test-org/test-repo",
+    "enforcement": "active",
+    "bypass_actors": [],
+    "current_user_can_bypass": "never",
+    "node_id": "RRS_kwDORULESET2",
+    "conditions": {
+      "ref_name": {
+        "include": ["refs/heads/*"],
+        "exclude": ["refs/heads/main", "refs/heads/develop"]
+      }
+    },
+    "rules": [
+      {
+        "type": "branch_name_pattern",
+        "parameters": {
+          "name": "Branch naming convention",
+          "negate": false,
+          "operator": "regex",
+          "pattern": "^(feature|bugfix|hotfix|release)/[a-z0-9-]+$"
+        }
+      }
+    ],
+    "_links": {
+      "self": {
+        "href": "https://api.github.com/repos/test-org/test-repo/rulesets/12346"
+      },
+      "html": {
+        "href": "https://github.com/test-org/test-repo/rules/12346"
+      }
+    },
+    "created_at": "2025-01-01T00:00:00Z",
+    "updated_at": "2025-01-01T00:00:00Z"
+  }
+]

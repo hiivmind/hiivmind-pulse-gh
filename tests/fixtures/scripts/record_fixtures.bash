@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Fixture Recording Script
-# Records fixtures from live GitHub APIs with sanitization
+# Records fixtures from live GitHub APIs with setup/teardown and sanitization
+#
+# Uses the shared resource management library (tests/lib/resources/) for
+# creating and cleaning up test resources during fixture recording.
 
 set -euo pipefail
 
@@ -10,9 +13,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FIXTURES_DIR="${SCRIPT_DIR%/*}"
-PROJECT_ROOT="${FIXTURES_DIR%/*}/.."
+TESTS_DIR="${FIXTURES_DIR%/*}"
+PROJECT_ROOT="${TESTS_DIR%/*}"
 MANIFEST_FILE="${FIXTURES_DIR}/recording_manifest.yaml"
 SANITIZE_SCRIPT="${SCRIPT_DIR}/sanitize_fixture.bash"
+RESOURCES_DIR="${TESTS_DIR}/lib/resources"
+
+# Default test targets
+: "${TEST_ORG:=hiivmind}"
+: "${TEST_REPO:=hiivmind-pulse-gh}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -72,6 +81,154 @@ check_prerequisites() {
 }
 
 # =============================================================================
+# RESOURCE MANAGEMENT INTEGRATION
+# =============================================================================
+
+# Load resource management library
+load_resource_library() {
+    if [[ -d "$RESOURCES_DIR" ]]; then
+        source "${RESOURCES_DIR}/core.bash"
+        source "${RESOURCES_DIR}/milestone.bash"
+        source "${RESOURCES_DIR}/issue.bash"
+        source "${RESOURCES_DIR}/label.bash"
+        source "${RESOURCES_DIR}/variable.bash"
+        source "${RESOURCES_DIR}/release.bash"
+        source "${RESOURCES_DIR}/protection.bash"
+        source "${RESOURCES_DIR}/pr.bash"
+        source "${RESOURCES_DIR}/project.bash"
+        log_success "Resource management library loaded"
+        return 0
+    else
+        log_warning "Resource library not found at $RESOURCES_DIR"
+        log_warning "Setup/teardown features will be disabled"
+        return 1
+    fi
+}
+
+# Run setup actions for a fixture
+# Usage: run_setup DOMAIN FIXTURE_NAME
+run_setup() {
+    local domain="$1"
+    local fixture_name="$2"
+
+    # Check if setup is defined
+    local setup_count=$(yq ".fixtures.${domain}.${fixture_name}.setup | length // 0" "$MANIFEST_FILE")
+
+    if [[ "$setup_count" == "0" ]] || [[ "$setup_count" == "null" ]]; then
+        return 0
+    fi
+
+    log_info "Running setup for ${domain}/${fixture_name}..."
+
+    # Get fixture-specific test targets (override global defaults)
+    local fixture_test_org=$(yq ".fixtures.${domain}.${fixture_name}.test_org // \"${TEST_ORG}\"" "$MANIFEST_FILE")
+    local fixture_test_repo=$(yq ".fixtures.${domain}.${fixture_name}.test_repo // \"${TEST_REPO}\"" "$MANIFEST_FILE")
+
+    # Use fixture-specific values for this setup
+    TEST_ORG="$fixture_test_org"
+    TEST_REPO="$fixture_test_repo"
+
+    # Setup cleanup trap
+    setup_cleanup_trap
+
+    # Process each setup action
+    for i in $(seq 0 $((setup_count - 1))); do
+        local resource_type=$(yq ".fixtures.${domain}.${fixture_name}.setup[$i].resource" "$MANIFEST_FILE")
+        local action=$(yq ".fixtures.${domain}.${fixture_name}.setup[$i].action // \"\"" "$MANIFEST_FILE")
+        local capture_var=$(yq ".fixtures.${domain}.${fixture_name}.setup[$i].capture // \"\"" "$MANIFEST_FILE")
+
+        if [[ "$action" == "ensure_empty" ]]; then
+            log_info "  Ensuring no ${resource_type}s exist..."
+            ensure_empty "$resource_type" "$TEST_ORG" "$TEST_REPO"
+            continue
+        fi
+
+        if [[ "$resource_type" != "null" && -n "$resource_type" ]]; then
+            local title=$(yq ".fixtures.${domain}.${fixture_name}.setup[$i].params.title // \"\"" "$MANIFEST_FILE")
+            local description=$(yq ".fixtures.${domain}.${fixture_name}.setup[$i].params.description // \"\"" "$MANIFEST_FILE")
+            local name=$(yq ".fixtures.${domain}.${fixture_name}.setup[$i].params.name // \"\"" "$MANIFEST_FILE")
+            local value=$(yq ".fixtures.${domain}.${fixture_name}.setup[$i].params.value // \"\"" "$MANIFEST_FILE")
+
+            # NOTE: We use command substitution to capture the result, but this runs in a subshell
+            # so track_resource() calls inside the create_* functions won't update TRACKED_RESOURCES
+            # in the parent shell. We must track resources explicitly here after capturing the result.
+            case "$resource_type" in
+                milestone)
+                    log_info "  Creating milestone: $title"
+                    local result=$(create_milestone_raw "$TEST_ORG" "$TEST_REPO" "$title" "$description")
+                    track_resource "milestone" "${TEST_ORG}/${TEST_REPO}/${result}"
+                    if [[ -n "$capture_var" ]]; then
+                        export "$capture_var"="$result"
+                        log_info "  Captured $capture_var=$result"
+                    fi
+                    ;;
+                issue)
+                    log_info "  Creating issue: $title"
+                    local result=$(create_issue_raw "$TEST_ORG" "$TEST_REPO" "$title" "$description")
+                    track_resource "issue" "${TEST_ORG}/${TEST_REPO}/${result}"
+                    if [[ -n "$capture_var" ]]; then
+                        export "$capture_var"="$result"
+                        log_info "  Captured $capture_var=$result"
+                    fi
+                    ;;
+                label)
+                    log_info "  Creating label: $name"
+                    local result=$(create_label_raw "$TEST_ORG" "$TEST_REPO" "$name")
+                    track_resource "label" "${TEST_ORG}/${TEST_REPO}/${result}"
+                    ;;
+                variable)
+                    log_info "  Creating variable: $name"
+                    local result=$(create_variable_raw "$TEST_ORG" "$TEST_REPO" "$name" "$value")
+                    track_resource "variable" "${TEST_ORG}/${TEST_REPO}/${result}"
+                    ;;
+                pr)
+                    log_info "  Creating test PR: $title"
+                    local result=$(create_test_pr_raw "$TEST_ORG" "$TEST_REPO" "$title")
+                    track_resource "pr" "${TEST_ORG}/${TEST_REPO}/${result}"
+                    if [[ -n "$capture_var" ]]; then
+                        export "$capture_var"="$result"
+                        log_info "  Captured $capture_var=$result"
+                    fi
+                    ;;
+                release)
+                    local tag_name=$(yq ".fixtures.${domain}.${fixture_name}.setup[$i].params.tag_name // \"\"" "$MANIFEST_FILE")
+                    local body=$(yq ".fixtures.${domain}.${fixture_name}.setup[$i].params.body // \"\"" "$MANIFEST_FILE")
+                    log_info "  Creating release: $name ($tag_name)"
+                    local result=$(create_release_raw "$TEST_ORG" "$TEST_REPO" "$tag_name" "$name" "$body")
+                    track_resource "release" "${TEST_ORG}/${TEST_REPO}/${result}"
+                    if [[ -n "$capture_var" ]]; then
+                        export "$capture_var"="$result"
+                        log_info "  Captured $capture_var=$result"
+                    fi
+                    ;;
+                project_item)
+                    local project_number=$(yq ".fixtures.${domain}.${fixture_name}.setup[$i].params.project_number // \"\"" "$MANIFEST_FILE")
+                    log_info "  Creating draft project item: $title"
+                    local result=$(create_draft_item_raw "$TEST_ORG" "$project_number" "$title" "$description")
+                    track_resource "project_item" "${TEST_ORG}/${project_number}/${result}"
+                    if [[ -n "$capture_var" ]]; then
+                        export "$capture_var"="$result"
+                        log_info "  Captured $capture_var=$result"
+                    fi
+                    ;;
+                *)
+                    log_warning "  Unknown resource type: $resource_type"
+                    ;;
+            esac
+        fi
+    done
+
+    log_success "Setup complete"
+}
+
+# Run teardown (automatic via cleanup trap)
+run_teardown() {
+    log_info "Running teardown..."
+    cleanup_tracked_resources
+    log_success "Teardown complete"
+}
+
+# =============================================================================
 # RECORDING FUNCTIONS
 # =============================================================================
 
@@ -96,19 +253,34 @@ record_fixture() {
     mkdir -p "$output_dir"
     local output_file="${output_dir}/${fixture_name}.json"
 
+    # Run setup (creates test resources if defined in manifest)
+    if [[ -n "${RESOURCES_LOADED:-}" ]]; then
+        run_setup "$domain" "$fixture_name"
+    fi
+
     # Record based on type
+    local record_success=true
     case "$fixture_type" in
         graphql)
-            record_graphql_fixture "$domain" "$fixture_name" "$output_file"
+            record_graphql_fixture "$domain" "$fixture_name" "$output_file" || record_success=false
             ;;
         rest)
-            record_rest_fixture "$domain" "$fixture_name" "$output_file"
+            record_rest_fixture "$domain" "$fixture_name" "$output_file" || record_success=false
             ;;
         *)
             log_error "Unknown fixture type: $fixture_type"
-            return 1
+            record_success=false
             ;;
     esac
+
+    # Run teardown (automatic via trap, but also explicit for clarity)
+    if [[ -n "${RESOURCES_LOADED:-}" ]] && [[ -n "${TRACKED_RESOURCES:-}" ]]; then
+        run_teardown
+    fi
+
+    if [[ "$record_success" == "false" ]]; then
+        return 1
+    fi
 
     # Sanitize if script exists
     if [[ -f "$SANITIZE_SCRIPT" ]]; then
@@ -130,19 +302,34 @@ record_graphql_fixture() {
     local output_file="$3"
 
     local query=$(yq ".fixtures.${domain}.${fixture_name}.query" "$MANIFEST_FILE")
-    local variables=$(yq ".fixtures.${domain}.${fixture_name}.variables // {}" "$MANIFEST_FILE")
+    local variables_json=$(yq -o=json ".fixtures.${domain}.${fixture_name}.variables // {}" "$MANIFEST_FILE")
 
     if [[ "$query" == "null" ]]; then
         log_error "No query defined for ${domain}/${fixture_name}"
         return 1
     fi
 
-    # Execute GraphQL query
-    if [[ "$variables" != "{}" ]] && [[ "$variables" != "null" ]]; then
-        gh api graphql -f query="$query" --input <(echo "$variables") > "$output_file"
-    else
-        gh api graphql -f query="$query" > "$output_file"
+    # Build command arguments
+    local args=(-f "query=$query")
+
+    # Add variables as individual flags
+    if [[ "$variables_json" != "{}" ]] && [[ "$variables_json" != "null" ]]; then
+        # Extract each variable and add as -f or -F flag
+        while IFS='=' read -r key value; do
+            # Determine if value is a number (use -F) or string (use -f)
+            if [[ "$value" =~ ^[0-9]+$ ]]; then
+                args+=(-F "$key=$value")
+            else
+                # Remove quotes from string values
+                value="${value%\"}"
+                value="${value#\"}"
+                args+=(-f "$key=$value")
+            fi
+        done < <(echo "$variables_json" | jq -r 'to_entries[] | "\(.key)=\(.value)"')
     fi
+
+    # Execute GraphQL query
+    gh api graphql "${args[@]}" > "$output_file"
 }
 
 # Record REST fixture
@@ -161,9 +348,22 @@ record_rest_fixture() {
         return 1
     fi
 
-    # Replace variables in endpoint
+    # Replace standard variables in endpoint
     endpoint="${endpoint//\{owner\}/$test_org}"
     endpoint="${endpoint//\{repo\}/$test_repo}"
+
+    # Replace any captured variables (exported by setup)
+    # Match {variable_name} patterns and substitute with environment variables
+    while [[ "$endpoint" =~ \{([a-zA-Z_][a-zA-Z0-9_]*)\} ]]; do
+        local var_name="${BASH_REMATCH[1]}"
+        local var_value="${!var_name:-}"
+        if [[ -n "$var_value" ]]; then
+            endpoint="${endpoint//\{$var_name\}/$var_value}"
+        else
+            log_warning "Variable $var_name not found for endpoint substitution"
+            break
+        fi
+    done
 
     # Execute REST API call
     gh api "$endpoint" -X "$method" > "$output_file"
@@ -192,9 +392,9 @@ record_domain() {
 
     while IFS= read -r fixture_name; do
         if record_fixture "$domain" "$fixture_name"; then
-            ((count++))
+            ((count++)) || true
         else
-            ((failed++))
+            ((failed++)) || true
         fi
     done <<< "$fixture_names"
 
@@ -218,9 +418,9 @@ record_all() {
 
     while IFS= read -r domain; do
         if record_domain "$domain"; then
-            ((total++))
+            ((total++)) || true
         else
-            ((failed++))
+            ((failed++)) || true
         fi
     done <<< "$domains"
 
@@ -276,6 +476,13 @@ main() {
         log_error "Manifest file not found: $MANIFEST_FILE"
         log_info "Create one using recording_manifest.yaml template"
         exit 1
+    fi
+
+    # Load resource management library for setup/teardown
+    if load_resource_library; then
+        RESOURCES_LOADED=true
+    else
+        RESOURCES_LOADED=""
     fi
 
     # Parse arguments

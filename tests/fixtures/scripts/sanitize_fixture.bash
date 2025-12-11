@@ -27,11 +27,9 @@ sanitize_generic() {
                 # Sanitize emails
                 (if .email then .email = "test@example.com" else . end) |
 
-                # Sanitize avatar URLs
-                (if .avatarUrl or .avatar_url then
-                    .avatarUrl = "https://avatars.githubusercontent.com/test-user" |
-                    .avatar_url = "https://avatars.githubusercontent.com/test-user"
-                else . end) |
+                # Sanitize avatar URLs (only set existing fields)
+                (if .avatarUrl then .avatarUrl = "https://avatars.githubusercontent.com/test-user" else . end) |
+                (if .avatar_url then .avatar_url = "https://avatars.githubusercontent.com/test-user" else . end) |
 
                 # Sanitize names (but preserve title/name fields for milestones/repos)
                 (if .name and (.type == "User" or .type == "Organization") then
@@ -73,8 +71,11 @@ sanitize_generic() {
 # Normalize timestamps to fixed values (preserves chronological order)
 sanitize_timestamps() {
     local base_date="2024-01-01T00:00:00Z"
+    local input
+    input=$(cat)
 
-    jq --arg base "$base_date" '
+    # Try the complex jq, fallback to passthrough if it fails
+    echo "$input" | jq --arg base "$base_date" '
         # Track unique timestamps and assign sequential values
         . as $root |
         [paths(type == "string" and test("\\d{4}-\\d{2}-\\d{2}T"))] as $paths |
@@ -92,7 +93,7 @@ sanitize_timestamps() {
             end
         ) |
         .data
-    ' 2>/dev/null || cat  # Fallback to original if jq fails
+    ' 2>/dev/null || echo "$input"  # Fallback to original if jq fails
 }
 
 # Sanitize GitHub-specific sensitive data

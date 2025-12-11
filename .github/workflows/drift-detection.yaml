@@ -1,0 +1,126 @@
+name: Schema Drift Detection
+
+on:
+  schedule:
+    # Run weekly on Sundays at 00:00 UTC
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: 'Specific domain to check (leave empty for all)'
+        required: false
+        default: ''
+      verbose:
+        description: 'Enable verbose output'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  detect-drift:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          # Install yq
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+          # Verify installations
+          gh --version
+          jq --version
+          yq --version
+
+      - name: Run drift detection
+        id: drift
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ARGS=""
+          if [[ -n "${{ inputs.domain }}" ]]; then
+            ARGS="--domain ${{ inputs.domain }}"
+          fi
+          if [[ "${{ inputs.verbose }}" == "true" ]]; then
+            ARGS="$ARGS --verbose"
+          fi
+
+          # Run detection and capture output
+          set +e
+          OUTPUT=$(./tests/fixtures/scripts/detect_drift.bash $ARGS 2>&1)
+          EXIT_CODE=$?
+          set -e
+
+          echo "$OUTPUT"
+
+          # Set outputs for later steps
+          if [[ $EXIT_CODE -ne 0 ]]; then
+            echo "drift_detected=true" >> $GITHUB_OUTPUT
+            # Escape output for multiline
+            echo "drift_output<<EOF" >> $GITHUB_OUTPUT
+            echo "$OUTPUT" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "drift_detected=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create issue on drift detection
+        if: steps.drift.outputs.drift_detected == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check if an open drift detection issue already exists
+          EXISTING=$(gh issue list --label "schema-drift" --state open --json number --jq 'length')
+
+          if [[ "$EXISTING" -gt 0 ]]; then
+            echo "Drift detection issue already exists, skipping creation"
+            exit 0
+          fi
+
+          # Create issue body
+          BODY="## GitHub API Schema Drift Detected
+
+          The weekly drift detection workflow found changes in the GitHub API schema compared to our recorded fixtures.
+
+          ### Detection Output
+
+          \`\`\`
+          ${{ steps.drift.outputs.drift_output }}
+          \`\`\`
+
+          ### Next Steps
+
+          1. Review the drift output above
+          2. If the changes are expected API updates:
+             - Run \`./tests/fixtures/scripts/record_fixtures.bash --all\` to update fixtures
+             - Review and commit the changes
+          3. If the changes indicate breaking changes:
+             - Update the relevant function library code
+             - Update tests as needed
+             - Re-record affected fixtures
+
+          ### References
+
+          - [GitHub API Changelog](https://github.blog/changelog/label/api/)
+          - [Recording Manifest](./tests/fixtures/recording_manifest.yaml)
+          "
+
+          gh issue create \
+            --title "🔄 GitHub API Schema Drift Detected" \
+            --body "$BODY" \
+            --label "schema-drift,automated"
+
+      - name: Summary
+        run: |
+          if [[ "${{ steps.drift.outputs.drift_detected }}" == "true" ]]; then
+            echo "::warning::Schema drift detected! Check the drift detection issue for details."
+          else
+            echo "✅ No schema drift detected"
+          fi

@@ -1,0 +1,23 @@
+{
+  "data": {
+    "repository": {
+      "id": "R_kgDOQm1-hg",
+      "name": "hiivmind-pulse-test-fixtures",
+      "nameWithOwner": "hiivmind/hiivmind-pulse-test-fixtures",
+      "description": "Test fixtures repository for hiivmind-pulse-gh testing framework",
+      "url": "https://github.com/hiivmind/hiivmind-pulse-test-fixtures",
+      "sshUrl": "git@github.com:hiivmind/hiivmind-pulse-test-fixtures.git",
+      "isPrivate": true,
+      "isFork": false,
+      "isArchived": false,
+      "createdAt": "2025-12-11T12:23:29Z",
+      "updatedAt": "2025-12-11T12:25:23Z",
+      "defaultBranchRef": {
+        "name": "main"
+      },
+      "owner": {
+        "login": "test-user"
+      }
+    }
+  }
+}

@@ -2,7 +2,8 @@
 
 > **Status:** Planning
 > **Created:** 2024-12-11
-> **Related Issues:** #21-#26 (to be created)
+> **Updated:** 2024-12-11 (Restructured to share resource management between fixtures and E2E)
+> **Related Issues:** #23-#29
 
 ## Executive Summary
 
@@ -53,7 +54,23 @@ tests/
 │   ├── fixtures.bash             # Fixture loading utilities
 │   └── mocks.bash                # Mock setup utilities
 │
+├── lib/                          # SHARED TEST LIBRARIES
+│   └── resources/                # Resource management (used by fixtures AND e2e)
+│       ├── core.bash             # Track/cleanup utilities
+│       ├── milestone.bash        # create_milestone, delete_milestone
+│       ├── issue.bash            # create_issue, close_issue, delete_issue
+│       ├── pr.bash               # create_pr, close_pr
+│       ├── release.bash          # create_release, delete_release
+│       ├── protection.bash       # create_ruleset, delete_ruleset
+│       ├── variable.bash         # create_variable, delete_variable
+│       └── project.bash          # create_project_item, delete_project_item
+│
 ├── fixtures/                     # CENTRALIZED fixture library
+│   ├── scripts/
+│   │   ├── record_fixtures.bash  # Main recorder (uses lib/resources/)
+│   │   ├── sanitize_fixture.bash # Data sanitization
+│   │   └── detect_drift.bash     # Schema drift detection
+│   ├── recording_manifest.yaml   # What to record, setup/teardown refs
 │   ├── graphql/                  # GraphQL response fixtures
 │   │   ├── identity/
 │   │   ├── repository/
@@ -68,7 +85,9 @@ tests/
 │   │   ├── variable/
 │   │   ├── release/
 │   │   └── action/
-│   └── generators/               # Fixture generation scripts
+│   └── _synthetic/               # Hand-crafted edge cases
+│       ├── errors/
+│       └── empty/
 │
 ├── mocks/
 │   ├── gh                        # Registry-based mock CLI
@@ -94,13 +113,12 @@ tests/
 │   └── cross-domain/             # Pipeline composition tests
 │
 └── e2e/                          # Live API tests
-    ├── sandbox/                  # Resource management
-    │   ├── setup.bash
-    │   ├── teardown.bash
-    │   └── resources.bash
+    ├── sandbox.bash              # Setup/teardown orchestrator (uses lib/resources/)
     ├── domain/                   # Per-domain live tests
     └── smoke/                    # Basic connectivity tests
 ```
+
+**Key Design Decision:** The `tests/lib/resources/` library is shared between fixture recording and E2E testing. Both need to create/delete GitHub resources - this eliminates duplication.
 
 ---
 
@@ -136,90 +154,204 @@ tests/
 
 ---
 
-### Phase 2: Centralized Fixture Library (Live Recording)
+### Phase 2: Test Data Infrastructure
 
-**Objective:** Create a single source of truth for test fixtures, **recorded from live GitHub APIs** to ensure they reflect actual API response structures.
+**Objective:** Create shared resource management AND fixture recording infrastructure. This phase has two parts that build on each other.
 
-**Why Record From Live APIs?**
+**Why Combined?**
 
-Hand-crafted fixtures test against **assumptions** about the API, not reality. If our assumptions are wrong (missing fields, different structures, schema changes), tests pass but production fails.
+Fixture recording and E2E testing both need to create/delete GitHub resources. By building resource management first, we:
+- Eliminate duplicate code between fixture recording and E2E
+- Ensure consistent resource lifecycle handling
+- Create deterministic, reproducible fixtures via setup/teardown
 
-| Approach | Validates |
-|----------|-----------|
-| Hand-crafted fixtures | Our code handles data we *think* the API returns |
-| Recorded fixtures | Our code handles data the API *actually* returns |
+---
+
+#### Part A: Resource Management Library
+
+**Objective:** Create reusable scripts for creating/deleting GitHub resources.
 
 **Deliverables:**
-1. Centralized `fixtures/` directory
-2. Fixture recording system with sanitization
-3. Drift detection for schema changes
-4. Fixtures for all 11 domains (recorded from live API)
-5. Synthetic fixtures for edge cases (errors, empty states)
+1. `tests/lib/resources/` library
+2. CRUD operations for all domain resources
+3. Resource tracking and cleanup utilities
 
 **Tasks:**
 
 | Task | Description | Estimate |
 |------|-------------|----------|
-| 2.1 | Create fixture directory structure (graphql/, rest/, scripts/) | 30 min |
-| 2.2 | Implement `scripts/record_fixtures.bash` main recorder | 3 hrs |
-| 2.3 | Implement `scripts/sanitize_fixture.bash` pipeline | 2 hrs |
-| 2.4 | Implement `scripts/detect_fixture_drift.bash` | 2 hrs |
-| 2.5 | Create `recording_manifest.yaml` configuration | 1 hr |
-| 2.6 | Migrate existing fixtures to new location | 1 hr |
-| 2.7 | Record fixtures for Identity domain | 1 hr |
-| 2.8 | Record fixtures for Repository domain | 1 hr |
-| 2.9 | Record fixtures for Milestone domain | 1 hr |
-| 2.10 | Record fixtures for Issue domain | 1 hr |
-| 2.11 | Record fixtures for PR domain | 1 hr |
-| 2.12 | Record fixtures for Project domain | 1 hr |
-| 2.13 | Record fixtures for Protection domain | 1 hr |
-| 2.14 | Record fixtures for Action domain | 1 hr |
-| 2.15 | Record fixtures for Secret domain | 1 hr |
-| 2.16 | Record fixtures for Variable domain | 1 hr |
-| 2.17 | Record fixtures for Release domain | 1 hr |
-| 2.18 | Create synthetic edge case fixtures (empty, nulls, errors) | 2 hrs |
-| 2.19 | Add CI workflow for weekly drift detection | 1 hr |
-| 2.20 | Document fixture recording process | 1 hr |
+| 2A.1 | Create `tests/lib/resources/` directory structure | 15 min |
+| 2A.2 | Implement `core.bash` - tracking, cleanup, error handling | 2 hrs |
+| 2A.3 | Implement `milestone.bash` - create/delete milestones | 1 hr |
+| 2A.4 | Implement `issue.bash` - create/close/delete issues | 1.5 hrs |
+| 2A.5 | Implement `pr.bash` - create/close PRs | 1.5 hrs |
+| 2A.6 | Implement `release.bash` - create/delete releases | 1 hr |
+| 2A.7 | Implement `protection.bash` - create/delete rulesets | 1.5 hrs |
+| 2A.8 | Implement `variable.bash` - create/delete variables | 1 hr |
+| 2A.9 | Implement `project.bash` - create/delete project items | 1 hr |
+| 2A.10 | Implement `label.bash` - create/delete labels | 30 min |
+| 2A.11 | Write tests for resource library | 2 hrs |
+| 2A.12 | Document resource library usage | 1 hr |
 
-**Recording & Sanitization:**
+**Resource Library Architecture:**
 ```bash
-# Record a fixture from live API
-./scripts/record_fixtures.bash identity viewer
+# tests/lib/resources/core.bash
 
-# Sanitization removes sensitive data while preserving structure:
-# - Usernames → "test-user"
-# - Node IDs → deterministic fake IDs
-# - Emails → "test@example.com"
-# - Timestamps → normalized values
+# Global tracking array
+declare -g TRACKED_RESOURCES=""
+
+# Track a resource for cleanup
+track_resource() {
+    local type="$1"    # milestone, issue, pr, etc.
+    local id="$2"      # Resource identifier
+    TRACKED_RESOURCES+="$type:$id "
+}
+
+# Cleanup all tracked resources (call in teardown)
+cleanup_tracked_resources() {
+    for resource in $TRACKED_RESOURCES; do
+        local type="${resource%%:*}"
+        local id="${resource#*:}"
+        "delete_${type}" "$id" 2>/dev/null || true
+    done
+    TRACKED_RESOURCES=""
+}
+
+# Trap for cleanup on failure
+setup_cleanup_trap() {
+    trap 'cleanup_tracked_resources' EXIT ERR
+}
 ```
 
-**Drift Detection:**
 ```bash
-# Run periodically to detect API schema changes
-./scripts/detect_fixture_drift.bash --all
-# Output: "WARNING: milestone/list.json has new field 'due_on_timestamp'"
+# tests/lib/resources/milestone.bash
+source "$(dirname "${BASH_SOURCE[0]}")/core.bash"
+
+create_milestone() {
+    local owner="$1" repo="$2" title="$3"
+    local result=$(gh api "repos/$owner/$repo/milestones" \
+        -f title="$title" -f state="open")
+    local number=$(echo "$result" | jq -r '.number')
+    track_resource "milestone" "$owner/$repo/$number"
+    echo "$number"
+}
+
+delete_milestone() {
+    local ref="$1"  # owner/repo/number
+    local owner="${ref%%/*}"
+    local rest="${ref#*/}"
+    local repo="${rest%%/*}"
+    local number="${rest#*/}"
+    gh api -X DELETE "repos/$owner/$repo/milestones/$number" 2>/dev/null || true
+}
 ```
 
-**Fixture Naming Convention:**
-```
-{domain}/{operation}[_{variant}].json
+**Acceptance Criteria (Part A):**
+- [ ] All resource types have create/delete functions
+- [ ] Resources are automatically tracked for cleanup
+- [ ] Cleanup handles partial failures gracefully
+- [ ] Library has its own test suite
 
-Examples:
-milestone/list_all.json        # Recorded from live API
-milestone/list_open.json       # Recorded from live API
-_synthetic/empty/array.json    # Hand-crafted (clearly marked)
-_synthetic/errors/404.json     # Hand-crafted (clearly marked)
+---
+
+#### Part B: Fixture Recording System
+
+**Objective:** Record fixtures from live APIs using the resource library for setup/teardown.
+
+**Why Record From Live APIs?**
+
+Hand-crafted fixtures test against **assumptions** about the API, not reality. If our assumptions are wrong (missing fields, different structures, schema changes), tests pass but production fails.
+
+**Deliverables:**
+1. Fixture recording scripts (using Part A)
+2. Sanitization pipeline
+3. Drift detection
+4. Fixtures for all 11 domains
+
+**Tasks:**
+
+| Task | Description | Estimate |
+|------|-------------|----------|
+| 2B.1 | Create fixture directory structure | 30 min |
+| 2B.2 | Implement `record_fixtures.bash` (uses lib/resources/) | 3 hrs |
+| 2B.3 | Implement `sanitize_fixture.bash` pipeline | 2 hrs |
+| 2B.4 | Implement `detect_drift.bash` | 2 hrs |
+| 2B.5 | Create `recording_manifest.yaml` with setup/teardown refs | 2 hrs |
+| 2B.6 | Migrate existing fixtures to new location | 1 hr |
+| 2B.7 | Record fixtures for Identity domain | 1 hr |
+| 2B.8 | Record fixtures for Repository domain | 1 hr |
+| 2B.9 | Record fixtures for Milestone domain | 1 hr |
+| 2B.10 | Record fixtures for Issue domain | 1 hr |
+| 2B.11 | Record fixtures for PR domain | 1 hr |
+| 2B.12 | Record fixtures for Project domain | 1 hr |
+| 2B.13 | Record fixtures for Protection domain | 1 hr |
+| 2B.14 | Record fixtures for Action domain | 1 hr |
+| 2B.15 | Record fixtures for Secret domain | 1 hr |
+| 2B.16 | Record fixtures for Variable domain | 1 hr |
+| 2B.17 | Record fixtures for Release domain | 1 hr |
+| 2B.18 | Create synthetic edge case fixtures | 2 hrs |
+| 2B.19 | Add CI workflow for weekly drift detection | 1 hr |
+| 2B.20 | Document fixture recording process | 1 hr |
+
+**Recording Manifest with Setup/Teardown:**
+```yaml
+# fixtures/recording_manifest.yaml
+fixtures:
+  milestone:
+    list_populated:
+      type: rest
+      endpoint: "/repos/{owner}/{repo}/milestones?state=all"
+      setup:
+        - resource: milestone
+          params: { title: "Test Milestone v1.0", state: "open" }
+        - resource: milestone
+          params: { title: "Test Milestone v2.0", state: "closed" }
+      # teardown is automatic via tracked resources
+
+    list_empty:
+      type: rest
+      endpoint: "/repos/{owner}/{repo}/milestones?state=all"
+      setup:
+        - action: ensure_empty
+          resource: milestone
+      # Ensures no milestones exist before recording
 ```
 
-**Acceptance Criteria:**
+**Recording Flow:**
+```bash
+# fixtures/scripts/record_fixtures.bash
+source "../../lib/resources/core.bash"
+source "../../lib/resources/milestone.bash"
+# ... source all resource libraries
+
+record_fixture() {
+    local domain="$1" fixture="$2"
+
+    # Setup cleanup trap
+    setup_cleanup_trap
+
+    # Run setup from manifest
+    run_setup "$domain" "$fixture"
+
+    # Record API response
+    local response=$(execute_api_call "$domain" "$fixture")
+
+    # Cleanup happens automatically via trap
+
+    # Sanitize and save
+    echo "$response" | sanitize_fixture "$domain" > "fixtures/$domain/$fixture.json"
+}
+```
+
+**Acceptance Criteria (Part B):**
 - [ ] All domain fixtures recorded from live APIs
+- [ ] Setup creates precise test state before recording
+- [ ] Teardown cleans up automatically (via Part A)
 - [ ] Sanitization removes all sensitive data
 - [ ] Drift detection catches schema changes
-- [ ] Synthetic fixtures clearly separated and documented
-- [ ] CI runs weekly drift detection
-- [ ] Old fixture locations removed
+- [ ] Re-recording produces identical fixtures
 
-**Dependencies:** Phase 1
+**Dependencies:** Phase 1, Part A must complete before Part B
 
 ---
 
@@ -404,77 +536,105 @@ setup() {
 
 ### Phase 6: E2E Test Infrastructure
 
-**Objective:** Create reliable E2E testing with proper resource management.
+**Objective:** Create reliable E2E testing by leveraging the shared resource management from Phase 2.
+
+**Key Design Decision:** This phase **reuses** the `tests/lib/resources/` library built in Phase 2. No duplicate resource management code is needed.
 
 **Deliverables:**
-1. Test sandbox setup/teardown system
-2. Resource tracking and cleanup
-3. E2E tests for critical paths
-4. CI workflow integration
+1. Sandbox orchestrator (using Phase 2 resource library)
+2. E2E tests for critical paths
+3. CI workflow integration
 
 **Tasks:**
 
 | Task | Description | Estimate |
 |------|-------------|----------|
-| 6.1 | Design sandbox resource model | 2 hrs |
-| 6.2 | Implement `sandbox/setup.bash` | 3 hrs |
-| 6.3 | Implement `sandbox/teardown.bash` | 2 hrs |
-| 6.4 | Implement `sandbox/resources.bash` helpers | 2 hrs |
-| 6.5 | Create smoke tests (connectivity, auth) | 1 hr |
-| 6.6 | E2E: Milestone CRUD cycle | 2 hrs |
-| 6.7 | E2E: Issue lifecycle | 2 hrs |
-| 6.8 | E2E: PR operations | 2 hrs |
-| 6.9 | E2E: Project item management | 2 hrs |
-| 6.10 | E2E: Protection rule application | 2 hrs |
-| 6.11 | E2E: Variable CRUD cycle | 2 hrs |
-| 6.12 | E2E: Release creation | 2 hrs |
-| 6.13 | Update CI workflow | 2 hrs |
-| 6.14 | Configure test environment variables | 1 hr |
-| 6.15 | Document E2E test requirements | 1 hr |
+| 6.1 | Create `e2e/sandbox.bash` orchestrator (uses lib/resources/) | 2 hrs |
+| 6.2 | Create `e2e/smoke/` connectivity tests | 1 hr |
+| 6.3 | E2E: Milestone CRUD cycle | 1.5 hrs |
+| 6.4 | E2E: Issue lifecycle | 1.5 hrs |
+| 6.5 | E2E: PR operations | 1.5 hrs |
+| 6.6 | E2E: Project item management | 1.5 hrs |
+| 6.7 | E2E: Protection rule application | 1.5 hrs |
+| 6.8 | E2E: Variable CRUD cycle | 1 hr |
+| 6.9 | E2E: Release creation | 1.5 hrs |
+| 6.10 | Update CI workflow for E2E | 2 hrs |
+| 6.11 | Configure test environment variables | 1 hr |
+| 6.12 | Document E2E test requirements | 1 hr |
 
-**Sandbox Resource Model:**
+**Sandbox Using Shared Resources:**
 ```bash
-# sandbox/resources.bash
+# tests/e2e/sandbox.bash
+# Reuses the resource library from Phase 2!
 
-# Track created resources for cleanup
-declare -A SANDBOX_RESOURCES=(
-    [milestones]=""
-    [issues]=""
-    [labels]=""
-    [releases]=""
-    [rulesets]=""
-    [variables]=""
-)
+source "../lib/resources/core.bash"
+source "../lib/resources/milestone.bash"
+source "../lib/resources/issue.bash"
+source "../lib/resources/pr.bash"
+source "../lib/resources/release.bash"
+source "../lib/resources/protection.bash"
+source "../lib/resources/variable.bash"
 
-# Create resource and track for cleanup
-create_test_milestone() {
-    local title="bats-test-$(date +%s)"
-    local result=$(gh api "repos/$TEST_ORG/$TEST_REPO/milestones" \
-        -f title="$title" -f state="open")
+# Sandbox setup - creates test resources
+setup_sandbox() {
+    setup_cleanup_trap  # From core.bash - cleanup on exit/error
 
-    local number=$(echo "$result" | jq -r '.number')
-    SANDBOX_RESOURCES[milestones]+=" $number"
+    # Create resources using Phase 2 functions
+    export TEST_MILESTONE=$(create_milestone "$TEST_ORG" "$TEST_REPO" "E2E Test Milestone")
+    export TEST_ISSUE=$(create_issue "$TEST_ORG" "$TEST_REPO" "E2E Test Issue")
+    export TEST_LABEL=$(create_label "$TEST_ORG" "$TEST_REPO" "e2e-test")
 
-    echo "$number"
+    echo "Sandbox ready: milestone=$TEST_MILESTONE, issue=$TEST_ISSUE"
 }
 
-# Cleanup all tracked resources
-cleanup_sandbox() {
-    for milestone in ${SANDBOX_RESOURCES[milestones]}; do
-        gh api -X DELETE "repos/$TEST_ORG/$TEST_REPO/milestones/$milestone" 2>/dev/null || true
-    done
-    # ... cleanup other resource types
+# Sandbox teardown - automatic via cleanup_tracked_resources()
+teardown_sandbox() {
+    cleanup_tracked_resources  # From core.bash
 }
 ```
 
+**E2E Test Pattern:**
+```bash
+#!/usr/bin/env bats
+# tests/e2e/domain/test_milestone_e2e.bats
+
+setup_file() {
+    source "../sandbox.bash"
+    setup_sandbox
+}
+
+teardown_file() {
+    teardown_sandbox
+}
+
+@test "milestone: create and fetch roundtrip" {
+    source "../../lib/github/gh-milestone-functions.sh"
+
+    # Create via our functions
+    local number=$(create_milestone "$TEST_ORG" "$TEST_REPO" "Roundtrip Test")
+
+    # Fetch and verify
+    run fetch_milestone "$TEST_ORG" "$TEST_REPO" "$number"
+    assert_success
+    assert_output --partial "Roundtrip Test"
+}
+```
+
+**What's NOT Needed (thanks to Phase 2):**
+- ❌ `sandbox/resources.bash` - Use `lib/resources/*.bash` instead
+- ❌ `create_test_milestone()` - Use `create_milestone()` from Phase 2
+- ❌ `cleanup_sandbox()` - Use `cleanup_tracked_resources()` from Phase 2
+- ❌ Resource tracking logic - Already in `lib/resources/core.bash`
+
 **Acceptance Criteria:**
-- [ ] Sandbox creates/destroys resources reliably
+- [ ] E2E tests use Phase 2 resource library (no duplication)
+- [ ] Sandbox setup/teardown is reliable
 - [ ] No orphaned resources after test runs
 - [ ] E2E tests cover critical user journeys
 - [ ] CI runs E2E on main branch only
 - [ ] Test environment documented
 
-**Dependencies:** Phase 5
+**Dependencies:** Phase 2 (resource library), Phase 5
 
 ---
 
@@ -510,12 +670,15 @@ cleanup_sandbox() {
 | Phase | Duration | Dependencies |
 |-------|----------|--------------|
 | Phase 1: Foundation | 1 day | None |
-| Phase 2: Fixtures (Live Recording) | 3 days | Phase 1 |
-| Phase 3: Mock System | 2 days | Phase 2 |
-| Phase 4: Unit Tests | 3 days | Phase 1, 2 |
+| Phase 2A: Resource Management | 2 days | Phase 1 |
+| Phase 2B: Fixture Recording | 3 days | Phase 2A |
+| Phase 3: Mock System | 2 days | Phase 2B |
+| Phase 4: Unit Tests | 3 days | Phase 1, 2B |
 | Phase 5: Integration | 4 days | Phase 3, 4 |
-| Phase 6: E2E | 3 days | Phase 5 |
-| **Total** | **~16 days** | |
+| Phase 6: E2E | 2 days | Phase 2A, Phase 5 |
+| **Total** | **~17 days** | |
+
+**Note:** Phase 6 duration reduced from 3→2 days because it reuses Phase 2A's resource management library instead of building its own.
 
 ---
 

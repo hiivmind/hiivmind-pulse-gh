@@ -1,0 +1,87 @@
+{
+  "data": {
+    "organization": {
+      "projectV2": {
+        "id": "PVT_SANITIZED_PROJECT",
+        "title": "Hiivmind Pulse Test Fixtures",
+        "shortDescription": null,
+        "public": false,
+        "closed": false,
+        "createdAt": "2025-12-11T12:23:42Z",
+        "updatedAt": "2025-12-11T12:23:42Z",
+        "items": {
+          "totalCount": 0,
+          "nodes": []
+        },
+        "fields": {
+          "nodes": [
+            {
+              "id": "PVTF_SANITIZED_FIELD",
+              "name": "Title",
+              "dataType": "TITLE"
+            },
+            {
+              "id": "PVTF_SANITIZED_FIELD",
+              "name": "Assignees",
+              "dataType": "ASSIGNEES"
+            },
+            {
+              "id": "PVTSSF_lADODUFJxM4BKYZ4zg6RANY",
+              "name": "Status",
+              "dataType": "SINGLE_SELECT",
+              "options": [
+                {
+                  "id": "f75ad846",
+                  "name": "Todo"
+                },
+                {
+                  "id": "47fc9ee4",
+                  "name": "In Progress"
+                },
+                {
+                  "id": "98236657",
+                  "name": "Done"
+                }
+              ]
+            },
+            {
+              "id": "PVTF_SANITIZED_FIELD",
+              "name": "Labels",
+              "dataType": "LABELS"
+            },
+            {
+              "id": "PVTF_SANITIZED_FIELD",
+              "name": "Linked pull requests",
+              "dataType": "LINKED_PULL_REQUESTS"
+            },
+            {
+              "id": "PVTF_SANITIZED_FIELD",
+              "name": "Milestone",
+              "dataType": "MILESTONE"
+            },
+            {
+              "id": "PVTF_SANITIZED_FIELD",
+              "name": "Repository",
+              "dataType": "REPOSITORY"
+            },
+            {
+              "id": "PVTF_SANITIZED_FIELD",
+              "name": "Reviewers",
+              "dataType": "REVIEWERS"
+            },
+            {
+              "id": "PVTF_SANITIZED_FIELD",
+              "name": "Parent issue",
+              "dataType": "PARENT_ISSUE"
+            },
+            {
+              "id": "PVTF_SANITIZED_FIELD",
+              "name": "Sub-issues progress",
+              "dataType": "SUB_ISSUES_PROGRESS"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

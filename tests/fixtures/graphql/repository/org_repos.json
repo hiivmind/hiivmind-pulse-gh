@@ -1,0 +1,75 @@
+{
+  "data": {
+    "organization": {
+      "repositories": {
+        "totalCount": 8,
+        "nodes": [
+          {
+            "id": "R_kgDOQm1-hg",
+            "name": "hiivmind-pulse-test-fixtures",
+            "nameWithOwner": "hiivmind/hiivmind-pulse-test-fixtures",
+            "description": "Test fixtures repository for hiivmind-pulse-gh testing framework",
+            "isPrivate": true,
+            "createdAt": "2025-12-11T12:23:29Z"
+          },
+          {
+            "id": "R_kgDOPWbGbQ",
+            "name": "hiivmind-pulse-gh",
+            "nameWithOwner": "hiivmind/hiivmind-pulse-gh",
+            "description": null,
+            "isPrivate": false,
+            "createdAt": "2025-08-01T06:50:23Z"
+          },
+          {
+            "id": "R_kgDOQkJ61A",
+            "name": "hiivmind-corpus",
+            "nameWithOwner": "hiivmind/hiivmind-corpus",
+            "description": null,
+            "isPrivate": false,
+            "createdAt": "2025-12-07T11:37:07Z"
+          },
+          {
+            "id": "R_kgDOQl8Vwg",
+            "name": ".github",
+            "nameWithOwner": "hiivmind/.github",
+            "description": null,
+            "isPrivate": false,
+            "createdAt": "2025-12-10T05:20:05Z"
+          },
+          {
+            "id": "R_kgDOPR37Og",
+            "name": "hiivmind-claude-os",
+            "nameWithOwner": "hiivmind/hiivmind-claude-os",
+            "description": null,
+            "isPrivate": true,
+            "createdAt": "2025-07-24T06:54:14Z"
+          },
+          {
+            "id": "R_kgDOQlC1GQ",
+            "name": "hiivmind-corpus-data",
+            "nameWithOwner": "hiivmind/hiivmind-corpus-data",
+            "description": null,
+            "isPrivate": true,
+            "createdAt": "2025-12-08T20:38:49Z"
+          },
+          {
+            "id": "R_kgDOPXUnHA",
+            "name": "hiivmind-dev-commands",
+            "nameWithOwner": "hiivmind/hiivmind-dev-commands",
+            "description": null,
+            "isPrivate": true,
+            "createdAt": "2025-08-03T01:32:16Z"
+          },
+          {
+            "id": "R_kgDOPVbJ9Q",
+            "name": "hiivmind-claude-agents",
+            "nameWithOwner": "hiivmind/hiivmind-claude-agents",
+            "description": null,
+            "isPrivate": true,
+            "createdAt": "2025-07-30T14:15:35Z"
+          }
+        ]
+      }
+    }
+  }
+}
