@@ -144,6 +144,7 @@ source lib/github/gh-pr-functions.sh         # Pull request operations
 source lib/github/gh-project-functions.sh    # Project v2 operations
 source lib/github/gh-protection-functions.sh # Protection (branch + rulesets)
 source lib/github/gh-action-functions.sh     # Actions (workflows, runs, jobs)
+source lib/github/gh-secret-functions.sh     # Secrets (encrypted secrets)
 
 # Examples
 get_viewer_id                                           # Get current user ID
@@ -206,6 +207,10 @@ hiivmind-pulse-gh/
 │   ├── gh-action-functions.sh       # Workflows, runs, jobs
 │   ├── gh-action-jq-filters.yaml
 │   ├── gh-action-index.md
+│   ├── # Secret Domain
+│   ├── gh-secret-functions.sh       # Encrypted secrets
+│   ├── gh-secret-jq-filters.yaml
+│   ├── gh-secret-index.md
 │   ├── # Legacy/Supporting
 │   ├── gh-rest-functions.sh         # REST shell functions (DEPRECATED)
 │   ├── gh-rest-endpoints.yaml       # REST endpoint templates
@@ -272,6 +277,15 @@ hiivmind-pulse-gh/
 - `enable_workflow`, `disable_workflow`, `delete_run_logs` - Management
 - `filter_runs_by_*`, `filter_workflows_by_*` - Filtering
 - `format_workflows`, `format_runs`, `format_jobs` - Formatting
+
+### Secret Domain (`gh-secret-functions.sh`)
+- `fetch_repo_public_key`, `fetch_org_public_key`, `fetch_env_public_key` - Public keys for encryption
+- `discover_repo_secrets`, `discover_env_secrets`, `discover_org_secrets`, `discover_user_secrets` - Discovery
+- `detect_secret_exists`, `detect_env_secret_exists`, `detect_org_secret_exists` - Detection
+- `set_repo_secret`, `set_env_secret`, `set_org_secret`, `set_user_secret` - Set secrets
+- `delete_repo_secret`, `delete_env_secret`, `delete_org_secret`, `delete_user_secret` - Delete secrets
+- `set_org_secret_repos`, `add_repo_to_org_secret`, `remove_repo_from_org_secret` - Repo access management
+- `filter_secrets_by_*`, `format_secrets` - Filtering and formatting
 
 ## Pipeline Pattern
 
