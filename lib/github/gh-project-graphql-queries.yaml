@@ -413,7 +413,7 @@ item_queries:
                         }
                       }
                     }
-                    ... on ProjectV2ItemFieldReviewersValue {
+                    ... on ProjectV2ItemFieldReviewerValue {
                       reviewers(first: 10) {
                         nodes {
                           ... on User {
@@ -432,7 +432,7 @@ item_queries:
                         }
                       }
                     }
-                    ... on ProjectV2ItemFieldPullRequestsValue {
+                    ... on ProjectV2ItemFieldPullRequestValue {
                       pullRequests(first: 10) {
                         nodes {
                           number
@@ -641,7 +641,7 @@ item_queries:
                         }
                       }
                     }
-                    ... on ProjectV2ItemFieldReviewersValue {
+                    ... on ProjectV2ItemFieldReviewerValue {
                       reviewers(first: 10) {
                         nodes {
                           ... on User {
@@ -660,7 +660,7 @@ item_queries:
                         }
                       }
                     }
-                    ... on ProjectV2ItemFieldPullRequestsValue {
+                    ... on ProjectV2ItemFieldPullRequestValue {
                       pullRequests(first: 10) {
                         nodes {
                           number
@@ -1376,7 +1376,7 @@ pagination:
                         }
                       }
                     }
-                    ... on ProjectV2ItemFieldReviewersValue {
+                    ... on ProjectV2ItemFieldReviewerValue {
                       reviewers(first: 10) {
                         nodes {
                           ... on User {
@@ -1395,7 +1395,7 @@ pagination:
                         }
                       }
                     }
-                    ... on ProjectV2ItemFieldPullRequestsValue {
+                    ... on ProjectV2ItemFieldPullRequestValue {
                       pullRequests(first: 10) {
                         nodes {
                           number
@@ -1615,7 +1615,7 @@ pagination:
                         }
                       }
                     }
-                    ... on ProjectV2ItemFieldReviewersValue {
+                    ... on ProjectV2ItemFieldReviewerValue {
                       reviewers(first: 10) {
                         nodes {
                           ... on User {
@@ -1634,7 +1634,7 @@ pagination:
                         }
                       }
                     }
-                    ... on ProjectV2ItemFieldPullRequestsValue {
+                    ... on ProjectV2ItemFieldPullRequestValue {
                       pullRequests(first: 10) {
                         nodes {
                           number
