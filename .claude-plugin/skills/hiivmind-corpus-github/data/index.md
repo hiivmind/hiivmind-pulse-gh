@@ -39,6 +39,10 @@
 - **Unions** `github-docs:graphql/reference/unions.md` - Union type definitions
 - **Input Objects** `github-docs:graphql/reference/input-objects.md` - Input type definitions
 
+### GraphQL Schema (SDL)
+
+- **Full Schema** `graphql-schema:schema.docs.graphql` - Complete GitHub GraphQL API schema in SDL format (70k+ lines)
+
 ---
 
 ## REST API

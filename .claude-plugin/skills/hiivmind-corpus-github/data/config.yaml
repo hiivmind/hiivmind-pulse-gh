@@ -22,6 +22,14 @@ sources:
     last_commit_sha: "615f92e99b53b59b71fd973c649f1405b5072f91"
     last_indexed_at: "2024-12-10T16:45:00Z"
 
+  - id: "graphql-schema"
+    type: "local"
+    path: "uploads/graphql-schema/"
+    description: "GitHub GraphQL API schema (SDL format)"
+    files:
+      - "schema.docs.graphql"
+    last_indexed_at: "2024-12-10T17:00:00Z"
+
 index:
   format: "markdown"
   last_updated_at: "2024-12-10T16:45:00Z"
