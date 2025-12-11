@@ -1,0 +1,375 @@
+# GitHub Releases jq Filters
+# Transformation and formatting filters for releases and assets
+
+# =============================================================================
+# FORMAT FILTERS
+# =============================================================================
+
+filters:
+  # Format releases as tabular list
+  format_releases_list:
+    description: Format releases array as table
+    filter: |
+      ["TAG", "NAME", "PUBLISHED", "PRERELEASE", "DRAFT", "LATEST"] as $headers |
+      [$headers],
+      (.[] | [
+        (.tagName // .tag_name),
+        .name,
+        (.publishedAt // .published_at // "-"),
+        ((.isPrerelease // .prerelease) | tostring),
+        ((.isDraft // .draft) | tostring),
+        ((.isLatest // false) | tostring)
+      ]) |
+      @tsv
+
+  # Format single release with details
+  format_release_detail:
+    description: Format single release with all metadata
+    filter: |
+      "Tag Name: \(.tag_name // .tagName)",
+      "Release Name: \(.name)",
+      "Created: \(.created_at // .createdAt)",
+      "Published: \(.published_at // .publishedAt // \"Not published\")",
+      "Prerelease: \(.prerelease // .isPrerelease)",
+      "Draft: \(.draft // .isDraft)",
+      "Latest: \(.isLatest // false)",
+      "Target: \(.target_commitish)",
+      "Author: \(.author.login)",
+      "Assets: \(.assets | length)",
+      "",
+      "Release Notes:",
+      "\(.body // \"No release notes\")"
+
+  # Format assets as tabular list
+  format_assets_list:
+    description: Format assets array as table
+    filter: |
+      ["NAME", "SIZE", "DOWNLOADS", "CONTENT_TYPE", "URL"] as $headers |
+      [$headers],
+      (.[] | [
+        .name,
+        (.size | tostring),
+        ((.downloadCount // .download_count) | tostring),
+        .content_type,
+        (.browser_download_url // .downloadUrl)
+      ]) |
+      @tsv
+
+  # Format release notes (body text)
+  format_release_notes:
+    description: Extract and format release notes
+    filter: |
+      .body // "No release notes"
+
+  # Format release summary (compact)
+  format_release_summary:
+    description: Format release as single line summary
+    filter: |
+      (.tagName // .tag_name) + " - " + .name + " (" + (.publishedAt // .published_at // "unpublished") + ")"
+
+# =============================================================================
+# EXTRACT FILTERS
+# =============================================================================
+
+  # Extract tag names
+  extract_tag_names:
+    description: Extract array of tag names
+    filter: |
+      map(.tagName // .tag_name)
+
+  # Extract release names
+  extract_release_names:
+    description: Extract array of release names
+    filter: |
+      map(.name)
+
+  # Extract asset names
+  extract_asset_names:
+    description: Extract array of asset names from release
+    filter: |
+      .assets | map(.name)
+
+  # Extract asset download URLs
+  extract_asset_urls:
+    description: Extract array of asset download URLs
+    filter: |
+      map(.browser_download_url // .downloadUrl)
+
+  # Extract download counts
+  extract_download_counts:
+    description: Extract download counts for assets
+    filter: |
+      map({name: .name, downloads: (.downloadCount // .download_count)})
+
+  # Extract release IDs
+  extract_release_ids:
+    description: Extract release IDs
+    filter: |
+      map(.id)
+
+  # Extract published dates
+  extract_published_dates:
+    description: Extract publication dates
+    filter: |
+      map({tag: (.tagName // .tag_name), published: (.publishedAt // .published_at)})
+
+# =============================================================================
+# FILTER OPERATIONS
+# =============================================================================
+
+  # Filter by prerelease status
+  filter_by_prerelease:
+    description: Filter by prerelease status (requires --arg isPrerelease "true"|"false")
+    filter: |
+      if $isPrerelease == "true" then
+        map(select(.isPrerelease == true or .prerelease == true))
+      else
+        map(select(.isPrerelease == false or .prerelease == false))
+      end
+
+  # Filter by draft status
+  filter_by_draft:
+    description: Filter by draft status (requires --arg isDraft "true"|"false")
+    filter: |
+      if $isDraft == "true" then
+        map(select(.isDraft == true or .draft == true))
+      else
+        map(select(.isDraft == false or .draft == false))
+      end
+
+  # Filter by tag pattern
+  filter_by_tag_pattern:
+    description: Filter releases by tag pattern (requires --arg pattern REGEX)
+    filter: |
+      map(select(.tagName // .tag_name | test($pattern)))
+
+  # Filter by asset name pattern
+  filter_assets_by_name:
+    description: Filter assets by name pattern (requires --arg pattern REGEX)
+    filter: |
+      map(select(.name | test($pattern)))
+
+  # Filter releases published after date
+  filter_published_after:
+    description: Filter releases published after date (requires --arg date ISO8601)
+    filter: |
+      map(select(.publishedAt // .published_at > $date))
+
+  # Filter stable releases only
+  filter_stable_only:
+    description: Keep only stable (non-prerelease, non-draft) releases
+    filter: |
+      map(select(
+        (.isPrerelease // .prerelease) == false and
+        (.isDraft // .draft) == false
+      ))
+
+  # Filter latest release
+  filter_latest:
+    description: Keep only the latest release
+    filter: |
+      map(select(.isLatest == true))
+
+# =============================================================================
+# SUMMARY FILTERS
+# =============================================================================
+
+  # Count releases by type
+  count_by_type:
+    description: Count releases by type (prerelease, draft, stable)
+    filter: |
+      {
+        total: length,
+        stable: (map(select((.isPrerelease // .prerelease) == false and (.isDraft // .draft) == false)) | length),
+        prerelease: (map(select(.isPrerelease // .prerelease == true)) | length),
+        draft: (map(select(.isDraft // .draft == true)) | length)
+      }
+
+  # Release summary with stats
+  release_summary:
+    description: Summarize releases with statistics
+    filter: |
+      {
+        total: length,
+        by_type: {
+          stable: (map(select((.isPrerelease // .prerelease) == false and (.isDraft // .draft) == false)) | length),
+          prerelease: (map(select(.isPrerelease // .prerelease == true)) | length),
+          draft: (map(select(.isDraft // .draft == true)) | length)
+        },
+        recent: (
+          sort_by(.publishedAt // .published_at) |
+          reverse |
+          .[0:5] |
+          map({tag: (.tagName // .tag_name), name: .name, published: (.publishedAt // .published_at)})
+        ),
+        latest: (
+          map(select(.isLatest == true)) |
+          .[0] |
+          {tag: (.tagName // .tag_name), name: .name}
+        )
+      }
+
+  # Download statistics
+  download_stats:
+    description: Calculate download statistics for releases
+    filter: |
+      {
+        total_releases: length,
+        total_downloads: (map(.assets // [] | map(.downloadCount // .download_count) | add // 0) | add),
+        by_release: (
+          map({
+            tag: (.tagName // .tag_name),
+            name: .name,
+            asset_count: (.assets // [] | length),
+            total_downloads: (.assets // [] | map(.downloadCount // .download_count) | add // 0)
+          })
+        )
+      }
+
+  # Asset statistics
+  asset_stats:
+    description: Calculate asset statistics
+    filter: |
+      .assets | {
+        total_assets: length,
+        total_size: (map(.size) | add),
+        total_downloads: (map(.downloadCount // .download_count) | add // 0),
+        by_asset: (
+          map({
+            name: .name,
+            size: .size,
+            downloads: (.downloadCount // .download_count),
+            content_type: .content_type
+          })
+        )
+      }
+
+  # Top downloads
+  top_downloads:
+    description: Get top downloaded releases (requires --argjson limit NUM)
+    filter: |
+      map({
+        tag: (.tagName // .tag_name),
+        name: .name,
+        total_downloads: (.assets // [] | map(.downloadCount // .download_count) | add // 0)
+      }) |
+      sort_by(.total_downloads) |
+      reverse |
+      .[:($limit // 10)]
+
+# =============================================================================
+# TRANSFORMATION FILTERS
+# =============================================================================
+
+  # Normalize gh CLI format to REST format
+  normalize_release_from_cli:
+    description: Normalize gh CLI release format to REST API format
+    filter: |
+      {
+        tag_name: .tagName,
+        name: .name,
+        published_at: .publishedAt,
+        created_at: .createdAt,
+        prerelease: .isPrerelease,
+        draft: .isDraft
+      }
+
+  # Add version metadata
+  add_version_metadata:
+    description: Parse semantic version from tag
+    filter: |
+      map(. + {
+        version: ((.tagName // .tag_name) | ltrimstr("v")),
+        is_semver: ((.tagName // .tag_name) | test("^v?[0-9]+\\.[0-9]+\\.[0-9]+"))
+      })
+
+  # Sort by semantic version
+  sort_by_semver:
+    description: Sort releases by semantic version
+    filter: |
+      map(. + {
+        _version_parts: ((.tagName // .tag_name) | ltrimstr("v") | split(".") | map(tonumber? // 0))
+      }) |
+      sort_by(._version_parts) |
+      map(del(._version_parts))
+
+  # Group by major version
+  group_by_major_version:
+    description: Group releases by major version
+    filter: |
+      map(. + {
+        major: ((.tagName // .tag_name) | ltrimstr("v") | split(".")[0])
+      }) |
+      group_by(.major) |
+      map({
+        major_version: .[0].major,
+        count: length,
+        releases: map({tag: (.tagName // .tag_name), name: .name})
+      })
+
+  # Convert to changelog format
+  to_changelog:
+    description: Convert releases to changelog format
+    filter: |
+      map(
+        "## " + .name + " (" + (.tagName // .tag_name) + ") - " + (.publishedAt // .published_at) + "\n\n" +
+        (.body // "No release notes") + "\n"
+      ) | join("\n")
+
+  # Extract asset metadata
+  extract_asset_metadata:
+    description: Extract comprehensive asset metadata
+    filter: |
+      .assets | map({
+        name: .name,
+        size_mb: ((.size / 1048576) | floor),
+        downloads: (.downloadCount // .download_count),
+        content_type: .content_type,
+        url: (.browser_download_url // .downloadUrl),
+        created: (.created_at // .createdAt)
+      })
+
+# =============================================================================
+# VALIDATION FILTERS
+# =============================================================================
+
+  # Detect invalid releases
+  detect_invalid_releases:
+    description: Flag releases with potential issues
+    filter: |
+      map(. + {
+        has_assets: ((.assets // [] | length) > 0),
+        has_notes: ((.body // "") != ""),
+        is_tagged: ((.tagName // .tag_name) != null),
+        is_published: ((.publishedAt // .published_at) != null)
+      })
+
+  # Validate semantic versioning
+  validate_semver:
+    description: Check if releases follow semantic versioning
+    filter: |
+      map(. + {
+        follows_semver: ((.tagName // .tag_name) | test("^v?[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9.]+)?(\\+[a-zA-Z0-9.]+)?$"))
+      })
+
+  # Find releases missing assets
+  find_missing_assets:
+    description: Find releases without any assets
+    filter: |
+      map(select((.assets // [] | length) == 0)) |
+      map({tag: (.tagName // .tag_name), name: .name})
+
+  # Find draft releases
+  find_drafts:
+    description: Find all draft releases
+    filter: |
+      map(select(.isDraft == true or .draft == true)) |
+      map({tag: (.tagName // .tag_name), name: .name, created: (.createdAt // .created_at)})
+
+  # Find old prereleases
+  find_old_prereleases:
+    description: Find prereleases older than stable releases
+    filter: |
+      map(select(.isPrerelease == true or .prerelease == true)) |
+      sort_by(.publishedAt // .published_at) |
+      .[0:10]

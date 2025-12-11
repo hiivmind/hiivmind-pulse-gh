@@ -146,6 +146,7 @@ source lib/github/gh-protection-functions.sh # Protection (branch + rulesets)
 source lib/github/gh-action-functions.sh     # Actions (workflows, runs, jobs)
 source lib/github/gh-secret-functions.sh     # Secrets (encrypted secrets)
 source lib/github/gh-variable-functions.sh   # Variables (configuration variables)
+source lib/github/gh-release-functions.sh    # Releases (tags, assets, notes)
 
 # Examples
 get_viewer_id                                           # Get current user ID
@@ -216,6 +217,11 @@ hiivmind-pulse-gh/
 │   ├── gh-variable-functions.sh     # Configuration variables
 │   ├── gh-variable-jq-filters.yaml
 │   ├── gh-variable-index.md
+│   ├── # Release Domain
+│   ├── gh-release-functions.sh      # Releases, tags, assets
+│   ├── gh-release-graphql-queries.yaml
+│   ├── gh-release-jq-filters.yaml
+│   ├── gh-release-index.md
 │   ├── # Legacy/Supporting
 │   ├── gh-rest-functions.sh         # REST shell functions (DEPRECATED)
 │   ├── gh-rest-endpoints.yaml       # REST endpoint templates
@@ -302,6 +308,16 @@ hiivmind-pulse-gh/
 - `delete_repo_variable`, `delete_env_variable`, `delete_org_variable` - Delete variables
 - `set_org_variable_repos`, `add_repo_to_org_variable`, `remove_repo_from_org_variable` - Repo access management
 - `filter_variables_by_*`, `format_variables` - Filtering and formatting
+
+### Release Domain (`gh-release-functions.sh`)
+- `fetch_release`, `fetch_release_by_tag`, `fetch_latest_release` - Fetch release data
+- `discover_repo_releases`, `discover_release_assets`, `discover_repo_tags` - Discovery
+- `get_release_id`, `get_release_tag`, `get_asset_id` - Lookup IDs and tags
+- `detect_release_exists`, `detect_is_prerelease`, `detect_is_draft`, `detect_is_latest` - Detection
+- `create_release`, `create_draft_release`, `update_release`, `delete_release` - Release CRUD
+- `upload_release_asset`, `download_release_asset`, `delete_release_asset` - Asset management
+- `publish_draft_release`, `generate_release_notes`, `download_release_tarball` - Utilities
+- `filter_releases_by_*`, `format_releases`, `format_assets` - Filtering and formatting
 
 ## Pipeline Pattern
 

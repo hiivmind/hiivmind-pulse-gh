@@ -1,0 +1,330 @@
+# GitHub Releases GraphQL Queries
+# GraphQL queries for release operations
+
+queries:
+  # Fetch single release by tag
+  fetch_release_by_tag:
+    description: Fetch release by tag name with assets
+    query: |
+      query($owner: String!, $repo: String!, $tagName: String!) {
+        repository(owner: $owner, name: $repo) {
+          release(tagName: $tagName) {
+            id
+            name
+            tagName
+            description
+            createdAt
+            publishedAt
+            updatedAt
+            isDraft
+            isPrerelease
+            isLatest
+            author {
+              login
+              avatarUrl
+            }
+            releaseAssets(first: 100) {
+              totalCount
+              nodes {
+                id
+                name
+                size
+                downloadCount
+                contentType
+                downloadUrl
+                createdAt
+                updatedAt
+              }
+            }
+            tagCommit {
+              oid
+              committedDate
+              message
+            }
+            url
+          }
+        }
+      }
+
+  # Fetch latest release
+  fetch_latest_release:
+    description: Fetch latest non-prerelease
+    query: |
+      query($owner: String!, $repo: String!) {
+        repository(owner: $owner, name: $repo) {
+          latestRelease {
+            id
+            name
+            tagName
+            description
+            createdAt
+            publishedAt
+            isDraft
+            isPrerelease
+            isLatest
+            author {
+              login
+            }
+            releaseAssets(first: 100) {
+              totalCount
+              nodes {
+                id
+                name
+                size
+                downloadCount
+                downloadUrl
+              }
+            }
+            url
+          }
+        }
+      }
+
+  # List releases
+  list_releases:
+    description: List repository releases (paginated)
+    query: |
+      query($owner: String!, $repo: String!, $first: Int = 10, $after: String) {
+        repository(owner: $owner, name: $repo) {
+          releases(first: $first, after: $after, orderBy: {field: CREATED_AT, direction: DESC}) {
+            totalCount
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            nodes {
+              id
+              name
+              tagName
+              description
+              createdAt
+              publishedAt
+              isDraft
+              isPrerelease
+              isLatest
+              author {
+                login
+              }
+              releaseAssets(first: 10) {
+                totalCount
+              }
+              url
+            }
+          }
+        }
+      }
+
+  # Fetch release with full assets
+  fetch_release_with_assets:
+    description: Fetch release with complete asset information
+    query: |
+      query($owner: String!, $repo: String!, $tagName: String!) {
+        repository(owner: $owner, name: $repo) {
+          release(tagName: $tagName) {
+            id
+            name
+            tagName
+            description
+            createdAt
+            publishedAt
+            updatedAt
+            isDraft
+            isPrerelease
+            isLatest
+            author {
+              login
+              email
+              avatarUrl
+            }
+            releaseAssets(first: 100) {
+              totalCount
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+              nodes {
+                id
+                name
+                label
+                size
+                downloadCount
+                contentType
+                downloadUrl
+                createdAt
+                updatedAt
+                uploader {
+                  login
+                }
+              }
+            }
+            tagCommit {
+              oid
+              abbreviatedOid
+              committedDate
+              message
+              messageHeadline
+              author {
+                name
+                email
+                date
+              }
+            }
+            url
+            resourcePath
+          }
+        }
+      }
+
+  # List repository tags
+  list_tags:
+    description: List repository git tags
+    query: |
+      query($owner: String!, $repo: String!, $first: Int = 100, $after: String) {
+        repository(owner: $owner, name: $repo) {
+          refs(refPrefix: "refs/tags/", first: $first, after: $after, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) {
+            totalCount
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            nodes {
+              name
+              target {
+                ... on Tag {
+                  id
+                  name
+                  message
+                  tagger {
+                    name
+                    email
+                    date
+                  }
+                  target {
+                    ... on Commit {
+                      oid
+                      committedDate
+                      message
+                    }
+                  }
+                }
+                ... on Commit {
+                  oid
+                  committedDate
+                  message
+                }
+              }
+            }
+          }
+        }
+      }
+
+  # Fetch release assets only
+  fetch_release_assets:
+    description: Fetch only the assets for a release
+    query: |
+      query($owner: String!, $repo: String!, $tagName: String!, $first: Int = 100, $after: String) {
+        repository(owner: $owner, name: $repo) {
+          release(tagName: $tagName) {
+            releaseAssets(first: $first, after: $after) {
+              totalCount
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+              nodes {
+                id
+                name
+                label
+                size
+                downloadCount
+                contentType
+                downloadUrl
+                createdAt
+                updatedAt
+                uploader {
+                  login
+                  avatarUrl
+                }
+              }
+            }
+          }
+        }
+      }
+
+  # Fetch minimal release info
+  fetch_release_minimal:
+    description: Fetch release with minimal fields (for listing)
+    query: |
+      query($owner: String!, $repo: String!, $tagName: String!) {
+        repository(owner: $owner, name: $repo) {
+          release(tagName: $tagName) {
+            id
+            name
+            tagName
+            publishedAt
+            isDraft
+            isPrerelease
+            isLatest
+            author {
+              login
+            }
+            url
+          }
+        }
+      }
+
+  # Check if release exists
+  check_release_exists:
+    description: Check if a release exists by tag name
+    query: |
+      query($owner: String!, $repo: String!, $tagName: String!) {
+        repository(owner: $owner, name: $repo) {
+          release(tagName: $tagName) {
+            id
+          }
+        }
+      }
+
+  # List prerelease versions
+  list_prereleases:
+    description: List only prerelease versions
+    query: |
+      query($owner: String!, $repo: String!, $first: Int = 10) {
+        repository(owner: $owner, name: $repo) {
+          releases(first: $first, orderBy: {field: CREATED_AT, direction: DESC}) {
+            nodes {
+              id
+              name
+              tagName
+              publishedAt
+              isPrerelease
+              author {
+                login
+              }
+              url
+            }
+          }
+        }
+      }
+
+  # Fetch release statistics
+  release_statistics:
+    description: Get release download statistics
+    query: |
+      query($owner: String!, $repo: String!, $tagName: String!) {
+        repository(owner: $owner, name: $repo) {
+          release(tagName: $tagName) {
+            name
+            tagName
+            publishedAt
+            releaseAssets(first: 100) {
+              totalCount
+              nodes {
+                name
+                size
+                downloadCount
+              }
+            }
+          }
+        }
+      }
