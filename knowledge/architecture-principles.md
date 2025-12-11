@@ -114,62 +114,192 @@ When the operation is unclear:
 
 ---
 
-## 2. The Three-Layer Architecture
+## 2. The Four-Layer Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    LAYER 3: SKILLS                          │
+│                   LAYER 4: SKILLS                           │
 │  Workflow orchestration via SKILL.md instructions           │
-│  Composes primitives using pipe patterns                    │
-│  Human-readable, goal-oriented                              │
+│  Multi-step workflows, error handling, documentation        │
+│  Human-readable, goal-oriented, composes all lower layers   │
 └─────────────────────────────────────────────────────────────┘
                               │
                               │ composes
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                  LAYER 2: FUNCTIONS                         │
+│              LAYER 3: SMART APPLICATION                     │
+│  High-level functions: apply_{outcome}()                    │
+│  Auto-detect context, compose primitives + templates        │
+│  Handle schema variations transparently                     │
+│  Example: apply_main_branch_protection()                    │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              │ uses
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│              LAYER 2: PRIMITIVE FUNCTIONS                   │
 │  Shell functions in lib/github/gh-{domain}-functions.sh    │
-│  Single-responsibility, stdin→stdout                        │
-│  Uses Priority Chain internally                             │
+│  Single-responsibility: FETCH, DETECT, MUTATE, etc.         │
+│  Stdin→stdout pipes, uses Priority Chain internally         │
 └─────────────────────────────────────────────────────────────┘
                               │
                               │ references
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                  LAYER 1: TEMPLATES                         │
+│         LAYER 1: TEMPLATES & DOCUMENTATION                  │
 │  GraphQL queries: gh-{domain}-graphql-queries.yaml         │
 │  jq filters: gh-{domain}-jq-filters.yaml                   │
+│  Config templates: gh-{domain}-templates.yaml (optional)   │
 │  Index docs: gh-{domain}-index.md                          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ### Layer 1: Templates & Documentation
 
-**Templates (YAML)**
+**Query/Filter Templates (YAML) - Required**
 - Externalized, versionable, testable query/filter definitions
 - GraphQL queries with parameters and extraction paths
 - jq filters for data transformation
 - No logic, only data
 
-**Index Documentation (Markdown)**
+**Configuration Templates (YAML) - Optional**
+
+Configuration templates (`gh-{domain}-templates.yaml`) should only be added when:
+
+1. **High complexity** - API configurations have 10+ fields with nested structures
+2. **Non-obvious best practices** - Users need expert knowledge to configure correctly
+3. **Schema variations** - API behavior differs based on context (org vs personal repos)
+4. **Common use cases** - Clear, reusable patterns exist
+
+**When NOT to use configuration templates:**
+- Simple mutations with <5 parameters
+- Highly variable configurations with no clear patterns
+- Domain where every use case is unique
+
+**Template access functions:**
+```bash
+get_{domain}_template "NAME"    # Returns JSON config from template
+list_{domain}_templates         # Lists available template names
+```
+
+**Example - Protection domain has templates:**
+- 40+ field configurations (required_status_checks, required_pull_request_reviews, etc.)
+- Schema variations (org repos support `restrictions` object, personal repos require `null`)
+- 29 different ruleset types with varying parameters
+- Clear best practices (main branch needs 2 approvals, signed commits, etc.)
+
+**Example - Issue domain doesn't need templates:**
+- Simple CRUD operations (3-5 field mutations)
+- No schema variations
+- Configurations are highly variable per use case
+
+**Index Documentation (Markdown) - Required**
 - `gh-{domain}-index.md` for each domain
-- Documents every function and filter
+- Documents every function at all layers
 - Includes examples and composition patterns
-- Single source of truth for available primitives
+- Single source of truth for available operations
 
-### Layer 2: Functions
+### Layer 2: Primitive Functions
 
-- Thin wrappers that select appropriate interaction method
-- Follow Priority Chain internally
+**Seven primitive types:**
+- FETCH, LOOKUP, FILTER, EXTRACT, FORMAT, MUTATE, DETECT
 - Single responsibility, composable via pipes
+- Follow Priority Chain internally (gh CLI → GraphQL → REST)
 - Located in `lib/github/gh-{domain}-functions.sh`
 
-### Layer 3: Skills
+**Characteristics:**
+- Pure operations - no context detection
+- Explicit parameters (owner, repo, branch, etc.)
+- Stdin→stdout for data flow
+- Examples: `fetch_branch_protection`, `detect_owner_type`, `format_issues`
 
-- Human-readable workflows in SKILL.md
-- Compose primitives - no new logic
-- Reference index.md for available operations
+### Layer 3: Smart Application Functions
+
+**Purpose:** Compose primitives with context awareness to achieve complete outcomes.
+
+**When to add Layer 3 functions:**
+- Multiple primitives must be composed in a specific sequence
+- Context detection is needed (org vs personal, current state, etc.)
+- Schema variations must be handled transparently
+- Common outcome can be parameterized simply
+
+**Naming pattern:** `apply_{outcome}`, `get_{aggregate}_summary`, `upsert_{entity}`
+
+**Example:** `apply_main_branch_protection()`
+
+This function demonstrates all Layer 3 characteristics:
+
+```bash
+apply_main_branch_protection() {
+    local owner="$1"
+    local repo="$2"
+
+    # 1. CONTEXT DETECTION - Determine repository type
+    local repo_type
+    repo_type=$(_detect_repo_type "$owner" "$repo")  # Internal API call
+    # Returns: "organization" or "personal"
+
+    # 2. SCHEMA VARIATION HANDLING - Select appropriate template
+    local template_name
+    if [[ "$repo_type" == "organization" ]]; then
+        template_name="main_org"      # Can use: restrictions object,
+                                      # required_signatures, bypass_pull_request_allowances
+    else
+        template_name="main_personal" # Must use: restrictions=null,
+                                      # no required_signatures
+    fi
+
+    # 3. COMPOSITION - Layer 2 primitives + Layer 1 template
+    get_protection_template "$template_name" | \
+        set_branch_protection_rest "$owner" "$repo" "main"
+}
+```
+
+**What this achieves:**
+- User calls simple function: `apply_main_branch_protection "owner" "repo"`
+- Function handles complexity: detects context, selects template, applies protection
+- Avoids errors: org-only fields automatically excluded for personal repos
+- Encodes best practices: org repos get 2 approvals + code owners, personal get 1 approval
+
+**Other Layer 3 examples:**
+- `upsert_repo_ruleset()` - Detects if ruleset exists, then creates or updates
+- `get_protection_summary()` - Fetches branch protection + rulesets, formats into single summary
+- `apply_branch_naming_ruleset()` - Gets template, applies to repository
+
+**Not all domains need Layer 3:**
+- Issue domain: primitives are sufficient (`create_issue`, `set_issue_milestone`)
+- Milestone domain: simple CRUD, no context detection needed
+- Protection domain: essential (40+ fields, org/personal variations)
+
+### Layer 4: Skills
+
+**Purpose:** Multi-step workflows combining all lower layers with error handling and user guidance.
+
+**Characteristics:**
+- Workflow orchestration (multiple operations in sequence)
+- Conceptual documentation (when to use X vs Y)
+- Error handling guidance (403 = permissions, 404 = missing entity)
+- Workspace configuration integration
 - Located in `skills/{skill-name}/SKILL.md`
+
+**Skills are NOT code** - they are documentation that guides Claude Code to compose the layers below.
+
+**Example workflow from Protection skill:**
+```bash
+# Full repository protection setup - composes Layer 3 functions
+apply_main_branch_protection "$ORG" "$REPO"
+apply_develop_branch_protection "$ORG" "$REPO"
+apply_branch_naming_ruleset "$ORG" "$REPO"
+apply_release_branch_ruleset "$ORG" "$REPO"
+apply_tag_protection_ruleset "$ORG" "$REPO"
+```
+
+**Skills provide:**
+- Decision trees (Branch Protection vs Rulesets - when to use each)
+- Complete outcomes ("Protect Main Branch", "Set Up Full Repository Protection")
+- Error scenarios (personal repo + restrictions object = 404 error)
+- Workspace integration (loading org/repo from `.hiivmind/github/config.yaml`)
+- Human-readable documentation for Claude Code to follow
 
 ---
 
@@ -180,21 +310,31 @@ When the operation is unclear:
 ```
 lib/github/
 ├── index.md                           # Master index of all domains
-├── gh-{domain}-functions.sh           # Shell function primitives
-├── gh-{domain}-graphql-queries.yaml   # GraphQL query templates
-├── gh-{domain}-jq-filters.yaml        # jq filter templates
-└── gh-{domain}-index.md               # Domain-specific function index
+├── gh-{domain}-functions.sh           # Shell functions (Layer 2 + Layer 3)
+├── gh-{domain}-graphql-queries.yaml   # GraphQL query templates (Layer 1)
+├── gh-{domain}-jq-filters.yaml        # jq filter templates (Layer 1)
+├── gh-{domain}-templates.yaml         # Config templates (Layer 1, optional)
+└── gh-{domain}-index.md               # Domain-specific function index (Layer 1)
+```
+
+**When to include `gh-{domain}-templates.yaml`:**
+- Domain has complex API payloads (10+ fields, nested structures)
+- Schema variations exist (org vs personal, different entity types)
+- Best practices can be encoded as reusable configs
+- Examples: Protection domain (has templates), Issue domain (no templates needed)
 ```
 
 ### 3.2 Domain Coverage
 
-| Domain | Functions | Queries | Filters | Index |
-|--------|-----------|---------|---------|-------|
-| Projects | `gh-project-functions.sh` | `gh-project-graphql-queries.yaml` | `gh-project-jq-filters.yaml` | `gh-project-index.md` |
-| Issues | `gh-issue-functions.sh` | `gh-issue-graphql-queries.yaml` | `gh-issue-jq-filters.yaml` | `gh-issue-index.md` |
-| Repositories | `gh-repo-functions.sh` | `gh-repo-graphql-queries.yaml` | `gh-repo-jq-filters.yaml` | `gh-repo-index.md` |
-| Identity | `gh-identity-functions.sh` | `gh-identity-graphql-queries.yaml` | - | `gh-identity-index.md` |
-| Milestones | `gh-milestone-functions.sh` | (shared) | `gh-milestone-jq-filters.yaml` | `gh-milestone-index.md` |
+| Domain | Functions | Queries | Filters | Templates | Index |
+|--------|-----------|---------|---------|-----------|-------|
+| Protection | `gh-protection-functions.sh` | `gh-protection-graphql-queries.yaml` | `gh-protection-jq-filters.yaml` | `gh-protection-templates.yaml` | `gh-protection-index.md` |
+| Projects | `gh-project-functions.sh` | `gh-project-graphql-queries.yaml` | `gh-project-jq-filters.yaml` | - | `gh-project-index.md` |
+| Issues | `gh-issue-functions.sh` | `gh-issue-graphql-queries.yaml` | `gh-issue-jq-filters.yaml` | - | `gh-issue-index.md` |
+| Repositories | `gh-repo-functions.sh` | `gh-repo-graphql-queries.yaml` | `gh-repo-jq-filters.yaml` | - | `gh-repo-index.md` |
+| Identity | `gh-identity-functions.sh` | `gh-identity-graphql-queries.yaml` | - | - | `gh-identity-index.md` |
+| Milestones | `gh-milestone-functions.sh` | (shared) | `gh-milestone-jq-filters.yaml` | - | `gh-milestone-index.md` |
+| PRs | `gh-pr-functions.sh` | `gh-pr-graphql-queries.yaml` | `gh-pr-jq-filters.yaml` | - | `gh-pr-index.md` |
 
 ---
 
@@ -291,23 +431,31 @@ fetch_org_project_fields 2 "hiivmind" | extract_field_ids
 
 ## Domains
 
-| Domain | Functions | Description |
-|--------|-----------|-------------|
-| [Projects](gh-project-index.md) | 24 | ProjectsV2 CRUD, fields, items, views |
-| [Issues](gh-issue-index.md) | 12 | Issue CRUD, labels, assignees |
-| [Repositories](gh-repo-index.md) | 8 | Repository discovery and metadata |
-| [Identity](gh-identity-index.md) | 6 | User/org detection and lookup |
-| [Milestones](gh-milestone-index.md) | 8 | Milestone CRUD operations |
+| Domain | Layer 2 | Layer 3 | Templates | Description |
+|--------|---------|---------|-----------|-------------|
+| [Protection](gh-protection-index.md) | 32 | 7 | ✅ | Branch protection + rulesets, schema variations |
+| [Projects](gh-project-index.md) | 20 | 4 | - | ProjectsV2 CRUD, fields, items, views |
+| [Issues](gh-issue-index.md) | 12 | - | - | Issue CRUD, labels, assignees |
+| [PRs](gh-pr-index.md) | 12 | - | - | Pull request CRUD, reviews, status |
+| [Repositories](gh-repo-index.md) | 8 | - | - | Repository discovery and metadata |
+| [Identity](gh-identity-index.md) | 6 | - | - | User/org detection and lookup |
+| [Milestones](gh-milestone-index.md) | 8 | - | - | Milestone CRUD operations |
 
-## Function Types
+## Layer 2: Primitive Types
 
 - **FETCH** - Retrieve data (`discover_*`, `fetch_*`)
 - **LOOKUP** - Resolve IDs (`get_*_id`)
 - **FILTER** - Transform data (`filter_*`, `apply_*_filter`)
 - **EXTRACT** - Pull specific fields (`extract_*`)
 - **FORMAT** - Human-readable output (`format_*`)
-- **MUTATE** - Create/update/delete (`create_*`, `update_*`, `delete_*`)
-- **DETECT** - Determine types (`detect_*`)
+- **MUTATE** - Create/update/delete (`create_*`, `update_*`, `delete_*`, `set_*`)
+- **DETECT** - Determine types/states (`detect_*`, `check_*`)
+
+## Layer 3: Smart Application
+
+- **apply_*** - Apply configurations with context detection
+- **upsert_*** - Idempotent create/update operations
+- **get_*_summary** - Aggregate multiple fetches
 
 ## Interaction Priority
 
@@ -319,9 +467,9 @@ fetch_org_project_fields 2 "hiivmind" | extract_field_ids
 
 ---
 
-## 5. Primitive Classification
+## 5. Primitive Classification (Layer 2)
 
-Every primitive falls into exactly one category:
+Every Layer 2 primitive falls into exactly one category:
 
 ### 5.1 FETCH Primitives
 **Purpose:** Retrieve data from GitHub API
@@ -408,7 +556,7 @@ detect_default_branch "owner" "repo"    # → "main" or "master"
 
 ## 6. Naming Conventions
 
-### 6.1 Scope Prefixes
+### 6.1 Layer 2 Scope Prefixes
 
 Always specify the scope explicitly. Never create "dual-mode" functions.
 
@@ -419,7 +567,21 @@ Always specify the scope explicitly. Never create "dual-mode" functions.
 | `org_` | Organization by login | `fetch_org_projects "hiivmind"` |
 | `repo_` | Repository by owner/name | `fetch_repo_issues "owner" "repo"` |
 
-### 6.2 Entity Naming
+### 6.2 Layer 3 Outcome Prefixes
+
+Layer 3 functions focus on outcomes, not operations:
+
+| Prefix | Meaning | Example |
+|--------|---------|---------|
+| `apply_` | Apply configuration/policy | `apply_main_branch_protection "owner" "repo"` |
+| `upsert_` | Create or update (idempotent) | `upsert_repo_ruleset "owner" "repo" "name"` |
+| `get_{x}_summary` | Aggregate multiple fetches | `get_protection_summary "owner" "repo"` |
+
+**Key difference from Layer 2:**
+- Layer 2: Explicit scope, explicit operation (`fetch_branch_protection "owner" "repo" "main"`)
+- Layer 3: Outcome-focused, handles context (`apply_main_branch_protection "owner" "repo"`)
+
+### 6.3 Entity Naming
 
 | Entity | Singular | Plural |
 |--------|----------|--------|
@@ -428,13 +590,15 @@ Always specify the scope explicitly. Never create "dual-mode" functions.
 | Pull Request | `pr` | `prs` |
 | Repository | `repo` or `repository` | `repos` or `repositories` |
 | Milestone | `milestone` | `milestones` |
+| Protection | `protection` | `protections` |
+| Ruleset | `ruleset` | `rulesets` |
 
-### 6.3 Anti-Patterns
+### 6.4 Anti-Patterns
 
 **NEVER do this:**
 
 ```bash
-# BAD: Dual-mode function
+# BAD: Dual-mode function (Layer 2 should be explicit)
 get_projects() {
     local login="$1"
     local type="$2"  # "organization" or "user"
@@ -445,16 +609,34 @@ get_projects() {
     fi
 }
 
-# BAD: Ambiguous scope
+# BAD: Ambiguous scope (Layer 2)
 fetch_projects "hiivmind"  # Is this user or org?
+
+# BAD: Context detection in Layer 2 primitive
+fetch_issues() {
+    local owner="$1"
+    local repo="$2"
+    # BAD: Primitives shouldn't detect context
+    if [[ $(detect_owner_type "$owner") == "org" ]]; then
+        # Different behavior based on context
+    fi
+}
 ```
 
 **ALWAYS do this:**
 
 ```bash
-# GOOD: Explicit scope
+# GOOD: Explicit scope (Layer 2)
 discover_org_projects "hiivmind"
 discover_user_projects
+
+# GOOD: Context detection in Layer 3
+apply_main_branch_protection() {
+    local owner="$1"
+    local repo="$2"
+    local repo_type=$(_detect_repo_type "$owner" "$repo")  # Internal helper
+    # ... select template based on repo_type
+}
 ```
 
 ---
@@ -579,10 +761,12 @@ filter_open() {
 ## Summary
 
 1. **Priority Chain:** gh CLI → GraphQL → REST → Research
-2. **Three layers:** Templates/Indexes → Functions → Skills
-3. **Seven primitive types:** Fetch, Lookup, Filter, Extract, Format, Mutate, Detect
-4. **Explicit scope:** Always `_user_`, `_org_`, or `_repo_` - never dual-mode
-5. **Pipe-first:** Compose via pipes, avoid intermediate variable capture
-6. **Complete CRUD:** Every domain has full coverage matrix
-7. **Index documentation:** Every function documented in `{domain}-index.md`
-8. **Config-driven:** Leverage cached IDs from `.hiivmind/github/config.yaml`
+2. **Four layers:** Templates/Docs → Primitives → Smart Application → Skills
+3. **Seven primitive types (Layer 2):** Fetch, Lookup, Filter, Extract, Format, Mutate, Detect
+4. **Smart Application (Layer 3):** Context-aware composition (`apply_*`, `upsert_*`, `get_*_summary`)
+5. **Configuration templates (optional):** Only for complex domains (10+ fields, schema variations)
+6. **Explicit scope:** Always `_user_`, `_org_`, or `_repo_` - never dual-mode
+7. **Pipe-first:** Compose via pipes, avoid intermediate variable capture
+8. **Complete CRUD:** Every domain has full coverage matrix
+9. **Index documentation:** Every function (all layers) documented in `{domain}-index.md`
+10. **Config-driven:** Leverage cached IDs from `.hiivmind/github/config.yaml`
