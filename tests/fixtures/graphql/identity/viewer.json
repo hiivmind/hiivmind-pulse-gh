@@ -1,0 +1,22 @@
+{
+  "errors": [
+    {
+      "type": "INSUFFICIENT_SCOPES",
+      "locations": [
+        {
+          "line": 6,
+          "column": 5
+        }
+      ],
+      "message": "Your token has not been granted the required scopes to execute this query. The 'email' field requires one of the following scopes: ['user:email', 'read:user'], but your token has only been granted the: ['admin:public_key', 'gist', 'project', 'read:org', 'repo'] scopes. Please modify your token's scopes at: https://github.com/settings/tokens."
+    }
+  ],
+  "": {
+    "data": {
+      "viewer": {
+        "email": "test@example.com",
+        "name": "Test User"
+      }
+    }
+  }
+}

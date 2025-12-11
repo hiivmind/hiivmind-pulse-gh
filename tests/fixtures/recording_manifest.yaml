@@ -1,0 +1,416 @@
+# Fixture Recording Manifest
+# Defines which fixtures to record from live GitHub APIs and how to sanitize them
+
+# =============================================================================
+# METADATA
+# =============================================================================
+
+version: "1.0"
+last_updated: "2024-12-11"
+description: "Test fixture recording manifest for hiivmind-pulse-gh"
+# Default test targets (can be overridden per fixture)
+defaults:
+  test_org: "hiivmind"
+  test_repo: "hiivmind-pulse-gh"
+  test_user: null # Will use authenticated user
+# =============================================================================
+# FIXTURES
+# =============================================================================
+fixtures:
+  # ===========================================================================
+  # IDENTITY DOMAIN (GraphQL)
+  # ===========================================================================
+  identity:
+    viewer:
+      type: graphql
+      description: "Current authenticated user"
+      query: |
+        query {
+          viewer {
+            id
+            login
+            name
+            avatarUrl
+            bio
+            company
+            location
+            websiteUrl
+            createdAt
+            updatedAt
+          }
+        }
+      sanitize:
+        - path: ".data.viewer.name"
+          value: "Test User"
+      last_recorded: "2025-12-11T11:12:53Z"
+    user:
+      type: graphql
+      description: "Get user by login"
+      query: |
+        query($login: String!) {
+          user(login: $login) {
+            id
+            login
+            name
+            avatarUrl
+            bio
+            company
+            location
+            createdAt
+          }
+        }
+      variables:
+        login: "hiivmind"
+    organization:
+      type: graphql
+      description: "Get organization by login"
+      query: |
+        query($login: String!) {
+          organization(login: $login) {
+            id
+            login
+            name
+            avatarUrl
+            description
+            websiteUrl
+            location
+            createdAt
+          }
+        }
+      variables:
+        login: "hiivmind"
+    viewer_with_orgs:
+      type: graphql
+      description: "Viewer with organization memberships"
+      query: |
+        query {
+          viewer {
+            id
+            login
+            organizations(first: 10) {
+              totalCount
+              nodes {
+                id
+                login
+                name
+                avatarUrl
+              }
+            }
+          }
+        }
+  # ===========================================================================
+  # REPOSITORY DOMAIN (GraphQL)
+  # ===========================================================================
+  repository:
+    repo:
+      type: graphql
+      description: "Single repository details"
+      query: |
+        query($owner: String!, $name: String!) {
+          repository(owner: $owner, name: $name) {
+            id
+            name
+            nameWithOwner
+            description
+            url
+            sshUrl
+            isPrivate
+            isFork
+            isArchived
+            createdAt
+            updatedAt
+            defaultBranchRef {
+              name
+            }
+            owner {
+              login
+            }
+          }
+        }
+      variables:
+        owner: "hiivmind"
+        name: "hiivmind-pulse-gh"
+    org_repos:
+      type: graphql
+      description: "List organization repositories"
+      query: |
+        query($login: String!, $first: Int!) {
+          organization(login: $login) {
+            repositories(first: $first, orderBy: {field: UPDATED_AT, direction: DESC}) {
+              totalCount
+              nodes {
+                id
+                name
+                nameWithOwner
+                description
+                isPrivate
+                createdAt
+              }
+            }
+          }
+        }
+      variables:
+        login: "hiivmind"
+        first: 10
+  # ===========================================================================
+  # MILESTONE DOMAIN (REST)
+  # ===========================================================================
+  milestone:
+    list_all:
+      type: rest
+      description: "List all milestones (open and closed)"
+      endpoint: "/repos/{owner}/{repo}/milestones?state=all&per_page=100"
+      method: "GET"
+      test_org: "hiivmind"
+      test_repo: "hiivmind-pulse-gh"
+      last_recorded: "2025-12-11T11:14:39Z"
+    list_open:
+      type: rest
+      description: "List open milestones only"
+      endpoint: "/repos/{owner}/{repo}/milestones?state=open&per_page=100"
+      method: "GET"
+      test_org: "hiivmind"
+      test_repo: "hiivmind-pulse-gh"
+    list_closed:
+      type: rest
+      description: "List closed milestones only"
+      endpoint: "/repos/{owner}/{repo}/milestones?state=closed&per_page=100"
+      method: "GET"
+      test_org: "hiivmind"
+      test_repo: "hiivmind-pulse-gh"
+  # ===========================================================================
+  # ISSUE DOMAIN (GraphQL)
+  # ===========================================================================
+  issue:
+    repo_issues:
+      type: graphql
+      description: "List repository issues"
+      query: |
+        query($owner: String!, $name: String!, $first: Int!) {
+          repository(owner: $owner, name: $name) {
+            issues(first: $first, orderBy: {field: UPDATED_AT, direction: DESC}) {
+              totalCount
+              nodes {
+                id
+                number
+                title
+                body
+                state
+                createdAt
+                updatedAt
+                author {
+                  login
+                }
+                labels(first: 10) {
+                  nodes {
+                    name
+                    color
+                  }
+                }
+                assignees(first: 5) {
+                  nodes {
+                    login
+                  }
+                }
+                milestone {
+                  title
+                  number
+                }
+              }
+            }
+          }
+        }
+      variables:
+        owner: "hiivmind"
+        name: "hiivmind-pulse-gh"
+        first: 10
+  # ===========================================================================
+  # PR DOMAIN (GraphQL)
+  # ===========================================================================
+  pr:
+    repo_prs:
+      type: graphql
+      description: "List repository pull requests"
+      query: |
+        query($owner: String!, $name: String!, $first: Int!) {
+          repository(owner: $owner, name: $name) {
+            pullRequests(first: $first, orderBy: {field: UPDATED_AT, direction: DESC}) {
+              totalCount
+              nodes {
+                id
+                number
+                title
+                body
+                state
+                isDraft
+                createdAt
+                updatedAt
+                author {
+                  login
+                }
+                headRefName
+                baseRefName
+                mergeable
+                labels(first: 10) {
+                  nodes {
+                    name
+                  }
+                }
+              }
+            }
+          }
+        }
+      variables:
+        owner: "hiivmind"
+        name: "hiivmind-pulse-gh"
+        first: 10
+  # ===========================================================================
+  # PROJECT DOMAIN (GraphQL)
+  # ===========================================================================
+  project:
+    org_project:
+      type: graphql
+      description: "Organization project with items"
+      query: |
+        query($login: String!, $number: Int!) {
+          organization(login: $login) {
+            projectV2(number: $number) {
+              id
+              title
+              shortDescription
+              public
+              closed
+              createdAt
+              updatedAt
+              items(first: 20) {
+                totalCount
+                nodes {
+                  id
+                  type
+                  createdAt
+                  content {
+                    ... on Issue {
+                      id
+                      title
+                      number
+                    }
+                    ... on PullRequest {
+                      id
+                      title
+                      number
+                    }
+                  }
+                }
+              }
+              fields(first: 20) {
+                nodes {
+                  ... on ProjectV2Field {
+                    id
+                    name
+                    dataType
+                  }
+                  ... on ProjectV2SingleSelectField {
+                    id
+                    name
+                    dataType
+                    options {
+                      id
+                      name
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      variables:
+        login: "hiivmind"
+        number: 2
+  # ===========================================================================
+  # PROTECTION DOMAIN (REST)
+  # ===========================================================================
+  protection:
+    branch_protection:
+      type: rest
+      description: "Branch protection rules for default branch"
+      endpoint: "/repos/{owner}/{repo}/branches/main/protection"
+      method: "GET"
+      test_org: "hiivmind"
+      test_repo: "hiivmind-pulse-gh"
+    rulesets:
+      type: rest
+      description: "Repository rulesets"
+      endpoint: "/repos/{owner}/{repo}/rulesets"
+      method: "GET"
+      test_org: "hiivmind"
+      test_repo: "hiivmind-pulse-gh"
+  # ===========================================================================
+  # ACTION DOMAIN (REST)
+  # ===========================================================================
+  action:
+    workflows:
+      type: rest
+      description: "List repository workflows"
+      endpoint: "/repos/{owner}/{repo}/actions/workflows"
+      method: "GET"
+      test_org: "hiivmind"
+      test_repo: "hiivmind-pulse-gh"
+    runs:
+      type: rest
+      description: "List workflow runs"
+      endpoint: "/repos/{owner}/{repo}/actions/runs?per_page=10"
+      method: "GET"
+      test_org: "hiivmind"
+      test_repo: "hiivmind-pulse-gh"
+  # ===========================================================================
+  # VARIABLE DOMAIN (REST)
+  # ===========================================================================
+  variable:
+    list_repo_variables:
+      type: rest
+      description: "List repository variables"
+      endpoint: "/repos/{owner}/{repo}/actions/variables"
+      method: "GET"
+      test_org: "hiivmind"
+      test_repo: "hiivmind-pulse-gh"
+  # ===========================================================================
+  # RELEASE DOMAIN (GraphQL)
+  # ===========================================================================
+  release:
+    releases_list:
+      type: graphql
+      description: "List releases"
+      query: |
+        query($owner: String!, $name: String!, $first: Int!) {
+          repository(owner: $owner, name: $name) {
+            releases(first: $first, orderBy: {field: CREATED_AT, direction: DESC}) {
+              totalCount
+              nodes {
+                id
+                name
+                tagName
+                description
+                createdAt
+                publishedAt
+                isDraft
+                isPrerelease
+                isLatest
+                author {
+                  login
+                }
+                releaseAssets(first: 10) {
+                  totalCount
+                  nodes {
+                    name
+                    size
+                    downloadCount
+                  }
+                }
+              }
+            }
+          }
+        }
+      variables:
+        owner: "hiivmind"
+        name: "hiivmind-pulse-gh"
+        first: 10
