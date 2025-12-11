@@ -1,0 +1,22 @@
+# Default Mock Responses for Identity Domain
+
+mocks:
+  # GraphQL: Viewer query
+  - pattern: "viewer|ViewerQuery"
+    type: "graphql"
+    fixture: "graphql/identity/viewer.json"
+
+  # GraphQL: User query
+  - pattern: "user\\(login:"
+    type: "graphql"
+    fixture: "graphql/identity/user.json"
+
+  # GraphQL: Organization query
+  - pattern: "organization\\(login:"
+    type: "graphql"
+    fixture: "graphql/identity/organization.json"
+
+  # GraphQL: Viewer with orgs
+  - pattern: "viewer.*organizations"
+    type: "graphql"
+    fixture: "graphql/identity/viewer_with_orgs.json"

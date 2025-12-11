@@ -38,6 +38,12 @@ setup_mock_gh() {
     # Create temp directory for mock config if needed
     MOCK_CONFIG_DIR=$(mktemp -d)
     export MOCK_CONFIG_DIR
+
+    # Source registry if available (for enhanced mock system)
+    if [[ -f "$MOCK_DIR/registry.bash" ]]; then
+        source "$MOCK_DIR/registry.bash"
+        init_mock_registry "$MOCK_CONFIG_DIR"
+    fi
 }
 
 # Restore original PATH and cleanup mock configuration
@@ -295,4 +301,113 @@ setup_integration_mock() {
 # Usage: teardown_integration_mock
 teardown_integration_mock() {
     teardown_mock_gh
+}
+
+# =============================================================================
+# REGISTRY-BASED MOCK FUNCTIONS (Enhanced Mock System)
+# =============================================================================
+
+# Register a mock GraphQL response using the registry
+# Usage: register_mock_graphql QUERY_NAME_OR_PATTERN FIXTURE_PATH
+register_mock_graphql() {
+    local pattern="$1"
+    local fixture="$2"
+
+    # Use registry if available
+    if type -t mock_graphql >/dev/null 2>&1; then
+        mock_graphql "$pattern" "$fixture"
+    else
+        # Fallback to old system
+        mock_graphql_response "$pattern" "$fixture"
+    fi
+}
+
+# Register a mock REST response using the registry
+# Usage: register_mock_rest ENDPOINT FIXTURE_PATH [METHOD]
+register_mock_rest() {
+    local endpoint="$1"
+    local fixture="$2"
+    local method="${3:-GET}"
+
+    # Use registry if available
+    if type -t mock_rest >/dev/null 2>&1; then
+        mock_rest "$endpoint" "$fixture" "$method"
+    else
+        # Fallback to old system
+        mock_response "$endpoint" "$fixture"
+    fi
+}
+
+# Register an inline JSON mock response
+# Usage: register_mock_json PATTERN TYPE JSON_STRING
+register_mock_json() {
+    local pattern="$1"
+    local type="$2"
+    local json="$3"
+
+    # Use registry if available
+    if type -t mock_json >/dev/null 2>&1; then
+        mock_json "$pattern" "$type" "$json"
+    else
+        echo "ERROR: Registry not loaded, cannot register JSON mock" >&2
+        return 1
+    fi
+}
+
+# Clear the mock registry
+# Usage: clear_mocks
+clear_mocks() {
+    # Use registry if available
+    if type -t clear_mock_registry >/dev/null 2>&1; then
+        clear_mock_registry
+    else
+        reset_mock_state
+    fi
+}
+
+# Assert mock was called (registry-aware)
+# Usage: assert_registry_mock_called PATTERN [MIN_COUNT]
+assert_registry_mock_called() {
+    local pattern="$1"
+    local min_count="${2:-1}"
+
+    # Use registry if available
+    if type -t was_mock_called >/dev/null 2>&1; then
+        if ! was_mock_called "$pattern"; then
+            echo "Mock was not called with pattern: $pattern" >&2
+            return 1
+        fi
+
+        local actual=$(get_mock_call_count "$pattern")
+        if [[ "$actual" -lt "$min_count" ]]; then
+            echo "Mock called $actual times, expected at least $min_count" >&2
+            return 1
+        fi
+    else
+        # Fallback to old system
+        assert_mock_called "$pattern" "$min_count"
+    fi
+}
+
+# Load a mock configuration file (YAML)
+# Usage: load_mock_config_file PATH
+load_mock_config_file() {
+    local config_file="$1"
+
+    if type -t load_mock_config >/dev/null 2>&1; then
+        load_mock_config "$config_file"
+    else
+        echo "ERROR: Registry not loaded, cannot load config file" >&2
+        return 1
+    fi
+}
+
+# Debug: Print mock registry state
+# Usage: print_mock_registry
+print_mock_registry() {
+    if type -t debug_registry >/dev/null 2>&1; then
+        debug_registry
+    else
+        echo "Registry not available (old mock system)"
+    fi
 }

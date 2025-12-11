@@ -1,0 +1,22 @@
+# Default Mock Responses for Repository Domain
+
+mocks:
+  # GraphQL: Single repository
+  - pattern: "repository\\(owner:|RepositoryQuery"
+    type: "graphql"
+    fixture: "graphql/repository/repo.json"
+
+  # GraphQL: Organization repositories
+  - pattern: "organization.*repositories"
+    type: "graphql"
+    fixture: "graphql/repository/org_repos.json"
+
+  # GraphQL: User repositories
+  - pattern: "user.*repositories"
+    type: "graphql"
+    fixture: "graphql/repository/user_repos.json"
+
+  # REST: Get repository
+  - pattern: "repos/[^/]+/[^/]+"
+    type: "rest"
+    fixture: "graphql/repository/repo.json"
