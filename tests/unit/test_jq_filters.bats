@@ -236,7 +236,7 @@ setup() {
 # =============================================================================
 
 @test "milestone REST filter formats correctly" {
-    filter=$(get_filter "gh-project-jq-filters.yaml" ".milestone_filters.list_milestones_rest.filter")
+    filter=$(get_filter "gh-milestone-jq-filters.yaml" ".rest_format_filters.format_milestones_rest.filter")
 
     # Use integration fixture for milestones
     result=$(jq "$filter" < "$BATS_TEST_DIRNAME/../integration/fixtures/milestones.json")
@@ -252,7 +252,7 @@ setup() {
 }
 
 @test "milestone progress calculation is correct" {
-    filter=$(get_filter "gh-project-jq-filters.yaml" ".milestone_filters.list_milestones_rest.filter")
+    filter=$(get_filter "gh-milestone-jq-filters.yaml" ".rest_format_filters.format_milestones_rest.filter")
 
     result=$(jq "$filter" < "$BATS_TEST_DIRNAME/../integration/fixtures/milestones.json")
 
