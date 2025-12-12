@@ -1,7 +1,3 @@
-# Dependencies
-node_modules/
-package-lock.json
-
 # IDE
 .idea/
 .vscode/
@@ -11,12 +7,6 @@ package-lock.json
 # OS
 .DS_Store
 Thumbs.db
-
-# Test output
-.bats-run-logs/
-
-# Local tools downloaded to node_modules
-node_modules/.bin/yq
 
 # User-specific config (contains personal GitHub identity)
 .hiivmind/github/user.yaml
