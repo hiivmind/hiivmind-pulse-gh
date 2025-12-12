@@ -81,6 +81,46 @@ If cache miss, look up the URL in `data/config.yaml` and fetch fresh content.
 - **Local sources**: `data/uploads/{source_id}/` (user-uploaded files)
 - **Web cache**: `.cache/web/{source_id}/` (fetched web content, gitignored)
 
+## Large Structured Files (GraphQL Schema)
+
+The GraphQL schema at `data/uploads/graphql-schema/schema.docs.graphql` is ~70,000 lines. **DO NOT read the entire file**. Use Grep to search precisely:
+
+**Find a type definition:**
+```bash
+grep -n "^type Repository " data/uploads/graphql-schema/schema.docs.graphql -A 30
+```
+
+**Find an input type:**
+```bash
+grep -n "^input CreateIssueInput " data/uploads/graphql-schema/schema.docs.graphql -A 20
+```
+
+**Find a mutation:**
+```bash
+grep -n "createIssue" data/uploads/graphql-schema/schema.docs.graphql -B 2 -A 15
+```
+
+**Find all fields returning a specific type:**
+```bash
+grep -n ": Repository" data/uploads/graphql-schema/schema.docs.graphql
+```
+
+**Find an enum:**
+```bash
+grep -n "^enum IssueState " data/uploads/graphql-schema/schema.docs.graphql -A 10
+```
+
+**Find an interface:**
+```bash
+grep -n "^interface Node " data/uploads/graphql-schema/schema.docs.graphql -A 20
+```
+
+**When to use Grep vs Read:**
+- Looking for specific type/mutation/query → Grep with `-A` context
+- Need to see what fields a type has → Grep the type definition with `-A 30`
+- Need to find all usages of a type → Grep for `: TypeName`
+- Exploring connections → Grep for `Connection` or `Edge`
+
 ## Output
 
 - Cite the source ID and file path for reference
