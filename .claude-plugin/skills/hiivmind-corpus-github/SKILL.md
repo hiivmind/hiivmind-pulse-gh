@@ -13,9 +13,10 @@ Find and retrieve relevant documentation from the GitHub documentation corpus.
 
 1. **Read the index**: `data/index.md`
 2. **Parse path format**: `{source_id}:{relative_path}`
-3. **Look up source** in `data/config.yaml` by ID
-4. **Get content** based on source type (see Source Access below)
-5. **Answer** with citation to source and file path
+3. **Check for `⚡ GREP` marker** - if present, use Grep instead of Read (see Large Structured Files section)
+4. **Look up source** in `data/config.yaml` by ID
+5. **Get content** based on source type (see Source Access below)
+6. **Answer** with citation to source and file path
 
 ## Path Format
 

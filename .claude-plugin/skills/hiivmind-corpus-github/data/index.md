@@ -41,7 +41,7 @@
 
 ### GraphQL Schema (SDL)
 
-- **Full Schema** `graphql-schema:schema.docs.graphql` - Complete GitHub GraphQL API schema in SDL format (70k+ lines)
+- **Full Schema** `graphql-schema:schema.docs.graphql` ⚡ GREP - Complete GitHub GraphQL API schema (70k lines). Search with: `grep -n "^type {TypeName} " ... -A 30` or `grep -n "^input {InputName} " ... -A 20`
 
 ---
 
