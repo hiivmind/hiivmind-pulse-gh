@@ -353,6 +353,32 @@ list_rulesets "acme" "api" | format_rulesets
 - **Inherits gh permissions** — Can only access what your `gh` CLI can access. No elevation, no bypass.
 - **No destructive operations** — Delete operations (delete project, delete ruleset) intentionally excluded for safety.
 
+## Testing
+
+Tests are maintained in a separate repository to keep the plugin installation lean:
+
+**[hiivmind-pulse-gh-tests](https://github.com/hiivmind/hiivmind-pulse-gh-tests)**
+
+```bash
+# Clone test repo
+git clone https://github.com/hiivmind/hiivmind-pulse-gh-tests.git
+cd hiivmind-pulse-gh-tests
+
+# Setup (clones this repo + installs deps)
+./scripts/setup.sh
+
+# Run tests
+./node_modules/.bin/bats e2e/smoke/   # Quick smoke tests
+./node_modules/.bin/bats unit/        # Full unit tests
+./node_modules/.bin/bats integration/ # Integration tests
+```
+
+For local development, point tests at your local checkout:
+```bash
+export MAIN_REPO_PATH=/path/to/your/hiivmind-pulse-gh
+./node_modules/.bin/bats unit/
+```
+
 ## Contributing
 
 ```
