@@ -1,0 +1,27 @@
+# Default Mock Responses for Protection Domain
+
+mocks:
+  # REST: Branch protection
+  - pattern: "repos/.*/branches/.*/protection"
+    type: "rest"
+    fixture: "_synthetic/protection/branch_protection.json"
+
+  # REST: Repository rulesets
+  - pattern: "repos/.*/rulesets"
+    type: "rest"
+    fixture: "_synthetic/protection/rulesets.json"
+
+  # REST: Single ruleset
+  - pattern: "repos/.*/rulesets/[0-9]+"
+    type: "rest"
+    fixture: "_synthetic/protection/ruleset_detail.json"
+
+  # GraphQL: Branch protection rules
+  - pattern: "branchProtectionRules|BranchProtectionRule"
+    type: "graphql"
+    fixture: "_synthetic/protection/branch_protection.json"
+
+  # GraphQL: Repository rulesets
+  - pattern: "rulesets|RepositoryRuleset"
+    type: "graphql"
+    fixture: "_synthetic/protection/rulesets.json"

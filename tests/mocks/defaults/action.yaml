@@ -1,0 +1,27 @@
+# Default Mock Responses for Action Domain
+
+mocks:
+  # REST: List workflows
+  - pattern: "repos/.*/actions/workflows"
+    type: "rest"
+    fixture: "rest/action/workflows.json"
+
+  # REST: List workflow runs
+  - pattern: "repos/.*/actions/runs"
+    type: "rest"
+    fixture: "rest/action/runs.json"
+
+  # REST: Get single workflow
+  - pattern: "repos/.*/actions/workflows/[0-9]+"
+    type: "rest"
+    fixture: "rest/action/workflow.json"
+
+  # REST: Get single run
+  - pattern: "repos/.*/actions/runs/[0-9]+"
+    type: "rest"
+    fixture: "rest/action/run.json"
+
+  # REST: List jobs for run
+  - pattern: "repos/.*/actions/runs/.*/jobs"
+    type: "rest"
+    fixture: "rest/action/jobs.json"

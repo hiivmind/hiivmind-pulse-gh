@@ -53,9 +53,14 @@ load_mock_config() {
     fi
 
     # Extract mock definitions from YAML and register them
-    # Format: pattern|type|fixture_path
-    yq '.mocks[] | .pattern + "|" + .type + "|" + .fixture' "$config_file" 2>/dev/null | \
-        while IFS='|' read -r pattern type fixture; do
+    # Format: pattern<|>type<|>fixture_path (using <|> as separator to avoid conflicts)
+    yq '.mocks[] | .pattern + "<|>" + .type + "<|>" + .fixture' "$config_file" 2>/dev/null | \
+        while IFS='' read -r line; do
+            # Parse using <|> separator (chosen to avoid conflicts with common patterns)
+            local pattern="${line%%<|>*}"
+            local rest="${line#*<|>}"
+            local type="${rest%%<|>*}"
+            local fixture="${rest#*<|>}"
             register_mock "$pattern" "$type" "$fixture"
         done
 }
@@ -67,8 +72,8 @@ register_mock() {
     local type="$2"
     local response="$3"
 
-    # Append to registry: pattern|type|response
-    echo "${pattern}|${type}|${response}" >> "$MOCK_REGISTRY_FILE"
+    # Append to registry: pattern<|>type<|>response (using <|> to avoid conflicts)
+    echo "${pattern}<|>${type}<|>${response}" >> "$MOCK_REGISTRY_FILE"
 }
 
 # Clear mock registry
@@ -90,8 +95,14 @@ find_mock_response() {
     # Log the request
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ)|${request_type}|${request}" >> "$MOCK_CALLS_LOG"
 
-    # Search registry for matching pattern
-    while IFS='|' read -r pattern type response; do
+    # Search registry for matching pattern (using <|> separator)
+    while IFS='' read -r line; do
+        # Parse using <|> separator
+        local pattern="${line%%<|>*}"
+        local rest="${line#*<|>}"
+        local type="${rest%%<|>*}"
+        local response="${rest#*<|>}"
+
         # Check if type matches
         if [[ "$type" != "$request_type" ]]; then
             continue

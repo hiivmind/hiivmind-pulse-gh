@@ -1,0 +1,17 @@
+# Default Mock Responses for Variable Domain
+
+mocks:
+  # REST: List repo variables
+  - pattern: "repos/.*/actions/variables"
+    type: "rest"
+    fixture: "rest/variable/repo_variables.json"
+
+  # REST: Get single variable
+  - pattern: "repos/.*/actions/variables/[A-Z_]+"
+    type: "rest"
+    fixture: "rest/variable/variable.json"
+
+  # CLI: Variable list
+  - pattern: "variable list"
+    type: "cli"
+    fixture: "rest/variable/repo_variables.json"

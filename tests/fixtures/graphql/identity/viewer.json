@@ -3,7 +3,7 @@
     "viewer": {
       "id": "MDQ6VXNlcjY1ODQyNTU2",
       "login": "test-user",
-      "name": "Nathaniel Ramm",
+      "name": "Test User",
       "avatarUrl": "https://avatars.githubusercontent.com/test-user",
       "bio": "",
       "company": "@mountainash-io ",
@@ -11,13 +11,6 @@
       "websiteUrl": null,
       "createdAt": "2020-05-24T05:00:30Z",
       "updatedAt": "2025-11-08T10:38:46Z"
-    }
-  },
-  "": {
-    "data": {
-      "viewer": {
-        "name": "Test User"
-      }
     }
   }
 }

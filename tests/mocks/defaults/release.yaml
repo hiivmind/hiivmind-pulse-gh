@@ -1,0 +1,32 @@
+# Default Mock Responses for Release Domain
+
+mocks:
+  # REST: List releases
+  - pattern: "repos/.*/releases"
+    type: "rest"
+    fixture: "rest/release/releases.json"
+
+  # REST: Get latest release
+  - pattern: "repos/.*/releases/latest"
+    type: "rest"
+    fixture: "rest/release/release.json"
+
+  # REST: Get single release
+  - pattern: "repos/.*/releases/[0-9]+"
+    type: "rest"
+    fixture: "rest/release/release.json"
+
+  # REST: Get release by tag
+  - pattern: "repos/.*/releases/tags/"
+    type: "rest"
+    fixture: "rest/release/release.json"
+
+  # GraphQL: Release query
+  - pattern: "release\\(|Release"
+    type: "graphql"
+    fixture: "graphql/release/release.json"
+
+  # CLI: Release list
+  - pattern: "release list"
+    type: "cli"
+    fixture: "rest/release/releases.json"
