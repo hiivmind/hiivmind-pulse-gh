@@ -357,3 +357,38 @@ PROJECTS=$(discover_projects "$LOGIN" "$TYPE") && echo "$PROJECTS" | format_proj
 ```
 
 See `knowledge/claude-code-bash-escaping.md` for full details on the bug and workarounds.
+
+
+## GitHub Documentation Corpus
+
+This repository has access to the `github-navigate` skill which provides an always-current index of official GitHub documentation.
+
+**Use this skill when you need to:**
+- Look up GitHub REST API endpoint details
+- Check GraphQL API schema and queries
+- Find `gh` CLI command syntax
+- Understand GitHub authentication methods
+- Reference rate limits, pagination, or best practices
+
+**How to use:** Invoke `github-navigate` skill, then read `data/index.md` to find relevant documentation paths.
+
+| Topic | Index Section |
+|-------|---------------|
+| REST API endpoints | `rest/` paths |
+| GraphQL API | `graphql/` paths |
+| GitHub CLI | `github-cli/` paths |
+| Authentication | `rest/authentication/` |
+
+## Plugin Development Resources
+**IMPORTANT**: This is a Claude Code plugin. When working on plugin structure, installation, or distribution, use the `plugin-dev` skills for authoritative guidance.
+
+### Available Plugin-Dev Skills
+| Skill | Use When |
+|-------|----------|
+| `plugin-dev:plugin-structure` | Plugin manifest, directory layout, component organization |
+| `plugin-dev:skill-development` | Writing SKILL.md files, descriptions, progressive disclosure |
+| `plugin-dev:command-development` | Slash commands, YAML frontmatter, arguments |
+| `plugin-dev:agent-development` | Subagent definitions, triggering, tools |
+| `plugin-dev:hook-development` | Event hooks, PreToolUse/PostToolUse, validation |
+| `plugin-dev:mcp-integration` | MCP server configuration, external services |
+| `plugin-dev:plugin-settings` | Plugin configuration, .local.md files |
