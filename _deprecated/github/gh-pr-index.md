@@ -1,5 +1,8 @@
 # Pull Request Domain Index
 
+> **⚠️ DEPRECATED:** These functions are reference implementations from v2 architecture.
+> For v3, use `reference/api-routing.md` + corpus keywords instead of sourcing functions.
+
 > **Domain:** Pull Request
 > **Priority:** P1 (Work Tracking)
 > **Depends on:** Identity (for user IDs), Repository (for repo context), Milestone (for milestone IDs)

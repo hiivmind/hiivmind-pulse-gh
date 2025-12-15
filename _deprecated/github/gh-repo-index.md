@@ -1,5 +1,8 @@
 # Repository Domain Index
 
+> **⚠️ DEPRECATED:** These functions are reference implementations from v2 architecture.
+> For v3, use `reference/api-routing.md` + corpus keywords instead of sourcing functions.
+
 > **Domain:** Repository
 > **Priority:** P0 (Foundation)
 > **Depends on:** Identity

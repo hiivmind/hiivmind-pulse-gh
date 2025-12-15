@@ -1,5 +1,8 @@
 # GitHub Releases Domain - Function Index
 
+> **⚠️ DEPRECATED:** These functions are reference implementations from v2 architecture.
+> For v3, use `reference/api-routing.md` + corpus keywords instead of sourcing functions.
+
 > **Domain:** Release Management
 > **Layer:** 2 (Primitives)
 > **Functions:** 33 primitives across 8 types

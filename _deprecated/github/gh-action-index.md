@@ -1,5 +1,8 @@
 # Action Domain Functions Index
 
+> **⚠️ DEPRECATED:** These functions are reference implementations from v2 architecture.
+> For v3, use `reference/api-routing.md` + corpus keywords instead of sourcing functions.
+
 > **Domain:** GitHub Actions (Workflows, Runs, Jobs)
 > **File:** `lib/github/gh-action-functions.sh`
 > **Layer:** 2 (Primitives only - no Layer 3 needed)

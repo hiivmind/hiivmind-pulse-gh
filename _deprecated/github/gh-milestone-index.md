@@ -1,5 +1,8 @@
 # Milestone Domain Index
 
+> **⚠️ DEPRECATED:** These functions are reference implementations from v2 architecture.
+> For v3, use `reference/api-routing.md` + corpus keywords instead of sourcing functions.
+
 > **Domain:** Milestone
 > **Priority:** P1 (Work Tracking)
 > **Depends on:** None (isolated domain)

@@ -1,5 +1,8 @@
 # GitHub Variables Domain - Function Index
 
+> **⚠️ DEPRECATED:** These functions are reference implementations from v2 architecture.
+> For v3, use `reference/api-routing.md` + corpus keywords instead of sourcing functions.
+
 > **Domain:** Variable Management
 > **Layer:** 2 (Primitives)
 > **Functions:** 32 primitives across 7 types

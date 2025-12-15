@@ -1,5 +1,8 @@
 # Project Domain Index
 
+> **⚠️ DEPRECATED:** These functions are reference implementations from v2 architecture.
+> For v3, use `reference/api-routing.md` + corpus keywords instead of sourcing functions.
+
 > **Domain:** Projects v2
 > **Files:** `gh-project-functions.sh`, `gh-project-graphql-queries.yaml`, `gh-project-jq-filters.yaml`
 > **Last Updated:** 2025-12-11

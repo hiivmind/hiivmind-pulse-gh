@@ -1,5 +1,8 @@
 # Identity Domain Index
 
+> **⚠️ DEPRECATED:** These functions are reference implementations from v2 architecture.
+> For v3, use `reference/api-routing.md` + corpus keywords instead of sourcing functions.
+
 > **Domain:** Identity
 > **Priority:** P0 (Foundation)
 > **Files:**

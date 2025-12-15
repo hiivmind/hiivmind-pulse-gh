@@ -1,5 +1,8 @@
 # Protection Domain Functions Index
 
+> **⚠️ DEPRECATED:** These functions are reference implementations from v2 architecture.
+> For v3, use `reference/api-routing.md` + corpus keywords instead of sourcing functions.
+
 > **Domain:** Protection (Branch Protection Rules + Repository Rulesets)
 > **File:** `gh-protection-functions.sh`
 > **Created:** 2025-12-11
