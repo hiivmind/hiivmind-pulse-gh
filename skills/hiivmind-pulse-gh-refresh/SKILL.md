@@ -200,182 +200,194 @@ Fetch and cache repository settings including branch protection, merge settings,
 ### Fetch Settings for a Repository
 
 ```bash
-CONFIG=".hiivmind/github/config.yaml"
-OWNER=$(yq '.workspace.login' "$CONFIG")
-REPO="hiivmind-pulse-gh"
+# Corpus: REST /repos/{owner}/{repo}/branches/{branch}/protection
+# Keywords: branch protection, required_status_checks, enforce_admins, required_pull_request_reviews
+# Reference: hiivmind-corpus-github → "branch protection settings"
 
-# Create repos directory if needed
-mkdir -p .hiivmind/github/repos
+refresh_repo_settings() {
+    local config="$1"
+    local repo="$2"
+    local owner repo_data repo_id default_branch visibility archived protection
 
-# Fetch repository metadata and merge settings
-REPO_DATA=$(gh api "/repos/$OWNER/$REPO" --jq '{
-  name: .name,
-  id: .node_id,
-  full_name: .full_name,
-  default_branch: .default_branch,
-  visibility: .visibility,
-  archived: .archived,
-  merge_settings: {
-    allow_merge_commit: .allow_merge_commit,
-    allow_squash_merge: .allow_squash_merge,
-    allow_rebase_merge: .allow_rebase_merge,
-    allow_auto_merge: .allow_auto_merge,
-    delete_branch_on_merge: .delete_branch_on_merge,
-    allow_update_branch: .allow_update_branch,
-    squash_merge_commit_title: .squash_merge_commit_title,
-    squash_merge_commit_message: .squash_merge_commit_message,
-    merge_commit_title: .merge_commit_title,
-    merge_commit_message: .merge_commit_message
-  }
-}')
+    owner=$(yq '.workspace.login' "$config")
 
-# Extract basic info
-REPO_ID=$(echo "$REPO_DATA" | jq -r '.id')
-DEFAULT_BRANCH=$(echo "$REPO_DATA" | jq -r '.default_branch')
-VISIBILITY=$(echo "$REPO_DATA" | jq -r '.visibility')
-ARCHIVED=$(echo "$REPO_DATA" | jq -r '.archived')
+    # Create repos directory if needed
+    mkdir -p .hiivmind/github/repos
 
-# Build repo config file
-cat > ".hiivmind/github/repos/$REPO.yaml" << EOF
+    # Fetch repository metadata and merge settings
+    repo_data=$(gh api "/repos/$owner/$repo" --jq '{
+      name: .name,
+      id: .node_id,
+      full_name: .full_name,
+      default_branch: .default_branch,
+      visibility: .visibility,
+      archived: .archived,
+      merge_settings: {
+        allow_merge_commit: .allow_merge_commit,
+        allow_squash_merge: .allow_squash_merge,
+        allow_rebase_merge: .allow_rebase_merge,
+        allow_auto_merge: .allow_auto_merge,
+        delete_branch_on_merge: .delete_branch_on_merge,
+        allow_update_branch: .allow_update_branch,
+        squash_merge_commit_title: .squash_merge_commit_title,
+        squash_merge_commit_message: .squash_merge_commit_message,
+        merge_commit_title: .merge_commit_title,
+        merge_commit_message: .merge_commit_message
+      }
+    }')
+
+    # Extract basic info
+    repo_id=$(echo "$repo_data" | jq -r '.id')
+    default_branch=$(echo "$repo_data" | jq -r '.default_branch')
+    visibility=$(echo "$repo_data" | jq -r '.visibility')
+    archived=$(echo "$repo_data" | jq -r '.archived')
+
+    # Build repo config file
+    cat > ".hiivmind/github/repos/$repo.yaml" << EOF
 # hiivmind-pulse-gh - Repository Settings Configuration
 # Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 repository:
-  name: $REPO
-  id: $REPO_ID
-  full_name: $OWNER/$REPO
-  default_branch: $DEFAULT_BRANCH
-  visibility: $VISIBILITY
-  archived: $ARCHIVED
+  name: $repo
+  id: $repo_id
+  full_name: $owner/$repo
+  default_branch: $default_branch
+  visibility: $visibility
+  archived: $archived
 
 branch_protection:
 EOF
 
-# Fetch branch protection for default branch
-# Corpus: REST /repos/{owner}/{repo}/branches/{branch}/protection
-# Keywords: branch protection, required_status_checks, enforce_admins, required_pull_request_reviews
-# Reference: hiivmind-corpus-github → "branch protection settings"
-PROTECTION=$(gh api "/repos/$OWNER/$REPO/branches/$DEFAULT_BRANCH/protection" 2>/dev/null || echo "null")
+    # Fetch branch protection for default branch
+    protection=$(gh api "/repos/$owner/$repo/branches/$default_branch/protection" 2>/dev/null || echo "null")
 
-if [[ "$PROTECTION" != "null" ]]; then
-  cat >> ".hiivmind/github/repos/$REPO.yaml" << EOF
-  $DEFAULT_BRANCH:
+    # Use = instead of != to avoid escaping bug
+    if [[ ! "$protection" = "null" ]]; then
+        cat >> ".hiivmind/github/repos/$repo.yaml" << EOF
+  $default_branch:
     enabled: true
     required_pull_request_reviews:
-$(echo "$PROTECTION" | jq -r '.required_pull_request_reviews | if . then "      required_approving_review_count: \(.required_approving_review_count // 0)\n      dismiss_stale_reviews: \(.dismiss_stale_reviews // false)\n      require_code_owner_reviews: \(.require_code_owner_reviews // false)\n      require_last_push_approval: \(.require_last_push_approval // false)" else "      required_approving_review_count: 0" end')
+$(echo "$protection" | jq -r '.required_pull_request_reviews | if . then "      required_approving_review_count: \(.required_approving_review_count // 0)\n      dismiss_stale_reviews: \(.dismiss_stale_reviews // false)\n      require_code_owner_reviews: \(.require_code_owner_reviews // false)\n      require_last_push_approval: \(.require_last_push_approval // false)" else "      required_approving_review_count: 0" end')
     required_status_checks:
-$(echo "$PROTECTION" | jq -r '.required_status_checks | if . then "      strict: \(.strict)\n      contexts:\n" + (.contexts | map("        - \"" + . + "\"") | join("\n")) else "      strict: false\n      contexts: []" end')
+$(echo "$protection" | jq -r '.required_status_checks | if . then "      strict: \(.strict)\n      contexts:\n" + (.contexts | map("        - \"" + . + "\"") | join("\n")) else "      strict: false\n      contexts: []" end')
     enforce_admins:
-$(echo "$PROTECTION" | jq -r '.enforce_admins.enabled // false')
+$(echo "$protection" | jq -r '.enforce_admins.enabled // false')
     required_linear_history:
-$(echo "$PROTECTION" | jq -r '.required_linear_history.enabled // false')
+$(echo "$protection" | jq -r '.required_linear_history.enabled // false')
     allow_force_pushes:
-$(echo "$PROTECTION" | jq -r '.allow_force_pushes.enabled // false')
+$(echo "$protection" | jq -r '.allow_force_pushes.enabled // false')
     allow_deletions:
-$(echo "$PROTECTION" | jq -r '.allow_deletions.enabled // false')
+$(echo "$protection" | jq -r '.allow_deletions.enabled // false')
     required_conversation_resolution:
-$(echo "$PROTECTION" | jq -r '.required_conversation_resolution.enabled // false')
+$(echo "$protection" | jq -r '.required_conversation_resolution.enabled // false')
     lock_branch:
-$(echo "$PROTECTION" | jq -r '.lock_branch.enabled // false')
+$(echo "$protection" | jq -r '.lock_branch.enabled // false')
     allow_fork_syncing:
-$(echo "$PROTECTION" | jq -r '.allow_fork_syncing.enabled // false')
+$(echo "$protection" | jq -r '.allow_fork_syncing.enabled // false')
     restrictions:
-$(echo "$PROTECTION" | jq -r '.restrictions | if . then "      users:\n" + (.users | map("        - " + .login) | join("\n")) + "\n      teams:\n" + (.teams | map("        - " + .slug) | join("\n")) + "\n      apps:\n" + (.apps | map("        - " + .slug) | join("\n")) else "      users: []\n      teams: []\n      apps: []" end')
+$(echo "$protection" | jq -r '.restrictions | if . then "      users:\n" + (.users | map("        - " + .login) | join("\n")) + "\n      teams:\n" + (.teams | map("        - " + .slug) | join("\n")) + "\n      apps:\n" + (.apps | map("        - " + .slug) | join("\n")) else "      users: []\n      teams: []\n      apps: []" end')
 
 EOF
-else
-  cat >> ".hiivmind/github/repos/$REPO.yaml" << EOF
-  $DEFAULT_BRANCH:
+    else
+        cat >> ".hiivmind/github/repos/$repo.yaml" << EOF
+  $default_branch:
     enabled: false
 
 EOF
-fi
+    fi
 
-# Fetch rulesets
-# Corpus: REST /repos/{owner}/{repo}/rulesets
-# Keywords: rulesets, enforcement, conditions, target, ref_name
-# Reference: hiivmind-corpus-github → "repository rulesets"
-RULESETS=$(gh api "/repos/$OWNER/$REPO/rulesets" --jq '.[] | {
-  id: .id,
-  name: .name,
-  target: .target,
-  enforcement: .enforcement,
-  conditions: .conditions,
-  rules: .rules
-}')
+    # Fetch rulesets (pipe result directly to processing)
+    local rulesets
+    rulesets=$(gh api "/repos/$owner/$repo/rulesets" --jq '.[] | {
+      id: .id,
+      name: .name,
+      target: .target,
+      enforcement: .enforcement,
+      conditions: .conditions,
+      rules: .rules
+    }')
 
-cat >> ".hiivmind/github/repos/$REPO.yaml" << EOF
+    cat >> ".hiivmind/github/repos/$repo.yaml" << EOF
 rulesets:
 EOF
 
-if [[ -n "$RULESETS" ]]; then
-  echo "$RULESETS" | jq -c '.' | while read -r ruleset; do
-    RULESET_ID=$(echo "$ruleset" | jq -r '.id')
-    RULESET_NAME=$(echo "$ruleset" | jq -r '.name')
-    TARGET=$(echo "$ruleset" | jq -r '.target')
-    ENFORCEMENT=$(echo "$ruleset" | jq -r '.enforcement')
+    if [[ -n "$rulesets" ]]; then
+        echo "$rulesets" | jq -c '.' | while read -r ruleset; do
+            local ruleset_id ruleset_name target enforcement
 
-    cat >> ".hiivmind/github/repos/$REPO.yaml" << RULESETEOF
-  - id: $RULESET_ID
-    name: "$RULESET_NAME"
-    target: $TARGET
-    enforcement: $ENFORCEMENT
+            ruleset_id=$(echo "$ruleset" | jq -r '.id')
+            ruleset_name=$(echo "$ruleset" | jq -r '.name')
+            target=$(echo "$ruleset" | jq -r '.target')
+            enforcement=$(echo "$ruleset" | jq -r '.enforcement')
+
+            cat >> ".hiivmind/github/repos/$repo.yaml" << RULESETEOF
+  - id: $ruleset_id
+    name: "$ruleset_name"
+    target: $target
+    enforcement: $enforcement
     conditions:
 $(echo "$ruleset" | jq -r '.conditions | to_entries | map("      \(.key): \(.value | @json)") | join("\n")')
     rules:
 $(echo "$ruleset" | jq -r '.rules | map("      - type: \(.type)\n        parameters: \(.parameters | @json)") | join("\n")')
 
 RULESETEOF
-  done
-else
-  echo "  []" >> ".hiivmind/github/repos/$REPO.yaml"
-fi
+        done
+    else
+        echo "  []" >> ".hiivmind/github/repos/$repo.yaml"
+    fi
 
-# Add merge settings
-cat >> ".hiivmind/github/repos/$REPO.yaml" << EOF
+    # Add merge settings
+    cat >> ".hiivmind/github/repos/$repo.yaml" << EOF
 
 merge_settings:
-$(echo "$REPO_DATA" | jq -r '.merge_settings | to_entries | map("  \(.key): \(.value)") | join("\n")')
+$(echo "$repo_data" | jq -r '.merge_settings | to_entries | map("  \(.key): \(.value)") | join("\n")')
 EOF
 
-# Fetch labels
-LABELS=$(gh api "/repos/$OWNER/$REPO/labels" --jq '.[] | {
-  name: .name,
-  color: .color,
-  description: .description,
-  default: .default
-}')
+    # Fetch labels
+    local labels
+    labels=$(gh api "/repos/$owner/$repo/labels" --jq '.[] | {
+      name: .name,
+      color: .color,
+      description: .description,
+      default: .default
+    }')
 
-cat >> ".hiivmind/github/repos/$REPO.yaml" << EOF
+    cat >> ".hiivmind/github/repos/$repo.yaml" << EOF
 
 labels:
 EOF
 
-if [[ -n "$LABELS" ]]; then
-  echo "$LABELS" | jq -c '.' | while read -r label; do
-    LABEL_NAME=$(echo "$label" | jq -r '.name')
-    LABEL_COLOR=$(echo "$label" | jq -r '.color')
-    LABEL_DESC=$(echo "$label" | jq -r '.description // ""')
-    LABEL_DEFAULT=$(echo "$label" | jq -r '.default // false')
+    if [[ -n "$labels" ]]; then
+        echo "$labels" | jq -c '.' | while read -r label; do
+            local label_name label_color label_desc label_default
 
-    cat >> ".hiivmind/github/repos/$REPO.yaml" << LABELEOF
-  - name: "$LABEL_NAME"
-    color: $LABEL_COLOR
-    description: "$LABEL_DESC"
-    default: $LABEL_DEFAULT
+            label_name=$(echo "$label" | jq -r '.name')
+            label_color=$(echo "$label" | jq -r '.color')
+            label_desc=$(echo "$label" | jq -r '.description // ""')
+            label_default=$(echo "$label" | jq -r '.default // false')
+
+            cat >> ".hiivmind/github/repos/$repo.yaml" << LABELEOF
+  - name: "$label_name"
+    color: $label_color
+    description: "$label_desc"
+    default: $label_default
 LABELEOF
-  done
-fi
+        done
+    fi
 
-# Add metadata
-cat >> ".hiivmind/github/repos/$REPO.yaml" << EOF
+    # Add metadata
+    cat >> ".hiivmind/github/repos/$repo.yaml" << EOF
 
 cache:
   synced_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
   schema_version: "1.0"
 EOF
 
-echo "Repository settings cached to .hiivmind/github/repos/$REPO.yaml"
+    echo "Repository settings cached to .hiivmind/github/repos/$repo.yaml"
+}
+
+# Usage:
+refresh_repo_settings ".hiivmind/github/config.yaml" "hiivmind-pulse-gh"
 ```
 
 ### Update Freshness Tracking
