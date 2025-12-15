@@ -404,6 +404,180 @@ yq -i ".cache.last_updated_at = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
 
 ---
 
+## Refresh Project Automations (Phase 4)
+
+Document automation rules configured for a project.
+
+**Note:** GitHub Projects v2 automations are configured in the UI and not fully exposed via API. This refresh creates a template file with common patterns that you can manually update to reflect your project's actual automation rules.
+
+### Initialize Automations Documentation
+
+```bash
+CONFIG=".hiivmind/github/config.yaml"
+OWNER=$(yq '.workspace.login' "$CONFIG")
+PROJECT_NUM=2
+
+# Create automations directory if needed
+mkdir -p .hiivmind/github/automations
+
+# Fetch project info
+PROJECT_DATA=$(gh api graphql -f query='
+  query($owner: String!, $number: Int!) {
+    organization(login: $owner) {
+      projectV2(number: $number) {
+        id
+        title
+      }
+    }
+  }
+' -f owner="$OWNER" -F number="$PROJECT_NUM")
+
+PROJECT_ID=$(echo "$PROJECT_DATA" | jq -r '.data.organization.projectV2.id')
+PROJECT_TITLE=$(echo "$PROJECT_DATA" | jq -r '.data.organization.projectV2.title')
+
+# Create automations file with template
+cat > ".hiivmind/github/automations/project-$PROJECT_NUM.yaml" << 'EOF'
+# hiivmind-pulse-gh - Project Automations Configuration
+# This file documents automation rules for this GitHub Project v2.
+#
+# IMPORTANT: GitHub Projects v2 automations are configured in the project UI
+# and are not fully exposed via API. Update this file manually to reflect
+# your project's actual automation rules.
+
+EOF
+
+# Add project info
+cat >> ".hiivmind/github/automations/project-$PROJECT_NUM.yaml" << EOF
+project:
+  number: $PROJECT_NUM
+  id: $PROJECT_ID
+  title: "$PROJECT_TITLE"
+
+# Built-in GitHub automations (update manually)
+built_in:
+  auto_add:
+    enabled: false
+    repositories: []
+
+  auto_archive:
+    enabled: false
+    trigger: null
+    conditions:
+      status_value: null
+      delay_days: null
+
+# Custom workflow automations (document your workflows here)
+workflows: []
+  # Example:
+  # - name: "Auto-triage new issues"
+  #   description: "Set status to Triage for new issues"
+  #   trigger:
+  #     type: "item_added"
+  #     source: "issue"
+  #   actions:
+  #     - type: "set_field"
+  #       field: "Status"
+  #       value: "Triage"
+
+cache:
+  synced_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+  schema_version: "1.0"
+  source: "manual"
+
+# Common Automation Patterns:
+#
+# 1. Auto-add new issues/PRs to project
+#    - Configure in project settings > Workflows
+#    - Update built_in.auto_add.enabled and repositories
+#
+# 2. Auto-archive completed items
+#    - Configure in project settings > Workflows
+#    - Update built_in.auto_archive settings
+#
+# 3. Status transitions on events
+#    - When issue closed -> Set Status to "Done"
+#    - When assigned -> Set Status to "In Progress"
+#    - Document these in workflows section
+#
+# 4. Field auto-population
+#    - Set Priority based on labels
+#    - Set Estimate based on issue size
+#    - Document these in workflows section
+EOF
+
+echo "Automations template created at .hiivmind/github/automations/project-$PROJECT_NUM.yaml"
+echo ""
+echo "NEXT STEPS:"
+echo "1. Review your project's automation settings in the GitHub UI"
+echo "2. Update the automations file to reflect actual configured automations"
+echo "3. Re-run this refresh periodically to update the timestamp"
+```
+
+### Manually Update Automations
+
+After creating the template, manually update it to reflect your project's automation rules:
+
+1. **Check Project Settings** - Go to your project > Settings > Workflows in GitHub UI
+2. **Document Auto-Add** - Note which repositories have auto-add enabled
+3. **Document Auto-Archive** - Note if/when items auto-archive
+4. **Document Custom Workflows** - Add any workflow patterns you've configured
+5. **Update the File** - Edit `.hiivmind/github/automations/project-{N}.yaml`
+
+### Example Manual Updates
+
+```yaml
+built_in:
+  auto_add:
+    enabled: true
+    repositories:
+      - hiivmind-pulse-gh
+      - hiivmind-corpus
+
+  auto_archive:
+    enabled: true
+    trigger: "status_changed"
+    conditions:
+      status_value: "Done"
+      delay_days: 30
+
+workflows:
+  - name: "Auto-triage new issues"
+    description: "Set status to Triage for new issues"
+    trigger:
+      type: "item_added"
+      source: "issue"
+    actions:
+      - type: "set_field"
+        field: "Status"
+        value: "Triage"
+
+  - name: "Complete closed issues"
+    description: "Set status to Done when issue is closed"
+    trigger:
+      type: "item_closed"
+    actions:
+      - type: "set_field"
+        field: "Status"
+        value: "Done"
+```
+
+### Update Freshness Tracking
+
+After refreshing/updating automations:
+
+```bash
+FRESHNESS=".hiivmind/github/freshness.yaml"
+PROJECTS_REFRESHED="$PROJECT_NUM"
+
+# Mark automations section as fresh
+yq -i ".sections.automations.last_checked = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
+yq -i ".sections.automations.stale = false" "$FRESHNESS"
+yq -i ".sections.automations.projects_covered = [$PROJECTS_REFRESHED]" "$FRESHNESS"
+yq -i ".cache.last_updated_at = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
+```
+
+---
+
 ## Refresh Projects
 
 ### List Current vs Cached Projects

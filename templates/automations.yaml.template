@@ -1,0 +1,94 @@
+# hiivmind-pulse-gh - Project Automations Configuration
+# This file documents automation rules configured for a GitHub Project v2.
+# Each project gets its own file: .hiivmind/github/automations/project-{N}.yaml
+#
+# NOTE: GitHub Projects v2 automations are configured in the UI and not fully
+# exposed via API. This file is primarily for documentation and awareness.
+# You can manually update this file to reflect your project's automation rules.
+#
+# Generated/Updated by hiivmind-pulse-gh-refresh on {{synced_at}}
+
+# Project identification
+project:
+  number: {{project_number}}       # Project number (visible in URL)
+  id: {{project_id}}               # GraphQL node ID (PVT_...)
+  title: {{project_title}}         # Project title
+
+# Built-in GitHub automations
+# These are configured in the project settings UI
+built_in:
+  # Auto-add items to project
+  auto_add:
+    enabled: {{enabled}}           # true if auto-add is configured
+    repositories: []               # Repositories with auto-add enabled
+    # Common triggers:
+    # - issues_opened: Auto-add when issues are created
+    # - pull_requests_opened: Auto-add when PRs are created
+
+  # Auto-archive items
+  auto_archive:
+    enabled: {{enabled}}           # true if auto-archive is configured
+    trigger: {{trigger}}           # e.g., "item_closed", "status_changed"
+    conditions:
+      status_value: {{status}}     # e.g., "Done" - status that triggers archive
+      delay_days: {{days}}         # Days to wait before archiving
+
+# Custom workflow automations
+# Document any custom workflows or automation patterns here
+workflows:
+  - name: {{workflow_name}}        # Descriptive name
+    description: {{description}}   # What this workflow does
+    trigger:
+      type: {{trigger_type}}       # e.g., "item_added", "field_changed", "item_closed"
+      field: {{field_name}}        # Field that triggers (if type is "field_changed")
+      value: {{field_value}}       # Value that triggers (if applicable)
+    actions:
+      - type: {{action_type}}      # e.g., "set_field", "add_label", "notify"
+        field: {{field_name}}      # Field to update
+        value: {{field_value}}     # Value to set
+
+# Common automation patterns (examples)
+# Uncomment and customize as needed
+
+# Pattern 1: Auto-triage new issues
+# - name: "Auto-triage new issues"
+#   trigger: {type: "item_added", source: "issue"}
+#   actions:
+#     - {type: "set_field", field: "Status", value: "Triage"}
+#     - {type: "set_field", field: "Priority", value: "Medium"}
+
+# Pattern 2: Move to "In Progress" when assigned
+# - name: "Start work on assignment"
+#   trigger: {type: "field_changed", field: "Assignees"}
+#   actions:
+#     - {type: "set_field", field: "Status", value: "In Progress"}
+
+# Pattern 3: Mark as "Done" when issue closed
+# - name: "Complete closed issues"
+#   trigger: {type: "item_closed"}
+#   actions:
+#     - {type: "set_field", field: "Status", value: "Done"}
+
+# Pattern 4: Archive completed items after 30 days
+# - name: "Archive old completed items"
+#   trigger: {type: "field_changed", field: "Status", value: "Done"}
+#   actions:
+#     - {type: "archive_item", delay_days: 30}
+
+# Pattern 5: Auto-label based on status
+# - name: "Add in-progress label"
+#   trigger: {type: "field_changed", field: "Status", value: "In Progress"}
+#   actions:
+#     - {type: "add_label", label: "in-progress"}
+
+# Metadata
+cache:
+  synced_at: {{synced_at}}         # ISO timestamp of last update
+  schema_version: "1.0"
+  source: "manual"                 # "manual" or "api" (when API support improves)
+
+# Notes:
+# - GitHub Projects v2 automations are currently UI-only
+# - This file serves as documentation for automation-aware operations
+# - Update this file manually when you change automations in the project UI
+# - Future API improvements may allow automated detection

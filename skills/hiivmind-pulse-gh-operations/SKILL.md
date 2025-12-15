@@ -337,7 +337,182 @@ fi
 
 ---
 
-## Step 4: Determine API Type
+## Step 4: Check Project Automations (Phase 4)
+
+**Optional:** If the operation involves adding items to a project or updating fields, check if automations might handle it automatically to avoid duplication.
+
+### Check if Automations are Documented
+
+```bash
+PROJECT_NUM=2
+AUTOMATIONS_FILE=".hiivmind/github/automations/project-$PROJECT_NUM.yaml"
+
+if [[ -f "$AUTOMATIONS_FILE" ]]; then
+  echo "Automations documented for project $PROJECT_NUM"
+else
+  echo "No automations documented - operations will proceed normally"
+fi
+```
+
+### Check Auto-Add Status
+
+```bash
+# Function to check if a repository has auto-add enabled
+has_auto_add() {
+  local project_num=$1
+  local repo_name=$2
+  local automations_file=".hiivmind/github/automations/project-$project_num.yaml"
+
+  if [[ ! -f "$automations_file" ]]; then
+    return 1  # No automations file - assume no auto-add
+  fi
+
+  local auto_add_enabled=$(yq '.built_in.auto_add.enabled' "$automations_file")
+
+  if [[ "$auto_add_enabled" != "true" ]]; then
+    return 1  # Auto-add not enabled
+  fi
+
+  # Check if this repo is in the auto-add list
+  local repo_in_list=$(yq ".built_in.auto_add.repositories[] | select(. == \"$repo_name\")" "$automations_file")
+
+  if [[ -n "$repo_in_list" ]]; then
+    return 0  # Repo has auto-add enabled
+  else
+    return 1  # Repo not in auto-add list
+  fi
+}
+
+# Usage
+if has_auto_add 2 "hiivmind-pulse-gh"; then
+  echo "Project 2 has auto-add enabled for hiivmind-pulse-gh"
+  echo "New issues/PRs will be added automatically - no need to add manually"
+else
+  echo "Project 2 does not have auto-add for hiivmind-pulse-gh"
+  echo "Will need to add items manually"
+fi
+```
+
+### Check for Status Auto-Set Workflows
+
+```bash
+# Function to check if status will be auto-set on an event
+will_auto_set_status() {
+  local project_num=$1
+  local trigger_type=$2  # e.g., "item_closed", "item_added"
+  local automations_file=".hiivmind/github/automations/project-$project_num.yaml"
+
+  if [[ ! -f "$automations_file" ]]; then
+    return 1  # No automations
+  fi
+
+  # Check if any workflow matches this trigger and sets Status
+  local matching_workflow=$(yq ".workflows[] | select(.trigger.type == \"$trigger_type\") | select(.actions[].field == \"Status\") | .name" "$automations_file")
+
+  if [[ -n "$matching_workflow" ]]; then
+    echo "$matching_workflow"
+    return 0  # Automation exists
+  else
+    return 1  # No automation for this trigger
+  fi
+}
+
+# Usage
+WORKFLOW=$(will_auto_set_status 2 "item_closed")
+if [[ $? -eq 0 ]]; then
+  echo "Workflow '$WORKFLOW' will auto-set Status when item is closed"
+  echo "Skipping manual status update to avoid duplication"
+else
+  echo "No automation for item_closed - will set status manually"
+fi
+```
+
+### Get Auto-Archive Settings
+
+```bash
+PROJECT_NUM=2
+AUTOMATIONS_FILE=".hiivmind/github/automations/project-$PROJECT_NUM.yaml"
+
+# Check if auto-archive is enabled
+AUTO_ARCHIVE_ENABLED=$(yq '.built_in.auto_archive.enabled' "$AUTOMATIONS_FILE" 2>/dev/null)
+
+if [[ "$AUTO_ARCHIVE_ENABLED" = "true" ]]; then
+  STATUS=$(yq '.built_in.auto_archive.conditions.status_value' "$AUTOMATIONS_FILE")
+  DELAY=$(yq '.built_in.auto_archive.conditions.delay_days' "$AUTOMATIONS_FILE")
+
+  echo "Auto-archive is enabled:"
+  echo "  Trigger: Items with status '$STATUS'"
+  echo "  Delay: $DELAY days"
+  echo ""
+  echo "Items will archive automatically - no need to manually archive"
+else
+  echo "Auto-archive not enabled - items must be archived manually"
+fi
+```
+
+### Check for Duplicate Automation
+
+```bash
+# Function to check if an operation would duplicate an automation
+would_duplicate_automation() {
+  local project_num=$1
+  local operation_type=$2  # e.g., "add_to_project", "set_status"
+  local context=$3         # Additional context (e.g., status value)
+  local automations_file=".hiivmind/github/automations/project-$project_num.yaml"
+
+  if [[ ! -f "$automations_file" ]]; then
+    return 1  # No automations - no duplication
+  fi
+
+  case "$operation_type" in
+    "add_to_project")
+      # Check if auto-add would handle this
+      local repo=$context
+      if has_auto_add "$project_num" "$repo"; then
+        return 0  # Would duplicate auto-add
+      fi
+      ;;
+
+    "set_status")
+      # Check if any workflow sets this status automatically
+      local status_value=$context
+      local auto_set=$(yq ".workflows[] | select(.actions[].field == \"Status\") | select(.actions[].value == \"$status_value\")" "$automations_file")
+      if [[ -n "$auto_set" ]]; then
+        return 0  # Would duplicate automation
+      fi
+      ;;
+  esac
+
+  return 1  # No duplication
+}
+
+# Usage
+if would_duplicate_automation 2 "add_to_project" "hiivmind-pulse-gh"; then
+  echo "WARNING: Auto-add is enabled - this item will be added automatically"
+  echo "Skipping manual add to avoid duplication"
+else
+  echo "No automation for this operation - proceeding"
+fi
+```
+
+### List Documented Workflows
+
+```bash
+PROJECT_NUM=2
+AUTOMATIONS_FILE=".hiivmind/github/automations/project-$PROJECT_NUM.yaml"
+
+echo "Documented workflows for project $PROJECT_NUM:"
+yq '.workflows[] | "- \(.name): \(.description)"' "$AUTOMATIONS_FILE" 2>/dev/null
+
+echo ""
+echo "Built-in automations:"
+echo "  Auto-add: $(yq '.built_in.auto_add.enabled' "$AUTOMATIONS_FILE" 2>/dev/null)"
+echo "  Auto-archive: $(yq '.built_in.auto_archive.enabled' "$AUTOMATIONS_FILE" 2>/dev/null)"
+```
+
+---
+
+## Step 5: Determine API Type
 
 Use this routing table to determine GraphQL vs REST:
 
@@ -361,7 +536,7 @@ Use this routing table to determine GraphQL vs REST:
 
 ---
 
-## Step 5: Find Workflow Example
+## Step 6: Find Workflow Example
 
 Check for relevant workflow pattern:
 
@@ -383,7 +558,7 @@ ls "${CLAUDE_PLUGIN_ROOT}/reference/workflows/"
 
 ---
 
-## Step 6: Search Corpus for Syntax
+## Step 7: Search Corpus for Syntax
 
 Use keywords to find exact syntax in the corpus.
 
@@ -431,7 +606,7 @@ grep -n "^enum {EnumName} " "$SCHEMA" -A 20
 
 ---
 
-## Step 7: Execute Operation
+## Step 8: Execute Operation
 
 ### Domain: Issues
 
@@ -789,7 +964,7 @@ gh release download "$TAG" -R "$REPO_FULL" --pattern "*.tar.gz"
 
 ---
 
-## Step 8: Report Result
+## Step 9: Report Result
 
 After execution:
 

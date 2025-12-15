@@ -430,6 +430,129 @@ cache:
 
 ---
 
+## Schema: automations/project-{N}.yaml (Phase 4)
+
+Project automation rules and workflow documentation. Stored per-project for independent tracking.
+
+**Important:** GitHub Projects v2 automations are configured in the project UI and not fully exposed via API. This file is primarily for documentation and automation-awareness. Update it manually to reflect your project's actual automation configuration.
+
+### project
+
+Identifies which project these automations belong to.
+
+| Path | Type | Description |
+|------|------|-------------|
+| `.project.number` | number | Project number (visible in URL) |
+| `.project.id` | string | GraphQL node ID (`PVT_...`) |
+| `.project.title` | string | Project title |
+
+### built_in
+
+Built-in GitHub automations configured in the project settings UI.
+
+| Path | Type | Description |
+|------|------|-------------|
+| `.built_in.auto_add` | object | Auto-add items to project settings |
+| `.built_in.auto_add.enabled` | boolean | `true` if auto-add is configured |
+| `.built_in.auto_add.repositories[]` | array | Repositories with auto-add enabled |
+| `.built_in.auto_archive` | object | Auto-archive settings |
+| `.built_in.auto_archive.enabled` | boolean | `true` if auto-archive is configured |
+| `.built_in.auto_archive.trigger` | string | Trigger type (e.g., `item_closed`, `status_changed`) |
+| `.built_in.auto_archive.conditions` | object | Conditions for auto-archive |
+| `.built_in.auto_archive.conditions.status_value` | string | Status that triggers archive |
+| `.built_in.auto_archive.conditions.delay_days` | number | Days to wait before archiving |
+
+### workflows
+
+Custom workflow automations documented for this project.
+
+| Path | Type | Description |
+|------|------|-------------|
+| `.workflows[]` | array | List of documented workflows |
+| `.workflows[].name` | string | Workflow name |
+| `.workflows[].description` | string | What this workflow does |
+| `.workflows[].trigger` | object | What triggers this workflow |
+| `.workflows[].trigger.type` | string | Trigger type: `item_added`, `field_changed`, `item_closed` |
+| `.workflows[].trigger.field` | string | Field that triggers (for `field_changed` type) |
+| `.workflows[].trigger.value` | string | Value that triggers (optional) |
+| `.workflows[].actions[]` | array | Actions performed by this workflow |
+| `.workflows[].actions[].type` | string | Action type: `set_field`, `add_label`, `notify`, `archive_item` |
+| `.workflows[].actions[].field` | string | Field to update (for `set_field` type) |
+| `.workflows[].actions[].value` | string | Value to set |
+
+**Example:**
+```yaml
+project:
+  number: 2
+  id: PVT_kwDOBxxxxxx
+  title: "Development Board"
+
+built_in:
+  auto_add:
+    enabled: true
+    repositories:
+      - hiivmind-pulse-gh
+      - hiivmind-corpus
+
+  auto_archive:
+    enabled: true
+    trigger: "status_changed"
+    conditions:
+      status_value: "Done"
+      delay_days: 30
+
+workflows:
+  - name: "Auto-triage new issues"
+    description: "Set status to Triage for new issues"
+    trigger:
+      type: "item_added"
+      source: "issue"
+    actions:
+      - type: "set_field"
+        field: "Status"
+        value: "Triage"
+      - type: "set_field"
+        field: "Priority"
+        value: "Medium"
+
+  - name: "Complete closed issues"
+    description: "Set status to Done when issue is closed"
+    trigger:
+      type: "item_closed"
+    actions:
+      - type: "set_field"
+        field: "Status"
+        value: "Done"
+
+  - name: "Start work on assignment"
+    description: "Move to In Progress when item is assigned"
+    trigger:
+      type: "field_changed"
+      field: "Assignees"
+    actions:
+      - type: "set_field"
+        field: "Status"
+        value: "In Progress"
+
+cache:
+  synced_at: "2025-12-15T14:00:00Z"
+  schema_version: "1.0"
+  source: "manual"
+```
+
+### Common Automation Lookups
+
+| Need | yq Command |
+|------|------------|
+| Check if auto-add enabled | `yq '.built_in.auto_add.enabled' automations/project-2.yaml` |
+| Get auto-add repos | `yq '.built_in.auto_add.repositories[]' automations/project-2.yaml` |
+| Check if auto-archive enabled | `yq '.built_in.auto_archive.enabled' automations/project-2.yaml` |
+| Get archive delay | `yq '.built_in.auto_archive.conditions.delay_days' automations/project-2.yaml` |
+| List workflows | `yq '.workflows[].name' automations/project-2.yaml` |
+| Find status auto-set | `yq '.workflows[] \| select(.actions[].field == "Status")' automations/project-2.yaml` |
+
+---
+
 ## Schema: user.yaml (Personal, Git-Ignored)
 
 ### user
@@ -610,6 +733,29 @@ else
 fi
 ```
 
+### Pattern 6: Automation-Aware Operations (Phase 4)
+
+Check if auto-add is enabled before manually adding items to a project:
+
+```bash
+PROJECT_NUM=2
+REPO="hiivmind-pulse-gh"
+AUTOMATIONS_FILE=".hiivmind/github/automations/project-$PROJECT_NUM.yaml"
+
+# Check if auto-add is enabled for this repo
+AUTO_ADD_ENABLED=$(yq '.built_in.auto_add.enabled' "$AUTOMATIONS_FILE")
+AUTO_ADD_REPOS=$(yq '.built_in.auto_add.repositories[]' "$AUTOMATIONS_FILE")
+
+if [[ "$AUTO_ADD_ENABLED" = "true" ]] && echo "$AUTO_ADD_REPOS" | grep -q "^$REPO$"; then
+  echo "Auto-add is enabled for $REPO in project $PROJECT_NUM"
+  echo "New issues/PRs will be added automatically - skipping manual add"
+else
+  echo "Auto-add not enabled - adding item manually"
+  ISSUE_URL=$(gh issue view $ISSUE_NUM -R "$OWNER/$REPO" --json url --jq '.url')
+  gh project item-add $PROJECT_NUM --owner "$OWNER" --url "$ISSUE_URL"
+fi
+```
+
 ---
 
 ## Related Documentation
@@ -623,3 +769,4 @@ fi
 | `templates/freshness.yaml.template` | Template for per-section freshness tracking (Phase 1) |
 | `templates/views.yaml.template` | Template for project view config (Phase 2) |
 | `templates/repo.yaml.template` | Template for repository settings (Phase 3) |
+| `templates/automations.yaml.template` | Template for project automation documentation (Phase 4) |
