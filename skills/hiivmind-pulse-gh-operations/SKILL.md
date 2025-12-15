@@ -386,7 +386,7 @@ REPO_FILE=".hiivmind/github/repos/$REPO.yaml"
 # Get required approving review count
 REVIEW_COUNT=$(yq ".branch_protection[\"$BRANCH\"].required_pull_request_reviews.required_approving_review_count" "$REPO_FILE" 2>/dev/null)
 
-if [[ "$REVIEW_COUNT" != "null" ]] && [[ "$REVIEW_COUNT" != "0" ]]; then
+if [[ ! "$REVIEW_COUNT" = "null" ]] && [[ ! "$REVIEW_COUNT" = "0" ]]; then
   echo "Branch $BRANCH requires $REVIEW_COUNT approving review(s)"
 else
   echo "Branch $BRANCH has no review requirements"
@@ -1015,11 +1015,13 @@ get_repo_writers() {
   local writers=()
 
   # Get teams with admin or write access
-  local admin_teams=$(yq ".repo_team_access[\"$repo_name\"].admin[]" "$teams_file" 2>/dev/null)
-  local write_teams=$(yq ".repo_team_access[\"$repo_name\"].write[]" "$teams_file" 2>/dev/null)
+  local admin_teams write_teams all_teams
 
-  # Combine teams
-  local all_teams=$(echo -e "$admin_teams\n$write_teams" | sort -u)
+  admin_teams=$(yq ".repo_team_access[\"$repo_name\"].admin[]" "$teams_file" 2>/dev/null)
+  write_teams=$(yq ".repo_team_access[\"$repo_name\"].write[]" "$teams_file" 2>/dev/null)
+
+  # Combine teams (avoid pipe in assignment)
+  all_teams=$(printf "%s\n%s" "$admin_teams" "$write_teams" | sort -u)
 
   # Get members from each team
   while read -r team_slug; do
@@ -1029,13 +1031,21 @@ get_repo_writers() {
   done <<< "$all_teams" | sort -u
 }
 
+# Format reviewer list for gh CLI
+format_reviewers() {
+  local repo="$1"
+  local count="${2:-3}"
+
+  get_repo_writers "$repo" | head -n "$count" | tr '\n' ',' | sed 's/,$//'
+}
+
 # Usage - suggest reviewers from team members with write access
 REPO="hiivmind-pulse-gh"
 echo "Potential reviewers for $REPO (users with write+ access):"
 get_repo_writers "$REPO"
 
 # Use in PR creation
-REVIEWERS=$(get_repo_writers "$REPO" | head -3 | tr '\n' ',' | sed 's/,$//')
+REVIEWERS=$(format_reviewers "$REPO" 3)
 echo ""
 echo "Suggested reviewers: $REVIEWERS"
 # gh pr create ... --reviewer "$REVIEWERS"
@@ -1313,8 +1323,18 @@ gh api "/repos/$REPO_FULL/milestones/$MILESTONE_NUM" -X DELETE
 **List milestones (GraphQL):**
 ```bash
 # Corpus keywords: milestones, repository, dueOn, progressPercentage
-gh api graphql -f query='query($owner: String!, $repo: String!) { repository(owner: $owner, name: $repo) { milestones(first: 20, states: [OPEN]) { nodes { number title dueOn progressPercentage } } } }' \
-  -f owner="$OWNER" -f repo="$REPO"
+# Reference: hiivmind-corpus-github → "list repository milestones"
+list_milestones() {
+  local owner="$1"
+  local repo="$2"
+  local state="${3:-OPEN}"
+
+  gh api graphql -f query='query($owner: String!, $repo: String!, $state: [MilestoneState!]) { repository(owner: $owner, name: $repo) { milestones(first: 20, states: $state) { nodes { number title dueOn progressPercentage } } } }' \
+    -f owner="$owner" -f repo="$repo" -f state="$state"
+}
+
+# Usage:
+list_milestones "$OWNER" "$REPO" "OPEN"
 ```
 
 **Assign milestone to issue:**
@@ -1358,34 +1378,57 @@ PROJECT_ID=$(yq ".projects.catalog[] | select(.number == $PROJECT_NUM) | .id" "$
 # Simple - gh CLI (recommended)
 gh project item-add $PROJECT_NUM --owner "$OWNER" --url "$ITEM_URL"
 
-# Or GraphQL mutation
+# Or GraphQL mutation for programmatic use
 # Corpus keywords: addProjectV2ItemById, projectId, contentId
 # Reference: hiivmind-corpus-github → "add item to project"
-ITEM_ID="..."  # Issue or PR node ID
-gh api graphql -f query='mutation($projectId: ID!, $contentId: ID!) { addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) { item { id } } }' \
-  -f projectId="$PROJECT_ID" -f contentId="$ITEM_ID"
+add_project_item() {
+  local project_id="$1"
+  local content_id="$2"  # Issue or PR node ID
+
+  gh api graphql -f query='mutation($projectId: ID!, $contentId: ID!) { addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) { item { id } } }' \
+    -f projectId="$project_id" -f contentId="$content_id" --jq '.data.addProjectV2ItemById.item.id'
+}
+
+# Usage:
+ITEM_ID=$(add_project_item "$PROJECT_ID" "$ISSUE_ID")
 ```
 
 **Update project field:**
 ```bash
-# Get field and option IDs from config
-FIELD_ID=$(yq ".projects.catalog[] | select(.number == $PROJECT_NUM) | .fields.Status.id" "$CONFIG")
-OPTION_ID=$(yq ".projects.catalog[] | select(.number == $PROJECT_NUM) | .fields.Status.options.\"In progress\"" "$CONFIG")
-
-# Update field value
 # Corpus keywords: updateProjectV2ItemFieldValue, singleSelectOptionId, fieldId
 # Reference: hiivmind-corpus-github → "update project field value"
 # Note: value type varies by field (singleSelectOptionId, text, number, date, iteration)
-gh api graphql -f query='mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) { updateProjectV2ItemFieldValue(input: {projectId: $projectId, itemId: $itemId, fieldId: $fieldId, value: {singleSelectOptionId: $optionId}}) { projectV2Item { id } } }' \
-  -f projectId="$PROJECT_ID" -f itemId="$ITEM_ID" -f fieldId="$FIELD_ID" -f optionId="$OPTION_ID"
+
+update_project_field_single_select() {
+  local project_id="$1"
+  local item_id="$2"
+  local field_id="$3"
+  local option_id="$4"
+
+  gh api graphql -f query='mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) { updateProjectV2ItemFieldValue(input: {projectId: $projectId, itemId: $itemId, fieldId: $fieldId, value: {singleSelectOptionId: $optionId}}) { projectV2Item { id } } }' \
+    -f projectId="$project_id" -f itemId="$item_id" -f fieldId="$field_id" -f optionId="$option_id"
+}
+
+# Usage with config lookups:
+FIELD_ID=$(yq ".projects.catalog[] | select(.number == $PROJECT_NUM) | .fields.Status.id" "$CONFIG")
+OPTION_ID=$(yq ".projects.catalog[] | select(.number == $PROJECT_NUM) | .fields.Status.options.\"In progress\"" "$CONFIG")
+update_project_field_single_select "$PROJECT_ID" "$ITEM_ID" "$FIELD_ID" "$OPTION_ID"
 ```
 
 **Archive project item:**
 ```bash
 # Corpus keywords: archiveProjectV2Item, projectId, itemId
 # Reference: hiivmind-corpus-github → "archive project item"
-gh api graphql -f query='mutation($projectId: ID!, $itemId: ID!) { archiveProjectV2Item(input: {projectId: $projectId, itemId: $itemId}) { item { id } } }' \
-  -f projectId="$PROJECT_ID" -f itemId="$ITEM_ID"
+archive_project_item() {
+  local project_id="$1"
+  local item_id="$2"
+
+  gh api graphql -f query='mutation($projectId: ID!, $itemId: ID!) { archiveProjectV2Item(input: {projectId: $projectId, itemId: $itemId}) { item { id } } }' \
+    -f projectId="$project_id" -f itemId="$item_id"
+}
+
+# Usage:
+archive_project_item "$PROJECT_ID" "$ITEM_ID"
 ```
 
 ---
@@ -1394,22 +1437,35 @@ gh api graphql -f query='mutation($projectId: ID!, $itemId: ID!) { archiveProjec
 
 **Set branch protection (REST):**
 ```bash
-gh api "/repos/$REPO_FULL/branches/$BRANCH/protection" \
-  -X PUT \
-  -H "Accept: application/vnd.github+json" \
-  --input - <<EOF
+# Corpus keywords: branches protection, required_status_checks, enforce_admins, required_pull_request_reviews
+# Reference: hiivmind-corpus-github → "branch protection rules"
+
+set_branch_protection() {
+  local repo_full="$1"
+  local branch="$2"
+  local required_checks="${3:-ci}"
+  local review_count="${4:-1}"
+
+  gh api "/repos/$repo_full/branches/$branch/protection" \
+    -X PUT \
+    -H "Accept: application/vnd.github+json" \
+    --input - <<EOF
 {
   "required_status_checks": {
     "strict": true,
-    "contexts": ["ci"]
+    "contexts": ["$required_checks"]
   },
   "enforce_admins": true,
   "required_pull_request_reviews": {
-    "required_approving_review_count": 1
+    "required_approving_review_count": $review_count
   },
   "restrictions": null
 }
 EOF
+}
+
+# Usage:
+set_branch_protection "$REPO_FULL" "main" "ci" 1
 ```
 
 **Get branch protection:**
@@ -1428,24 +1484,37 @@ gh api "/repos/$REPO_FULL/branches/$BRANCH/protection" -X DELETE
 
 **Create ruleset (REST):**
 ```bash
-gh api "/repos/$REPO_FULL/rulesets" \
-  -X POST \
-  --input - <<EOF
+# Corpus keywords: rulesets, enforcement, conditions, ref_name, rules
+# Reference: hiivmind-corpus-github → "repository rulesets"
+
+create_ruleset() {
+  local repo_full="$1"
+  local ruleset_name="$2"
+  local branch_pattern="${3:-refs/heads/main}"
+  local review_count="${4:-1}"
+
+  gh api "/repos/$repo_full/rulesets" \
+    -X POST \
+    --input - <<EOF
 {
-  "name": "$RULESET_NAME",
+  "name": "$ruleset_name",
   "target": "branch",
   "enforcement": "active",
   "conditions": {
     "ref_name": {
-      "include": ["refs/heads/main"],
+      "include": ["$branch_pattern"],
       "exclude": []
     }
   },
   "rules": [
-    {"type": "pull_request", "parameters": {"required_approving_review_count": 1}}
+    {"type": "pull_request", "parameters": {"required_approving_review_count": $review_count}}
   ]
 }
 EOF
+}
+
+# Usage:
+create_ruleset "$REPO_FULL" "main-protection" "refs/heads/main" 1
 ```
 
 **List rulesets:**
