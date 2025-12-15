@@ -959,57 +959,21 @@ fi
 
 ### Pattern 5: Protection-Aware PR Merge (Phase 3)
 
-Use repository settings to choose the correct merge method and respect auto-delete settings:
+**See:** `hiivmind-pulse-gh-operations` skill → Step 3: Load Repository Settings
 
-```bash
-REPO="hiivmind-pulse-gh"
-REPO_FILE=".hiivmind/github/repos/$REPO.yaml"
-PR_NUM=42
-
-# Get preferred merge method
-if [[ $(yq '.merge_settings.allow_squash_merge' "$REPO_FILE") = "true" ]]; then
-  MERGE_METHOD="squash"
-elif [[ $(yq '.merge_settings.allow_merge_commit' "$REPO_FILE") = "true" ]]; then
-  MERGE_METHOD="merge"
-else
-  MERGE_METHOD="rebase"
-fi
-
-# Check if branch auto-deletes
-AUTO_DELETE=$(yq '.merge_settings.delete_branch_on_merge' "$REPO_FILE")
-
-# Merge PR
-if [[ "$AUTO_DELETE" = "true" ]]; then
-  gh pr merge $PR_NUM --$MERGE_METHOD
-  echo "Branch will auto-delete after merge"
-else
-  gh pr merge $PR_NUM --$MERGE_METHOD --delete-branch
-  echo "Manually deleting branch after merge"
-fi
-```
+Use repository settings to determine correct merge method:
+- Query `merge_settings.allow_squash_merge`, `allow_merge_commit`, `allow_rebase_merge`
+- Query `merge_settings.delete_branch_on_merge`
+- Pass appropriate flags to `gh pr merge`
 
 ### Pattern 6: Automation-Aware Operations (Phase 4)
 
-Check if auto-add is enabled before manually adding items to a project:
+**See:** `hiivmind-pulse-gh-operations` skill → Step 4: Load Automation Configuration
 
-```bash
-PROJECT_NUM=2
-REPO="hiivmind-pulse-gh"
-AUTOMATIONS_FILE=".hiivmind/github/automations/project-$PROJECT_NUM.yaml"
-
-# Check if auto-add is enabled for this repo
-AUTO_ADD_ENABLED=$(yq '.built_in.auto_add.enabled' "$AUTOMATIONS_FILE")
-AUTO_ADD_REPOS=$(yq '.built_in.auto_add.repositories[]' "$AUTOMATIONS_FILE")
-
-if [[ "$AUTO_ADD_ENABLED" = "true" ]] && echo "$AUTO_ADD_REPOS" | grep -q "^$REPO$"; then
-  echo "Auto-add is enabled for $REPO in project $PROJECT_NUM"
-  echo "New issues/PRs will be added automatically - skipping manual add"
-else
-  echo "Auto-add not enabled - adding item manually"
-  ISSUE_URL=$(gh issue view $ISSUE_NUM -R "$OWNER/$REPO" --json url --jq '.url')
-  gh project item-add $PROJECT_NUM --owner "$OWNER" --url "$ISSUE_URL"
-fi
-```
+Check automation settings before manual operations:
+- Query `.hiivmind/github/automations/project-{number}.yaml`
+- Check `built_in.auto_add.enabled` and `built_in.auto_add.repositories[]`
+- Skip manual adds if auto-add handles it
 
 ---
 
