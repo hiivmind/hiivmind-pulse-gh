@@ -58,7 +58,10 @@ THRESHOLD_DAYS=$(yq '.preferences.freshness_threshold_days // 7' "$USER_CONFIG" 
 LAST_SYNC=$(yq '.cache.last_synced_at' "$CONFIG")
 
 # Calculate age in days
-if [[ "$LAST_SYNC" != "null" && -n "$LAST_SYNC" ]]; then
+# Note: Using positive-first logic to avoid != escaping bug in Claude Code Bash tool
+if [[ "$LAST_SYNC" = "null" ]] || [[ -z "$LAST_SYNC" ]]; then
+  echo "STALE=unknown"
+else
   LAST_SYNC_EPOCH=$(date -d "$LAST_SYNC" +%s 2>/dev/null || echo 0)
   NOW_EPOCH=$(date +%s)
   AGE_DAYS=$(( (NOW_EPOCH - LAST_SYNC_EPOCH) / 86400 ))
@@ -69,8 +72,6 @@ if [[ "$LAST_SYNC" != "null" && -n "$LAST_SYNC" ]]; then
   else
     echo "STALE=false"
   fi
-else
-  echo "STALE=unknown"
 fi
 ```
 
