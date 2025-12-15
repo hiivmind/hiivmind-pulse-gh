@@ -1,35 +1,25 @@
 {
   "name": "hiivmind-pulse-gh",
-  "description": "GitHub skills for Claude Code - Projects v2, Milestones, Branch Protection, and workspace configuration. Includes user-init for authentication setup, workspace-init for project discovery, and operational skills for managing kanban boards and branch rules.",
-  "version": "3.0.0",
+  "description": "GitHub workspace initialization and API documentation corpus. Run init once, then use gh CLI directly with routing guide and corpus for GraphQL/REST operations.",
+  "version": "4.0.0",
   "author": {
     "name": "Nathaniel Ramm <nathaniel@hiivmind.ai>"
   },
   "keywords": [
     "github",
-    "projects",
-    "project-board",
-    "kanban",
-    "attached",
-    "linked",
-    "connected",
-    "belongs-to",
-    "part-of",
-    "tracked",
-    "associated",
-    "membership",
-    "discover-projects",
-    "find-projects",
-    "milestones",
-    "branch-protection",
-    "rulesets",
     "graphql",
     "rest-api",
-    "project-management",
-    "status-updates",
-    "views",
-    "roadmap",
-    "gh"
+    "projects-v2",
+    "milestones",
+    "issues",
+    "pull-requests",
+    "actions",
+    "workflows",
+    "branch-protection",
+    "rulesets",
+    "releases",
+    "gh-cli",
+    "workspace-init"
   ],
   "repository": "https://github.com/hiivmind/hiivmind-pulse-gh"
 }
