@@ -97,9 +97,6 @@ gh api "/users/$OWNER" --jq '.type' 2>/dev/null || echo "Organization"
 List available projects:
 
 ```bash
-OWNER="hiivmind"
-TYPE="organization"  # or "user"
-
 # Discover projects using GraphQL
 # Reference corpus for syntax:
 #   - Keywords: projectsV2, organization, user, nodes
@@ -108,13 +105,21 @@ TYPE="organization"  # or "user"
 #
 # Query pattern: organization(login:) or user(login:) → projectsV2(first:) → nodes { number title closed }
 
-if [[ "$TYPE" == "organization" ]]; then
-  gh api graphql -f query='query($login: String!) { organization(login: $login) { projectsV2(first: 20) { nodes { number title closed } } } }' \
-    -f login="$OWNER" --jq '.data.organization.projectsV2.nodes[] | "\(.number): \(.title) [\(if .closed then "closed" else "open" end)]"'
-else
-  gh api graphql -f query='query($login: String!) { user(login: $login) { projectsV2(first: 20) { nodes { number title closed } } } }' \
-    -f login="$OWNER" --jq '.data.user.projectsV2.nodes[] | "\(.number): \(.title) [\(if .closed then "closed" else "open" end)]"'
-fi
+discover_projects() {
+    local login="$1"
+    local type="$2"  # "organization" or "user"
+
+    if [[ "$type" = "organization" ]]; then
+        gh api graphql -f query='query($login: String!) { organization(login: $login) { projectsV2(first: 20) { nodes { number title closed } } } }' \
+            -f login="$login" --jq '.data.organization.projectsV2.nodes[] | "\(.number): \(.title) [\(if .closed then "closed" else "open" end)]"'
+    else
+        gh api graphql -f query='query($login: String!) { user(login: $login) { projectsV2(first: 20) { nodes { number title closed } } } }' \
+            -f login="$login" --jq '.data.user.projectsV2.nodes[] | "\(.number): \(.title) [\(if .closed then "closed" else "open" end)]"'
+    fi
+}
+
+# Usage:
+discover_projects "hiivmind" "organization"
 ```
 
 **Select which projects to cache** - typically all open ones.
@@ -134,34 +139,41 @@ mkdir -p .hiivmind/github
 Fetch workspace ID and project details, then create config:
 
 ```bash
-OWNER="hiivmind"
-TYPE="organization"
-DEFAULT_PROJECT=2
-PROJECTS="2"  # space-separated list
-
 # Get workspace ID
 # Corpus keywords: organization, user, id (global node ID)
-if [[ "$TYPE" == "organization" ]]; then
-  OWNER_ID=$(gh api graphql -f query='query($login: String!) { organization(login: $login) { id } }' -f login="$OWNER" --jq '.data.organization.id')
-else
-  OWNER_ID=$(gh api graphql -f query='query($login: String!) { user(login: $login) { id } }' -f login="$OWNER" --jq '.data.user.id')
-fi
+get_workspace_id() {
+    local login="$1"
+    local type="$2"
+
+    if [[ "$type" = "organization" ]]; then
+        gh api graphql -f query='query($login: String!) { organization(login: $login) { id } }' -f login="$login" --jq '.data.organization.id'
+    else
+        gh api graphql -f query='query($login: String!) { user(login: $login) { id } }' -f login="$login" --jq '.data.user.id'
+    fi
+}
 
 # Create base config from template
 # Template reference: templates/config.yaml.template
 # Substituting: workspace_type, workspace_login, initialized_at, toolkit_version
+create_base_config() {
+    local owner="$1"
+    local type="$2"
+    local default_project="$3"
+    local owner_id
 
-cat > .hiivmind/github/config.yaml << EOF
+    owner_id=$(get_workspace_id "$owner" "$type")
+
+    cat > .hiivmind/github/config.yaml << EOF
 # hiivmind-pulse-gh workspace configuration
 # Generated: $(date -Iseconds)
 
 workspace:
-  type: $TYPE
-  login: $OWNER
-  id: $OWNER_ID
+  type: $type
+  login: $owner
+  id: $owner_id
 
 projects:
-  default: $DEFAULT_PROJECT
+  default: $default_project
   catalog: []
 
 repositories: []
@@ -173,6 +185,10 @@ cache:
   last_synced_at: $(date -Iseconds)
   toolkit_version: "1.0.0"
 EOF
+}
+
+# Usage:
+create_base_config "hiivmind" "organization" 2
 ```
 
 ### Add Project Details
@@ -180,31 +196,34 @@ EOF
 For each project, fetch and add field IDs:
 
 ```bash
-PROJECT_NUM=2
-
 # Fetch project with fields
 # Corpus keywords: projectV2, fields, ProjectV2Field, ProjectV2SingleSelectField, options
 # Inline fragments required for field type discrimination
 # Reference: hiivmind-corpus-github → "project fields with options"
 
-PROJECT_DATA=$(gh api graphql -f query='
-  query($owner: String!, $number: Int!) {
-    organization(login: $owner) {
-      projectV2(number: $number) {
-        id title url
-        fields(first: 50) {
-          nodes {
-            ... on ProjectV2SingleSelectField { id name options { id name } }
-            ... on ProjectV2Field { id name }
+fetch_project_fields() {
+    local owner="$1"
+    local project_num="$2"
+
+    gh api graphql -f query='
+      query($owner: String!, $number: Int!) {
+        organization(login: $owner) {
+          projectV2(number: $number) {
+            id title url
+            fields(first: 50) {
+              nodes {
+                ... on ProjectV2SingleSelectField { id name options { id name } }
+                ... on ProjectV2Field { id name }
+              }
+            }
           }
         }
       }
-    }
-  }
-' -f owner="$OWNER" -F number="$PROJECT_NUM")
+    ' -f owner="$owner" -F number="$project_num" | jq '.data.organization.projectV2'
+}
 
-# Extract and format (use yq to merge into config.yaml)
-echo "$PROJECT_DATA" | jq '.data.organization.projectV2'
+# Usage:
+fetch_project_fields "hiivmind" 2
 ```
 
 ---
@@ -298,24 +317,27 @@ EOF
 # Corpus keywords: viewer (authenticated user), login, id, name, email
 # Reference: hiivmind-corpus-github → "viewer query"
 
-USER_DATA=$(gh api graphql -f query='{ viewer { login id name email } }')
+create_user_config() {
+    local user_data login user_id name email
 
-LOGIN=$(echo "$USER_DATA" | jq -r '.data.viewer.login')
-USER_ID=$(echo "$USER_DATA" | jq -r '.data.viewer.id')
-NAME=$(echo "$USER_DATA" | jq -r '.data.viewer.name // empty')
-EMAIL=$(echo "$USER_DATA" | jq -r '.data.viewer.email // empty')
+    user_data=$(gh api graphql -f query='{ viewer { login id name email } }')
 
-# Template reference: templates/user.yaml.template
-cat > .hiivmind/github/user.yaml << EOF
+    login=$(echo "$user_data" | jq -r '.data.viewer.login')
+    user_id=$(echo "$user_data" | jq -r '.data.viewer.id')
+    name=$(echo "$user_data" | jq -r '.data.viewer.name // empty')
+    email=$(echo "$user_data" | jq -r '.data.viewer.email // empty')
+
+    # Template reference: templates/user.yaml.template
+    cat > .hiivmind/github/user.yaml << EOF
 # hiivmind-pulse-gh user configuration
 # DO NOT COMMIT - add to .gitignore
 # Generated: $(date -Iseconds)
 
 user:
-  login: $LOGIN
-  id: $USER_ID
-  name: $NAME
-  email: $EMAIL
+  login: $login
+  id: $user_id
+  name: $name
+  email: $email
 
 permissions:
   org_role: null
@@ -333,6 +355,10 @@ cache:
   permissions_checked_at: null
   permissions_ttl_hours: 24
 EOF
+}
+
+# Usage:
+create_user_config
 ```
 
 ### Add to .gitignore
