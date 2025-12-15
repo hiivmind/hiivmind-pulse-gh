@@ -244,6 +244,192 @@ cache:
 
 ---
 
+## Schema: repos/{repo-name}.yaml (Phase 3)
+
+Repository settings and protection rules, stored per-repository for fast access and independent freshness tracking.
+
+### repository
+
+Repository identification and basic metadata.
+
+| Path | Type | Description |
+|------|------|-------------|
+| `.repository.name` | string | Repository name |
+| `.repository.id` | string | GraphQL node ID (`R_kgDO...`) |
+| `.repository.full_name` | string | Full repository path (`owner/repo`) |
+| `.repository.default_branch` | string | Default branch name (e.g., `main`) |
+| `.repository.visibility` | string | `public`, `private`, or `internal` |
+| `.repository.archived` | boolean | `true` if repository is archived |
+
+### branch_protection
+
+Legacy branch protection rules, keyed by branch name.
+
+| Path | Type | Description |
+|------|------|-------------|
+| `.branch_protection.{branch}` | object | Protection settings for a specific branch |
+| `.branch_protection.{branch}.enabled` | boolean | `true` if protection is enabled |
+| `.branch_protection.{branch}.required_pull_request_reviews` | object | PR review requirements |
+| `.branch_protection.{branch}.required_pull_request_reviews.required_approving_review_count` | number | Number of approvals needed |
+| `.branch_protection.{branch}.required_pull_request_reviews.dismiss_stale_reviews` | boolean | Dismiss reviews on new commits |
+| `.branch_protection.{branch}.required_pull_request_reviews.require_code_owner_reviews` | boolean | Require code owner approval |
+| `.branch_protection.{branch}.required_pull_request_reviews.require_last_push_approval` | boolean | Require approval after last push |
+| `.branch_protection.{branch}.required_status_checks` | object | Status check requirements |
+| `.branch_protection.{branch}.required_status_checks.strict` | boolean | Require branches to be up to date |
+| `.branch_protection.{branch}.required_status_checks.contexts[]` | array | Required check names |
+| `.branch_protection.{branch}.enforce_admins` | boolean | Apply rules to admins |
+| `.branch_protection.{branch}.required_linear_history` | boolean | Require linear history |
+| `.branch_protection.{branch}.allow_force_pushes` | boolean | Allow force pushes |
+| `.branch_protection.{branch}.allow_deletions` | boolean | Allow branch deletion |
+| `.branch_protection.{branch}.required_conversation_resolution` | boolean | Require conversation resolution |
+| `.branch_protection.{branch}.lock_branch` | boolean | Lock branch (read-only) |
+| `.branch_protection.{branch}.restrictions` | object | Who can push to this branch |
+| `.branch_protection.{branch}.restrictions.users[]` | array | User logins with push access |
+| `.branch_protection.{branch}.restrictions.teams[]` | array | Team slugs with push access |
+| `.branch_protection.{branch}.restrictions.apps[]` | array | App slugs with push access |
+
+### rulesets
+
+Modern repository rulesets (pattern-based protection).
+
+| Path | Type | Description |
+|------|------|-------------|
+| `.rulesets[]` | array | List of rulesets |
+| `.rulesets[].id` | number | Ruleset ID |
+| `.rulesets[].name` | string | Ruleset name |
+| `.rulesets[].target` | string | `branch` or `tag` |
+| `.rulesets[].enforcement` | string | `active`, `evaluate`, or `disabled` |
+| `.rulesets[].conditions` | object | When this ruleset applies |
+| `.rulesets[].conditions.ref_name` | object | Branch/tag name patterns |
+| `.rulesets[].conditions.ref_name.include[]` | array | Patterns to include (e.g., `refs/heads/main`) |
+| `.rulesets[].conditions.ref_name.exclude[]` | array | Patterns to exclude |
+| `.rulesets[].rules[]` | array | Rules to enforce |
+| `.rulesets[].rules[].type` | string | Rule type (e.g., `pull_request`, `required_signatures`) |
+| `.rulesets[].rules[].parameters` | object | Rule-specific parameters |
+
+### merge_settings
+
+Repository merge configuration.
+
+| Path | Type | Description |
+|------|------|-------------|
+| `.merge_settings.allow_merge_commit` | boolean | Allow merge commits |
+| `.merge_settings.allow_squash_merge` | boolean | Allow squash merging |
+| `.merge_settings.allow_rebase_merge` | boolean | Allow rebase merging |
+| `.merge_settings.allow_auto_merge` | boolean | Allow auto-merge |
+| `.merge_settings.delete_branch_on_merge` | boolean | Auto-delete head branches |
+| `.merge_settings.allow_update_branch` | boolean | Allow updating PR branches |
+| `.merge_settings.squash_merge_commit_title` | string | `PR_TITLE` or `COMMIT_OR_PR_TITLE` |
+| `.merge_settings.squash_merge_commit_message` | string | `PR_BODY`, `COMMIT_MESSAGES`, or `BLANK` |
+| `.merge_settings.merge_commit_title` | string | `PR_TITLE` or `MERGE_MESSAGE` |
+| `.merge_settings.merge_commit_message` | string | `PR_BODY`, `PR_TITLE`, or `BLANK` |
+
+### labels
+
+Repository labels.
+
+| Path | Type | Description |
+|------|------|-------------|
+| `.labels[]` | array | List of labels |
+| `.labels[].name` | string | Label name |
+| `.labels[].color` | string | Hex color (without #) |
+| `.labels[].description` | string | Label description |
+| `.labels[].default` | boolean | `true` if GitHub default label |
+
+**Example:**
+```yaml
+repository:
+  name: hiivmind-pulse-gh
+  id: R_kgDONxxxxxx
+  full_name: hiivmind/hiivmind-pulse-gh
+  default_branch: main
+  visibility: public
+  archived: false
+
+branch_protection:
+  main:
+    enabled: true
+    required_pull_request_reviews:
+      required_approving_review_count: 1
+      dismiss_stale_reviews: true
+      require_code_owner_reviews: false
+      require_last_push_approval: false
+    required_status_checks:
+      strict: true
+      contexts:
+        - "ci/build"
+        - "ci/test"
+    enforce_admins: true
+    required_linear_history: false
+    allow_force_pushes: false
+    allow_deletions: false
+    required_conversation_resolution: true
+    lock_branch: false
+    restrictions:
+      users: []
+      teams: []
+      apps: []
+
+rulesets:
+  - id: 12345
+    name: "Protect main branch"
+    target: branch
+    enforcement: active
+    conditions:
+      ref_name:
+        include: ["refs/heads/main"]
+        exclude: []
+    rules:
+      - type: pull_request
+        parameters:
+          required_approving_review_count: 1
+
+merge_settings:
+  allow_merge_commit: true
+  allow_squash_merge: true
+  allow_rebase_merge: false
+  allow_auto_merge: true
+  delete_branch_on_merge: true
+  allow_update_branch: true
+  squash_merge_commit_title: PR_TITLE
+  squash_merge_commit_message: PR_BODY
+  merge_commit_title: PR_TITLE
+  merge_commit_message: PR_BODY
+
+labels:
+  - name: bug
+    color: d73a4a
+    description: "Something isn't working"
+    default: true
+  - name: enhancement
+    color: a2eeef
+    description: "New feature or request"
+    default: true
+  - name: documentation
+    color: 0075ca
+    description: "Improvements or additions to documentation"
+    default: true
+
+cache:
+  synced_at: "2025-12-15T12:00:00Z"
+  schema_version: "1.0"
+```
+
+### Common Repository Lookups
+
+| Need | yq Command |
+|------|------------|
+| Check if branch protected | `yq '.branch_protection["main"].enabled' repos/repo-name.yaml` |
+| Get required review count | `yq '.branch_protection["main"].required_pull_request_reviews.required_approving_review_count' repos/repo-name.yaml` |
+| Get required checks | `yq '.branch_protection["main"].required_status_checks.contexts[]' repos/repo-name.yaml` |
+| Check merge methods | `yq '.merge_settings \| keys' repos/repo-name.yaml` |
+| Check if auto-delete | `yq '.merge_settings.delete_branch_on_merge' repos/repo-name.yaml` |
+| List all labels | `yq '.labels[].name' repos/repo-name.yaml` |
+| Check label exists | `yq '.labels[] \| select(.name == "bug")' repos/repo-name.yaml` |
+| Get default branch | `yq '.repository.default_branch' repos/repo-name.yaml` |
+
+---
+
 ## Schema: user.yaml (Personal, Git-Ignored)
 
 ### user
@@ -393,6 +579,37 @@ else
 fi
 ```
 
+### Pattern 5: Protection-Aware PR Merge (Phase 3)
+
+Use repository settings to choose the correct merge method and respect auto-delete settings:
+
+```bash
+REPO="hiivmind-pulse-gh"
+REPO_FILE=".hiivmind/github/repos/$REPO.yaml"
+PR_NUM=42
+
+# Get preferred merge method
+if [[ $(yq '.merge_settings.allow_squash_merge' "$REPO_FILE") = "true" ]]; then
+  MERGE_METHOD="squash"
+elif [[ $(yq '.merge_settings.allow_merge_commit' "$REPO_FILE") = "true" ]]; then
+  MERGE_METHOD="merge"
+else
+  MERGE_METHOD="rebase"
+fi
+
+# Check if branch auto-deletes
+AUTO_DELETE=$(yq '.merge_settings.delete_branch_on_merge' "$REPO_FILE")
+
+# Merge PR
+if [[ "$AUTO_DELETE" = "true" ]]; then
+  gh pr merge $PR_NUM --$MERGE_METHOD
+  echo "Branch will auto-delete after merge"
+else
+  gh pr merge $PR_NUM --$MERGE_METHOD --delete-branch
+  echo "Manually deleting branch after merge"
+fi
+```
+
 ---
 
 ## Related Documentation
@@ -403,5 +620,6 @@ fi
 | `reference/workflows/` | Multi-step workflow examples |
 | `templates/config.yaml.template` | Template used to generate config |
 | `templates/user.yaml.template` | Template for user-specific config |
-| `templates/views.yaml.template` | Template for project view config (Phase 2) |
 | `templates/freshness.yaml.template` | Template for per-section freshness tracking (Phase 1) |
+| `templates/views.yaml.template` | Template for project view config (Phase 2) |
+| `templates/repo.yaml.template` | Template for repository settings (Phase 3) |

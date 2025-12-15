@@ -136,7 +136,208 @@ echo "Default view for project $PROJECT_NUM: $DEFAULT_VIEW"
 
 ---
 
-## Step 3: Determine API Type
+## Step 3: Load Repository Settings (Phase 3)
+
+**Optional:** If the operation involves PRs, branch protection, or merging, load repository settings to respect protection rules and merge preferences.
+
+### Check if Repository Settings are Cached
+
+```bash
+REPO="hiivmind-pulse-gh"
+REPO_FILE=".hiivmind/github/repos/$REPO.yaml"
+
+if [[ -f "$REPO_FILE" ]]; then
+  echo "Repository settings cached for $REPO"
+else
+  echo "Repository settings not cached - consider running refresh with repo_settings section"
+fi
+```
+
+### Check Branch Protection Status
+
+```bash
+# Function to check if a branch has protection enabled
+is_branch_protected() {
+  local repo=$1
+  local branch=$2
+  local repo_file=".hiivmind/github/repos/$repo.yaml"
+
+  if [[ ! -f "$repo_file" ]]; then
+    # No repo config - assume not protected
+    return 1
+  fi
+
+  local protected=$(yq ".branch_protection[\"$branch\"].enabled" "$repo_file")
+
+  if [[ "$protected" = "true" ]]; then
+    return 0  # Branch is protected
+  else
+    return 1  # Branch is not protected
+  fi
+}
+
+# Usage
+if is_branch_protected "hiivmind-pulse-gh" "main"; then
+  echo "main branch is protected - PRs required"
+else
+  echo "main branch is not protected - direct push allowed"
+fi
+```
+
+### Get Required Status Checks
+
+```bash
+REPO="hiivmind-pulse-gh"
+BRANCH="main"
+REPO_FILE=".hiivmind/github/repos/$REPO.yaml"
+
+# Get required status checks for a branch
+REQUIRED_CHECKS=$(yq ".branch_protection[\"$BRANCH\"].required_status_checks.contexts[]" "$REPO_FILE" 2>/dev/null)
+
+if [[ -n "$REQUIRED_CHECKS" ]]; then
+  echo "Required status checks for $BRANCH:"
+  echo "$REQUIRED_CHECKS"
+else
+  echo "No required status checks for $BRANCH"
+fi
+```
+
+### Get Required Review Count
+
+```bash
+REPO="hiivmind-pulse-gh"
+BRANCH="main"
+REPO_FILE=".hiivmind/github/repos/$REPO.yaml"
+
+# Get required approving review count
+REVIEW_COUNT=$(yq ".branch_protection[\"$BRANCH\"].required_pull_request_reviews.required_approving_review_count" "$REPO_FILE" 2>/dev/null)
+
+if [[ "$REVIEW_COUNT" != "null" ]] && [[ "$REVIEW_COUNT" != "0" ]]; then
+  echo "Branch $BRANCH requires $REVIEW_COUNT approving review(s)"
+else
+  echo "Branch $BRANCH has no review requirements"
+fi
+```
+
+### Check Allowed Merge Methods
+
+```bash
+REPO="hiivmind-pulse-gh"
+REPO_FILE=".hiivmind/github/repos/$REPO.yaml"
+
+# Check which merge methods are allowed
+ALLOW_MERGE=$(yq '.merge_settings.allow_merge_commit' "$REPO_FILE")
+ALLOW_SQUASH=$(yq '.merge_settings.allow_squash_merge' "$REPO_FILE")
+ALLOW_REBASE=$(yq '.merge_settings.allow_rebase_merge' "$REPO_FILE")
+
+echo "Allowed merge methods for $REPO:"
+[[ "$ALLOW_MERGE" = "true" ]] && echo "  - merge commit"
+[[ "$ALLOW_SQUASH" = "true" ]] && echo "  - squash merge"
+[[ "$ALLOW_REBASE" = "true" ]] && echo "  - rebase merge"
+```
+
+### Get Preferred Merge Method
+
+```bash
+# Function to get the preferred merge method
+get_preferred_merge_method() {
+  local repo=$1
+  local repo_file=".hiivmind/github/repos/$repo.yaml"
+
+  if [[ ! -f "$repo_file" ]]; then
+    echo "merge"  # Default fallback
+    return
+  fi
+
+  # Check in order of preference: squash, merge, rebase
+  if [[ $(yq '.merge_settings.allow_squash_merge' "$repo_file") = "true" ]]; then
+    echo "squash"
+  elif [[ $(yq '.merge_settings.allow_merge_commit' "$repo_file") = "true" ]]; then
+    echo "merge"
+  elif [[ $(yq '.merge_settings.allow_rebase_merge' "$repo_file") = "true" ]]; then
+    echo "rebase"
+  else
+    echo "merge"  # Fallback
+  fi
+}
+
+# Usage
+PREFERRED=$(get_preferred_merge_method "hiivmind-pulse-gh")
+echo "Preferred merge method: $PREFERRED"
+
+# Use with gh pr merge
+gh pr merge $PR_NUM -R "$REPO_FULL" --$PREFERRED
+```
+
+### Check if Branch Auto-Deletes
+
+```bash
+REPO="hiivmind-pulse-gh"
+REPO_FILE=".hiivmind/github/repos/$REPO.yaml"
+
+# Check if branches auto-delete after merge
+AUTO_DELETE=$(yq '.merge_settings.delete_branch_on_merge' "$REPO_FILE")
+
+if [[ "$AUTO_DELETE" = "true" ]]; then
+  echo "Branches will auto-delete after merge"
+  # No need to manually delete branch
+else
+  echo "Branches will NOT auto-delete after merge"
+  # Offer to delete branch manually
+fi
+```
+
+### Get Repository Labels
+
+```bash
+REPO="hiivmind-pulse-gh"
+REPO_FILE=".hiivmind/github/repos/$REPO.yaml"
+
+# List all available labels
+echo "Available labels for $REPO:"
+yq '.labels[] | "\(.name) (\(.color))"' "$REPO_FILE"
+
+# Get default labels (GitHub standard labels)
+echo ""
+echo "Default labels:"
+yq '.labels[] | select(.default == true) | .name' "$REPO_FILE"
+```
+
+### Validate Label Before Use
+
+```bash
+# Function to check if a label exists
+label_exists() {
+  local repo=$1
+  local label_name=$2
+  local repo_file=".hiivmind/github/repos/$repo.yaml"
+
+  if [[ ! -f "$repo_file" ]]; then
+    # No repo config - assume label exists
+    return 0
+  fi
+
+  local exists=$(yq ".labels[] | select(.name == \"$label_name\") | .name" "$repo_file")
+
+  if [[ -n "$exists" ]]; then
+    return 0  # Label exists
+  else
+    return 1  # Label does not exist
+  fi
+}
+
+# Usage
+if label_exists "hiivmind-pulse-gh" "bug"; then
+  echo "Label 'bug' exists - safe to apply"
+  gh issue edit $ISSUE_NUM --add-label "bug"
+else
+  echo "Label 'bug' does not exist - create it first"
+fi
+```
+
+---
+
+## Step 4: Determine API Type
 
 Use this routing table to determine GraphQL vs REST:
 
@@ -160,7 +361,7 @@ Use this routing table to determine GraphQL vs REST:
 
 ---
 
-## Step 4: Find Workflow Example
+## Step 5: Find Workflow Example
 
 Check for relevant workflow pattern:
 
@@ -182,7 +383,7 @@ ls "${CLAUDE_PLUGIN_ROOT}/reference/workflows/"
 
 ---
 
-## Step 5: Search Corpus for Syntax
+## Step 6: Search Corpus for Syntax
 
 Use keywords to find exact syntax in the corpus.
 
@@ -230,7 +431,7 @@ grep -n "^enum {EnumName} " "$SCHEMA" -A 20
 
 ---
 
-## Step 6: Execute Operation
+## Step 7: Execute Operation
 
 ### Domain: Issues
 
@@ -588,7 +789,7 @@ gh release download "$TAG" -R "$REPO_FULL" --pattern "*.tar.gz"
 
 ---
 
-## Step 7: Report Result
+## Step 8: Report Result
 
 After execution:
 
