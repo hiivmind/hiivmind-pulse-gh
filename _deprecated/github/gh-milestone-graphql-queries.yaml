@@ -1,0 +1,235 @@
+# GitHub Milestone Domain - GraphQL Query Templates
+# Part of hiivmind-pulse-gh domain segmentation architecture
+#
+# Usage:
+#   query=$(yq '.queries.repository_milestones.query' gh-milestone-graphql-queries.yaml)
+#   gh api graphql -f query="$query" -f owner="owner" -f repo="repo"
+#
+# Note: Milestone CRUD operations require REST API (see gh-milestone-functions.sh)
+# GraphQL is used for queries and setting milestones on issues/PRs
+
+queries:
+  #============================================================================
+  # MILESTONE QUERIES
+  #============================================================================
+
+  repository_milestones:
+    description: "List all milestones in a repository"
+    parameters:
+      - name: "owner"
+        type: "String!"
+        description: "Repository owner"
+      - name: "repo"
+        type: "String!"
+        description: "Repository name"
+      - name: "states"
+        type: "[MilestoneState!]"
+        description: "OPEN, CLOSED, or both"
+        default: "[OPEN]"
+    query: |
+      query($owner: String!, $repo: String!, $states: [MilestoneState!] = [OPEN]) {
+        repository(owner: $owner, name: $repo) {
+          owner {
+            login
+          }
+          name
+          milestones(first: 100, states: $states, orderBy: {field: DUE_DATE, direction: ASC}) {
+            totalCount
+            nodes {
+              id
+              number
+              title
+              description
+              dueOn
+              state
+              closed
+              closedAt
+              createdAt
+              updatedAt
+              url
+              progressPercentage
+              issues(first: 1) {
+                totalCount
+              }
+              pullRequests(first: 1) {
+                totalCount
+              }
+            }
+          }
+        }
+      }
+
+  milestone_by_number:
+    description: "Get specific milestone by number"
+    parameters:
+      - name: "owner"
+        type: "String!"
+      - name: "repo"
+        type: "String!"
+      - name: "number"
+        type: "Int!"
+    query: |
+      query($owner: String!, $repo: String!, $number: Int!) {
+        repository(owner: $owner, name: $repo) {
+          owner {
+            login
+          }
+          name
+          milestone(number: $number) {
+            id
+            number
+            title
+            description
+            dueOn
+            state
+            closed
+            closedAt
+            createdAt
+            updatedAt
+            url
+            progressPercentage
+            issues(first: 1) {
+              totalCount
+            }
+            pullRequests(first: 1) {
+              totalCount
+            }
+          }
+        }
+      }
+
+  milestone_with_issues:
+    description: "Get milestone with its issues"
+    parameters:
+      - name: "owner"
+        type: "String!"
+      - name: "repo"
+        type: "String!"
+      - name: "number"
+        type: "Int!"
+      - name: "issueFirst"
+        type: "Int"
+        default: 50
+    query: |
+      query($owner: String!, $repo: String!, $number: Int!, $issueFirst: Int = 50) {
+        repository(owner: $owner, name: $repo) {
+          milestone(number: $number) {
+            id
+            number
+            title
+            description
+            dueOn
+            state
+            progressPercentage
+            issues(first: $issueFirst, orderBy: {field: UPDATED_AT, direction: DESC}) {
+              totalCount
+              nodes {
+                number
+                title
+                state
+                url
+                assignees(first: 5) {
+                  nodes {
+                    login
+                  }
+                }
+                labels(first: 10) {
+                  nodes {
+                    name
+                    color
+                  }
+                }
+              }
+            }
+            pullRequests(first: $issueFirst, orderBy: {field: UPDATED_AT, direction: DESC}) {
+              totalCount
+              nodes {
+                number
+                title
+                state
+                url
+                author {
+                  login
+                }
+              }
+            }
+          }
+        }
+      }
+
+  milestone_id_only:
+    description: "Get just the milestone node ID by number"
+    parameters:
+      - name: "owner"
+        type: "String!"
+      - name: "repo"
+        type: "String!"
+      - name: "number"
+        type: "Int!"
+    query: |
+      query($owner: String!, $repo: String!, $number: Int!) {
+        repository(owner: $owner, name: $repo) {
+          milestone(number: $number) {
+            id
+          }
+        }
+      }
+
+#==============================================================================
+# USAGE EXAMPLES
+#==============================================================================
+
+examples:
+  list_milestones:
+    description: "List open milestones"
+    command: |
+      gh api graphql -H X-Github-Next-Global-ID:1 \
+        -f query="$(yq '.queries.repository_milestones.query' gh-milestone-graphql-queries.yaml)" \
+        -f owner="owner" \
+        -f repo="repo" \
+        -f states='["OPEN"]'
+
+  list_all_milestones:
+    description: "List all milestones (open and closed)"
+    command: |
+      gh api graphql -H X-Github-Next-Global-ID:1 \
+        -f query="$(yq '.queries.repository_milestones.query' gh-milestone-graphql-queries.yaml)" \
+        -f owner="owner" \
+        -f repo="repo" \
+        -f states='["OPEN", "CLOSED"]'
+
+  get_milestone:
+    description: "Get specific milestone"
+    command: |
+      gh api graphql -H X-Github-Next-Global-ID:1 \
+        -f query="$(yq '.queries.milestone_by_number.query' gh-milestone-graphql-queries.yaml)" \
+        -f owner="owner" \
+        -f repo="repo" \
+        -F number=1
+
+#==============================================================================
+# NOTES
+#==============================================================================
+
+notes:
+  milestone_states: |
+    MilestoneState enum values:
+    - OPEN: Milestone is open
+    - CLOSED: Milestone is closed
+
+  progress_percentage: |
+    progressPercentage is calculated by GitHub as:
+    (closed_issues + closed_prs) / (total_issues + total_prs) * 100
+    Returns 0 if no issues/PRs are associated.
+
+  crud_operations: |
+    Creating, updating, and deleting milestones requires REST API.
+    Use functions in gh-milestone-functions.sh:
+    - create_milestone
+    - update_milestone
+    - close_milestone
+    - delete_milestone
+
+  setting_on_issues: |
+    To set a milestone on an issue or PR, use the Issue/PR domain functions
+    which will be available in gh-issue-functions.sh and gh-pr-functions.sh.

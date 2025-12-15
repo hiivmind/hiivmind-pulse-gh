@@ -1,0 +1,622 @@
+# GitHub Projects jq Filter Templates
+# Collection of jq filters for processing GitHub Projects v2 data
+# Returns JSON data for LLM interpretation instead of formatted text
+
+basic_filters:
+  no_filter:
+    description: "Return all project data in JSON format"
+    filter: |
+      {
+        project: (.data.organization.projectV2 // .data.viewer.projectV2).title,
+        description: (.data.organization.projectV2 // .data.viewer.projectV2).shortDescription,
+        status: (.data.organization.projectV2 // .data.viewer.projectV2).closed,
+        created: (.data.organization.projectV2 // .data.viewer.projectV2).createdAt,
+        updated: (.data.organization.projectV2 // .data.viewer.projectV2).updatedAt,
+        totalItems: (.data.organization.projectV2 // .data.viewer.projectV2).items.totalCount,
+        filters: {},
+        items: (.data.organization.projectV2 // .data.viewer.projectV2).items.nodes
+      }
+
+  repository_filter:
+    description: "Filter project items by repository name"
+    parameters:
+      - name: "repo"
+        description: "Repository name to filter by"
+    filter: |
+      {
+        project: (.data.organization.projectV2 // .data.viewer.projectV2).title,
+        totalItems: (.data.organization.projectV2 // .data.viewer.projectV2).items.totalCount,
+        filters: {repository: $repo},
+        filteredItems: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | select(.content.repository.name == $repo)],
+        filteredCount: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | select(.content.repository.name == $repo)] | length
+      }
+
+  assignee_filter:
+    description: "Filter project items by assignee username"
+    parameters:
+      - name: "assignee"
+        description: "Username to filter by"
+    filter: |
+      {
+        project: (.data.organization.projectV2 // .data.viewer.projectV2).title,
+        totalItems: (.data.organization.projectV2 // .data.viewer.projectV2).items.totalCount,
+        filters: {assignee: $assignee},
+        filteredItems: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | select(.content.assignees.nodes[]?.login == $assignee)],
+        filteredCount: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | select(.content.assignees.nodes[]?.login == $assignee)] | length
+      }
+    # Shell-safe single line version
+    shell_safe: '{project: (.data.organization.projectV2 // .data.viewer.projectV2).title, totalItems: (.data.organization.projectV2 // .data.viewer.projectV2).items.totalCount, filters: {assignee: $assignee}, filteredItems: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | select(.content.assignees.nodes[]?.login == $assignee)], filteredCount: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | select(.content.assignees.nodes[]?.login == $assignee)] | length}'
+
+  status_filter:
+    description: "Filter project items by status field value"
+    parameters:
+      - name: "status"
+        description: "Status value to filter by"
+    filter: |
+      {
+        project: (.data.organization.projectV2 // .data.viewer.projectV2).title,
+        totalItems: (.data.organization.projectV2 // .data.viewer.projectV2).items.totalCount,
+        filters: {status: $status},
+        filteredItems: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | select(.fieldValues.nodes[]? | select(.field.name == "Status" and .name == $status))],
+        filteredCount: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | select(.fieldValues.nodes[]? | select(.field.name == "Status" and .name == $status))] | length
+      }
+
+  priority_filter:
+    description: "Filter project items by priority field value"
+    parameters:
+      - name: "priority"
+        description: "Priority value to filter by"
+    filter: |
+      {
+        project: (.data.organization.projectV2 // .data.viewer.projectV2).title,
+        totalItems: (.data.organization.projectV2 // .data.viewer.projectV2).items.totalCount,
+        filters: {priority: $priority},
+        filteredItems: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | select(.fieldValues.nodes[]? | select(.field.name == "Priority" and .name == $priority))],
+        filteredCount: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | select(.fieldValues.nodes[]? | select(.field.name == "Priority" and .name == $priority))] | length
+      }
+
+combined_filters:
+  repo_and_assignee:
+    description: "Filter by both repository and assignee"
+    parameters:
+      - name: "repo"
+        description: "Repository name to filter by"
+      - name: "assignee"
+        description: "Username to filter by"
+    filter: |
+      {
+        project: (.data.organization.projectV2 // .data.viewer.projectV2).title,
+        totalItems: (.data.organization.projectV2 // .data.viewer.projectV2).items.totalCount,
+        filters: {repository: $repo, assignee: $assignee},
+        filteredItems: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | select(.content.repository.name == $repo and .content.assignees.nodes[]?.login == $assignee)],
+        filteredCount: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | select(.content.repository.name == $repo and .content.assignees.nodes[]?.login == $assignee)] | length
+      }
+
+  repo_and_status:
+    description: "Filter by repository and status"
+    parameters:
+      - name: "repo"
+        description: "Repository name to filter by"
+      - name: "status"
+        description: "Status value to filter by"
+    filter: |
+      {
+        project: (.data.organization.projectV2 // .data.viewer.projectV2).title,
+        totalItems: (.data.organization.projectV2 // .data.viewer.projectV2).items.totalCount,
+        filters: {repository: $repo, status: $status},
+        filteredItems: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | select(.content.repository.name == $repo and (.fieldValues.nodes[]? | select(.field.name == "Status" and .name == $status)))],
+        filteredCount: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | select(.content.repository.name == $repo and (.fieldValues.nodes[]? | select(.field.name == "Status" and .name == $status)))] | length
+      }
+
+  assignee_and_status:
+    description: "Filter by assignee and status"
+    parameters:
+      - name: "assignee"
+        description: "Username to filter by"
+      - name: "status"
+        description: "Status value to filter by"
+    filter: |
+      {
+        project: (.data.organization.projectV2 // .data.viewer.projectV2).title,
+        totalItems: (.data.organization.projectV2 // .data.viewer.projectV2).items.totalCount,
+        filters: {assignee: $assignee, status: $status},
+        filteredItems: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | select(.content.assignees.nodes[]?.login == $assignee and (.fieldValues.nodes[]? | select(.field.name == "Status" and .name == $status)))],
+        filteredCount: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | select(.content.assignees.nodes[]?.login == $assignee and (.fieldValues.nodes[]? | select(.field.name == "Status" and .name == $status)))] | length
+      }
+
+  universal_filter:
+    description: "Apply all possible filters with conditional logic"
+    parameters:
+      - name: "repo"
+        description: "Repository name (empty string to ignore)"
+      - name: "assignee"
+        description: "Username (empty string to ignore)"
+      - name: "status"
+        description: "Status value (empty string to ignore)"
+      - name: "priority"
+        description: "Priority value (empty string to ignore)"
+    filter: |
+      {
+        project: (.data.organization.projectV2 // .data.viewer.projectV2).title,
+        description: (.data.organization.projectV2 // .data.viewer.projectV2).shortDescription,
+        status: (.data.organization.projectV2 // .data.viewer.projectV2).closed,
+        created: (.data.organization.projectV2 // .data.viewer.projectV2).createdAt,
+        updated: (.data.organization.projectV2 // .data.viewer.projectV2).updatedAt,
+        totalItems: (.data.organization.projectV2 // .data.viewer.projectV2).items.totalCount,
+        filters: {
+          repository: $repo,
+          assignee: $assignee, 
+          status: $status,
+          priority: $priority
+        },
+        filteredItems: [
+          (.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | 
+          select(
+            (if $repo != "" then .content.repository.name == $repo else true end) and
+            (if $assignee != "" then .content.assignees.nodes[]?.login == $assignee else true end) and  
+            (if $status != "" then .fieldValues.nodes[]?.name == $status and .fieldValues.nodes[]?.field.name == "Status" else true end) and
+            (if $priority != "" then .fieldValues.nodes[]?.name == $priority and .fieldValues.nodes[]?.field.name == "Priority" else true end)
+          )
+        ]
+      } | . + {filteredCount: (.filteredItems | length)}
+    
+    # Compact single-line version for shell safety
+    compact: '{project: (.data.organization.projectV2 // .data.viewer.projectV2).title, description: (.data.organization.projectV2 // .data.viewer.projectV2).shortDescription, status: (.data.organization.projectV2 // .data.viewer.projectV2).closed, created: (.data.organization.projectV2 // .data.viewer.projectV2).createdAt, updated: (.data.organization.projectV2 // .data.viewer.projectV2).updatedAt, totalItems: (.data.organization.projectV2 // .data.viewer.projectV2).items.totalCount, filters: {repository: $repo, assignee: $assignee, status: $status, priority: $priority}, filteredItems: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | select((if $repo != "" then .content.repository.name == $repo else true end) and (if $assignee != "" then .content.assignees.nodes[]?.login == $assignee else true end) and (if $status != "" then .fieldValues.nodes[]?.name == $status and .fieldValues.nodes[]?.field.name == "Status" else true end) and (if $priority != "" then .fieldValues.nodes[]?.name == $priority and .fieldValues.nodes[]?.field.name == "Priority" else true end))]} | . + {filteredCount: (.filteredItems | length)}'
+
+discovery_filters:
+  list_repositories:
+    description: "Extract unique repository names from project items"
+    filter: |
+      {
+        project: (.data.organization.projectV2 // .data.viewer.projectV2).title,
+        repositories: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | select(.content.repository) | .content.repository.name] | unique | sort
+      }
+
+  list_assignees:
+    description: "Extract unique assignee usernames from project items"
+    filter: |
+      {
+        project: (.data.organization.projectV2 // .data.viewer.projectV2).title,
+        assignees: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | .content.assignees.nodes[]?.login] | unique | sort
+      }
+
+  list_statuses:
+    description: "Extract unique status values from project items"
+    filter: |
+      {
+        project: (.data.organization.projectV2 // .data.viewer.projectV2).title,
+        statuses: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | .fieldValues.nodes[]? | select(.field.name == "Status") | .name] | unique | sort
+      }
+
+  list_priorities:
+    description: "Extract unique priority values from project items"
+    filter: |
+      {
+        project: (.data.organization.projectV2 // .data.viewer.projectV2).title,
+        priorities: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | .fieldValues.nodes[]? | select(.field.name == "Priority") | .name] | unique | sort
+      }
+
+  list_reviewers:
+    description: "Extract unique reviewers (users and teams) from project items"
+    filter: |
+      {
+        project: (.data.organization.projectV2 // .data.viewer.projectV2).title,
+        reviewers: {
+          users: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | .fieldValues.nodes[]? | select(.reviewers) | .reviewers.nodes[]? | select(.login) | {login: .login, name: .name}] | unique_by(.login) | sort_by(.login),
+          teams: [(.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] | .fieldValues.nodes[]? | select(.reviewers) | .reviewers.nodes[]? | select(.slug) | {name: .name, slug: .slug}] | unique_by(.slug) | sort_by(.slug)
+        }
+      }
+
+  list_linked_prs:
+    description: "Extract linked pull requests from project items"
+    filter: |
+      {
+        project: (.data.organization.projectV2 // .data.viewer.projectV2).title,
+        linkedPullRequests: [
+          (.data.organization.projectV2 // .data.viewer.projectV2).items.nodes[] |
+          .fieldValues.nodes[]? |
+          select(.pullRequests) |
+          .pullRequests.nodes[]? |
+          {number: .number, title: .title, state: .state, url: .url}
+        ] | unique_by(.url)
+      }
+
+  list_fields:
+    description: "Extract project field structure and types"
+    filter: |
+      {
+        project: (.data.organization.projectV2 // .data.viewer.projectV2).title,
+        fields: [
+          (.data.organization.projectV2 // .data.viewer.projectV2).fields.nodes[] | {
+            name: .name,
+            dataType: .dataType,
+            fieldType: (
+              if .dataType == "SINGLE_SELECT" then "Single Select"
+              elif .dataType == "TEXT" then "Text"
+              elif .dataType == "NUMBER" then "Number"
+              elif .dataType == "DATE" then "Date"
+              elif .dataType == "ITERATION" then "Iteration"
+              elif .dataType == "TITLE" then "Title"
+              elif .dataType == "ASSIGNEES" then "Assignees"
+              elif .dataType == "LABELS" then "Labels"
+              elif .dataType == "REPOSITORY" then "Repository"
+              else .dataType
+              end
+            ),
+            options: (if .dataType == "SINGLE_SELECT" then [.options[]? | {name: .name, color: .color, description: .description}] else null end),
+            iterations: (if .dataType == "ITERATION" then [.configuration.iterations[]? | {title: .title, startDate: .startDate, duration: .duration}] else null end)
+          }
+        ]
+      }
+
+  format_user_projects:
+    description: "Format user projects discovery output"
+    filter: |
+      {
+        context: "user",
+        user: .data.viewer.login,
+        projects: [
+          .data.viewer.projectsV2.nodes[] | {
+            number: .number,
+            title: .title,
+            description: (.shortDescription // "No description"),
+            status: (if .closed then "CLOSED" else "OPEN" end),
+            items: .items.totalCount,
+            created: .createdAt,
+            updated: .updatedAt
+          }
+        ],
+        totalCount: (.data.viewer.projectsV2.nodes | length)
+      }
+
+  format_org_projects:
+    description: "Format organization projects discovery output"
+    parameters:
+      - name: "org_name"
+        description: "Organization name for context"
+    filter: |
+      {
+        context: "organization",
+        organization: {
+          name: .data.organization.name,
+          login: .data.organization.login
+        },
+        projects: [
+          .data.organization.projectsV2.nodes[] | {
+            number: .number,
+            title: .title,
+            description: (.shortDescription // "No description"),
+            status: (if .closed then "CLOSED" else "OPEN" end),
+            items: .items.totalCount,
+            created: .createdAt,
+            updated: .updatedAt
+          }
+        ],
+        totalCount: (.data.organization.projectsV2.nodes | length)
+      }
+
+  format_repo_projects:
+    description: "Format repository projects discovery output"
+    parameters:
+      - name: "owner"
+        description: "Repository owner"
+      - name: "repo"
+        description: "Repository name"
+    filter: |
+      {
+        context: "repository",
+        repository: {
+          name: .data.repository.name,
+          owner: .data.repository.owner.login,
+          fullName: (.data.repository.owner.login + "/" + .data.repository.name)
+        },
+        projects: [
+          .data.repository.projectsV2.nodes[] | {
+            number: .number,
+            title: .title,
+            description: (.shortDescription // "No description"),
+            status: (if .closed then "CLOSED" else "OPEN" end),
+            items: .items.totalCount
+          }
+        ],
+        totalCount: (.data.repository.projectsV2.nodes | length)
+      }
+
+  format_all_projects:
+    description: "Format all accessible projects discovery output"
+    filter: |
+      {
+        context: "all",
+        user: .data.viewer.login,
+        personalProjects: [
+          (.data.viewer.projectsV2.nodes // [])[] | {
+            number: .number,
+            title: .title,
+            description: (.shortDescription // "No description"),
+            status: (if .closed then "CLOSED" else "OPEN" end),
+            items: .items.totalCount,
+            context: "personal"
+          }
+        ],
+        organizationProjects: [
+          .data.viewer.organizations.nodes[] as $org |
+          $org.projectsV2.nodes[] | {
+            number: .number,
+            title: .title,
+            description: (.shortDescription // "No description"),
+            status: (if .closed then "CLOSED" else "OPEN" end),
+            items: .items.totalCount,
+            context: "organization",
+            organization: {
+              name: $org.name,
+              login: $org.login
+            }
+          }
+        ],
+        summary: {
+          totalPersonal: ((.data.viewer.projectsV2.nodes // []) | length),
+          totalOrganizations: (.data.viewer.organizations.nodes | length),
+          totalOrgProjects: ([.data.viewer.organizations.nodes[].projectsV2.nodes[]] | length),
+          totalProjects: (((.data.viewer.projectsV2.nodes // []) | length) + ([.data.viewer.organizations.nodes[].projectsV2.nodes[]] | length))
+        }
+      }
+
+# Usage Examples:
+examples:
+  no_filter:
+    command: |
+      cat project_data.json | jq '{{ .basic_filters.no_filter.filter }}'
+    description: "Return all project data in structured JSON"
+
+  repository_filter:
+    command: |
+      cat project_data.json | jq --arg repo "my-repo" '{{ .basic_filters.repository_filter.filter }}'
+    description: "Filter items by repository name"
+
+  assignee_filter:
+    command: |
+      cat project_data.json | jq --arg assignee "username" '{{ .basic_filters.assignee_filter.filter }}'
+    description: "Filter items by assignee username"
+
+  multiple_filters:
+    command: |
+      cat project_data.json | jq --arg repo "my-repo" --arg assignee "username" '{{ .combined_filters.repo_and_assignee.filter }}'
+    description: "Filter by both repository and assignee"
+
+  universal_filter:
+    command: |
+      cat project_data.json | jq --arg repo "my-repo" --arg assignee "" --arg status "Backlog" --arg priority "" '{{ .combined_filters.universal_filter.filter }}'
+    description: "Apply universal filter with conditional logic"
+
+  discovery_repos:
+    command: |
+      cat project_data.json | jq '{{ .discovery_filters.list_repositories.filter }}'
+    description: "List all available repositories"
+
+  discovery_assignees:
+    command: |
+      cat project_data.json | jq '{{ .discovery_filters.list_assignees.filter }}'
+    description: "List all available assignees"
+
+# =============================================================================
+# VIEW FILTERS
+# =============================================================================
+
+view_filters:
+  list_views:
+    description: "Format project views list"
+    filter: |
+      {
+        project: .data.node.title,
+        viewCount: .data.node.views.totalCount,
+        views: [
+          .data.node.views.nodes[] | {
+            id: .id,
+            number: .number,
+            name: .name,
+            layout: .layout,
+            filter: (.filter // ""),
+            sortBy: (if .sortBy then {
+              field: (.sortBy.field.name // null),
+              direction: .sortBy.direction
+            } else null end),
+            groupBy: (.groupBy.name // null),
+            createdAt: .createdAt,
+            updatedAt: .updatedAt
+          }
+        ]
+      }
+
+  format_view_config:
+    description: "Format single view configuration"
+    filter: |
+      {
+        project: .data.node.title,
+        view: (
+          .data.node.view | {
+            id: .id,
+            number: .number,
+            name: .name,
+            layout: .layout,
+            filter: (.filter // "No filter"),
+            sortBy: (if .sortBy then {
+              field: (.sortBy.field.name // null),
+              direction: .sortBy.direction
+            } else "Not sorted" end),
+            groupBy: (.groupBy.name // "Not grouped"),
+            createdAt: .createdAt,
+            updatedAt: .updatedAt
+          }
+        )
+      }
+
+# =============================================================================
+# REPOSITORY LINKING FILTERS
+# =============================================================================
+
+repository_filters:
+  list_linked_repositories:
+    description: "Format linked repositories from a project"
+    filter: |
+      {
+        project: .data.node.title,
+        repositoryCount: .data.node.repositories.totalCount,
+        repositories: [
+          .data.node.repositories.nodes[] | {
+            id: .id,
+            name: .name,
+            fullName: .nameWithOwner,
+            owner: .owner.login,
+            url: .url,
+            isPrivate: .isPrivate,
+            description: (.description // "")
+          }
+        ]
+      }
+
+# =============================================================================
+# STATUS UPDATE FILTERS
+# =============================================================================
+# Filters for project status update data
+
+status_update_filters:
+  format_status_updates:
+    description: "Format status updates for display"
+    filter: |
+      {
+        project: .data.node.title,
+        totalUpdates: .data.node.statusUpdates.totalCount,
+        updates: [
+          .data.node.statusUpdates.nodes[] | {
+            id: .id,
+            status: .status,
+            body: (.body // ""),
+            startDate: (.startDate // "Not set"),
+            targetDate: (.targetDate // "Not set"),
+            createdAt: .createdAt,
+            updatedAt: .updatedAt,
+            creator: .creator.login
+          }
+        ]
+      }
+
+  filter_by_status:
+    description: "Filter updates by status value"
+    parameters:
+      - name: "status"
+        description: "ON_TRACK, AT_RISK, OFF_TRACK, COMPLETE, or INACTIVE"
+    filter: |
+      {
+        project: .data.node.title,
+        filterStatus: $status,
+        updates: [
+          .data.node.statusUpdates.nodes[] |
+          select(.status == $status) | {
+            id: .id,
+            status: .status,
+            body: (.body // ""),
+            startDate: (.startDate // "Not set"),
+            targetDate: (.targetDate // "Not set"),
+            createdAt: .createdAt,
+            creator: .creator.login
+          }
+        ],
+        count: [.data.node.statusUpdates.nodes[] | select(.status == $status)] | length
+      }
+
+  latest_status:
+    description: "Extract just the latest status update"
+    filter: |
+      {
+        project: .data.node.title,
+        latestUpdate: (
+          .data.node.statusUpdates.nodes[0] // null |
+          if . then {
+            status: .status,
+            body: (.body // "No message"),
+            startDate: (.startDate // "Not set"),
+            targetDate: (.targetDate // "Not set"),
+            createdAt: .createdAt,
+            creator: .creator.login
+          } else null end
+        )
+      }
+
+# =============================================================================
+# NOTE: Milestone filters moved to gh-milestone-jq-filters.yaml
+# =============================================================================
+
+# =============================================================================
+# WORKSPACE INITIALIZATION FILTERS
+# =============================================================================
+# Filters for workspace setup and config.yaml generation
+
+workspace_filters:
+  # Transform project fields from GraphQL response to config-ready structure
+  transform_project_fields:
+    description: "Transform project fields to config.yaml format (JSON output for yq conversion)"
+    input: "GraphQL project response with .fields.nodes array"
+    filter: |
+      .fields.nodes | map(
+        if .dataType == "SINGLE_SELECT" then
+          {
+            key: .name,
+            value: {
+              id: .id,
+              type: "single_select",
+              options: (.options | map({(.name): .id}) | add)
+            }
+          }
+        elif .dataType == "ITERATION" then
+          {
+            key: .name,
+            value: {
+              id: .id,
+              type: "iteration",
+              iterations: (.configuration.iterations | map({(.title): .id}) | add)
+            }
+          }
+        else
+          {
+            key: .name,
+            value: {
+              id: .id,
+              type: (.dataType | ascii_downcase)
+            }
+          }
+        end
+      ) | from_entries
+
+  # Extract project summary for discovery display
+  format_discovered_projects:
+    description: "Format discovered projects for display"
+    input: "Array of project nodes from discovery query"
+    filter: |
+      map({
+        number: .number,
+        id: .id,
+        title: .title,
+        url: .url,
+        status: (if .closed then "closed" else "open" end)
+      })
+
+  # NOTE: format_repository_for_config moved to gh-repo-jq-filters.yaml
+
+  # Count fields by type for summary
+  count_fields_by_type:
+    description: "Count project fields grouped by type"
+    input: "Project with .fields.nodes array"
+    filter: |
+      .fields.nodes | group_by(.dataType) | map({
+        type: .[0].dataType,
+        count: length,
+        names: [.[].name]
+      })
+
+# Notes:
+# - All filters return JSON data for LLM interpretation
+# - Use empty strings ("") to skip optional parameters in universal filter
+# - Discovery filters help identify available filter values
+# - Workspace filters help with config.yaml generation
+# - Filters are designed to work with both user and organization project data
+# - Milestone filters moved to gh-milestone-jq-filters.yaml

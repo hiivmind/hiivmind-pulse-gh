@@ -1,0 +1,512 @@
+# GitHub Pull Request Domain - GraphQL Query Templates
+# Part of hiivmind-pulse-gh domain segmentation architecture
+#
+# Usage:
+#   query=$(yq '.queries.pr_by_number.query' gh-pr-graphql-queries.yaml)
+#   gh api graphql -f query="$query" -f owner="owner" -f repo="repo" -F number=123
+
+queries:
+  #============================================================================
+  # PULL REQUEST QUERIES
+  #============================================================================
+
+  pr_by_number:
+    description: "Get a specific pull request by number"
+    parameters:
+      - name: "owner"
+        type: "String!"
+      - name: "repo"
+        type: "String!"
+      - name: "number"
+        type: "Int!"
+    query: |
+      query($owner: String!, $repo: String!, $number: Int!) {
+        repository(owner: $owner, name: $repo) {
+          pullRequest(number: $number) {
+            id
+            number
+            title
+            body
+            state
+            isDraft
+            url
+            createdAt
+            updatedAt
+            mergedAt
+            closedAt
+            additions
+            deletions
+            changedFiles
+            author {
+              login
+            }
+            assignees(first: 10) {
+              nodes {
+                login
+                id
+              }
+            }
+            labels(first: 20) {
+              nodes {
+                name
+                color
+                id
+              }
+            }
+            milestone {
+              number
+              title
+              id
+            }
+            reviewRequests(first: 10) {
+              nodes {
+                requestedReviewer {
+                  ... on User { login }
+                  ... on Team { name }
+                }
+              }
+            }
+            reviews(first: 10, states: [APPROVED, CHANGES_REQUESTED, COMMENTED]) {
+              nodes {
+                author { login }
+                state
+                submittedAt
+              }
+            }
+            headRefName
+            baseRefName
+            mergeable
+            commits(first: 1) {
+              totalCount
+            }
+            comments(first: 1) {
+              totalCount
+            }
+          }
+        }
+      }
+
+  pr_id_only:
+    description: "Get just the PR node ID by number"
+    parameters:
+      - name: "owner"
+        type: "String!"
+      - name: "repo"
+        type: "String!"
+      - name: "number"
+        type: "Int!"
+    query: |
+      query($owner: String!, $repo: String!, $number: Int!) {
+        repository(owner: $owner, name: $repo) {
+          pullRequest(number: $number) {
+            id
+          }
+        }
+      }
+
+  repository_prs:
+    description: "List pull requests in a repository"
+    parameters:
+      - name: "owner"
+        type: "String!"
+      - name: "repo"
+        type: "String!"
+      - name: "states"
+        type: "[PullRequestState!]"
+        default: "[OPEN]"
+      - name: "first"
+        type: "Int"
+        default: 50
+    query: |
+      query($owner: String!, $repo: String!, $states: [PullRequestState!] = [OPEN], $first: Int = 50) {
+        repository(owner: $owner, name: $repo) {
+          pullRequests(first: $first, states: $states, orderBy: {field: UPDATED_AT, direction: DESC}) {
+            totalCount
+            nodes {
+              id
+              number
+              title
+              state
+              isDraft
+              url
+              createdAt
+              updatedAt
+              mergedAt
+              closedAt
+              author {
+                login
+              }
+              assignees(first: 10) {
+                nodes {
+                  login
+                }
+              }
+              labels(first: 10) {
+                nodes {
+                  name
+                  color
+                }
+              }
+              milestone {
+                number
+                title
+              }
+              headRefName
+              baseRefName
+            }
+          }
+        }
+      }
+
+  pr_with_reviews:
+    description: "Get PR with detailed review information"
+    parameters:
+      - name: "owner"
+        type: "String!"
+      - name: "repo"
+        type: "String!"
+      - name: "number"
+        type: "Int!"
+    query: |
+      query($owner: String!, $repo: String!, $number: Int!) {
+        repository(owner: $owner, name: $repo) {
+          pullRequest(number: $number) {
+            id
+            number
+            title
+            state
+            isDraft
+            url
+            author {
+              login
+            }
+            reviewRequests(first: 10) {
+              nodes {
+                requestedReviewer {
+                  ... on User { login }
+                  ... on Team { name }
+                }
+              }
+            }
+            reviews(first: 50) {
+              totalCount
+              nodes {
+                id
+                author { login }
+                state
+                body
+                submittedAt
+                comments(first: 10) {
+                  nodes {
+                    body
+                    path
+                    line
+                  }
+                }
+              }
+            }
+            latestReviews(first: 10) {
+              nodes {
+                author { login }
+                state
+                submittedAt
+              }
+            }
+          }
+        }
+      }
+
+  pr_files_changed:
+    description: "Get files changed in a PR"
+    parameters:
+      - name: "owner"
+        type: "String!"
+      - name: "repo"
+        type: "String!"
+      - name: "number"
+        type: "Int!"
+      - name: "first"
+        type: "Int"
+        default: 100
+    query: |
+      query($owner: String!, $repo: String!, $number: Int!, $first: Int = 100) {
+        repository(owner: $owner, name: $repo) {
+          pullRequest(number: $number) {
+            id
+            number
+            title
+            additions
+            deletions
+            changedFiles
+            files(first: $first) {
+              nodes {
+                path
+                additions
+                deletions
+                changeType
+              }
+            }
+          }
+        }
+      }
+
+#==============================================================================
+# MUTATIONS
+#==============================================================================
+
+mutations:
+  set_pr_milestone:
+    description: "Set or clear milestone on a pull request"
+    parameters:
+      - name: "prId"
+        type: "ID!"
+        description: "Pull request node ID"
+      - name: "milestoneId"
+        type: "ID"
+        description: "Milestone node ID (null to clear)"
+    query: |
+      mutation($prId: ID!, $milestoneId: ID) {
+        updatePullRequest(input: {
+          pullRequestId: $prId
+          milestoneId: $milestoneId
+        }) {
+          pullRequest {
+            id
+            number
+            title
+            milestone {
+              id
+              number
+              title
+            }
+          }
+        }
+      }
+
+  update_pull_request:
+    description: "Update PR with assignees"
+    parameters:
+      - name: "prId"
+        type: "ID!"
+      - name: "assigneeIds"
+        type: "[ID!]"
+    query: |
+      mutation($prId: ID!, $assigneeIds: [ID!]) {
+        updatePullRequest(input: {
+          pullRequestId: $prId
+          assigneeIds: $assigneeIds
+        }) {
+          pullRequest {
+            id
+            number
+            title
+            assignees(first: 10) {
+              nodes {
+                login
+              }
+            }
+          }
+        }
+      }
+
+  close_pull_request:
+    description: "Close a pull request"
+    parameters:
+      - name: "prId"
+        type: "ID!"
+    query: |
+      mutation($prId: ID!) {
+        closePullRequest(input: {
+          pullRequestId: $prId
+        }) {
+          pullRequest {
+            id
+            number
+            title
+            state
+          }
+        }
+      }
+
+  reopen_pull_request:
+    description: "Reopen a closed pull request"
+    parameters:
+      - name: "prId"
+        type: "ID!"
+    query: |
+      mutation($prId: ID!) {
+        reopenPullRequest(input: {
+          pullRequestId: $prId
+        }) {
+          pullRequest {
+            id
+            number
+            title
+            state
+          }
+        }
+      }
+
+  mark_ready_for_review:
+    description: "Mark a draft PR as ready for review"
+    parameters:
+      - name: "prId"
+        type: "ID!"
+    query: |
+      mutation($prId: ID!) {
+        markPullRequestReadyForReview(input: {
+          pullRequestId: $prId
+        }) {
+          pullRequest {
+            id
+            number
+            title
+            isDraft
+          }
+        }
+      }
+
+  convert_to_draft:
+    description: "Convert a PR to draft"
+    parameters:
+      - name: "prId"
+        type: "ID!"
+    query: |
+      mutation($prId: ID!) {
+        convertPullRequestToDraft(input: {
+          pullRequestId: $prId
+        }) {
+          pullRequest {
+            id
+            number
+            title
+            isDraft
+          }
+        }
+      }
+
+  add_labels_to_labelable:
+    description: "Add labels to a PR"
+    parameters:
+      - name: "labelableId"
+        type: "ID!"
+        description: "PR node ID"
+      - name: "labelIds"
+        type: "[ID!]!"
+        description: "Array of label node IDs"
+    query: |
+      mutation($labelableId: ID!, $labelIds: [ID!]!) {
+        addLabelsToLabelable(input: {
+          labelableId: $labelableId
+          labelIds: $labelIds
+        }) {
+          labelable {
+            ... on PullRequest {
+              id
+              number
+              labels(first: 20) {
+                nodes {
+                  name
+                }
+              }
+            }
+          }
+        }
+      }
+
+  remove_labels_from_labelable:
+    description: "Remove labels from a PR"
+    parameters:
+      - name: "labelableId"
+        type: "ID!"
+        description: "PR node ID"
+      - name: "labelIds"
+        type: "[ID!]!"
+        description: "Array of label node IDs"
+    query: |
+      mutation($labelableId: ID!, $labelIds: [ID!]!) {
+        removeLabelsFromLabelable(input: {
+          labelableId: $labelableId
+          labelIds: $labelIds
+        }) {
+          labelable {
+            ... on PullRequest {
+              id
+              number
+              labels(first: 20) {
+                nodes {
+                  name
+                }
+              }
+            }
+          }
+        }
+      }
+
+  request_reviews:
+    description: "Request reviews from users or teams"
+    parameters:
+      - name: "prId"
+        type: "ID!"
+      - name: "userIds"
+        type: "[ID!]"
+      - name: "teamIds"
+        type: "[ID!]"
+    query: |
+      mutation($prId: ID!, $userIds: [ID!], $teamIds: [ID!]) {
+        requestReviews(input: {
+          pullRequestId: $prId
+          userIds: $userIds
+          teamIds: $teamIds
+        }) {
+          pullRequest {
+            id
+            number
+            reviewRequests(first: 10) {
+              nodes {
+                requestedReviewer {
+                  ... on User { login }
+                  ... on Team { name }
+                }
+              }
+            }
+          }
+        }
+      }
+
+#==============================================================================
+# NOTES
+#==============================================================================
+
+notes:
+  pr_states: |
+    PullRequestState enum values:
+    - OPEN: PR is open
+    - CLOSED: PR is closed without merging
+    - MERGED: PR was merged
+
+  review_states: |
+    PullRequestReviewState enum:
+    - PENDING: Review not yet submitted
+    - COMMENTED: Review with comments only
+    - APPROVED: Review approved changes
+    - CHANGES_REQUESTED: Review requested changes
+    - DISMISSED: Review was dismissed
+
+  mergeable_states: |
+    MergeableState enum:
+    - MERGEABLE: Can be merged
+    - CONFLICTING: Has merge conflicts
+    - UNKNOWN: Mergeability not yet computed
+
+  rest_vs_graphql: |
+    Use REST API for:
+    - Simple PR listing
+    - Requesting reviewers by login (simpler than node IDs)
+    - Merge operations
+
+    Use GraphQL for:
+    - Complex queries with specific field selection
+    - Mutations (update, close, reopen)
+    - Getting node IDs for mutations
+    - Draft PR operations

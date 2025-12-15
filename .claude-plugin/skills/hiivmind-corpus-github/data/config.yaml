@@ -1,45 +1,63 @@
-# GitHub Documentation Corpus Configuration
+# GitHub API Corpus Configuration (hiivmind-pulse-gh specialization)
 schema_version: 2
 
 corpus:
-  name: "github"
-  display_name: "GitHub"
-  created_at: "2024-12-10T16:37:00Z"
-  focus_areas:
+  name: "github-api-pulse"
+  display_name: "GitHub API (Pulse Edition)"
+  description: "Specialized GitHub documentation for hiivmind-pulse-gh plugin - focused on REST/GraphQL APIs, Projects v2, Actions, and repository management"
+  created_at: "2025-12-15T15:00:00+11:00"
+  keywords:
+    - github
     - graphql
-    - rest
-    - github-cli
+    - rest-api
+    - projects-v2
+    - milestones
+    - issues
+    - pull-requests
+    - actions
+    - workflows
+    - branch-protection
+    - rulesets
+    - releases
+    - secrets
+    - variables
+    - gh-cli
 
-# Multiple sources - each with its own type and tracking
 sources:
-  - id: "github-docs"
+  - id: "docs"
     type: "git"
     repo_url: "https://github.com/github/docs"
     repo_owner: "github"
     repo_name: "docs"
     branch: "main"
     docs_root: "content"
-    last_commit_sha: "615f92e99b53b59b71fd973c649f1405b5072f91"
-    last_indexed_at: "2024-12-10T16:45:00Z"
+    last_commit_sha: "93fb820585b3969f7b19a3d3eb3cdef93d95b0a1"
+    last_indexed_at: "2025-12-15T15:00:00+11:00"
 
   - id: "graphql-schema"
     type: "local"
     path: "uploads/graphql-schema/"
-    description: "GitHub GraphQL API schema (SDL format)"
+    description: "GitHub GraphQL API schema (70k+ lines)"
     files:
       - "schema.docs.graphql"
-    last_indexed_at: "2024-12-10T17:00:00Z"
+    last_indexed_at: "2025-12-15T15:00:00+11:00"
 
 index:
   format: "markdown"
-  last_updated_at: "2024-12-10T16:45:00Z"
+  last_updated_at: "2025-12-15T15:00:00+11:00"
 
 settings:
-  # Focus on GraphQL, REST API, and gh CLI documentation
-  include_patterns:
-    - "graphql/**/*.md"
-    - "rest/**/*.md"
-    - "github-cli/**/*.md"
+  # This is a specialized subset - only include API-relevant sections
+  included_sections:
+    - rest
+    - graphql
+    - actions
+    - issues
+    - pull-requests
+    - repositories
+    - organizations
+    - github-cli
+    - authentication
   exclude_patterns:
     - "**/_*.md"
     - "**/_snippets/**"

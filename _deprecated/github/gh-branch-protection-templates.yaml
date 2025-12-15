@@ -1,0 +1,264 @@
+# Branch Protection Configuration Templates
+# Preset configurations for common branch protection scenarios
+# Use with: get_protection_template "template_name" | set_branch_protection "owner" "repo" "branch"
+
+# =============================================================================
+# BRANCH PROTECTION TEMPLATES
+# =============================================================================
+# These are configurations for the legacy branch protection API (per-branch rules)
+
+branch_protection:
+  # ---------------------------------------------------------------------------
+  # Main branch - Organization (strict)
+  # ---------------------------------------------------------------------------
+  # Full protection for main branch in organizational repositories
+  # Requires: 2 approvals, code owner review, signed commits, linear history
+  main_org:
+    required_status_checks:
+      strict: true
+      contexts: []
+    enforce_admins: true
+    required_pull_request_reviews:
+      require_code_owner_reviews: true
+      dismiss_stale_reviews: true
+      required_approving_review_count: 2
+      require_last_push_approval: true
+      bypass_pull_request_allowances:
+        users: []
+        teams: []
+        apps: []
+    restrictions:
+      users: []
+      teams: []
+      apps: []
+    required_linear_history: true
+    allow_force_pushes: false
+    allow_deletions: false
+    required_conversation_resolution: true
+    lock_branch: false
+    allow_fork_syncing: true
+    required_signatures: true
+
+  # ---------------------------------------------------------------------------
+  # Main branch - Personal (relaxed)
+  # ---------------------------------------------------------------------------
+  # Lighter protection for personal repositories
+  # Requires: 1 approval, no code owner requirement, no signed commits
+  main_personal:
+    required_status_checks:
+      strict: true
+      contexts: []
+    enforce_admins: true
+    required_pull_request_reviews:
+      require_code_owner_reviews: false
+      dismiss_stale_reviews: true
+      required_approving_review_count: 1
+      require_last_push_approval: true
+    restrictions: null
+    required_linear_history: false
+    allow_force_pushes: false
+    allow_deletions: false
+    required_conversation_resolution: true
+    lock_branch: false
+    allow_fork_syncing: true
+
+  # ---------------------------------------------------------------------------
+  # Develop branch - Organization
+  # ---------------------------------------------------------------------------
+  # Moderate protection for develop branch in organizational repositories
+  # Requires: 1 approval, code owner review, but more relaxed than main
+  develop_org:
+    required_status_checks:
+      strict: false
+      contexts: []
+    enforce_admins: true
+    required_pull_request_reviews:
+      require_code_owner_reviews: true
+      dismiss_stale_reviews: true
+      required_approving_review_count: 1
+      require_last_push_approval: true
+      bypass_pull_request_allowances:
+        users: []
+        teams: []
+        apps: []
+    restrictions:
+      users: []
+      teams: []
+      apps: []
+    required_linear_history: false
+    allow_force_pushes: false
+    allow_deletions: false
+    required_conversation_resolution: true
+    lock_branch: false
+    allow_fork_syncing: true
+    required_signatures: false
+
+  # ---------------------------------------------------------------------------
+  # Develop branch - Personal
+  # ---------------------------------------------------------------------------
+  # Light protection for develop branch in personal repositories
+  develop_personal:
+    required_status_checks:
+      strict: false
+      contexts: []
+    enforce_admins: true
+    required_pull_request_reviews:
+      require_code_owner_reviews: false
+      dismiss_stale_reviews: true
+      required_approving_review_count: 1
+      require_last_push_approval: true
+    restrictions: null
+    required_linear_history: false
+    allow_force_pushes: false
+    allow_deletions: false
+    required_conversation_resolution: true
+    lock_branch: false
+    allow_fork_syncing: true
+
+  # ---------------------------------------------------------------------------
+  # Minimal protection
+  # ---------------------------------------------------------------------------
+  # Bare minimum protection - just prevent force pushes and deletions
+  minimal:
+    required_status_checks: null
+    enforce_admins: false
+    required_pull_request_reviews: null
+    restrictions: null
+    required_linear_history: false
+    allow_force_pushes: false
+    allow_deletions: false
+    required_conversation_resolution: false
+    lock_branch: false
+    allow_fork_syncing: true
+
+# =============================================================================
+# RULESET TEMPLATES
+# =============================================================================
+# These are configurations for the modern Rulesets API (pattern-based rules)
+# Note: Rulesets are only available for organization repositories
+
+rulesets:
+  # ---------------------------------------------------------------------------
+  # Branch Naming Convention
+  # ---------------------------------------------------------------------------
+  # Enforces standard branch naming patterns across the repository
+  # Allowed: main, develop, feature/*, release/*, hotfix/*, bugfix/*, chore/*, renovate/*
+  branch_naming:
+    name: "Branch Naming Convention"
+    target: branch
+    enforcement: active
+    conditions:
+      ref_name:
+        include:
+          - "refs/heads/**"
+        exclude: []
+    rules:
+      - type: branch_name_pattern
+        parameters:
+          name: "Branch naming pattern"
+          negate: false
+          operator: regex
+          pattern: "^(main|develop)|((feature|chore|release|hotfix|bugfix|renovate)[-_/].+)$"
+
+  # ---------------------------------------------------------------------------
+  # Release Branch Protection
+  # ---------------------------------------------------------------------------
+  # Protects release branches (release/*) with strict rules
+  # Requires: PR with code owner review, no direct updates, no deletion
+  release_branches:
+    name: "Release Branch Protection"
+    target: branch
+    enforcement: active
+    conditions:
+      ref_name:
+        include:
+          - "refs/heads/release*"
+        exclude: []
+    rules:
+      - type: pull_request
+        parameters:
+          dismiss_stale_reviews_on_push: false
+          require_code_owner_review: true
+          require_last_push_approval: true
+          required_approving_review_count: 1
+          required_review_thread_resolution: true
+      - type: update
+        parameters:
+          update_allows_fetch_and_merge: false
+      - type: deletion
+
+  # ---------------------------------------------------------------------------
+  # Feature Branch Protection
+  # ---------------------------------------------------------------------------
+  # Light protection for feature branches (feature/*)
+  # Minimal rules to keep branches clean
+  feature_branches:
+    name: "Feature Branch Protection"
+    target: branch
+    enforcement: active
+    conditions:
+      ref_name:
+        include:
+          - "refs/heads/feature*"
+        exclude: []
+    rules: []
+
+  # ---------------------------------------------------------------------------
+  # Hotfix Branch Protection
+  # ---------------------------------------------------------------------------
+  # Protection for hotfix branches (hotfix/*)
+  # Similar to release but may allow faster merges
+  hotfix_branches:
+    name: "Hotfix Branch Protection"
+    target: branch
+    enforcement: active
+    conditions:
+      ref_name:
+        include:
+          - "refs/heads/hotfix*"
+        exclude: []
+    rules:
+      - type: pull_request
+        parameters:
+          dismiss_stale_reviews_on_push: false
+          require_code_owner_review: false
+          require_last_push_approval: true
+          required_approving_review_count: 1
+          required_review_thread_resolution: true
+
+  # ---------------------------------------------------------------------------
+  # Tag Protection
+  # ---------------------------------------------------------------------------
+  # Protect tags from unauthorized creation/deletion
+  tag_protection:
+    name: "Tag Protection"
+    target: tag
+    enforcement: active
+    conditions:
+      ref_name:
+        include:
+          - "refs/tags/**"
+        exclude: []
+    rules:
+      - type: creation
+      - type: deletion
+
+# =============================================================================
+# RULE TYPE REFERENCE
+# =============================================================================
+# Available rule types for rulesets:
+#
+# - creation: Restrict branch/tag creation
+# - update: Restrict updates (pushes)
+# - deletion: Prevent deletion
+# - required_linear_history: Require linear history
+# - required_deployments: Require deployments to succeed
+# - required_signatures: Require signed commits
+# - pull_request: Require pull request reviews
+# - required_status_checks: Require status checks to pass
+# - non_fast_forward: Prevent force pushes
+# - commit_message_pattern: Enforce commit message format
+# - commit_author_email_pattern: Restrict commit author emails
+# - committer_email_pattern: Restrict committer emails
+# - branch_name_pattern: Enforce branch naming convention
+# - tag_name_pattern: Enforce tag naming convention

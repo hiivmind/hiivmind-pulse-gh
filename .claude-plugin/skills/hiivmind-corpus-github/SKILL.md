@@ -1,130 +1,81 @@
 ---
-name: hiivmind-corpus-github-navigate
-description: Find relevant GitHub documentation. Use when working with GitHub GraphQL API, REST API, or gh CLI commands.
+name: github-navigate
+description: >-
+  Find GitHub API documentation for hiivmind-pulse-gh operations. Use when you need GraphQL schema types, REST endpoint syntax, or gh CLI commands. Trigger keywords: "find in docs", "check the docs", "GraphQL schema", "REST endpoint", "gh command", "API syntax", issue, pullRequest, milestone, projectV2, rulesets, workflows, secrets, releases.
 ---
 
-# GitHub Documentation Corpus Navigator
+# GitHub API Documentation Navigator (Pulse Edition)
 
-Find and retrieve relevant documentation from the GitHub documentation corpus.
+This corpus provides GitHub API documentation specialized for hiivmind-pulse-gh.
 
-**Focus areas**: GraphQL API, REST API, gh CLI
+## How to Use
 
-## Process
+1. **Read routing guide first:** `reference/api-routing.md` - tells you which API (GraphQL vs REST)
+2. **Search this index:** Use keywords from routing guide
+3. **Read source docs:** Get exact syntax from `.source/docs/content/`
 
-1. **Read the index**: `data/index.md`
-2. **Parse path format**: `{source_id}:{relative_path}`
-3. **Check for `⚡ GREP` marker** - if present, use Grep instead of Read (see Large Structured Files section)
-4. **Look up source** in `data/config.yaml` by ID
-5. **Get content** based on source type (see Source Access below)
-6. **Answer** with citation to source and file path
+## Entry Points
 
-## Path Format
+| Need | Start Here |
+|------|------------|
+| Which API to use | `reference/api-routing.md` |
+| Find a topic | `data/index.md` → keyword search |
+| GraphQL type/mutation | `data/uploads/graphql-schema/schema.docs.graphql` (grep) |
+| REST endpoint | `data/sections/rest.md` |
+| gh CLI command | `data/sections/github-cli.md` |
 
-Index entries use the format: `{source_id}:{relative_path}`
+## Quick Keyword Lookups
 
-Examples:
-- `github-docs:graphql/guides/forming-calls-with-graphql.md` - GraphQL guide
-- `github-docs:rest/issues/issues.md` - REST API reference
-- `github-docs:github-cli/github-cli/about-github-cli.md` - gh CLI docs
+### GraphQL Operations
+- **Issues:** `createIssue`, `updateIssue`, `closeIssue`, `addComment`
+- **PRs:** `createPullRequest`, `mergePullRequest`, `requestReviews`
+- **Projects v2:** `addProjectV2ItemById`, `updateProjectV2ItemFieldValue`, `createProjectV2StatusUpdate`
+- **Labels:** `addLabelsToLabelable`, `removeLabelsFromLabelable`
 
-## Source Access
+### REST Operations (no GraphQL)
+- **Milestones:** `POST /repos/{owner}/{repo}/milestones`
+- **Branch protection:** `PUT /repos/{owner}/{repo}/branches/{branch}/protection`
+- **Rulesets:** `POST /repos/{owner}/{repo}/rulesets`
+- **Actions:** `/repos/{owner}/{repo}/actions/...`
+- **Secrets:** `/repos/{owner}/{repo}/actions/secrets/...`
+- **Variables:** `/repos/{owner}/{repo}/actions/variables/...`
+- **Releases:** `/repos/{owner}/{repo}/releases/...`
 
-### For git sources
+## GraphQL Schema Search
 
-Look up the source in `data/config.yaml` to get `repo_owner`, `repo_name`, `branch`, and `docs_root`.
+The schema file is 70k+ lines. Use grep patterns:
 
-**IMPORTANT: Always check for local clone first!**
-
-**Step 1 - Check for local clone:**
-Use Glob or Bash to check if `.source/{source_id}/` exists.
-
-**Step 2a - If local clone exists (PREFERRED):**
-Read directly from `.source/{source_id}/{docs_root}/{path}` using the Read tool.
-This is faster and works offline.
-
-**Step 2b - If NO local clone exists (fallback only):**
-Fetch from GitHub:
-```
-https://raw.githubusercontent.com/{repo_owner}/{repo_name}/{branch}/{docs_root}/{path}
-```
-Use WebFetch to retrieve content.
-
-**Tip:** If web fetching is slow or unreliable, suggest cloning locally:
 ```bash
-git clone --depth 1 https://github.com/github/docs.git .source/github-docs
-```
-This improves performance and enables offline access.
+# Find type definition
+grep -n "^type ProjectV2 " data/uploads/graphql-schema/schema.docs.graphql -A 50
 
-**Staleness check for git sources:**
-After reading, compare the source's `last_commit_sha` in config to the local clone:
-```bash
-cd .source/{source_id} && git rev-parse HEAD
-```
-If clone is **newer** than indexed SHA, warn user: "The docs have been updated since the index was built. Consider running refresh to update the index."
+# Find mutation
+grep -n "createProjectV2StatusUpdate" data/uploads/graphql-schema/schema.docs.graphql -B 5 -A 30
 
-### For local sources
+# Find input type
+grep -n "^input CreateIssueInput " data/uploads/graphql-schema/schema.docs.graphql -A 30
 
-Read directly from: `data/uploads/{source_id}/{path}`
-
-Local sources are user-uploaded files stored within the corpus.
-
-### For web sources
-
-Read from cache: `.cache/web/{source_id}/{cached_file}`
-
-If cache miss, look up the URL in `data/config.yaml` and fetch fresh content.
-
-## File Locations
-
-- **Index**: `data/index.md`
-- **Config**: `data/config.yaml` (has sources array with per-source tracking)
-- **Git sources**: `.source/{source_id}/` (cloned repos, gitignored)
-- **Local sources**: `data/uploads/{source_id}/` (user-uploaded files)
-- **Web cache**: `.cache/web/{source_id}/` (fetched web content, gitignored)
-
-## Large Structured Files (GraphQL Schema)
-
-The GraphQL schema at `data/uploads/graphql-schema/schema.docs.graphql` is ~70,000 lines. **DO NOT read the entire file**. Use Grep to search precisely:
-
-**Find a type definition:**
-```bash
-grep -n "^type Repository " data/uploads/graphql-schema/schema.docs.graphql -A 30
+# Find enum
+grep -n "^enum ProjectV2ItemFieldValueOrderField " data/uploads/graphql-schema/schema.docs.graphql -A 20
 ```
 
-**Find an input type:**
-```bash
-grep -n "^input CreateIssueInput " data/uploads/graphql-schema/schema.docs.graphql -A 20
-```
+## Section Indices
 
-**Find a mutation:**
-```bash
-grep -n "createIssue" data/uploads/graphql-schema/schema.docs.graphql -B 2 -A 15
-```
+For detailed file listings by domain:
 
-**Find all fields returning a specific type:**
-```bash
-grep -n ": Repository" data/uploads/graphql-schema/schema.docs.graphql
-```
+- `data/sections/rest.md` - REST API endpoints
+- `data/sections/graphql.md` - GraphQL guides
+- `data/sections/issues.md` - Issues, milestones, labels, Projects v2
+- `data/sections/pull-requests.md` - PR operations
+- `data/sections/repositories.md` - Branches, protection, rulesets, releases
+- `data/sections/actions.md` - Workflows, runs, jobs, secrets, variables
+- `data/sections/organizations.md` - Orgs, teams, permissions
+- `data/sections/github-cli.md` - gh CLI reference
+- `data/sections/authentication.md` - Auth methods, PATs, SSH
 
-**Find an enum:**
-```bash
-grep -n "^enum IssueState " data/uploads/graphql-schema/schema.docs.graphql -A 10
-```
+## Source Path Reference
 
-**Find an interface:**
-```bash
-grep -n "^interface Node " data/uploads/graphql-schema/schema.docs.graphql -A 20
-```
-
-**When to use Grep vs Read:**
-- Looking for specific type/mutation/query → Grep with `-A` context
-- Need to see what fields a type has → Grep the type definition with `-A 30`
-- Need to find all usages of a type → Grep for `: TypeName`
-- Exploring connections → Grep for `Connection` or `Edge`
-
-## Output
-
-- Cite the source ID and file path for reference
-- Include code examples from the docs
-- Suggest related docs from the same index section
-- Note source type and freshness warnings if relevant
+| Prefix | Path |
+|--------|------|
+| `docs:` | `.source/docs/content/{path}` |
+| `graphql-schema:` | `data/uploads/graphql-schema/{file}` |

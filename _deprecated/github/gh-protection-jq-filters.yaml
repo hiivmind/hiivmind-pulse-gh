@@ -1,0 +1,279 @@
+# GitHub Protection Domain jq Filters
+# Filters for formatting and transforming branch protection and ruleset data
+#
+# Usage:
+#   filter=$(yq -r '.filters.format_branch_protection' gh-protection-jq-filters.yaml)
+#   echo "$data" | jq "$filter"
+
+# =============================================================================
+# FORMAT FILTERS
+# =============================================================================
+
+filters:
+  # ---------------------------------------------------------------------------
+  # Format branch protection for display (REST API response)
+  # ---------------------------------------------------------------------------
+  format_branch_protection: |
+    {
+      enforce_admins: .enforce_admins.enabled,
+      required_status_checks: (if .required_status_checks then {
+        strict: .required_status_checks.strict,
+        contexts: .required_status_checks.contexts
+      } else null end),
+      required_pull_request_reviews: (if .required_pull_request_reviews then {
+        required_approving_review_count: .required_pull_request_reviews.required_approving_review_count,
+        dismiss_stale_reviews: .required_pull_request_reviews.dismiss_stale_reviews,
+        require_code_owner_reviews: .required_pull_request_reviews.require_code_owner_reviews,
+        require_last_push_approval: .required_pull_request_reviews.require_last_push_approval,
+        bypass_pull_request_allowances: (if .required_pull_request_reviews.bypass_pull_request_allowances then {
+          users: [.required_pull_request_reviews.bypass_pull_request_allowances.users[]?.login],
+          teams: [.required_pull_request_reviews.bypass_pull_request_allowances.teams[]?.slug],
+          apps: [.required_pull_request_reviews.bypass_pull_request_allowances.apps[]?.slug]
+        } else null end)
+      } else null end),
+      restrictions: (if .restrictions then {
+        users: [.restrictions.users[].login],
+        teams: [.restrictions.teams[].slug],
+        apps: [.restrictions.apps[].slug]
+      } else null end),
+      required_linear_history: .required_linear_history.enabled,
+      allow_force_pushes: .allow_force_pushes.enabled,
+      allow_deletions: .allow_deletions.enabled,
+      required_conversation_resolution: .required_conversation_resolution.enabled,
+      required_signatures: .required_signatures.enabled,
+      lock_branch: .lock_branch.enabled,
+      allow_fork_syncing: .allow_fork_syncing.enabled
+    }
+
+  # ---------------------------------------------------------------------------
+  # Format branch protection from GraphQL response
+  # ---------------------------------------------------------------------------
+  format_branch_protection_graphql: |
+    {
+      id: .id,
+      pattern: .pattern,
+      enforce_admins: .isAdminEnforced,
+      required_status_checks: (if .requiresStatusChecks then {
+        strict: .requiresStrictStatusChecks,
+        contexts: .requiredStatusCheckContexts
+      } else null end),
+      required_pull_request_reviews: (if .requiresApprovingReviews then {
+        required_approving_review_count: .requiredApprovingReviewCount,
+        dismiss_stale_reviews: .dismissesStaleReviews,
+        require_code_owner_reviews: .requiresCodeOwnerReviews,
+        require_last_push_approval: .requireLastPushApproval
+      } else null end),
+      required_linear_history: .requiresLinearHistory,
+      allow_force_pushes: .allowsForcePushes,
+      allow_deletions: .allowsDeletions,
+      required_conversation_resolution: .requiresConversationResolution,
+      required_signatures: .requiresCommitSignatures,
+      lock_branch: .lockBranch,
+      allow_fork_syncing: .lockAllowsFetchAndMerge,
+      blocks_creations: .blocksCreations,
+      restricts_pushes: .restrictsPushes,
+      restricts_review_dismissals: .restrictsReviewDismissals,
+      required_deployments: (if .requiresDeployments then {
+        environments: .requiredDeploymentEnvironments
+      } else null end),
+      matching_refs: [.matchingRefs.nodes[].name]
+    }
+
+  # ---------------------------------------------------------------------------
+  # Format rulesets list for display
+  # ---------------------------------------------------------------------------
+  format_rulesets_list: |
+    [.[] | {
+      id: .id,
+      name: .name,
+      target: .target,
+      enforcement: .enforcement,
+      source_type: .source_type,
+      source: .source,
+      rules_count: (.rules | length),
+      conditions: (if .conditions.ref_name then {
+        include: .conditions.ref_name.include,
+        exclude: .conditions.ref_name.exclude
+      } else null end)
+    }]
+
+  # ---------------------------------------------------------------------------
+  # Format single ruleset with full detail
+  # ---------------------------------------------------------------------------
+  format_ruleset_detail: |
+    {
+      id: .id,
+      database_id: .database_id,
+      name: .name,
+      target: .target,
+      enforcement: .enforcement,
+      source: {
+        type: .source_type,
+        name: .source
+      },
+      conditions: {
+        ref_name: (if .conditions.ref_name then {
+          include: .conditions.ref_name.include,
+          exclude: .conditions.ref_name.exclude
+        } else null end),
+        repository_name: (if .conditions.repository_name then {
+          include: .conditions.repository_name.include,
+          exclude: .conditions.repository_name.exclude,
+          protected: .conditions.repository_name.protected
+        } else null end)
+      },
+      rules: [.rules[] | {
+        type: .type,
+        parameters: .parameters
+      }],
+      bypass_actors: [.bypass_actors[]? | {
+        actor_type: (if .actor.slug then "team_or_app" elif .organization_admin then "org_admin" elif .deploy_key then "deploy_key" else "role" end),
+        actor: (.actor.slug // .actor.name // .repository_role_name // (if .organization_admin then "Organization Admin" elif .deploy_key then "Deploy Key" else "Unknown" end)),
+        bypass_mode: .bypass_mode
+      }],
+      created_at: .created_at,
+      updated_at: .updated_at
+    }
+
+  # ---------------------------------------------------------------------------
+  # Format rules applying to a branch
+  # ---------------------------------------------------------------------------
+  format_rules_for_branch: |
+    [.[] | {
+      type: .type,
+      ruleset_source_type: .ruleset_source_type,
+      ruleset_source: .ruleset_source,
+      ruleset_id: .ruleset_id,
+      parameters: .parameters
+    }]
+
+  # ---------------------------------------------------------------------------
+  # Format GraphQL rulesets response
+  # ---------------------------------------------------------------------------
+  format_rulesets_graphql: |
+    .data.repository.rulesets.nodes | [.[] | {
+      id: .id,
+      database_id: .databaseId,
+      name: .name,
+      target: .target,
+      enforcement: .enforcement,
+      source: {
+        type: .source.__typename,
+        name: (.source.login // .source.name // .source.slug)
+      },
+      conditions: {
+        ref_name: (if .conditions.refName then {
+          include: .conditions.refName.include,
+          exclude: .conditions.refName.exclude
+        } else null end)
+      },
+      rules_count: .rules.totalCount,
+      rules: [.rules.nodes[] | {
+        id: .id,
+        type: .type,
+        parameters: .parameters
+      }],
+      bypass_actors: [.bypassActors.nodes[] | {
+        id: .id,
+        bypass_mode: .bypassMode,
+        actor: (.actor.slug // .actor.name),
+        role: .repositoryRoleName,
+        org_admin: .organizationAdmin,
+        deploy_key: .deployKey
+      }],
+      created_at: .createdAt,
+      updated_at: .updatedAt
+    }]
+
+  # ---------------------------------------------------------------------------
+  # Format branch protection rules from GraphQL
+  # ---------------------------------------------------------------------------
+  format_branch_protections_graphql: |
+    .data.repository.branchProtectionRules.nodes | [.[] | {
+      id: .id,
+      database_id: .databaseId,
+      pattern: .pattern,
+      enforce_admins: .isAdminEnforced,
+      allows_deletions: .allowsDeletions,
+      allows_force_pushes: .allowsForcePushes,
+      blocks_creations: .blocksCreations,
+      dismisses_stale_reviews: .dismissesStaleReviews,
+      lock_branch: .lockBranch,
+      lock_allows_fetch_and_merge: .lockAllowsFetchAndMerge,
+      require_last_push_approval: .requireLastPushApproval,
+      required_approving_review_count: .requiredApprovingReviewCount,
+      required_status_check_contexts: .requiredStatusCheckContexts,
+      requires_approving_reviews: .requiresApprovingReviews,
+      requires_code_owner_reviews: .requiresCodeOwnerReviews,
+      requires_commit_signatures: .requiresCommitSignatures,
+      requires_conversation_resolution: .requiresConversationResolution,
+      requires_deployments: .requiresDeployments,
+      required_deployment_environments: .requiredDeploymentEnvironments,
+      requires_linear_history: .requiresLinearHistory,
+      requires_status_checks: .requiresStatusChecks,
+      requires_strict_status_checks: .requiresStrictStatusChecks,
+      restricts_pushes: .restrictsPushes,
+      restricts_review_dismissals: .restrictsReviewDismissals,
+      matching_refs: [.matchingRefs.nodes[].name]
+    }]
+
+# =============================================================================
+# EXTRACT FILTERS
+# =============================================================================
+
+  # ---------------------------------------------------------------------------
+  # Extract unique rule types from rulesets
+  # ---------------------------------------------------------------------------
+  extract_rule_types: |
+    [.[].rules[].type] | unique | sort
+
+  # ---------------------------------------------------------------------------
+  # Extract bypass actors from rulesets
+  # ---------------------------------------------------------------------------
+  extract_bypass_actors: |
+    [.[].bypass_actors[]? | {
+      actor: .actor,
+      type: .actor_type,
+      bypass_mode: .bypass_mode
+    }] | unique_by(.actor)
+
+  # ---------------------------------------------------------------------------
+  # Extract protected patterns from branch protection rules
+  # ---------------------------------------------------------------------------
+  extract_protected_patterns: |
+    [.[].pattern] | unique | sort
+
+  # ---------------------------------------------------------------------------
+  # Extract status check contexts across all protections
+  # ---------------------------------------------------------------------------
+  extract_status_checks: |
+    [.[].required_status_checks.contexts[]?] | unique | sort
+
+# =============================================================================
+# SUMMARY FILTERS
+# =============================================================================
+
+  # ---------------------------------------------------------------------------
+  # Protection summary for a repository
+  # ---------------------------------------------------------------------------
+  protection_summary: |
+    {
+      total_branch_protections: (if type == "array" then length else 0 end),
+      patterns: [.[].pattern] | unique,
+      admin_enforced_count: [.[] | select(.enforce_admins == true or .isAdminEnforced == true)] | length,
+      requires_reviews_count: [.[] | select(.required_pull_request_reviews != null or .requiresApprovingReviews == true)] | length,
+      requires_status_checks_count: [.[] | select(.required_status_checks != null or .requiresStatusChecks == true)] | length,
+      requires_signatures_count: [.[] | select(.required_signatures.enabled == true or .requiresCommitSignatures == true)] | length
+    }
+
+  # ---------------------------------------------------------------------------
+  # Ruleset summary
+  # ---------------------------------------------------------------------------
+  ruleset_summary: |
+    {
+      total_rulesets: length,
+      by_target: (group_by(.target) | map({key: .[0].target, value: length}) | from_entries),
+      by_enforcement: (group_by(.enforcement) | map({key: .[0].enforcement, value: length}) | from_entries),
+      total_rules: ([.[].rules_count] | add),
+      rule_types: ([.[].rules[].type] | unique)
+    }

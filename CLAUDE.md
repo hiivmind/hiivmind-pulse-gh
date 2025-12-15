@@ -359,25 +359,47 @@ PROJECTS=$(discover_projects "$LOGIN" "$TYPE") && echo "$PROJECTS" | format_proj
 See `knowledge/claude-code-bash-escaping.md` for full details on the bug and workarounds.
 
 
-## GitHub Documentation Corpus
+## GitHub Documentation Corpus (Embedded)
 
-This repository has access to the `github-navigate` skill which provides an always-current index of official GitHub documentation.
+This repository includes an embedded `github-navigate` skill at `.claude-plugin/skills/hiivmind-corpus-github/` with specialized GitHub API documentation.
 
-**Use this skill when you need to:**
-- Look up GitHub REST API endpoint details
-- Check GraphQL API schema and queries
-- Find `gh` CLI command syntax
-- Understand GitHub authentication methods
-- Reference rate limits, pagination, or best practices
+### Usage Flow (v3 Architecture)
 
-**How to use:** Invoke `github-navigate` skill, then read `data/index.md` to find relevant documentation paths.
+1. **Check routing first:** Read `reference/api-routing.md` to determine which API (GraphQL vs REST)
+2. **Search corpus:** Use keywords from routing guide to find docs
+3. **Read source:** Get exact syntax from `.claude-plugin/skills/hiivmind-corpus-github/.source/docs/content/`
 
-| Topic | Index Section |
-|-------|---------------|
-| REST API endpoints | `rest/` paths |
-| GraphQL API | `graphql/` paths |
-| GitHub CLI | `github-cli/` paths |
-| Authentication | `rest/authentication/` |
+### Quick Lookups
+
+| Need | Path |
+|------|------|
+| API routing decisions | `reference/api-routing.md` |
+| Keyword-tagged index | `.claude-plugin/skills/hiivmind-corpus-github/data/index.md` |
+| GraphQL schema (grep) | `.claude-plugin/skills/hiivmind-corpus-github/data/uploads/graphql-schema/schema.docs.graphql` |
+| REST endpoints | `.claude-plugin/skills/hiivmind-corpus-github/data/sections/rest.md` |
+| gh CLI commands | `.claude-plugin/skills/hiivmind-corpus-github/data/sections/github-cli.md` |
+
+### GraphQL Schema Search
+
+```bash
+# Find type definition
+grep -n "^type ProjectV2 " .claude-plugin/skills/hiivmind-corpus-github/data/uploads/graphql-schema/schema.docs.graphql -A 50
+
+# Find mutation
+grep -n "createProjectV2StatusUpdate" .claude-plugin/skills/hiivmind-corpus-github/data/uploads/graphql-schema/schema.docs.graphql -B 5 -A 30
+```
+
+### Corpus Sections
+
+| Section | Focus |
+|---------|-------|
+| `sections/rest.md` | REST API endpoints |
+| `sections/graphql.md` | GraphQL guides |
+| `sections/issues.md` | Issues, milestones, labels, Projects v2 |
+| `sections/pull-requests.md` | PR operations |
+| `sections/repositories.md` | Branches, protection, rulesets |
+| `sections/actions.md` | Workflows, runs, secrets, variables |
+| `sections/organizations.md` | Orgs, teams, permissions |
 
 ## Plugin Development Resources
 **IMPORTANT**: This is a Claude Code plugin. When working on plugin structure, installation, or distribution, use the `plugin-dev` skills for authoritative guidance.

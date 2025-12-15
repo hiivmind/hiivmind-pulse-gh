@@ -1,389 +1,295 @@
-# GitHub Documentation Corpus Index
+# GitHub API Documentation Corpus (Pulse Edition)
 
-> **Source:** github-docs (github/docs)
-> **Focus:** GraphQL API, REST API, gh CLI
-> **Last updated:** 2024-12-10
-
----
-
-## GraphQL API
-
-### Overview & Getting Started
-
-- **About the GraphQL API** `github-docs:graphql/overview/about-the-graphql-api.md` - Introduction to GitHub's GraphQL API
-- **Public Schema** `github-docs:graphql/overview/public-schema.md` - Download and explore the schema
-- **Rate Limits** `github-docs:graphql/overview/rate-limits-and-query-limits-for-the-graphql-api.md` - Understanding query limits and costs
-- **Breaking Changes** `github-docs:graphql/overview/breaking-changes.md` - API deprecations and changes
-- **Changelog** `github-docs:graphql/overview/changelog.md` - Recent API updates
-
-### GraphQL Guides
-
-- **Introduction to GraphQL** `github-docs:graphql/guides/introduction-to-graphql.md` - Core concepts and terminology
-- **Forming Calls** `github-docs:graphql/guides/forming-calls-with-graphql.md` - How to construct GraphQL queries
-- **Using Pagination** `github-docs:graphql/guides/using-pagination-in-the-graphql-api.md` - Cursor-based pagination patterns
-- **Global Node IDs** `github-docs:graphql/guides/using-global-node-ids.md` - Working with node IDs across APIs
-- **Migrating Global Node IDs** `github-docs:graphql/guides/migrating-graphql-global-node-ids.md` - ID format migration guide
-- **Migrating from REST** `github-docs:graphql/guides/migrating-from-rest-to-graphql.md` - REST to GraphQL transition
-- **GraphQL Clients** `github-docs:graphql/guides/using-graphql-clients.md` - Client libraries and tools
-- **Discussions API** `github-docs:graphql/guides/using-the-graphql-api-for-discussions.md` - Managing discussions via GraphQL
-- **Enterprise Accounts** `github-docs:graphql/guides/managing-enterprise-accounts.md` - Enterprise management via GraphQL
-
-### GraphQL Reference
-
-- **Queries** `github-docs:graphql/reference/queries.md` - Available query root fields
-- **Mutations** `github-docs:graphql/reference/mutations.md` - All mutation operations
-- **Objects** `github-docs:graphql/reference/objects.md` - Object type definitions
-- **Interfaces** `github-docs:graphql/reference/interfaces.md` - Interface definitions
-- **Enums** `github-docs:graphql/reference/enums.md` - Enumeration types
-- **Scalars** `github-docs:graphql/reference/scalars.md` - Scalar type definitions
-- **Unions** `github-docs:graphql/reference/unions.md` - Union type definitions
-- **Input Objects** `github-docs:graphql/reference/input-objects.md` - Input type definitions
-
-### GraphQL Schema (SDL)
-
-- **Full Schema** `graphql-schema:schema.docs.graphql` ⚡ GREP - Complete GitHub GraphQL API schema (70k lines). Search with: `grep -n "^type {TypeName} " ... -A 30` or `grep -n "^input {InputName} " ... -A 20`
+> **Purpose:** JIT specifics for hiivmind-pulse-gh operations
+> **Usage:** Search using keywords from `reference/api-routing.md`, then read source docs
+> **Source:** github/docs @ 93fb820
+> **Last updated:** 2025-12-15
 
 ---
 
-## REST API
+## Quick Reference: GraphQL Schema
 
-### Getting Started
+**File:** `data/uploads/graphql-schema/schema.docs.graphql`
 
-- **About the REST API** `github-docs:rest/about-the-rest-api/about-the-rest-api.md` - Overview and basics
-- **Quickstart** `github-docs:rest/quickstart.md` - Quick introduction
-- **API Versions** `github-docs:rest/about-the-rest-api/api-versions.md` - Versioning and stability
-- **Comparing REST and GraphQL** `github-docs:rest/about-the-rest-api/comparing-githubs-rest-api-and-graphql-api.md` - When to use each
-- **Breaking Changes** `github-docs:rest/about-the-rest-api/breaking-changes.md` - API deprecations
-- **OpenAPI Description** `github-docs:rest/about-the-rest-api/about-the-openapi-description-for-the-rest-api.md` - Machine-readable API spec
-
-### Using the REST API
-
-- **Getting Started** `github-docs:rest/using-the-rest-api/getting-started-with-the-rest-api.md` - First API calls
-- **Best Practices** `github-docs:rest/using-the-rest-api/best-practices-for-using-the-rest-api.md` - Recommended patterns
-- **Rate Limits** `github-docs:rest/using-the-rest-api/rate-limits-for-the-rest-api.md` - Understanding rate limiting
-- **Pagination** `github-docs:rest/using-the-rest-api/using-pagination-in-the-rest-api.md` - Paginating through results
-- **Troubleshooting** `github-docs:rest/using-the-rest-api/troubleshooting-the-rest-api.md` - Common issues and solutions
-
-### Authentication
-
-- **Authenticating to REST API** `github-docs:rest/authentication/authenticating-to-the-rest-api.md` - Auth methods overview
-- **Keeping Credentials Secure** `github-docs:rest/authentication/keeping-your-api-credentials-secure.md` - Security best practices
-- **Fine-grained PAT Endpoints** `github-docs:rest/authentication/endpoints-available-for-fine-grained-personal-access-tokens.md` - PAT-accessible endpoints
-- **GitHub App Permissions** `github-docs:rest/authentication/permissions-required-for-github-apps.md` - App permission reference
-- **PAT Permissions** `github-docs:rest/authentication/permissions-required-for-fine-grained-personal-access-tokens.md` - PAT permission reference
-- **App Installation Tokens** `github-docs:rest/authentication/endpoints-available-for-github-app-installation-access-tokens.md` - Installation token endpoints
-- **App User Tokens** `github-docs:rest/authentication/endpoints-available-for-github-app-user-access-tokens.md` - User token endpoints
-
-### REST Guides
-
-- **Scripting with JavaScript** `github-docs:rest/guides/scripting-with-the-rest-api-and-javascript.md` - Using Octokit.js
-- **Scripting with Ruby** `github-docs:rest/guides/scripting-with-the-rest-api-and-ruby.md` - Using Octokit.rb
-- **Working with Comments** `github-docs:rest/guides/working-with-comments.md` - Comment operations
-- **Interacting with Checks** `github-docs:rest/guides/using-the-rest-api-to-interact-with-checks.md` - Check runs and suites
-- **Git Database** `github-docs:rest/guides/using-the-rest-api-to-interact-with-your-git-database.md` - Low-level git operations
-- **Building a CI Server** `github-docs:rest/guides/building-a-ci-server.md` - CI integration patterns
-- **Delivering Deployments** `github-docs:rest/guides/delivering-deployments.md` - Deployment workflows
-- **Encrypting Secrets** `github-docs:rest/guides/encrypting-secrets-for-the-rest-api.md` - Secret encryption for API
-- **Discovering User Resources** `github-docs:rest/guides/discovering-resources-for-a-user.md` - User resource discovery
-- **Rendering Data as Graphs** `github-docs:rest/guides/rendering-data-as-graphs.md` - Data visualization
+Search patterns for the schema (70k lines):
+- Find type: `grep -n "^type {Name} " schema.docs.graphql -A 50`
+- Find input: `grep -n "^input {Name} " schema.docs.graphql -A 30`
+- Find enum: `grep -n "^enum {Name} " schema.docs.graphql -A 20`
+- Find mutation: `grep -n "{mutationName}" schema.docs.graphql -B 5 -A 30`
 
 ---
 
-### Issues, PRs & Projects (Priority)
+## Keyword-Tagged Index
 
-#### Issues
+### Issues
 
-- **Issues** `github-docs:rest/issues/issues.md` - Create, update, list issues
-- **Issue Comments** `github-docs:rest/issues/comments.md` - Comment management
-- **Issue Labels** `github-docs:rest/issues/labels.md` - Label operations
-- **Issue Milestones** `github-docs:rest/issues/milestones.md` - Milestone management
-- **Issue Assignees** `github-docs:rest/issues/assignees.md` - Assignee operations
-- **Issue Events** `github-docs:rest/issues/events.md` - Issue event history
-- **Issue Timeline** `github-docs:rest/issues/timeline.md` - Timeline events
-- **Sub-issues** `github-docs:rest/issues/sub-issues.md` - Sub-issue relationships
-- **Issue Dependencies** `github-docs:rest/issues/issue-dependencies.md` - Dependency tracking
+**Keywords:** `issue`, `issues`, `createIssue`, `updateIssue`, `closeIssue`, `addComment`, `subjectId`
 
-#### Pull Requests
+| Topic | Path | Keywords |
+|-------|------|----------|
+| About issues | `.source/docs/content/issues/tracking-your-work-with-issues/about-issues.md` | `issue`, `tracking` |
+| Create issue | `.source/docs/content/rest/issues/issues.md` | `createIssue`, `POST`, `create` |
+| Update issue | `.source/docs/content/rest/issues/issues.md` | `updateIssue`, `PATCH`, `state` |
+| GraphQL Issue type | `graphql-schema:schema.docs.graphql` | `type Issue`, `number`, `state` |
+| GraphQL mutations | `graphql-schema:schema.docs.graphql` | `createIssue`, `updateIssue`, `closeIssue` |
 
-- **Pull Requests** `github-docs:rest/pulls/pulls.md` - PR operations
-- **PR Review Comments** `github-docs:rest/pulls/comments.md` - Review comment management
-- **PR Reviews** `github-docs:rest/pulls/reviews.md` - Review operations
-- **PR Review Requests** `github-docs:rest/pulls/review-requests.md` - Request reviewers
-
-#### Projects
-
-- **Projects (v2)** `github-docs:rest/projects/projects.md` - Projects v2 API
-- **Project Collaborators** `github-docs:rest/projects/collaborators.md` - Project access
-- **Projects Classic** `github-docs:rest/projects-classic/projects.md` - Legacy project boards
-- **Project Cards (Classic)** `github-docs:rest/projects-classic/cards.md` - Classic project cards
-- **Project Columns (Classic)** `github-docs:rest/projects-classic/columns.md` - Classic project columns
-
-#### Reactions
-
-- **Reactions** `github-docs:rest/reactions/reactions.md` - Emoji reactions on issues/PRs
+**Section index:** → `sections/issues.md`
 
 ---
 
-### Repositories & Branches (Priority)
+### Pull Requests
 
-#### Repositories
+**Keywords:** `pullRequest`, `pullRequests`, `createPullRequest`, `updatePullRequest`, `mergePullRequest`, `requestReviews`
 
-- **Repos** `github-docs:rest/repos/repos.md` - Repository CRUD operations
-- **Repo Contents** `github-docs:rest/repos/contents.md` - File content operations
-- **Repo Topics** `github-docs:rest/repos/topics.md` - Repository topics
-- **Repo Tags** `github-docs:rest/repos/tags.md` - Tag management
-- **Repo Forks** `github-docs:rest/repos/forks.md` - Fork operations
-- **Repo Autolinks** `github-docs:rest/repos/autolinks.md` - Autolink references
-- **Repo Rules** `github-docs:rest/repos/rules.md` - Repository rulesets
-- **Repo Custom Properties** `github-docs:rest/repos/custom-properties.md` - Custom property values
-- **Repo Webhooks** `github-docs:rest/repos/webhooks.md` - Webhook management
+| Topic | Path | Keywords |
+|-------|------|----------|
+| About PRs | `.source/docs/content/pull-requests/collaborating-with-pull-requests/proposing-changes/about-pull-requests.md` | `pullRequest`, `review` |
+| Create PR | `.source/docs/content/rest/pulls/pulls.md` | `createPullRequest`, `POST`, `head`, `base` |
+| Merge PR | `.source/docs/content/rest/pulls/pulls.md` | `mergePullRequest`, `PUT`, `merge_method` |
+| GraphQL PR type | `graphql-schema:schema.docs.graphql` | `type PullRequest`, `mergeable` |
+| GraphQL mutations | `graphql-schema:schema.docs.graphql` | `createPullRequest`, `mergePullRequest`, `requestReviews` |
 
-#### Branches
-
-- **Branches** `github-docs:rest/branches/branches.md` - Branch operations
-- **Branch Protection** `github-docs:rest/branches/branch-protection.md` - Protection rules
-
-#### Commits
-
-- **Commits** `github-docs:rest/commits/commits.md` - Commit information
-- **Commit Comments** `github-docs:rest/commits/comments.md` - Commit comments
-- **Commit Statuses** `github-docs:rest/commits/statuses.md` - Status checks
-
-#### Git Data
-
-- **Git Blobs** `github-docs:rest/git/blobs.md` - Blob objects
-- **Git Commits** `github-docs:rest/git/commits.md` - Commit objects
-- **Git Refs** `github-docs:rest/git/refs.md` - Reference management
-- **Git Tags** `github-docs:rest/git/tags.md` - Tag objects
-- **Git Trees** `github-docs:rest/git/trees.md` - Tree objects
-
-#### Collaborators & Access
-
-- **Collaborators** `github-docs:rest/collaborators/collaborators.md` - Repo collaborators
-- **Repo Invitations** `github-docs:rest/collaborators/invitations.md` - Collaboration invites
-- **Deploy Keys** `github-docs:rest/deploy-keys/deploy-keys.md` - Deploy key management
-
-#### Releases
-
-- **Releases** `github-docs:rest/releases/releases.md` - Release management
-- **Release Assets** `github-docs:rest/releases/assets.md` - Release asset operations
+**Section index:** → `sections/pull-requests.md`
 
 ---
 
-### Organizations & Teams (Priority)
+### Milestones
 
-#### Organizations
+**Keywords:** `milestone`, `milestones`, `due_on`, `updateIssue`, `milestoneId`
 
-- **Organizations** `github-docs:rest/orgs/orgs.md` - Org management
-- **Org Members** `github-docs:rest/orgs/members.md` - Member management
-- **Org Outside Collaborators** `github-docs:rest/orgs/outside-collaborators.md` - External collaborators
-- **Org Webhooks** `github-docs:rest/orgs/webhooks.md` - Org webhook management
-- **Org Custom Properties** `github-docs:rest/orgs/custom-properties.md` - Custom property definitions
-- **Org Custom Roles** `github-docs:rest/orgs/custom-roles.md` - Custom role definitions
-- **Org Rules** `github-docs:rest/orgs/rules.md` - Organization rulesets
-- **Org Security Managers** `github-docs:rest/orgs/security-managers.md` - Security manager role
-- **Org Blocking** `github-docs:rest/orgs/blocking.md` - User blocking
-- **Org API Insights** `github-docs:rest/orgs/api-insights.md` - API usage insights
+| Topic | Path | Keywords |
+|-------|------|----------|
+| About milestones | `.source/docs/content/issues/using-labels-and-milestones/about-milestones.md` | `milestone`, `tracking` |
+| REST CRUD | `.source/docs/content/rest/issues/milestones.md` | `milestones`, `POST`, `PATCH`, `DELETE`, `due_on` |
+| GraphQL query | `graphql-schema:schema.docs.graphql` | `type Milestone`, `milestones`, `repository` |
+| Set on issue | `graphql-schema:schema.docs.graphql` | `updateIssue`, `milestoneId` |
 
-#### Teams
-
-- **Teams** `github-docs:rest/teams/teams.md` - Team management
-- **Team Members** `github-docs:rest/teams/members.md` - Team membership
-- **Team Discussions** `github-docs:rest/teams/discussions.md` - Team discussions
-- **Team Discussion Comments** `github-docs:rest/teams/discussion-comments.md` - Discussion comments
+**REST endpoints:**
+- `POST /repos/{owner}/{repo}/milestones` - create
+- `PATCH /repos/{owner}/{repo}/milestones/{number}` - update
+- `DELETE /repos/{owner}/{repo}/milestones/{number}` - delete
 
 ---
 
-### Checks & Actions
+### Labels
 
-#### Checks
+**Keywords:** `label`, `labels`, `addLabelsToLabelable`, `removeLabelsFromLabelable`, `labelIds`
 
-- **Check Runs** `github-docs:rest/checks/runs.md` - Check run operations
-- **Check Suites** `github-docs:rest/checks/suites.md` - Check suite management
-
-#### Actions
-
-- **Workflows** `github-docs:rest/actions/workflows.md` - Workflow operations
-- **Workflow Runs** `github-docs:rest/actions/workflow-runs.md` - Run management
-- **Workflow Jobs** `github-docs:rest/actions/workflow-jobs.md` - Job information
-- **Artifacts** `github-docs:rest/actions/artifacts.md` - Artifact management
-- **Secrets** `github-docs:rest/actions/secrets.md` - Secret management
-- **Variables** `github-docs:rest/actions/variables.md` - Variable management
-- **Permissions** `github-docs:rest/actions/permissions.md` - Actions permissions
-- **Self-hosted Runners** `github-docs:rest/actions/self-hosted-runners.md` - Runner management
-- **Runner Groups** `github-docs:rest/actions/self-hosted-runner-groups.md` - Runner group management
-- **Cache** `github-docs:rest/actions/cache.md` - Cache operations
-- **Hosted Runners** `github-docs:rest/actions/hosted-runners.md` - GitHub-hosted runners
-- **OIDC** `github-docs:rest/actions/oidc.md` - OIDC configuration
+| Topic | Path | Keywords |
+|-------|------|----------|
+| Managing labels | `.source/docs/content/issues/using-labels-and-milestones/managing-labels.md` | `labels`, `create`, `edit` |
+| REST CRUD | `.source/docs/content/rest/issues/labels.md` | `labels`, `POST`, `PATCH`, `DELETE`, `color` |
+| GraphQL mutations | `graphql-schema:schema.docs.graphql` | `addLabelsToLabelable`, `removeLabelsFromLabelable` |
 
 ---
 
-### Security & Code Quality
+### Projects v2
 
-#### Code Scanning
+**Keywords:** `projectV2`, `projectsV2`, `addProjectV2ItemById`, `updateProjectV2ItemFieldValue`, `archiveProjectV2Item`, `createProjectV2StatusUpdate`, `linkProjectV2ToRepository`
 
-- **Code Scanning** `github-docs:rest/code-scanning/code-scanning.md` - Code scanning alerts
-- **Alert Dismissal Requests** `github-docs:rest/code-scanning/alert-dismissal-requests.md` - Dismissal workflows
+| Topic | Path | Keywords |
+|-------|------|----------|
+| About Projects | `.source/docs/content/issues/planning-and-tracking-with-projects/learning-about-projects/about-projects.md` | `projectV2`, `planning` |
+| Managing items | `.source/docs/content/issues/planning-and-tracking-with-projects/managing-items-in-your-project/` | `items`, `add`, `archive` |
+| Fields | `.source/docs/content/issues/planning-and-tracking-with-projects/understanding-fields/` | `fields`, `fieldId`, `singleSelectOptions` |
+| Views | `.source/docs/content/issues/planning-and-tracking-with-projects/customizing-views-in-your-project/` | `views`, `layout`, `filter` |
+| GraphQL types | `graphql-schema:schema.docs.graphql` | `type ProjectV2`, `ProjectV2Item`, `ProjectV2Field` |
+| GraphQL mutations | `graphql-schema:schema.docs.graphql` | `addProjectV2ItemById`, `updateProjectV2ItemFieldValue`, `archiveProjectV2Item` |
+| Status updates | `graphql-schema:schema.docs.graphql` | `createProjectV2StatusUpdate`, `ON_TRACK`, `AT_RISK` |
+| Link repo | `graphql-schema:schema.docs.graphql` | `linkProjectV2ToRepository`, `repositoryId` |
 
-#### Secret Scanning
+**Known limitations:**
+- Views: create/update is UI-only (no `createProjectV2View` mutation)
+- Field options: `updateProjectV2Field` replaces ALL options
 
-- **Secret Scanning** `github-docs:rest/secret-scanning/secret-scanning.md` - Secret alerts
-
-#### Dependabot
-
-- **Dependabot Alerts** `github-docs:rest/dependabot/alerts.md` - Vulnerability alerts
-- **Dependabot Secrets** `github-docs:rest/dependabot/secrets.md` - Dependabot secrets
-- **Dependabot Repo Access** `github-docs:rest/dependabot/repository-access.md` - Repository access
-
-#### Security Advisories
-
-- **Security Advisories** `github-docs:rest/security-advisories/security-advisories.md` - Advisory management
-- **Repository Advisories** `github-docs:rest/security-advisories/repository-advisories.md` - Repo-specific advisories
-- **Global Advisories** `github-docs:rest/security-advisories/global-advisories.md` - GitHub advisory database
-
-#### Dependency Graph
-
-- **Dependency Review** `github-docs:rest/dependency-graph/dependency-review.md` - Dependency diff
-- **Dependency Submission** `github-docs:rest/dependency-graph/dependency-submission.md` - Submit dependencies
-- **SBOMs** `github-docs:rest/dependency-graph/sboms.md` - Software bill of materials
-
-#### Code Security
-
-- **Security Configurations** `github-docs:rest/code-security/configurations.md` - Security config management
+**Section index:** → `sections/issues.md` (Projects subsection)
 
 ---
 
-### Deployments & Environments
+### Branch Protection (Legacy)
 
-- **Deployments** `github-docs:rest/deployments/deployments.md` - Deployment operations
-- **Deployment Statuses** `github-docs:rest/deployments/statuses.md` - Status updates
-- **Environments** `github-docs:rest/deployments/environments.md` - Environment management
-- **Branch Policies** `github-docs:rest/deployments/branch-policies.md` - Deployment branch policies
-- **Protection Rules** `github-docs:rest/deployments/protection-rules.md` - Environment protection
+**Keywords:** `branch protection`, `required_status_checks`, `enforce_admins`, `required_pull_request_reviews`, `BranchProtectionRule`
 
----
+| Topic | Path | Keywords |
+|-------|------|----------|
+| About protection | `.source/docs/content/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches.md` | `protection`, `branch` |
+| REST endpoints | `.source/docs/content/rest/branches/branch-protection.md` | `PUT`, `GET`, `DELETE`, `protection` |
+| Status checks | `.source/docs/content/rest/branches/branch-protection.md` | `required_status_checks`, `contexts`, `strict` |
+| PR reviews | `.source/docs/content/rest/branches/branch-protection.md` | `required_pull_request_reviews`, `approving_review_count` |
+| GraphQL (read-only) | `graphql-schema:schema.docs.graphql` | `type BranchProtectionRule` |
 
-### Apps & OAuth
-
-#### GitHub Apps
-
-- **Apps** `github-docs:rest/apps/apps.md` - App management
-- **App Installations** `github-docs:rest/apps/installations.md` - Installation operations
-- **App Webhooks** `github-docs:rest/apps/webhooks.md` - App webhook config
-- **OAuth Apps** `github-docs:rest/apps/oauth-applications.md` - OAuth app management
-- **Marketplace** `github-docs:rest/apps/marketplace.md` - Marketplace integration
-
-#### OAuth Authorizations
-
-- **OAuth Authorizations** `github-docs:rest/oauth-authorizations/oauth-authorizations.md` - Token management
+**REST endpoints:**
+- `GET /repos/{owner}/{repo}/branches/{branch}/protection`
+- `PUT /repos/{owner}/{repo}/branches/{branch}/protection`
+- `DELETE /repos/{owner}/{repo}/branches/{branch}/protection`
 
 ---
 
-### Users & Activity
+### Repository Rulesets (Modern)
 
-#### Users
+**Keywords:** `rulesets`, `ruleset`, `enforcement`, `conditions`, `ref_name`, `target`
 
-- **Users** `github-docs:rest/users/users.md` - User information
-- **Emails** `github-docs:rest/users/emails.md` - Email management
-- **Followers** `github-docs:rest/users/followers.md` - Follower operations
-- **SSH Keys** `github-docs:rest/users/keys.md` - SSH key management
-- **GPG Keys** `github-docs:rest/users/gpg-keys.md` - GPG key management
-- **Blocking** `github-docs:rest/users/blocking.md` - User blocking
-- **Social Accounts** `github-docs:rest/users/social-accounts.md` - Social media links
+| Topic | Path | Keywords |
+|-------|------|----------|
+| About rulesets | `.source/docs/content/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets.md` | `rulesets`, `conditions` |
+| Available rules | `.source/docs/content/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets.md` | `rules`, `creation`, `deletion` |
+| REST endpoints | `.source/docs/content/rest/repos/rules.md` | `rulesets`, `POST`, `PUT`, `DELETE` |
+| GraphQL query | `graphql-schema:schema.docs.graphql` | `type RepositoryRuleset`, `rulesets` |
 
-#### Activity
-
-- **Events** `github-docs:rest/activity/events.md` - Event streams
-- **Feeds** `github-docs:rest/activity/feeds.md` - Atom feeds
-- **Notifications** `github-docs:rest/activity/notifications.md` - Notification management
-- **Starring** `github-docs:rest/activity/starring.md` - Star operations
-- **Watching** `github-docs:rest/activity/watching.md` - Watch operations
-
----
-
-### Enterprise (Reference)
-
-- **Enterprise Admin** `github-docs:rest/enterprise-admin/index.md` - Enterprise API overview
-- **Audit Log** `github-docs:rest/enterprise-admin/audit-log.md` - Audit log access
-- **SCIM** `github-docs:rest/enterprise-admin/scim.md` - SCIM provisioning
-- **Licensing** `github-docs:rest/enterprise-admin/licensing.md` - License management
-- **Enterprise Orgs** `github-docs:rest/enterprise-admin/orgs.md` - Org management
-- **Enterprise Users** `github-docs:rest/enterprise-admin/users.md` - User management
-- **Enterprise Rules** `github-docs:rest/enterprise-admin/rules.md` - Enterprise rulesets
-- **Custom Properties** `github-docs:rest/enterprise-admin/custom-properties.md` - Enterprise properties
-- **Enterprise Teams** `github-docs:rest/enterprise-teams/enterprise-teams.md` - Enterprise team management
+**REST endpoints:**
+- `GET /repos/{owner}/{repo}/rulesets`
+- `POST /repos/{owner}/{repo}/rulesets`
+- `GET /repos/{owner}/{repo}/rulesets/{id}`
+- `PUT /repos/{owner}/{repo}/rulesets/{id}`
+- `DELETE /repos/{owner}/{repo}/rulesets/{id}`
+- `GET /repos/{owner}/{repo}/rules/branches/{branch}` - check what applies
 
 ---
 
-### Other APIs
+### Actions (Workflows, Runs, Jobs)
 
-#### Search
+**Keywords:** `workflows`, `runs`, `jobs`, `actions`, `workflow_dispatch`, `dispatches`, `cancel`, `rerun`
 
-- **Search** `github-docs:rest/search/search.md` - Search API
+| Topic | Path | Keywords |
+|-------|------|----------|
+| Understanding Actions | `.source/docs/content/actions/learn-github-actions/understanding-github-actions.md` | `actions`, `workflows` |
+| Workflow syntax | `.source/docs/content/actions/using-workflows/workflow-syntax-for-github-actions.md` | `workflow`, `jobs`, `steps` |
+| REST workflows | `.source/docs/content/rest/actions/workflows.md` | `workflows`, `GET`, `workflow_id` |
+| REST runs | `.source/docs/content/rest/actions/workflow-runs.md` | `runs`, `run_id`, `cancel`, `rerun` |
+| REST jobs | `.source/docs/content/rest/actions/workflow-jobs.md` | `jobs`, `job_id` |
+| Trigger workflow | `.source/docs/content/rest/actions/workflows.md` | `dispatches`, `POST`, `workflow_dispatch` |
 
-#### Webhooks
+**REST endpoints:**
+- `GET /repos/{owner}/{repo}/actions/workflows`
+- `GET /repos/{owner}/{repo}/actions/runs`
+- `POST /repos/{owner}/{repo}/actions/workflows/{id}/dispatches`
+- `POST /repos/{owner}/{repo}/actions/runs/{id}/cancel`
+- `POST /repos/{owner}/{repo}/actions/runs/{id}/rerun`
 
-- **Webhooks** `github-docs:rest/webhooks/webhooks.md` - Webhook reference
-
-#### Gists
-
-- **Gists** `github-docs:rest/gists/gists.md` - Gist operations
-- **Gist Comments** `github-docs:rest/gists/comments.md` - Gist comments
-
-#### Packages
-
-- **Packages** `github-docs:rest/packages/packages.md` - Package management
-
-#### Pages
-
-- **Pages** `github-docs:rest/pages/pages.md` - GitHub Pages
-
-#### Codespaces
-
-- **Codespaces** `github-docs:rest/codespaces/codespaces.md` - Codespace management
-- **Codespace Secrets** `github-docs:rest/codespaces/secrets.md` - User secrets
-- **Codespace Org Secrets** `github-docs:rest/codespaces/organization-secrets.md` - Org secrets
-
-#### Rate Limit
-
-- **Rate Limit** `github-docs:rest/rate-limit/rate-limit.md` - Check rate limit status
-
-#### Meta
-
-- **Meta** `github-docs:rest/meta/meta.md` - GitHub API metadata
+**CLI alternative:** `gh run`, `gh workflow`
 
 ---
 
-## gh CLI
+### Secrets
 
-### Getting Started
+**Keywords:** `secrets`, `encrypted_value`, `key_id`, `public-key`, `environments`
 
-- **About GitHub CLI** `github-docs:github-cli/github-cli/about-github-cli.md` - Introduction and capabilities
-- **Quickstart** `github-docs:github-cli/github-cli/quickstart.md` - Installation and first commands
-- **CLI Reference** `github-docs:github-cli/github-cli/github-cli-reference.md` - Command reference
+| Topic | Path | Keywords |
+|-------|------|----------|
+| Using secrets | `.source/docs/content/actions/security-guides/using-secrets-in-github-actions.md` | `secrets`, `encrypted` |
+| REST repo secrets | `.source/docs/content/rest/actions/secrets.md` | `secrets`, `PUT`, `DELETE`, `key_id` |
+| REST org secrets | `.source/docs/content/rest/actions/secrets.md` | `orgs`, `secrets`, `visibility` |
+| Public key | `.source/docs/content/rest/actions/secrets.md` | `public-key`, `encrypt` |
 
-### Advanced Usage
+**REST endpoints:**
+- `GET /repos/{owner}/{repo}/actions/secrets`
+- `GET /repos/{owner}/{repo}/actions/secrets/public-key`
+- `PUT /repos/{owner}/{repo}/actions/secrets/{name}`
+- `DELETE /repos/{owner}/{repo}/actions/secrets/{name}`
 
-- **Using Multiple Accounts** `github-docs:github-cli/github-cli/using-multiple-accounts.md` - Multi-account configuration
-- **Using Extensions** `github-docs:github-cli/github-cli/using-github-cli-extensions.md` - Installing and using extensions
-- **Creating Extensions** `github-docs:github-cli/github-cli/creating-github-cli-extensions.md` - Building custom extensions
+**Encryption required.** CLI alternative: `gh secret` (handles encryption automatically)
 
 ---
 
-## Quick Reference
+### Variables
 
-### Common Patterns
+**Keywords:** `variables`, `actions`, `environments`, `visibility`
 
-| Task | GraphQL | REST | gh CLI |
-|------|---------|------|--------|
-| List issues | `github-docs:graphql/reference/queries.md` | `github-docs:rest/issues/issues.md` | `gh issue list` |
-| Create PR | `github-docs:graphql/reference/mutations.md` | `github-docs:rest/pulls/pulls.md` | `gh pr create` |
-| Project items | `github-docs:graphql/guides/introduction-to-graphql.md` | `github-docs:rest/projects/projects.md` | `gh project` |
-| Branch protection | N/A | `github-docs:rest/branches/branch-protection.md` | `gh api` |
-| Org members | `github-docs:graphql/reference/objects.md` | `github-docs:rest/orgs/members.md` | `gh api` |
+| Topic | Path | Keywords |
+|-------|------|----------|
+| Using variables | `.source/docs/content/actions/learn-github-actions/variables.md` | `variables`, `env` |
+| REST repo vars | `.source/docs/content/rest/actions/variables.md` | `variables`, `POST`, `PATCH`, `DELETE` |
+| REST org vars | `.source/docs/content/rest/actions/variables.md` | `orgs`, `variables`, `visibility` |
 
-### Authentication Quick Links
+**REST endpoints:**
+- `GET /repos/{owner}/{repo}/actions/variables`
+- `POST /repos/{owner}/{repo}/actions/variables`
+- `PATCH /repos/{owner}/{repo}/actions/variables/{name}`
+- `DELETE /repos/{owner}/{repo}/actions/variables/{name}`
 
-- **REST Auth** `github-docs:rest/authentication/authenticating-to-the-rest-api.md`
-- **GraphQL Rate Limits** `github-docs:graphql/overview/rate-limits-and-query-limits-for-the-graphql-api.md`
-- **App Permissions** `github-docs:rest/authentication/permissions-required-for-github-apps.md`
+**No encryption needed** (unlike secrets).
+
+---
+
+### Releases
+
+**Keywords:** `releases`, `release`, `tag_name`, `target_commitish`, `assets`, `generate-notes`
+
+| Topic | Path | Keywords |
+|-------|------|----------|
+| About releases | `.source/docs/content/repositories/releasing-projects-on-github/about-releases.md` | `releases`, `tag` |
+| Managing releases | `.source/docs/content/repositories/releasing-projects-on-github/managing-releases-in-a-repository.md` | `create`, `edit`, `delete` |
+| REST endpoints | `.source/docs/content/rest/releases/releases.md` | `releases`, `POST`, `PATCH`, `DELETE` |
+| REST assets | `.source/docs/content/rest/releases/assets.md` | `assets`, `uploads.github.com` |
+| GraphQL query | `graphql-schema:schema.docs.graphql` | `type Release`, `releases`, `latestRelease` |
+
+**REST endpoints:**
+- `GET /repos/{owner}/{repo}/releases`
+- `GET /repos/{owner}/{repo}/releases/latest`
+- `POST /repos/{owner}/{repo}/releases`
+- `PATCH /repos/{owner}/{repo}/releases/{id}`
+- `DELETE /repos/{owner}/{repo}/releases/{id}`
+- `POST /repos/{owner}/{repo}/releases/generate-notes`
+
+**CLI alternative:** `gh release`
+
+---
+
+### Identity & Organizations
+
+**Keywords:** `viewer`, `user`, `organization`, `teams`, `members`
+
+| Topic | Path | Keywords |
+|-------|------|----------|
+| About orgs | `.source/docs/content/organizations/collaborating-with-groups-in-organizations/about-organizations.md` | `organization`, `teams` |
+| REST users | `.source/docs/content/rest/users/users.md` | `users`, `GET` |
+| REST orgs | `.source/docs/content/rest/orgs/orgs.md` | `orgs`, `GET` |
+| GraphQL viewer | `graphql-schema:schema.docs.graphql` | `Query`, `viewer`, `User` |
+| GraphQL org | `graphql-schema:schema.docs.graphql` | `type Organization`, `teams`, `projectsV2` |
+
+**Section index:** → `sections/organizations.md`
+
+---
+
+### GitHub CLI
+
+**Keywords:** `gh`, `cli`, `api`, `issue`, `pr`, `run`, `workflow`, `secret`, `release`
+
+| Topic | Path | Keywords |
+|-------|------|----------|
+| CLI manual | `.source/docs/content/github-cli/github-cli/about-github-cli.md` | `gh`, `cli` |
+| gh api | `.source/docs/content/github-cli/github-cli/using-github-cli-in-workflows.md` | `gh api`, `REST`, `GraphQL` |
+
+**Common commands:**
+- `gh api /repos/{owner}/{repo}/...` - REST API calls
+- `gh api graphql -f query='...'` - GraphQL queries
+- `gh issue`, `gh pr`, `gh run`, `gh workflow`, `gh secret`, `gh release`
+
+**Section index:** → `sections/github-cli.md`
+
+---
+
+## Section Indices
+
+Detailed indices for each domain:
+
+| Section | File |
+|---------|------|
+| REST API | `sections/rest.md` |
+| GraphQL | `sections/graphql.md` |
+| Issues | `sections/issues.md` |
+| Pull Requests | `sections/pull-requests.md` |
+| Repositories | `sections/repositories.md` |
+| Actions | `sections/actions.md` |
+| Organizations | `sections/organizations.md` |
+| GitHub CLI | `sections/github-cli.md` |
+| Authentication | `sections/authentication.md` |
+
+---
+
+## Path Reference
+
+| Source ID | Local Path |
+|-----------|------------|
+| `docs` | `.source/docs/content/` |
+| `graphql-schema` | `data/uploads/graphql-schema/` |

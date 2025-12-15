@@ -1,0 +1,389 @@
+# GitHub Actions jq Filters
+# Transformation and formatting filters for workflows, runs, and jobs
+
+# =============================================================================
+# FORMAT FILTERS
+# =============================================================================
+# Transform JSON to human-readable output
+
+filters:
+  # Format workflows as tabular list
+  format_workflows_list:
+    description: Format workflows array as table
+    filter: |
+      ["ID", "NAME", "PATH", "STATE"] as $headers |
+      [$headers],
+      (.[] | [.id, .name, .path, .state]) |
+      @tsv
+
+  # Format single workflow details
+  format_workflow_detail:
+    description: Format single workflow with all details
+    filter: |
+      "Workflow ID: \(.id)",
+      "Name: \(.name)",
+      "Path: \(.path)",
+      "State: \(.state)",
+      "Created: \(.created_at // .createdAt)",
+      "Updated: \(.updated_at // .updatedAt)",
+      "Badge URL: \(.badge_url)",
+      "HTML URL: \(.html_url)",
+      "API URL: \(.url)"
+
+  # Format runs as tabular list
+  format_runs_list:
+    description: Format runs array as table
+    filter: |
+      ["RUN_ID", "NAME", "BRANCH", "EVENT", "STATUS", "CONCLUSION", "CREATED"] as $headers |
+      [$headers],
+      (.[] | [
+        (.databaseId // .id),
+        .name,
+        (.headBranch // .head_branch),
+        .event,
+        .status,
+        (.conclusion // "-"),
+        (.createdAt // .created_at)
+      ]) |
+      @tsv
+
+  # Format single run details
+  format_run_detail:
+    description: Format single run with all details
+    filter: |
+      "Run ID: \(.id)",
+      "Run Number: \(.run_number)",
+      "Name: \(.name)",
+      "Branch: \(.head_branch)",
+      "SHA: \(.head_sha)",
+      "Event: \(.event)",
+      "Status: \(.status)",
+      "Conclusion: \(.conclusion // "N/A")",
+      "Workflow ID: \(.workflow_id)",
+      "Workflow Name: \(.workflow.name // "N/A")",
+      "Actor: \(.actor.login)",
+      "Triggering Actor: \(.triggering_actor.login // .actor.login)",
+      "Created: \(.created_at)",
+      "Updated: \(.updated_at)",
+      "Run Started: \(.run_started_at // "N/A")",
+      "HTML URL: \(.html_url)",
+      "Jobs URL: \(.jobs_url)",
+      "Logs URL: \(.logs_url)"
+
+  # Format jobs as tabular list
+  format_jobs_list:
+    description: Format jobs array as table
+    filter: |
+      ["JOB_ID", "NAME", "STATUS", "CONCLUSION", "STARTED", "COMPLETED", "DURATION"] as $headers |
+      [$headers],
+      (.[] | [
+        .id,
+        .name,
+        .status,
+        (.conclusion // "-"),
+        (.started_at // "-"),
+        (.completed_at // "-"),
+        (if .started_at and .completed_at then
+          (((.completed_at | fromdateiso8601) - (.started_at | fromdateiso8601)) | tostring + "s")
+        else "-" end)
+      ]) |
+      @tsv
+
+  # Format single job details
+  format_job_detail:
+    description: Format single job with all details
+    filter: |
+      "Job ID: \(.id)",
+      "Run ID: \(.run_id)",
+      "Name: \(.name)",
+      "Status: \(.status)",
+      "Conclusion: \(.conclusion // "N/A")",
+      "Started: \(.started_at)",
+      "Completed: \(.completed_at // "N/A")",
+      "Steps: \(.steps | length)",
+      "Runner Name: \(.runner_name // "N/A")",
+      "Runner Group: \(.runner_group_name // "N/A")",
+      "HTML URL: \(.html_url)",
+      "Step Summary:",
+      (.steps[] | "  - \(.name): \(.status) (\(.conclusion // "pending"))")
+
+  # Format run summary with jobs
+  format_run_summary:
+    description: Format run with job summary
+    filter: |
+      "Run #\(.run_number): \(.name)",
+      "Status: \(.status) | Conclusion: \(.conclusion // "pending")",
+      "Branch: \(.head_branch) | Event: \(.event)",
+      "Jobs Summary:",
+      (.jobs.jobs[] | "  - \(.name): \(.status) (\(.conclusion // "pending"))")
+
+# =============================================================================
+# EXTRACT FILTERS
+# =============================================================================
+# Pull specific data from structures
+
+  # Extract workflow IDs
+  extract_workflow_ids:
+    description: Extract array of workflow IDs
+    filter: |
+      map(.id)
+
+  # Extract workflow names
+  extract_workflow_names:
+    description: Extract array of workflow names
+    filter: |
+      map(.name)
+
+  # Extract run IDs
+  extract_run_ids:
+    description: Extract array of run IDs
+    filter: |
+      map(.id // .databaseId)
+
+  # Extract run numbers
+  extract_run_numbers:
+    description: Extract array of run numbers
+    filter: |
+      map(.run_number)
+
+  # Extract job IDs
+  extract_job_ids:
+    description: Extract array of job IDs
+    filter: |
+      map(.id)
+
+  # Extract job names
+  extract_job_names:
+    description: Extract array of job names
+    filter: |
+      map(.name)
+
+  # Extract failed jobs
+  extract_failed_jobs:
+    description: Get jobs that failed
+    filter: |
+      map(select(.conclusion == "failure"))
+
+  # Extract successful jobs
+  extract_successful_jobs:
+    description: Get jobs that succeeded
+    filter: |
+      map(select(.conclusion == "success"))
+
+  # Extract pending deployments
+  extract_pending_environments:
+    description: Get list of environments awaiting approval
+    filter: |
+      map(.environment.name) | unique
+
+# =============================================================================
+# FILTER OPERATIONS
+# =============================================================================
+# Subset operations (can be used in pipes)
+
+  # Filter by status
+  filter_by_status:
+    description: Filter runs/jobs by status (requires --arg status VALUE)
+    filter: |
+      map(select(.status == $status))
+
+  # Filter by conclusion
+  filter_by_conclusion:
+    description: Filter runs/jobs by conclusion (requires --arg conclusion VALUE)
+    filter: |
+      map(select(.conclusion == $conclusion))
+
+  # Filter by branch
+  filter_by_branch:
+    description: Filter runs by branch (requires --arg branch VALUE)
+    filter: |
+      map(select(.headBranch == $branch or .head_branch == $branch))
+
+  # Filter by event
+  filter_by_event:
+    description: Filter runs by event (requires --arg event VALUE)
+    filter: |
+      map(select(.event == $event))
+
+  # Filter by actor
+  filter_by_actor:
+    description: Filter runs by actor (requires --arg actor VALUE)
+    filter: |
+      map(select(.actor.login == $actor or .triggering_actor.login == $actor))
+
+  # Filter by workflow state
+  filter_by_state:
+    description: Filter workflows by state (requires --arg state VALUE)
+    filter: |
+      map(select(.state == $state))
+
+  # Filter completed runs
+  filter_completed:
+    description: Keep only completed runs
+    filter: |
+      map(select(.status == "completed"))
+
+  # Filter in-progress runs
+  filter_in_progress:
+    description: Keep only in-progress runs
+    filter: |
+      map(select(.status == "in_progress"))
+
+  # Filter queued runs
+  filter_queued:
+    description: Keep only queued runs
+    filter: |
+      map(select(.status == "queued"))
+
+  # Filter failed runs
+  filter_failed:
+    description: Keep only failed runs
+    filter: |
+      map(select(.conclusion == "failure"))
+
+  # Filter successful runs
+  filter_successful:
+    description: Keep only successful runs
+    filter: |
+      map(select(.conclusion == "success"))
+
+  # Filter cancelled runs
+  filter_cancelled:
+    description: Keep only cancelled runs
+    filter: |
+      map(select(.conclusion == "cancelled"))
+
+  # Filter active workflows
+  filter_active_workflows:
+    description: Keep only active workflows
+    filter: |
+      map(select(.state == "active"))
+
+  # Filter disabled workflows
+  filter_disabled_workflows:
+    description: Keep only disabled workflows
+    filter: |
+      map(select(.state == "disabled_manually" or .state == "disabled_inactivity"))
+
+# =============================================================================
+# SUMMARY FILTERS
+# =============================================================================
+# Aggregate and summarize data
+
+  # Count runs by status
+  count_by_status:
+    description: Count runs grouped by status
+    filter: |
+      group_by(.status) |
+      map({status: .[0].status, count: length})
+
+  # Count runs by conclusion
+  count_by_conclusion:
+    description: Count runs grouped by conclusion
+    filter: |
+      map(select(.conclusion != null)) |
+      group_by(.conclusion) |
+      map({conclusion: .[0].conclusion, count: length})
+
+  # Count runs by event
+  count_by_event:
+    description: Count runs grouped by event
+    filter: |
+      group_by(.event) |
+      map({event: .[0].event, count: length})
+
+  # Count runs by branch
+  count_by_branch:
+    description: Count runs grouped by branch
+    filter: |
+      group_by(.headBranch // .head_branch) |
+      map({branch: .[0].headBranch // .[0].head_branch, count: length})
+
+  # Workflow success rate
+  workflow_success_rate:
+    description: Calculate success rate for workflow runs
+    filter: |
+      {
+        total: length,
+        completed: (map(select(.status == "completed")) | length),
+        successful: (map(select(.conclusion == "success")) | length),
+        failed: (map(select(.conclusion == "failure")) | length),
+        success_rate: (
+          (map(select(.conclusion == "success")) | length) /
+          (map(select(.status == "completed")) | length) * 100
+        )
+      }
+
+  # Job duration summary
+  job_duration_summary:
+    description: Calculate min/max/avg job duration
+    filter: |
+      map(
+        select(.started_at and .completed_at) |
+        ((.completed_at | fromdateiso8601) - (.started_at | fromdateiso8601))
+      ) |
+      {
+        count: length,
+        min: (min | floor),
+        max: (max | floor),
+        avg: ((add / length) | floor),
+        total: (add | floor)
+      }
+
+  # Recent activity summary
+  recent_activity:
+    description: Summarize recent run activity
+    filter: |
+      {
+        total_runs: length,
+        in_progress: (map(select(.status == "in_progress")) | length),
+        queued: (map(select(.status == "queued")) | length),
+        recent_completed: (
+          map(select(.status == "completed")) |
+          sort_by(.updated_at // .updatedAt) |
+          reverse |
+          .[0:5] |
+          map({
+            id: .id // .databaseId,
+            name: .name,
+            conclusion: .conclusion,
+            updated: (.updated_at // .updatedAt)
+          })
+        )
+      }
+
+# =============================================================================
+# TRANSFORMATION FILTERS
+# =============================================================================
+# Convert between formats
+
+  # Convert gh CLI format to REST API format
+  normalize_run_from_cli:
+    description: Normalize gh CLI run format to REST format
+    filter: |
+      {
+        id: .databaseId,
+        name: .name,
+        head_branch: .headBranch,
+        head_sha: .headSha,
+        status: .status,
+        conclusion: .conclusion,
+        workflow_id: .workflowId,
+        event: .event,
+        created_at: .createdAt,
+        updated_at: .updatedAt,
+        run_number: .runNumber
+      }
+
+  # Convert gh CLI workflow format to REST format
+  normalize_workflow_from_cli:
+    description: Normalize gh CLI workflow format to REST format
+    filter: |
+      {
+        id: .id,
+        name: .name,
+        path: .path,
+        state: .state,
+        created_at: .createdAt,
+        updated_at: .updatedAt
+      }

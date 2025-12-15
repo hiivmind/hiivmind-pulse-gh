@@ -1,0 +1,532 @@
+# GitHub Protection Domain GraphQL Queries
+# Queries and mutations for branch protection rules and repository rulesets
+#
+# Usage:
+#   query=$(yq -r '.queries.repo_branch_protection_rules' gh-protection-graphql-queries.yaml)
+#   gh api graphql -f query="$query" -f owner="..." -f repo="..."
+
+# =============================================================================
+# DISCOVERY QUERIES
+# =============================================================================
+
+queries:
+  # ---------------------------------------------------------------------------
+  # List all branch protection rules for a repository
+  # ---------------------------------------------------------------------------
+  repo_branch_protection_rules: |
+    query($owner: String!, $repo: String!) {
+      repository(owner: $owner, name: $repo) {
+        id
+        name
+        branchProtectionRules(first: 100) {
+          totalCount
+          nodes {
+            id
+            databaseId
+            pattern
+            allowsDeletions
+            allowsForcePushes
+            blocksCreations
+            dismissesStaleReviews
+            isAdminEnforced
+            lockAllowsFetchAndMerge
+            lockBranch
+            requireLastPushApproval
+            requiredApprovingReviewCount
+            requiredDeploymentEnvironments
+            requiredStatusCheckContexts
+            requiresApprovingReviews
+            requiresCodeOwnerReviews
+            requiresCommitSignatures
+            requiresConversationResolution
+            requiresDeployments
+            requiresLinearHistory
+            requiresStatusChecks
+            requiresStrictStatusChecks
+            restrictsPushes
+            restrictsReviewDismissals
+            matchingRefs(first: 10) {
+              nodes {
+                name
+              }
+            }
+          }
+        }
+      }
+    }
+
+  # ---------------------------------------------------------------------------
+  # Get branch protection rule by pattern
+  # ---------------------------------------------------------------------------
+  branch_protection_by_pattern: |
+    query($owner: String!, $repo: String!, $pattern: String!) {
+      repository(owner: $owner, name: $repo) {
+        branchProtectionRules(first: 100) {
+          nodes {
+            id
+            databaseId
+            pattern
+            allowsDeletions
+            allowsForcePushes
+            blocksCreations
+            dismissesStaleReviews
+            isAdminEnforced
+            lockAllowsFetchAndMerge
+            lockBranch
+            requireLastPushApproval
+            requiredApprovingReviewCount
+            requiredDeploymentEnvironments
+            requiredStatusCheckContexts
+            requiresApprovingReviews
+            requiresCodeOwnerReviews
+            requiresCommitSignatures
+            requiresConversationResolution
+            requiresDeployments
+            requiresLinearHistory
+            requiresStatusChecks
+            requiresStrictStatusChecks
+            restrictsPushes
+            restrictsReviewDismissals
+            bypassForcePushAllowances(first: 10) {
+              nodes {
+                actor {
+                  ... on User { login }
+                  ... on Team { slug }
+                  ... on App { slug }
+                }
+              }
+            }
+            bypassPullRequestAllowances(first: 10) {
+              nodes {
+                actor {
+                  ... on User { login }
+                  ... on Team { slug }
+                  ... on App { slug }
+                }
+              }
+            }
+            pushAllowances(first: 10) {
+              nodes {
+                actor {
+                  ... on User { login }
+                  ... on Team { slug }
+                  ... on App { slug }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+  # ---------------------------------------------------------------------------
+  # Get branch protection rule by node ID
+  # ---------------------------------------------------------------------------
+  branch_protection_by_id: |
+    query($id: ID!) {
+      node(id: $id) {
+        ... on BranchProtectionRule {
+          id
+          databaseId
+          pattern
+          allowsDeletions
+          allowsForcePushes
+          blocksCreations
+          dismissesStaleReviews
+          isAdminEnforced
+          lockAllowsFetchAndMerge
+          lockBranch
+          requireLastPushApproval
+          requiredApprovingReviewCount
+          requiredDeploymentEnvironments
+          requiredStatusCheckContexts
+          requiresApprovingReviews
+          requiresCodeOwnerReviews
+          requiresCommitSignatures
+          requiresConversationResolution
+          requiresDeployments
+          requiresLinearHistory
+          requiresStatusChecks
+          requiresStrictStatusChecks
+          restrictsPushes
+          restrictsReviewDismissals
+          repository {
+            owner {
+              login
+            }
+            name
+          }
+        }
+      }
+    }
+
+  # ---------------------------------------------------------------------------
+  # List repository rulesets via GraphQL
+  # ---------------------------------------------------------------------------
+  repo_rulesets: |
+    query($owner: String!, $repo: String!) {
+      repository(owner: $owner, name: $repo) {
+        id
+        name
+        rulesets(first: 100, includeParents: true) {
+          totalCount
+          nodes {
+            id
+            databaseId
+            name
+            target
+            enforcement
+            createdAt
+            updatedAt
+            conditions {
+              refName {
+                include
+                exclude
+              }
+            }
+            rules(first: 50) {
+              totalCount
+              nodes {
+                id
+                type
+                parameters {
+                  ... on PullRequestParameters {
+                    dismissStaleReviewsOnPush
+                    requireCodeOwnerReview
+                    requireLastPushApproval
+                    requiredApprovingReviewCount
+                    requiredReviewThreadResolution
+                  }
+                  ... on RequiredStatusChecksParameters {
+                    requiredStatusChecks {
+                      context
+                      integrationId
+                    }
+                    strictRequiredStatusChecksPolicy
+                  }
+                  ... on BranchNamePatternParameters {
+                    name
+                    negate
+                    operator
+                    pattern
+                  }
+                  ... on TagNamePatternParameters {
+                    name
+                    negate
+                    operator
+                    pattern
+                  }
+                  ... on CommitMessagePatternParameters {
+                    name
+                    negate
+                    operator
+                    pattern
+                  }
+                  ... on CommitAuthorEmailPatternParameters {
+                    name
+                    negate
+                    operator
+                    pattern
+                  }
+                  ... on CommitterEmailPatternParameters {
+                    name
+                    negate
+                    operator
+                    pattern
+                  }
+                }
+              }
+            }
+            bypassActors(first: 20) {
+              nodes {
+                id
+                bypassMode
+                actor {
+                  ... on Team { slug name }
+                  ... on App { slug name }
+                }
+                repositoryRoleName
+                organizationAdmin
+                deployKey
+              }
+            }
+            source {
+              __typename
+              ... on Repository { name owner { login } }
+              ... on Organization { login }
+              ... on Enterprise { slug }
+            }
+          }
+        }
+      }
+    }
+
+  # ---------------------------------------------------------------------------
+  # List organization rulesets via GraphQL
+  # ---------------------------------------------------------------------------
+  org_rulesets: |
+    query($org: String!) {
+      organization(login: $org) {
+        id
+        login
+        rulesets(first: 100) {
+          totalCount
+          nodes {
+            id
+            databaseId
+            name
+            target
+            enforcement
+            createdAt
+            updatedAt
+            conditions {
+              refName {
+                include
+                exclude
+              }
+              repositoryName {
+                include
+                exclude
+                protected
+              }
+            }
+            rules(first: 50) {
+              totalCount
+              nodes {
+                id
+                type
+              }
+            }
+            bypassActors(first: 20) {
+              nodes {
+                id
+                bypassMode
+                actor {
+                  ... on Team { slug name }
+                  ... on App { slug name }
+                }
+                organizationAdmin
+              }
+            }
+          }
+        }
+      }
+    }
+
+  # ---------------------------------------------------------------------------
+  # Get ruleset by node ID with full details
+  # ---------------------------------------------------------------------------
+  ruleset_by_id: |
+    query($id: ID!) {
+      node(id: $id) {
+        ... on RepositoryRuleset {
+          id
+          databaseId
+          name
+          target
+          enforcement
+          createdAt
+          updatedAt
+          conditions {
+            refName {
+              include
+              exclude
+            }
+          }
+          rules(first: 50) {
+            nodes {
+              id
+              type
+              parameters {
+                ... on PullRequestParameters {
+                  dismissStaleReviewsOnPush
+                  requireCodeOwnerReview
+                  requireLastPushApproval
+                  requiredApprovingReviewCount
+                  requiredReviewThreadResolution
+                }
+                ... on RequiredStatusChecksParameters {
+                  requiredStatusChecks {
+                    context
+                    integrationId
+                  }
+                  strictRequiredStatusChecksPolicy
+                }
+              }
+            }
+          }
+          bypassActors(first: 20) {
+            nodes {
+              id
+              bypassMode
+              actor {
+                ... on Team { slug name }
+                ... on App { slug name }
+              }
+            }
+          }
+          source {
+            __typename
+            ... on Repository { name owner { login } }
+            ... on Organization { login }
+          }
+        }
+      }
+    }
+
+# =============================================================================
+# MUTATIONS
+# =============================================================================
+
+mutations:
+  # ---------------------------------------------------------------------------
+  # Create branch protection rule
+  # ---------------------------------------------------------------------------
+  # Input fields (all optional except repositoryId and pattern):
+  #   repositoryId: ID!
+  #   pattern: String!
+  #   allowsDeletions: Boolean
+  #   allowsForcePushes: Boolean
+  #   blocksCreations: Boolean
+  #   bypassForcePushActorIds: [ID!]
+  #   bypassPullRequestActorIds: [ID!]
+  #   dismissesStaleReviews: Boolean
+  #   isAdminEnforced: Boolean
+  #   lockAllowsFetchAndMerge: Boolean
+  #   lockBranch: Boolean
+  #   pushActorIds: [ID!]
+  #   requireLastPushApproval: Boolean
+  #   requiredApprovingReviewCount: Int
+  #   requiredDeploymentEnvironments: [String!]
+  #   requiredStatusCheckContexts: [String!]
+  #   requiredStatusChecks: [RequiredStatusCheckInput!]
+  #   requiresApprovingReviews: Boolean
+  #   requiresCodeOwnerReviews: Boolean
+  #   requiresCommitSignatures: Boolean
+  #   requiresConversationResolution: Boolean
+  #   requiresDeployments: Boolean
+  #   requiresLinearHistory: Boolean
+  #   requiresStatusChecks: Boolean
+  #   requiresStrictStatusChecks: Boolean
+  #   restrictsPushes: Boolean
+  #   restrictsReviewDismissals: Boolean
+  #   reviewDismissalActorIds: [ID!]
+  # ---------------------------------------------------------------------------
+  create_branch_protection_rule: |
+    mutation CreateBranchProtectionRule($input: CreateBranchProtectionRuleInput!) {
+      createBranchProtectionRule(input: $input) {
+        branchProtectionRule {
+          id
+          databaseId
+          pattern
+          allowsDeletions
+          allowsForcePushes
+          isAdminEnforced
+          requiresApprovingReviews
+          requiredApprovingReviewCount
+          requiresStatusChecks
+          requiresStrictStatusChecks
+          requiresCodeOwnerReviews
+          requiresCommitSignatures
+          requiresConversationResolution
+          requiresLinearHistory
+          restrictsPushes
+        }
+        clientMutationId
+      }
+    }
+
+  # ---------------------------------------------------------------------------
+  # Update branch protection rule
+  # ---------------------------------------------------------------------------
+  update_branch_protection_rule: |
+    mutation UpdateBranchProtectionRule($input: UpdateBranchProtectionRuleInput!) {
+      updateBranchProtectionRule(input: $input) {
+        branchProtectionRule {
+          id
+          databaseId
+          pattern
+          allowsDeletions
+          allowsForcePushes
+          isAdminEnforced
+          requiresApprovingReviews
+          requiredApprovingReviewCount
+          requiresStatusChecks
+          requiresStrictStatusChecks
+          requiresCodeOwnerReviews
+          requiresCommitSignatures
+          requiresConversationResolution
+          requiresLinearHistory
+          restrictsPushes
+        }
+        clientMutationId
+      }
+    }
+
+  # ---------------------------------------------------------------------------
+  # Delete branch protection rule
+  # ---------------------------------------------------------------------------
+  delete_branch_protection_rule: |
+    mutation DeleteBranchProtectionRule($ruleId: ID!) {
+      deleteBranchProtectionRule(input: {branchProtectionRuleId: $ruleId}) {
+        clientMutationId
+      }
+    }
+
+  # ---------------------------------------------------------------------------
+  # Create repository ruleset
+  # ---------------------------------------------------------------------------
+  # NOTE: REST API is preferred for ruleset mutations due to simpler input format.
+  # This GraphQL mutation is provided for completeness.
+  #
+  # Input fields:
+  #   sourceId: ID! (repository, organization, or enterprise ID)
+  #   name: String!
+  #   target: RepositoryRulesetTarget (BRANCH, TAG, PUSH, REPOSITORY)
+  #   enforcement: RuleEnforcement! (ACTIVE, EVALUATE, DISABLED)
+  #   conditions: RepositoryRuleConditionsInput!
+  #   rules: [RepositoryRuleInput!]
+  #   bypassActors: [RepositoryRulesetBypassActorInput!]
+  # ---------------------------------------------------------------------------
+  create_repository_ruleset: |
+    mutation CreateRepositoryRuleset($input: CreateRepositoryRulesetInput!) {
+      createRepositoryRuleset(input: $input) {
+        ruleset {
+          id
+          databaseId
+          name
+          target
+          enforcement
+          createdAt
+        }
+        clientMutationId
+      }
+    }
+
+  # ---------------------------------------------------------------------------
+  # Update repository ruleset
+  # ---------------------------------------------------------------------------
+  update_repository_ruleset: |
+    mutation UpdateRepositoryRuleset($input: UpdateRepositoryRulesetInput!) {
+      updateRepositoryRuleset(input: $input) {
+        ruleset {
+          id
+          databaseId
+          name
+          target
+          enforcement
+          updatedAt
+        }
+        clientMutationId
+      }
+    }
+
+  # ---------------------------------------------------------------------------
+  # Delete repository ruleset
+  # ---------------------------------------------------------------------------
+  delete_repository_ruleset: |
+    mutation DeleteRepositoryRuleset($rulesetId: ID!) {
+      deleteRepositoryRuleset(input: {repositoryRulesetId: $rulesetId}) {
+        clientMutationId
+      }
+    }
