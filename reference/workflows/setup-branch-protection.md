@@ -39,6 +39,9 @@ gh api "/repos/$OWNER/$REPO/branches/$BRANCH/protection" \
 ### Full Protection with All Options
 
 ```bash
+# Corpus keywords: branch protection, required_status_checks, required_pull_request_reviews
+# Reference: hiivmind-corpus-github → "branch protection rules"
+
 gh api "/repos/$OWNER/$REPO/branches/$BRANCH/protection" \
   -X PUT \
   -H "Accept: application/vnd.github+json" \
@@ -90,6 +93,9 @@ Rulesets are more flexible - support patterns, multiple targets, and org-level r
 ### Create Basic Ruleset
 
 ```bash
+# Corpus keywords: rulesets, enforcement, conditions, ref_name, rules
+# Reference: hiivmind-corpus-github → "repository rulesets"
+
 gh api "/repos/$OWNER/$REPO/rulesets" \
   -X POST \
   -H "Accept: application/vnd.github+json" \
@@ -115,6 +121,9 @@ EOF
 ### Create Comprehensive Ruleset
 
 ```bash
+# Corpus keywords: rulesets, pull_request, required_status_checks, required_linear_history
+# Reference: hiivmind-corpus-github → "ruleset rule types"
+
 gh api "/repos/$OWNER/$REPO/rulesets" \
   -X POST \
   -H "Accept: application/vnd.github+json" \
