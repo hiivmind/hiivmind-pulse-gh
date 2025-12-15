@@ -41,7 +41,102 @@ REPO_FULL="$OWNER/$REPO"
 
 ---
 
-## Step 2: Determine API Type
+## Step 2: Load View Configuration (Phase 2)
+
+**Optional:** If the operation involves creating/updating project items, load view configuration to respect visible fields.
+
+### Check if Views are Cached
+
+```bash
+PROJECT_NUM=2
+VIEW_FILE=".hiivmind/github/views/project-$PROJECT_NUM.yaml"
+
+if [[ -f "$VIEW_FILE" ]]; then
+  echo "Views cached for project $PROJECT_NUM"
+else
+  echo "Views not cached - consider running refresh with views section"
+fi
+```
+
+### Load View Configuration
+
+```bash
+PROJECT_NUM=2
+VIEW_FILE=".hiivmind/github/views/project-$PROJECT_NUM.yaml"
+VIEW_NAME="Backlog"  # Or use default view (number 1)
+
+# Get visible fields for a view
+VISIBLE_FIELDS=$(yq ".views[] | select(.name == \"$VIEW_NAME\") | .visible_fields[]" "$VIEW_FILE")
+
+echo "Visible fields in $VIEW_NAME view:"
+echo "$VISIBLE_FIELDS"
+```
+
+### Check if Field is Visible
+
+```bash
+# Function to check if a field should be shown in a view
+is_field_visible() {
+  local project_num=$1
+  local view_name=$2
+  local field_name=$3
+  local view_file=".hiivmind/github/views/project-$project_num.yaml"
+
+  if [[ ! -f "$view_file" ]]; then
+    # No view config - assume all fields visible
+    return 0
+  fi
+
+  local visible=$(yq ".views[] | select(.name == \"$view_name\") | .visible_fields[] | select(. == \"$field_name\")" "$view_file")
+
+  if [[ -n "$visible" ]]; then
+    return 0  # Field is visible
+  else
+    return 1  # Field is hidden
+  fi
+}
+
+# Usage
+if is_field_visible 2 "Backlog" "Priority"; then
+  echo "Priority field is visible - safe to update"
+else
+  echo "Priority field is hidden in this view - skip or warn"
+fi
+```
+
+### Get View's Visible Fields for Validation
+
+When creating items or suggesting field updates, respect the view's visible fields:
+
+```bash
+PROJECT_NUM=2
+VIEW_NAME="Current Sprint"
+VIEW_FILE=".hiivmind/github/views/project-$PROJECT_NUM.yaml"
+
+# Get all visible fields for the view
+VISIBLE_FIELDS=$(yq ".views[] | select(.name == \"$VIEW_NAME\") | .visible_fields[]" "$VIEW_FILE")
+
+echo "When adding items to '$VIEW_NAME' view, these fields are visible:"
+echo "$VISIBLE_FIELDS"
+echo ""
+echo "Consider prompting user to set these fields."
+```
+
+### Get Default View for Project
+
+```bash
+PROJECT_NUM=2
+VIEW_FILE=".hiivmind/github/views/project-$PROJECT_NUM.yaml"
+
+# Default view is typically the first one (number: 1)
+DEFAULT_VIEW=$(yq '.views[] | select(.number == 1) | .name' "$VIEW_FILE")
+
+echo "Default view for project $PROJECT_NUM: $DEFAULT_VIEW"
+```
+
+---
+
+## Step 3: Determine API Type
 
 Use this routing table to determine GraphQL vs REST:
 
@@ -65,7 +160,7 @@ Use this routing table to determine GraphQL vs REST:
 
 ---
 
-## Step 3: Find Workflow Example
+## Step 4: Find Workflow Example
 
 Check for relevant workflow pattern:
 
@@ -87,7 +182,7 @@ ls "${CLAUDE_PLUGIN_ROOT}/reference/workflows/"
 
 ---
 
-## Step 4: Search Corpus for Syntax
+## Step 5: Search Corpus for Syntax
 
 Use keywords to find exact syntax in the corpus.
 
@@ -135,7 +230,7 @@ grep -n "^enum {EnumName} " "$SCHEMA" -A 20
 
 ---
 
-## Step 5: Execute Operation
+## Step 6: Execute Operation
 
 ### Domain: Issues
 
@@ -493,7 +588,7 @@ gh release download "$TAG" -R "$REPO_FULL" --pattern "*.tar.gz"
 
 ---
 
-## Step 6: Report Result
+## Step 7: Report Result
 
 After execution:
 

@@ -61,6 +61,153 @@ yq '.sections | to_entries | .[] | select(.value.stale == true) | .key' "$FRESHN
 
 ---
 
+## Refresh Project Views (Phase 2)
+
+Fetch and cache view configurations for a project.
+
+### Fetch Views for a Project
+
+```bash
+CONFIG=".hiivmind/github/config.yaml"
+OWNER=$(yq '.workspace.login' "$CONFIG")
+PROJECT_NUM=2
+
+# Create views directory if needed
+mkdir -p .hiivmind/github/views
+
+# Fetch project views
+VIEW_DATA=$(gh api graphql -f query='
+  query($owner: String!, $number: Int!) {
+    organization(login: $owner) {
+      projectV2(number: $number) {
+        id
+        title
+        views(first: 20) {
+          nodes {
+            id
+            number
+            name
+            layout
+            filter
+            fields(first: 50) {
+              nodes {
+                ... on ProjectV2Field {
+                  id
+                  name
+                }
+                ... on ProjectV2SingleSelectField {
+                  id
+                  name
+                }
+                ... on ProjectV2IterationField {
+                  id
+                  name
+                }
+              }
+            }
+            groupByFields(first: 10) {
+              nodes {
+                ... on ProjectV2Field {
+                  id
+                  name
+                }
+              }
+            }
+            sortByFields(first: 10) {
+              nodes {
+                direction
+                field {
+                  ... on ProjectV2Field {
+                    id
+                    name
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+' -f owner="$OWNER" -F number="$PROJECT_NUM")
+
+# Extract project info
+PROJECT_ID=$(echo "$VIEW_DATA" | jq -r '.data.organization.projectV2.id')
+PROJECT_TITLE=$(echo "$VIEW_DATA" | jq -r '.data.organization.projectV2.title')
+
+# Build views.yaml
+cat > ".hiivmind/github/views/project-$PROJECT_NUM.yaml" << EOF
+# hiivmind-pulse-gh - Project Views Configuration
+# Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+project:
+  number: $PROJECT_NUM
+  id: $PROJECT_ID
+  title: "$PROJECT_TITLE"
+
+views:
+EOF
+
+# Process each view
+echo "$VIEW_DATA" | jq -r '.data.organization.projectV2.views.nodes[] | @json' | while read -r view; do
+  VIEW_NUM=$(echo "$view" | jq -r '.number')
+  VIEW_ID=$(echo "$view" | jq -r '.id')
+  VIEW_NAME=$(echo "$view" | jq -r '.name')
+  VIEW_LAYOUT=$(echo "$view" | jq -r '.layout')
+  VIEW_FILTER=$(echo "$view" | jq -r '.filter // ""')
+
+  # Get visible fields
+  VISIBLE_FIELDS=$(echo "$view" | jq -r '.fields.nodes[].name' | sed 's/^/    - /')
+
+  # Get group by fields
+  GROUP_BY=$(echo "$view" | jq -r '.groupByFields.nodes[] | "    - field: \(.name)"')
+
+  # Get sort by fields
+  SORT_BY=$(echo "$view" | jq -r '.sortByFields.nodes[] | "    - field: \(.field.name)\n      direction: \(.direction)"')
+
+  cat >> ".hiivmind/github/views/project-$PROJECT_NUM.yaml" << VIEWEOF
+  - number: $VIEW_NUM
+    id: $VIEW_ID
+    name: "$VIEW_NAME"
+    layout: $VIEW_LAYOUT
+    filter: "$VIEW_FILTER"
+    visible_fields:
+$VISIBLE_FIELDS
+    group_by:
+$GROUP_BY
+    sort_by:
+$SORT_BY
+
+VIEWEOF
+done
+
+# Add metadata
+cat >> ".hiivmind/github/views/project-$PROJECT_NUM.yaml" << EOF
+cache:
+  synced_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+  schema_version: "1.0"
+EOF
+
+echo "Views cached to .hiivmind/github/views/project-$PROJECT_NUM.yaml"
+```
+
+### Update Freshness Tracking
+
+After refreshing views:
+
+```bash
+FRESHNESS=".hiivmind/github/freshness.yaml"
+PROJECTS_REFRESHED="$PROJECT_NUM"
+
+# Mark views section as fresh
+yq -i ".sections.views.last_checked = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
+yq -i ".sections.views.stale = false" "$FRESHNESS"
+yq -i ".sections.views.projects_covered = [$PROJECTS_REFRESHED]" "$FRESHNESS"
+yq -i ".cache.last_updated_at = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
+```
+
+---
+
 ## Refresh Projects
 
 ### List Current vs Cached Projects

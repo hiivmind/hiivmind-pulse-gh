@@ -146,6 +146,104 @@ Metadata about config freshness.
 
 ---
 
+## Schema: views/project-{N}.yaml (Phase 2)
+
+Project view configurations, stored per-project for faster access and independent freshness tracking.
+
+### project
+
+Identifies which project these views belong to.
+
+| Path | Type | Description |
+|------|------|-------------|
+| `.project.number` | number | Project number (visible in URL) |
+| `.project.id` | string | GraphQL node ID (`PVT_...`) |
+| `.project.title` | string | Project title |
+
+### views
+
+Array of view configurations for the project.
+
+| Path | Type | Description |
+|------|------|-------------|
+| `.views[]` | array | List of views in this project |
+| `.views[].number` | number | View number (1-based index) |
+| `.views[].id` | string | GraphQL node ID |
+| `.views[].name` | string | View name (e.g., "Backlog", "Current Sprint") |
+| `.views[].layout` | string | `BOARD_LAYOUT`, `TABLE_LAYOUT`, `ROADMAP_LAYOUT` |
+| `.views[].filter` | string | View filter expression (e.g., "status:open") |
+| `.views[].visible_fields[]` | array | List of field names visible in this view |
+| `.views[].hidden_fields[]` | array | List of field names hidden in this view |
+| `.views[].group_by[]` | array | Group by configuration |
+| `.views[].group_by[].field` | string | Field name to group by |
+| `.views[].group_by[].direction` | string | `ASC` or `DESC` (optional) |
+| `.views[].sort_by[]` | array | Sort by configuration |
+| `.views[].sort_by[].field` | string | Field name to sort by |
+| `.views[].sort_by[].direction` | string | `ASC` or `DESC` |
+
+**Example:**
+```yaml
+project:
+  number: 2
+  id: PVT_kwDOBxxxxxx
+  title: "Development Board"
+
+views:
+  - number: 1
+    id: PVTV_lADOBxxxxxx
+    name: "Backlog"
+    layout: BOARD_LAYOUT
+    filter: "status:open"
+    visible_fields:
+      - Title
+      - Status
+      - Priority
+      - Assignees
+    hidden_fields:
+      - Estimate
+      - Start date
+    group_by:
+      - field: Status
+        direction: ASC
+    sort_by:
+      - field: Priority
+        direction: ASC
+      - field: Title
+        direction: ASC
+
+  - number: 2
+    id: PVTV_lADOByyyyyy
+    name: "Current Sprint"
+    layout: TABLE_LAYOUT
+    filter: "status:\"In Progress\""
+    visible_fields:
+      - Title
+      - Status
+      - Priority
+      - Assignees
+      - Estimate
+    sort_by:
+      - field: Priority
+        direction: DESC
+
+cache:
+  synced_at: "2025-12-15T10:30:00Z"
+  schema_version: "1.0"
+```
+
+### Common View Lookups
+
+| Need | yq Command |
+|------|------------|
+| Get view by name | `yq '.views[] \| select(.name == "Backlog")' views/project-2.yaml` |
+| List all views | `yq '.views[].name' views/project-2.yaml` |
+| Get visible fields | `yq '.views[] \| select(.name == "Backlog") \| .visible_fields[]' views/project-2.yaml` |
+| Check if field visible | `yq '.views[] \| select(.name == "Backlog") \| .visible_fields[] \| select(. == "Priority")' views/project-2.yaml` |
+| Get default view | `yq '.views[] \| select(.number == 1)' views/project-2.yaml` |
+| Get view layout | `yq '.views[] \| select(.name == "Backlog") \| .layout' views/project-2.yaml` |
+
+---
+
 ## Schema: user.yaml (Personal, Git-Ignored)
 
 ### user
@@ -274,6 +372,27 @@ Signs config needs refresh:
 - Field IDs return null
 - New projects/repos not appearing
 
+### Pattern 4: View-Aware Operations (Phase 2)
+
+Check if a field is visible in a view before prompting user to set it:
+
+```bash
+PROJECT_NUM=2
+VIEW_NAME="Backlog"
+VIEW_FILE=".hiivmind/github/views/project-$PROJECT_NUM.yaml"
+
+# Get visible fields
+VISIBLE_FIELDS=$(yq ".views[] | select(.name == \"$VIEW_NAME\") | .visible_fields[]" "$VIEW_FILE")
+
+# Check if Priority is visible
+if echo "$VISIBLE_FIELDS" | grep -q "^Priority$"; then
+  echo "Priority field is visible in $VIEW_NAME - prompting user to set it"
+  # Proceed with priority field update
+else
+  echo "Priority field is hidden in $VIEW_NAME - skipping"
+fi
+```
+
 ---
 
 ## Related Documentation
@@ -284,3 +403,5 @@ Signs config needs refresh:
 | `reference/workflows/` | Multi-step workflow examples |
 | `templates/config.yaml.template` | Template used to generate config |
 | `templates/user.yaml.template` | Template for user-specific config |
+| `templates/views.yaml.template` | Template for project view config (Phase 2) |
+| `templates/freshness.yaml.template` | Template for per-section freshness tracking (Phase 1) |
