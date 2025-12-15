@@ -129,7 +129,94 @@ The cause is likely this Bash tool escaping bug, not your shell code.
 - `lib/github/gh-workspace-functions.sh` - Uses assignment pattern, affected
 - `skills/hiivmind-pulse-gh-workspace-init/SKILL.md` - Documents assignment pattern
 
+---
+
+## Bug #2: `!=` Operator Escaping
+
+> **Discovered:** 2025-12-15
+> **Status:** Active
+> **Related Issue:** #44
+
+### Summary
+
+Claude Code's Bash tool incorrectly escapes the `!=` operator in bash conditionals, transforming it to `\!=` which causes a syntax error.
+
+### The Bug
+
+When a bash `[[ ]]` conditional contains `!=`:
+
+**Input command:**
+```bash
+if [[ "$LAST_SYNC" != "null" && -n "$LAST_SYNC" ]]; then
+  echo "valid"
+fi
+```
+
+**What Claude Code executes:**
+```bash
+if [[ "$LAST_SYNC" \!= "null" && -n "$LAST_SYNC" ]]; then
+```
+
+**Result:**
+```
+/bin/bash: eval: line 41: conditional binary operator expected
+/bin/bash: eval: line 41: syntax error near `\!='
+```
+
+### Root Cause
+
+The `!` character has special meaning in bash (history expansion). Claude Code's Bash tool appears to escape it in certain contexts where it shouldn't, specifically within `[[ ]]` conditionals.
+
+### Affected File
+
+`commands/hiivmind-pulse-gh.md` line 61 (Step 2b: Check Freshness):
+
+```bash
+if [[ "$LAST_SYNC" != "null" && -n "$LAST_SYNC" ]]; then
+```
+
+### Workarounds
+
+#### 1. Negate Equality Instead (Recommended)
+
+```bash
+# BAD - triggers bug
+if [[ "$LAST_SYNC" != "null" ]]; then
+
+# GOOD - works correctly
+if [[ ! "$LAST_SYNC" = "null" ]]; then
+```
+
+#### 2. Use Single Bracket Test
+
+```bash
+# Alternative - use [ ] instead of [[ ]]
+if [ "$LAST_SYNC" != "null" ]; then
+```
+
+#### 3. Split Conditions
+
+```bash
+# Separate the checks
+if [[ "$LAST_SYNC" = "null" ]]; then
+  echo "STALE=unknown"
+else
+  # ... process valid date
+fi
+```
+
+### Detection
+
+If you see errors like:
+- `conditional binary operator expected`
+- `syntax error near '\!='`
+- The executed command shows `\!=` instead of `!=`
+
+The cause is this escaping bug.
+
+---
+
 ## References
 
-- GitHub Issue: hiivmind/hiivmind-pulse-gh#8
+- GitHub Issue: hiivmind/hiivmind-pulse-gh#8 (pipe escaping bug)
 - Claude Code GitHub: https://github.com/anthropics/claude-code/issues (report if needed)
