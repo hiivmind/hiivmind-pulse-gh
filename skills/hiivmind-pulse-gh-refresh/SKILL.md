@@ -76,54 +76,29 @@ PROJECT_NUM=2
 mkdir -p .hiivmind/github/views
 
 # Fetch project views
+# Corpus keywords: views, fields, groupByFields, sortByFields, layout, filter
+# Reference: hiivmind-corpus-github → "project views with field configuration"
+# Schema: projectV2 → views → nodes { id number name layout filter fields groupByFields sortByFields }
+#
+# Note: View CRUD is UI-only (no createProjectV2View mutation exists)
+
 VIEW_DATA=$(gh api graphql -f query='
   query($owner: String!, $number: Int!) {
     organization(login: $owner) {
       projectV2(number: $number) {
-        id
-        title
+        id title
         views(first: 20) {
           nodes {
-            id
-            number
-            name
-            layout
-            filter
+            id number name layout filter
             fields(first: 50) {
               nodes {
-                ... on ProjectV2Field {
-                  id
-                  name
-                }
-                ... on ProjectV2SingleSelectField {
-                  id
-                  name
-                }
-                ... on ProjectV2IterationField {
-                  id
-                  name
-                }
+                ... on ProjectV2Field { id name }
+                ... on ProjectV2SingleSelectField { id name }
+                ... on ProjectV2IterationField { id name }
               }
             }
-            groupByFields(first: 10) {
-              nodes {
-                ... on ProjectV2Field {
-                  id
-                  name
-                }
-              }
-            }
-            sortByFields(first: 10) {
-              nodes {
-                direction
-                field {
-                  ... on ProjectV2Field {
-                    id
-                    name
-                  }
-                }
-              }
-            }
+            groupByFields(first: 10) { nodes { ... on ProjectV2Field { id name } } }
+            sortByFields(first: 10) { nodes { direction field { ... on ProjectV2Field { id name } } } }
           }
         }
       }
@@ -267,6 +242,9 @@ branch_protection:
 EOF
 
 # Fetch branch protection for default branch
+# Corpus: REST /repos/{owner}/{repo}/branches/{branch}/protection
+# Keywords: branch protection, required_status_checks, enforce_admins, required_pull_request_reviews
+# Reference: hiivmind-corpus-github → "branch protection settings"
 PROTECTION=$(gh api "/repos/$OWNER/$REPO/branches/$DEFAULT_BRANCH/protection" 2>/dev/null || echo "null")
 
 if [[ "$PROTECTION" != "null" ]]; then
@@ -304,6 +282,9 @@ EOF
 fi
 
 # Fetch rulesets
+# Corpus: REST /repos/{owner}/{repo}/rulesets
+# Keywords: rulesets, enforcement, conditions, target, ref_name
+# Reference: hiivmind-corpus-github → "repository rulesets"
 RULESETS=$(gh api "/repos/$OWNER/$REPO/rulesets" --jq '.[] | {
   id: .id,
   name: .name,
@@ -787,32 +768,19 @@ if [[ "$WORKSPACE_TYPE" != "organization" ]]; then
 fi
 
 # Fetch all teams with members and repository permissions
+# Corpus keywords: teams, members, repositories, edges, role, permission
+# Reference: hiivmind-corpus-github → "organization teams with members"
+# Schema: organization → teams → nodes { id slug name privacy members repositories }
+# Note: members/repositories use edges pattern with role/permission metadata
+
 TEAMS_DATA=$(gh api graphql -f query='
   query($login: String!) {
     organization(login: $login) {
       teams(first: 100) {
         nodes {
-          id
-          slug
-          name
-          privacy
-          members(first: 100) {
-            edges {
-              role
-              node {
-                login
-                id
-              }
-            }
-          }
-          repositories(first: 100) {
-            edges {
-              permission
-              node {
-                name
-              }
-            }
-          }
+          id slug name privacy
+          members(first: 100) { edges { role node { login id } } }
+          repositories(first: 100) { edges { permission node { name } } }
         }
       }
     }

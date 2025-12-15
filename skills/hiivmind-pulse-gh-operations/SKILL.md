@@ -1293,35 +1293,28 @@ gh pr list -R "$REPO_FULL" --state open
 
 **Create milestone (REST):**
 ```bash
-gh api "/repos/$REPO_FULL/milestones" \
-  -f title="$MILESTONE_TITLE" \
-  -f description="$DESCRIPTION" \
-  -f due_on="$DUE_DATE"  # ISO 8601: YYYY-MM-DDTHH:MM:SSZ
+# Corpus: REST POST /repos/{owner}/{repo}/milestones
+# Keywords: milestones, due_on, description
+gh api "/repos/$REPO_FULL/milestones" -f title="$MILESTONE_TITLE" -f description="$DESCRIPTION" -f due_on="$DUE_DATE"  # ISO 8601
 ```
 
 **Update milestone (REST):**
 ```bash
-gh api "/repos/$REPO_FULL/milestones/$MILESTONE_NUM" \
-  -X PATCH \
-  -f state="closed"
+# Corpus: REST PATCH /repos/{owner}/{repo}/milestones/{number}
+gh api "/repos/$REPO_FULL/milestones/$MILESTONE_NUM" -X PATCH -f state="closed"
 ```
 
 **Delete milestone (REST):**
 ```bash
+# Corpus: REST DELETE /repos/{owner}/{repo}/milestones/{number}
 gh api "/repos/$REPO_FULL/milestones/$MILESTONE_NUM" -X DELETE
 ```
 
 **List milestones (GraphQL):**
 ```bash
-gh api graphql -f query='
-  query($owner: String!, $repo: String!) {
-    repository(owner: $owner, name: $repo) {
-      milestones(first: 20, states: [OPEN]) {
-        nodes { number title dueOn progressPercentage }
-      }
-    }
-  }
-' -f owner="$OWNER" -f repo="$REPO"
+# Corpus keywords: milestones, repository, dueOn, progressPercentage
+gh api graphql -f query='query($owner: String!, $repo: String!) { repository(owner: $owner, name: $repo) { milestones(first: 20, states: [OPEN]) { nodes { number title dueOn progressPercentage } } } }' \
+  -f owner="$OWNER" -f repo="$REPO"
 ```
 
 **Assign milestone to issue:**
@@ -1335,20 +1328,19 @@ gh issue edit $ISSUE_NUM -R "$REPO_FULL" --milestone "$MILESTONE_TITLE"
 
 **Create label (REST):**
 ```bash
-gh api "/repos/$REPO_FULL/labels" \
-  -f name="$LABEL_NAME" \
-  -f color="$HEX_COLOR" \
-  -f description="$DESCRIPTION"
+# Corpus: REST POST /repos/{owner}/{repo}/labels
+# Keywords: labels, color, description
+gh api "/repos/$REPO_FULL/labels" -f name="$LABEL_NAME" -f color="$HEX_COLOR" -f description="$DESCRIPTION"
 ```
 
-**Add label to issue (GraphQL or CLI):**
+**Add/remove label from issue:**
 ```bash
+# Using gh CLI (recommended for label operations)
 gh issue edit $ISSUE_NUM -R "$REPO_FULL" --add-label "$LABEL_NAME"
-```
-
-**Remove label from issue:**
-```bash
 gh issue edit $ISSUE_NUM -R "$REPO_FULL" --remove-label "$LABEL_NAME"
+
+# Or GraphQL: addLabelsToLabelable, removeLabelsFromLabelable mutations
+# Corpus keywords: addLabelsToLabelable, removeLabelsFromLabelable, labelIds
 ```
 
 ---
@@ -1363,18 +1355,15 @@ PROJECT_ID=$(yq ".projects.catalog[] | select(.number == $PROJECT_NUM) | .id" "$
 
 **Add item to project:**
 ```bash
-# Simple - gh CLI
+# Simple - gh CLI (recommended)
 gh project item-add $PROJECT_NUM --owner "$OWNER" --url "$ITEM_URL"
 
 # Or GraphQL mutation
+# Corpus keywords: addProjectV2ItemById, projectId, contentId
+# Reference: hiivmind-corpus-github → "add item to project"
 ITEM_ID="..."  # Issue or PR node ID
-gh api graphql -f query='
-  mutation($projectId: ID!, $contentId: ID!) {
-    addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
-      item { id }
-    }
-  }
-' -f projectId="$PROJECT_ID" -f contentId="$ITEM_ID"
+gh api graphql -f query='mutation($projectId: ID!, $contentId: ID!) { addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) { item { id } } }' \
+  -f projectId="$PROJECT_ID" -f contentId="$ITEM_ID"
 ```
 
 **Update project field:**
@@ -1384,29 +1373,19 @@ FIELD_ID=$(yq ".projects.catalog[] | select(.number == $PROJECT_NUM) | .fields.S
 OPTION_ID=$(yq ".projects.catalog[] | select(.number == $PROJECT_NUM) | .fields.Status.options.\"In progress\"" "$CONFIG")
 
 # Update field value
-gh api graphql -f query='
-  mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
-    updateProjectV2ItemFieldValue(input: {
-      projectId: $projectId,
-      itemId: $itemId,
-      fieldId: $fieldId,
-      value: {singleSelectOptionId: $optionId}
-    }) {
-      projectV2Item { id }
-    }
-  }
-' -f projectId="$PROJECT_ID" -f itemId="$ITEM_ID" -f fieldId="$FIELD_ID" -f optionId="$OPTION_ID"
+# Corpus keywords: updateProjectV2ItemFieldValue, singleSelectOptionId, fieldId
+# Reference: hiivmind-corpus-github → "update project field value"
+# Note: value type varies by field (singleSelectOptionId, text, number, date, iteration)
+gh api graphql -f query='mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) { updateProjectV2ItemFieldValue(input: {projectId: $projectId, itemId: $itemId, fieldId: $fieldId, value: {singleSelectOptionId: $optionId}}) { projectV2Item { id } } }' \
+  -f projectId="$PROJECT_ID" -f itemId="$ITEM_ID" -f fieldId="$FIELD_ID" -f optionId="$OPTION_ID"
 ```
 
 **Archive project item:**
 ```bash
-gh api graphql -f query='
-  mutation($projectId: ID!, $itemId: ID!) {
-    archiveProjectV2Item(input: {projectId: $projectId, itemId: $itemId}) {
-      item { id }
-    }
-  }
-' -f projectId="$PROJECT_ID" -f itemId="$ITEM_ID"
+# Corpus keywords: archiveProjectV2Item, projectId, itemId
+# Reference: hiivmind-corpus-github → "archive project item"
+gh api graphql -f query='mutation($projectId: ID!, $itemId: ID!) { archiveProjectV2Item(input: {projectId: $projectId, itemId: $itemId}) { item { id } } }' \
+  -f projectId="$PROJECT_ID" -f itemId="$ITEM_ID"
 ```
 
 ---

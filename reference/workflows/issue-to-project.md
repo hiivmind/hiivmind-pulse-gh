@@ -47,13 +47,8 @@ gh project item-add "$PROJECT_NUM" \
 First, get the issue's node ID:
 
 ```bash
-ISSUE_ID=$(gh api graphql -f query='
-  query($url: URI!) {
-    resource(url: $url) {
-      ... on Issue { id }
-    }
-  }
-' -f url="$ISSUE_URL" --jq '.data.resource.id')
+# Corpus keywords: resource, url, URI, Issue
+ISSUE_ID=$(gh api graphql -f query='query($url: URI!) { resource(url: $url) { ... on Issue { id } } }' -f url="$ISSUE_URL" --jq '.data.resource.id')
 ```
 
 Then add to project:
@@ -61,13 +56,10 @@ Then add to project:
 ```bash
 PROJECT_ID=$(yq ".projects.catalog[] | select(.number == $PROJECT_NUM) | .id" "$CONFIG")
 
-gh api graphql -f query='
-  mutation($projectId: ID!, $contentId: ID!) {
-    addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
-      item { id }
-    }
-  }
-' -f projectId="$PROJECT_ID" -f contentId="$ISSUE_ID"
+# Corpus keywords: addProjectV2ItemById, projectId, contentId
+# Reference: hiivmind-pulse-gh-operations skill → Domain: Projects v2
+gh api graphql -f query='mutation($projectId: ID!, $contentId: ID!) { addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) { item { id } } }' \
+  -f projectId="$PROJECT_ID" -f contentId="$ISSUE_ID"
 ```
 
 ## Step 4: Set Initial Status (Optional)
@@ -78,25 +70,12 @@ If you want to set the Status field immediately:
 # Get IDs from config
 FIELD_ID=$(yq ".projects.catalog[] | select(.number == $PROJECT_NUM) | .fields.Status.id" "$CONFIG")
 OPTION_ID=$(yq ".projects.catalog[] | select(.number == $PROJECT_NUM) | .fields.Status.options.Backlog" "$CONFIG")
-
-# Get the project item ID (from step 3 response, or query it)
 ITEM_ID="PVTI_..."  # from addProjectV2ItemById response
 
-gh api graphql -f query='
-  mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
-    updateProjectV2ItemFieldValue(input: {
-      projectId: $projectId,
-      itemId: $itemId,
-      fieldId: $fieldId,
-      value: {singleSelectOptionId: $optionId}
-    }) {
-      projectV2Item { id }
-    }
-  }
-' -f projectId="$PROJECT_ID" \
-  -f itemId="$ITEM_ID" \
-  -f fieldId="$FIELD_ID" \
-  -f optionId="$OPTION_ID"
+# Corpus keywords: updateProjectV2ItemFieldValue, singleSelectOptionId
+# Reference: hiivmind-pulse-gh-operations skill → Domain: Projects v2
+gh api graphql -f query='mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) { updateProjectV2ItemFieldValue(input: {projectId: $projectId, itemId: $itemId, fieldId: $fieldId, value: {singleSelectOptionId: $optionId}}) { projectV2Item { id } } }' \
+  -f projectId="$PROJECT_ID" -f itemId="$ITEM_ID" -f fieldId="$FIELD_ID" -f optionId="$OPTION_ID"
 ```
 
 ## Complete Single-Command Version

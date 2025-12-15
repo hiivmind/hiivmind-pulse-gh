@@ -100,26 +100,20 @@ List available projects:
 OWNER="hiivmind"
 TYPE="organization"  # or "user"
 
+# Discover projects using GraphQL
+# Reference corpus for syntax:
+#   - Keywords: projectsV2, organization, user, nodes
+#   - Search: "list projects for organization"
+#   - Schema location: type Organization, type User, projectsV2 field
+#
+# Query pattern: organization(login:) or user(login:) → projectsV2(first:) → nodes { number title closed }
+
 if [[ "$TYPE" == "organization" ]]; then
-  gh api graphql -f query='
-    query($login: String!) {
-      organization(login: $login) {
-        projectsV2(first: 20) {
-          nodes { number title closed }
-        }
-      }
-    }
-  ' -f login="$OWNER" --jq '.data.organization.projectsV2.nodes[] | "\(.number): \(.title) [\(if .closed then "closed" else "open" end)]"'
+  gh api graphql -f query='query($login: String!) { organization(login: $login) { projectsV2(first: 20) { nodes { number title closed } } } }' \
+    -f login="$OWNER" --jq '.data.organization.projectsV2.nodes[] | "\(.number): \(.title) [\(if .closed then "closed" else "open" end)]"'
 else
-  gh api graphql -f query='
-    query($login: String!) {
-      user(login: $login) {
-        projectsV2(first: 20) {
-          nodes { number title closed }
-        }
-      }
-    }
-  ' -f login="$OWNER" --jq '.data.user.projectsV2.nodes[] | "\(.number): \(.title) [\(if .closed then "closed" else "open" end)]"'
+  gh api graphql -f query='query($login: String!) { user(login: $login) { projectsV2(first: 20) { nodes { number title closed } } } }' \
+    -f login="$OWNER" --jq '.data.user.projectsV2.nodes[] | "\(.number): \(.title) [\(if .closed then "closed" else "open" end)]"'
 fi
 ```
 
@@ -146,13 +140,17 @@ DEFAULT_PROJECT=2
 PROJECTS="2"  # space-separated list
 
 # Get workspace ID
+# Corpus keywords: organization, user, id (global node ID)
 if [[ "$TYPE" == "organization" ]]; then
   OWNER_ID=$(gh api graphql -f query='query($login: String!) { organization(login: $login) { id } }' -f login="$OWNER" --jq '.data.organization.id')
 else
   OWNER_ID=$(gh api graphql -f query='query($login: String!) { user(login: $login) { id } }' -f login="$OWNER" --jq '.data.user.id')
 fi
 
-# Create base config
+# Create base config from template
+# Template reference: templates/config.yaml.template
+# Substituting: workspace_type, workspace_login, initialized_at, toolkit_version
+
 cat > .hiivmind/github/config.yaml << EOF
 # hiivmind-pulse-gh workspace configuration
 # Generated: $(date -Iseconds)
@@ -173,6 +171,7 @@ milestones: {}
 cache:
   initialized_at: $(date -Iseconds)
   last_synced_at: $(date -Iseconds)
+  toolkit_version: "1.0.0"
 EOF
 ```
 
@@ -184,24 +183,19 @@ For each project, fetch and add field IDs:
 PROJECT_NUM=2
 
 # Fetch project with fields
+# Corpus keywords: projectV2, fields, ProjectV2Field, ProjectV2SingleSelectField, options
+# Inline fragments required for field type discrimination
+# Reference: hiivmind-corpus-github → "project fields with options"
+
 PROJECT_DATA=$(gh api graphql -f query='
   query($owner: String!, $number: Int!) {
     organization(login: $owner) {
       projectV2(number: $number) {
-        id
-        title
-        url
+        id title url
         fields(first: 50) {
           nodes {
-            ... on ProjectV2SingleSelectField {
-              id
-              name
-              options { id name }
-            }
-            ... on ProjectV2Field {
-              id
-              name
-            }
+            ... on ProjectV2SingleSelectField { id name options { id name } }
+            ... on ProjectV2Field { id name }
           }
         }
       }
@@ -220,9 +214,14 @@ echo "$PROJECT_DATA" | jq '.data.organization.projectV2'
 Per-section freshness tracking (Phase 1 of expanded introspection):
 
 ```bash
+# Generate from template: templates/freshness.yaml.template
+# Initialize workspace section as fresh, all others as stale
+
+NOW=$(date -Iseconds)
+
 cat > .hiivmind/github/freshness.yaml << EOF
 # hiivmind-pulse-gh - Per-Section Freshness Tracking
-# Generated: $(date -Iseconds)
+# Generated: $NOW
 
 defaults:
   threshold_hours: 168
@@ -230,7 +229,7 @@ defaults:
 sections:
   workspace:
     threshold_hours: 720
-    last_checked: $(date -Iseconds)
+    last_checked: $NOW
     stale: false
     note: "Organization/user metadata"
 
@@ -282,8 +281,8 @@ sections:
     note: "Team rosters and permissions (Phase 6)"
 
 cache:
-  created_at: $(date -Iseconds)
-  last_updated_at: $(date -Iseconds)
+  created_at: $NOW
+  last_updated_at: $NOW
   version: "1.0"
 EOF
 ```
@@ -296,6 +295,9 @@ EOF
 
 ```bash
 # Fetch your identity
+# Corpus keywords: viewer (authenticated user), login, id, name, email
+# Reference: hiivmind-corpus-github → "viewer query"
+
 USER_DATA=$(gh api graphql -f query='{ viewer { login id name email } }')
 
 LOGIN=$(echo "$USER_DATA" | jq -r '.data.viewer.login')
@@ -303,6 +305,7 @@ USER_ID=$(echo "$USER_DATA" | jq -r '.data.viewer.id')
 NAME=$(echo "$USER_DATA" | jq -r '.data.viewer.name // empty')
 EMAIL=$(echo "$USER_DATA" | jq -r '.data.viewer.email // empty')
 
+# Template reference: templates/user.yaml.template
 cat > .hiivmind/github/user.yaml << EOF
 # hiivmind-pulse-gh user configuration
 # DO NOT COMMIT - add to .gitignore
@@ -322,10 +325,13 @@ permissions:
 preferences:
   default_project: null
   default_repo: null
+  freshness_threshold_days: 7
+  confirm_mutations: true
 
 cache:
   user_checked_at: $(date -Iseconds)
   permissions_checked_at: null
+  permissions_ttl_hours: 24
 EOF
 ```
 
