@@ -47,49 +47,88 @@ fi
 
 ### 2b: Check Freshness
 
+**Phase 1+:** Per-section freshness checking based on operation domain.
+
 ```bash
 CONFIG=".hiivmind/github/config.yaml"
-USER_CONFIG=".hiivmind/github/user.yaml"
+FRESHNESS=".hiivmind/github/freshness.yaml"
 
-# Get threshold (default 7 days)
-THRESHOLD_DAYS=$(yq '.preferences.freshness_threshold_days // 7' "$USER_CONFIG" 2>/dev/null || echo 7)
+# Determine required section based on intent (Step 3)
+# For now, check if freshness.yaml exists
+if [[ -f "$FRESHNESS" ]]; then
+  echo "FRESHNESS_TRACKING=enabled"
 
-# Get last sync date
-LAST_SYNC=$(yq '.cache.last_synced_at' "$CONFIG")
+  # Map operation domain to required section
+  # This will be filled in during Step 3 (Intent Detection)
+  # For now, just check if any sections are stale
+  STALE_SECTIONS=$(yq '.sections | to_entries | .[] | select(.value.stale == true) | .key' "$FRESHNESS" 2>/dev/null)
 
-# Calculate age in days
-# Note: Using positive-first logic to avoid != escaping bug in Claude Code Bash tool
-if [[ "$LAST_SYNC" = "null" ]] || [[ -z "$LAST_SYNC" ]]; then
-  echo "STALE=unknown"
-else
-  LAST_SYNC_EPOCH=$(date -d "$LAST_SYNC" +%s 2>/dev/null || echo 0)
-  NOW_EPOCH=$(date +%s)
-  AGE_DAYS=$(( (NOW_EPOCH - LAST_SYNC_EPOCH) / 86400 ))
-
-  if [[ $AGE_DAYS -gt $THRESHOLD_DAYS ]]; then
-    echo "STALE=true"
-    echo "AGE_DAYS=$AGE_DAYS"
+  if [[ -n "$STALE_SECTIONS" ]]; then
+    echo "STALE_SECTIONS=$STALE_SECTIONS"
   else
-    echo "STALE=false"
+    echo "ALL_SECTIONS_FRESH=true"
+  fi
+else
+  echo "FRESHNESS_TRACKING=disabled"
+
+  # Fallback to legacy freshness check
+  USER_CONFIG=".hiivmind/github/user.yaml"
+  THRESHOLD_DAYS=$(yq '.preferences.freshness_threshold_days // 7' "$USER_CONFIG" 2>/dev/null || echo 7)
+  LAST_SYNC=$(yq '.cache.last_synced_at' "$CONFIG")
+
+  # Calculate age in days
+  # Note: Using positive-first logic to avoid != escaping bug in Claude Code Bash tool
+  if [[ "$LAST_SYNC" = "null" ]] || [[ -z "$LAST_SYNC" ]]; then
+    echo "STALE=unknown"
+  else
+    LAST_SYNC_EPOCH=$(date -d "$LAST_SYNC" +%s 2>/dev/null || echo 0)
+    NOW_EPOCH=$(date +%s)
+    AGE_DAYS=$(( (NOW_EPOCH - LAST_SYNC_EPOCH) / 86400 ))
+
+    if [[ $AGE_DAYS -gt $THRESHOLD_DAYS ]]; then
+      echo "STALE=true"
+      echo "AGE_DAYS=$AGE_DAYS"
+    else
+      echo "STALE=false"
+    fi
   fi
 fi
 ```
 
-**If stale:**
+**If using per-section freshness (Phase 1+):**
+- After Step 3 (Intent Detection), map domain to required section
+- Check if that specific section is stale
+- If stale, offer targeted refresh: "Would you like to refresh [section]?"
+
+**If using legacy freshness:**
 1. Inform user: "Your workspace config is $AGE_DAYS days old (threshold: $THRESHOLD_DAYS days)."
 2. Ask: "Would you like to refresh before proceeding?"
 3. If yes → Load `hiivmind-pulse-gh-refresh` skill
 4. After refresh → Continue to Step 3
 
-**If not stale or user skips:** Continue to Step 3
+**Domain to Section Mapping:**
+
+| Domain | Required Section(s) |
+|--------|---------------------|
+| issues | projects (if adding to project) |
+| pull_requests | projects, repo_settings |
+| milestones | repositories |
+| projects | projects, views |
+| branch_protection | repo_settings |
+| rulesets | repo_settings |
+| actions | repositories |
 
 ### 2c: Update Freshness Check Timestamp
 
 After checking freshness (whether refresh was performed or not):
 
 ```bash
-# Update last_freshness_check in config
+CONFIG=".hiivmind/github/config.yaml"
+
+# Update last_freshness_check in config (legacy)
 yq -i '.cache.last_freshness_check = "'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'"' "$CONFIG"
+
+# If using per-section tracking, staleness flags are updated automatically during checks
 ```
 
 ---

@@ -10,18 +10,33 @@ description: >
 
 Synchronize cached IDs with current GitHub state. Run when config becomes stale.
 
+## Usage
+
+```bash
+# Refresh all sections (default)
+# Use this skill without arguments
+
+# Refresh specific section only
+# Pass section name: workspace, projects, views, automations, repositories, repo_settings, relationships, teams
+```
+
 ## When to Refresh
 
-| Trigger | Symptom |
-|---------|---------|
-| Field ID changed | "Field not found" errors |
-| Option renamed | "Option not found" errors |
-| New project added | Project not in config |
-| Fields added/removed | Missing field in config |
+| Trigger | Symptom | Section |
+|---------|---------|---------|
+| Field ID changed | "Field not found" errors | projects |
+| Option renamed | "Option not found" errors | projects |
+| New project added | Project not in config | projects |
+| Fields added/removed | Missing field in config | projects |
+| View layout changed | View settings outdated | views (Phase 2) |
+| Protection rules changed | Rule not found | repo_settings (Phase 3) |
+| Automation changed | Unexpected behavior | automations (Phase 4) |
 
 ---
 
 ## Quick Status Check
+
+### Overall Status (Legacy)
 
 ```bash
 CONFIG=".hiivmind/github/config.yaml"
@@ -29,6 +44,19 @@ CONFIG=".hiivmind/github/config.yaml"
 echo "Last synced: $(yq '.cache.last_synced_at' "$CONFIG")"
 echo "Projects cached: $(yq '.projects.catalog | length' "$CONFIG")"
 echo "Default project: $(yq '.projects.default' "$CONFIG")"
+```
+
+### Per-Section Freshness (Phase 1+)
+
+```bash
+FRESHNESS=".hiivmind/github/freshness.yaml"
+
+echo "=== Freshness Status ==="
+yq '.sections | to_entries | .[] | "\(.key): stale=\(.value.stale), last_checked=\(.value.last_checked // "never")"' "$FRESHNESS"
+
+echo ""
+echo "=== Stale Sections ==="
+yq '.sections | to_entries | .[] | select(.value.stale == true) | .key' "$FRESHNESS"
 ```
 
 ---
@@ -166,20 +194,94 @@ cp "$CONFIG" "$CONFIG.bak"
 
 ---
 
-## Update Sync Timestamp
+## Update Freshness Tracking
 
-After any refresh:
+After refreshing any section, update freshness.yaml:
+
+### Update Specific Section
+
+```bash
+FRESHNESS=".hiivmind/github/freshness.yaml"
+SECTION="projects"  # or workspace, views, automations, etc.
+
+# Mark section as fresh
+yq -i ".sections.$SECTION.last_checked = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
+yq -i ".sections.$SECTION.stale = false" "$FRESHNESS"
+
+# Update cache metadata
+yq -i ".cache.last_updated_at = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
+```
+
+### Update Projects Section with Coverage
+
+```bash
+FRESHNESS=".hiivmind/github/freshness.yaml"
+PROJECTS_REFRESHED="2 3"  # Space-separated project numbers
+
+# Mark as fresh and record which projects were covered
+yq -i ".sections.projects.last_checked = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
+yq -i ".sections.projects.stale = false" "$FRESHNESS"
+yq -i ".sections.projects.projects_covered = [$PROJECTS_REFRESHED]" "$FRESHNESS"
+yq -i ".cache.last_updated_at = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
+```
+
+### Legacy Timestamp (Backwards Compatibility)
+
+Also update the legacy config.yaml timestamp:
 
 ```bash
 CONFIG=".hiivmind/github/config.yaml"
-yq -i ".cache.last_synced_at = \"$(date -Iseconds)\"" "$CONFIG"
+yq -i ".cache.last_synced_at = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$CONFIG"
 ```
 
 ---
 
 ## Detect Staleness
 
-Check if config is older than N days:
+### Per-Section Staleness (Phase 1+)
+
+Check which sections are stale based on their individual thresholds:
+
+```bash
+FRESHNESS=".hiivmind/github/freshness.yaml"
+
+# Function to check if a section is stale
+check_section_staleness() {
+  local section=$1
+  local last_checked=$(yq ".sections.$section.last_checked" "$FRESHNESS")
+  local threshold_hours=$(yq ".sections.$section.threshold_hours" "$FRESHNESS")
+
+  if [[ "$last_checked" = "null" ]] || [[ -z "$last_checked" ]]; then
+    echo "STALE (never checked)"
+    yq -i ".sections.$section.stale = true" "$FRESHNESS"
+    return 1
+  fi
+
+  local last_epoch=$(date -d "$last_checked" +%s 2>/dev/null || echo 0)
+  local now_epoch=$(date +%s)
+  local age_hours=$(( (now_epoch - last_epoch) / 3600 ))
+
+  if [[ $age_hours -gt $threshold_hours ]]; then
+    echo "STALE (${age_hours}h old, threshold: ${threshold_hours}h)"
+    yq -i ".sections.$section.stale = true" "$FRESHNESS"
+    return 1
+  else
+    echo "FRESH (${age_hours}h old, threshold: ${threshold_hours}h)"
+    yq -i ".sections.$section.stale = false" "$FRESHNESS"
+    return 0
+  fi
+}
+
+# Check all sections
+for section in workspace projects views automations repositories repo_settings relationships teams; do
+  echo -n "$section: "
+  check_section_staleness "$section"
+done
+```
+
+### Legacy Staleness Check
+
+For backwards compatibility with existing workflows:
 
 ```bash
 CONFIG=".hiivmind/github/config.yaml"

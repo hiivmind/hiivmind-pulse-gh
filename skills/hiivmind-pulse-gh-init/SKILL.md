@@ -215,7 +215,84 @@ echo "$PROJECT_DATA" | jq '.data.organization.projectV2'
 
 ---
 
-## Step 6: Generate user.yaml
+## Step 6: Generate freshness.yaml
+
+Per-section freshness tracking (Phase 1 of expanded introspection):
+
+```bash
+cat > .hiivmind/github/freshness.yaml << EOF
+# hiivmind-pulse-gh - Per-Section Freshness Tracking
+# Generated: $(date -Iseconds)
+
+defaults:
+  threshold_hours: 168
+
+sections:
+  workspace:
+    threshold_hours: 720
+    last_checked: $(date -Iseconds)
+    stale: false
+    note: "Organization/user metadata"
+
+  projects:
+    threshold_hours: 168
+    last_checked: null
+    stale: true
+    projects_covered: []
+    note: "Project fields and options"
+
+  views:
+    threshold_hours: 24
+    last_checked: null
+    stale: true
+    projects_covered: []
+    note: "Project view configurations (Phase 2)"
+
+  automations:
+    threshold_hours: 72
+    last_checked: null
+    stale: true
+    projects_covered: []
+    note: "Project automation rules (Phase 4)"
+
+  repositories:
+    threshold_hours: 168
+    last_checked: null
+    stale: true
+    repos_covered: []
+    note: "Repository catalog"
+
+  repo_settings:
+    threshold_hours: 72
+    last_checked: null
+    stale: true
+    repos_covered: []
+    note: "Branch protection, merge settings, labels (Phase 3)"
+
+  relationships:
+    threshold_hours: 168
+    last_checked: null
+    stale: true
+    note: "Project-repo links and dependencies (Phase 5)"
+
+  teams:
+    threshold_hours: 168
+    last_checked: null
+    stale: true
+    note: "Team rosters and permissions (Phase 6)"
+
+cache:
+  created_at: $(date -Iseconds)
+  last_updated_at: $(date -Iseconds)
+  version: "1.0"
+EOF
+```
+
+**Note:** Workspace section is marked as fresh since we just fetched it. All other sections start as stale.
+
+---
+
+## Step 7: Generate user.yaml
 
 ```bash
 # Fetch your identity
@@ -262,7 +339,7 @@ fi
 
 ---
 
-## Step 7: Verify Setup
+## Step 8: Verify Setup
 
 ```bash
 echo "=== Config Summary ==="
