@@ -26,4 +26,5 @@ milestones: {}
 cache:
   initialized_at: {{initialized_at}}
   last_synced_at: null
+  last_freshness_check: null         # When gateway last checked freshness
   toolkit_version: {{toolkit_version}}

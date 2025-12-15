@@ -28,6 +28,8 @@ permissions:
 preferences:
   default_project: null        # Override team default project
   default_repo: null           # For ambiguous commands
+  freshness_threshold_days: 7  # Days before config is considered stale
+  confirm_mutations: true      # Ask before create/update/delete operations
 
 # Cache metadata
 cache:
