@@ -124,6 +124,21 @@ The `--project` flag automatically adds the issue to the project.
 | "Field not found" | Field ID changed | Run `hiivmind-pulse-gh-refresh` |
 | "Option not found" | Status option renamed | Run `hiivmind-pulse-gh-refresh` |
 
+## Corpus Lookup
+
+Search the corpus index using these keywords:
+
+| Need | Keywords |
+|------|----------|
+| Create issue | `createIssue`, `repositoryId`, `title`, `body` |
+| Add to project | `addProjectV2ItemById`, `projectId`, `contentId` |
+| Update field value | `updateProjectV2ItemFieldValue`, `fieldId`, `singleSelectOptionId` |
+| Project types | `type ProjectV2`, `ProjectV2Item`, `ProjectV2Field` |
+
+Start with `reference/api-routing.md` → "Issues" or "Projects v2" section for routing decisions.
+
+---
+
 ## Related Workflows
 
 - `manage-milestones.md` - Set milestone on the issue

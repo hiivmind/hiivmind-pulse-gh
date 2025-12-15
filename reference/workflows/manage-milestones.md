@@ -200,9 +200,16 @@ gh api graphql -f query='
 
 ## Corpus Lookup
 
-For exact field names and types:
-- GraphQL: `grep -n "^type Milestone " graphql-schema:schema.docs.graphql -A 30`
-- REST: `sections/rest.md` → search "milestones"
+Search the corpus index using these keywords:
+
+| Need | Keywords |
+|------|----------|
+| Milestone type | `type Milestone`, `milestones`, `dueOn`, `progressPercentage` |
+| REST CRUD | `milestones`, `POST`, `PATCH`, `DELETE`, `due_on` |
+| Assign to issue | `updateIssue`, `milestoneId` |
+| Query milestones | `repository`, `milestones`, `states` |
+
+Start with `reference/api-routing.md` → "Milestones" section for routing decisions.
 
 ---
 
