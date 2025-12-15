@@ -68,13 +68,6 @@ Fetch and cache view configurations for a project.
 ### Fetch Views for a Project
 
 ```bash
-CONFIG=".hiivmind/github/config.yaml"
-OWNER=$(yq '.workspace.login' "$CONFIG")
-PROJECT_NUM=2
-
-# Create views directory if needed
-mkdir -p .hiivmind/github/views
-
 # Fetch project views
 # Corpus keywords: views, fields, groupByFields, sortByFields, layout, filter
 # Reference: hiivmind-corpus-github → "project views with field configuration"
@@ -82,88 +75,105 @@ mkdir -p .hiivmind/github/views
 #
 # Note: View CRUD is UI-only (no createProjectV2View mutation exists)
 
-VIEW_DATA=$(gh api graphql -f query='
-  query($owner: String!, $number: Int!) {
-    organization(login: $owner) {
-      projectV2(number: $number) {
-        id title
-        views(first: 20) {
-          nodes {
-            id number name layout filter
-            fields(first: 50) {
+refresh_project_views() {
+    local config="$1"
+    local project_num="$2"
+    local owner view_data project_id project_title
+
+    owner=$(yq '.workspace.login' "$config")
+
+    # Create views directory if needed
+    mkdir -p .hiivmind/github/views
+
+    # Fetch views data (pipe-first: fetch | process)
+    view_data=$(gh api graphql -f query='
+      query($owner: String!, $number: Int!) {
+        organization(login: $owner) {
+          projectV2(number: $number) {
+            id title
+            views(first: 20) {
               nodes {
-                ... on ProjectV2Field { id name }
-                ... on ProjectV2SingleSelectField { id name }
-                ... on ProjectV2IterationField { id name }
+                id number name layout filter
+                fields(first: 50) {
+                  nodes {
+                    ... on ProjectV2Field { id name }
+                    ... on ProjectV2SingleSelectField { id name }
+                    ... on ProjectV2IterationField { id name }
+                  }
+                }
+                groupByFields(first: 10) { nodes { ... on ProjectV2Field { id name } } }
+                sortByFields(first: 10) { nodes { direction field { ... on ProjectV2Field { id name } } } }
               }
             }
-            groupByFields(first: 10) { nodes { ... on ProjectV2Field { id name } } }
-            sortByFields(first: 10) { nodes { direction field { ... on ProjectV2Field { id name } } } }
           }
         }
       }
-    }
-  }
-' -f owner="$OWNER" -F number="$PROJECT_NUM")
+    ' -f owner="$owner" -F number="$project_num")
 
-# Extract project info
-PROJECT_ID=$(echo "$VIEW_DATA" | jq -r '.data.organization.projectV2.id')
-PROJECT_TITLE=$(echo "$VIEW_DATA" | jq -r '.data.organization.projectV2.title')
+    # Extract project info
+    project_id=$(echo "$view_data" | jq -r '.data.organization.projectV2.id')
+    project_title=$(echo "$view_data" | jq -r '.data.organization.projectV2.title')
 
-# Build views.yaml
-cat > ".hiivmind/github/views/project-$PROJECT_NUM.yaml" << EOF
+    # Build views.yaml
+    cat > ".hiivmind/github/views/project-$project_num.yaml" << EOF
 # hiivmind-pulse-gh - Project Views Configuration
 # Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 project:
-  number: $PROJECT_NUM
-  id: $PROJECT_ID
-  title: "$PROJECT_TITLE"
+  number: $project_num
+  id: $project_id
+  title: "$project_title"
 
 views:
 EOF
 
-# Process each view
-echo "$VIEW_DATA" | jq -r '.data.organization.projectV2.views.nodes[] | @json' | while read -r view; do
-  VIEW_NUM=$(echo "$view" | jq -r '.number')
-  VIEW_ID=$(echo "$view" | jq -r '.id')
-  VIEW_NAME=$(echo "$view" | jq -r '.name')
-  VIEW_LAYOUT=$(echo "$view" | jq -r '.layout')
-  VIEW_FILTER=$(echo "$view" | jq -r '.filter // ""')
+    # Process each view
+    echo "$view_data" | jq -r '.data.organization.projectV2.views.nodes[] | @json' | while read -r view; do
+        local view_num view_id view_name view_layout view_filter visible_fields group_by sort_by
 
-  # Get visible fields
-  VISIBLE_FIELDS=$(echo "$view" | jq -r '.fields.nodes[].name' | sed 's/^/    - /')
+        view_num=$(echo "$view" | jq -r '.number')
+        view_id=$(echo "$view" | jq -r '.id')
+        view_name=$(echo "$view" | jq -r '.name')
+        view_layout=$(echo "$view" | jq -r '.layout')
+        view_filter=$(echo "$view" | jq -r '.filter // ""')
 
-  # Get group by fields
-  GROUP_BY=$(echo "$view" | jq -r '.groupByFields.nodes[] | "    - field: \(.name)"')
+        # Get visible fields
+        visible_fields=$(echo "$view" | jq -r '.fields.nodes[].name' | sed 's/^/    - /')
 
-  # Get sort by fields
-  SORT_BY=$(echo "$view" | jq -r '.sortByFields.nodes[] | "    - field: \(.field.name)\n      direction: \(.direction)"')
+        # Get group by fields
+        group_by=$(echo "$view" | jq -r '.groupByFields.nodes[] | "    - field: \(.name)"')
 
-  cat >> ".hiivmind/github/views/project-$PROJECT_NUM.yaml" << VIEWEOF
-  - number: $VIEW_NUM
-    id: $VIEW_ID
-    name: "$VIEW_NAME"
-    layout: $VIEW_LAYOUT
-    filter: "$VIEW_FILTER"
+        # Get sort by fields
+        sort_by=$(echo "$view" | jq -r '.sortByFields.nodes[] | "    - field: \(.field.name)\n      direction: \(.direction)"')
+
+        cat >> ".hiivmind/github/views/project-$project_num.yaml" << VIEWEOF
+  - number: $view_num
+    id: $view_id
+    name: "$view_name"
+    layout: $view_layout
+    filter: "$view_filter"
     visible_fields:
-$VISIBLE_FIELDS
+$visible_fields
     group_by:
-$GROUP_BY
+$group_by
     sort_by:
-$SORT_BY
+$sort_by
 
 VIEWEOF
-done
+    done
 
-# Add metadata
-cat >> ".hiivmind/github/views/project-$PROJECT_NUM.yaml" << EOF
+    # Add metadata
+    cat >> ".hiivmind/github/views/project-$project_num.yaml" << EOF
 cache:
   synced_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
   schema_version: "1.0"
 EOF
 
-echo "Views cached to .hiivmind/github/views/project-$PROJECT_NUM.yaml"
+    echo "Views cached to .hiivmind/github/views/project-$project_num.yaml"
+}
+
+# Usage:
+refresh_project_views ".hiivmind/github/config.yaml" 2
 ```
 
 ### Update Freshness Tracking
