@@ -512,7 +512,219 @@ echo "  Auto-archive: $(yq '.built_in.auto_archive.enabled' "$AUTOMATIONS_FILE" 
 
 ---
 
-## Step 5: Determine API Type
+## Step 5: Check Cross-Repo Relationships (Phase 5)
+
+**Optional:** If the operation involves multiple repositories or cross-project coordination, check relationships to understand dependencies and project links.
+
+### Check if Relationships are Documented
+
+```bash
+RELATIONSHIPS_FILE=".hiivmind/github/relationships.yaml"
+
+if [[ -f "$RELATIONSHIPS_FILE" ]]; then
+  echo "Relationships documented"
+else
+  echo "No relationships documented - operations will proceed without relationship awareness"
+fi
+```
+
+### Get Linked Repositories for a Project
+
+```bash
+# Function to get repositories linked to a project
+get_project_repos() {
+  local project_num=$1
+  local relationships_file=".hiivmind/github/relationships.yaml"
+
+  if [[ ! -f "$relationships_file" ]]; then
+    return 1
+  fi
+
+  yq ".project_repo_links[$project_num].linked_repos[].name" "$relationships_file" 2>/dev/null
+}
+
+# Usage
+echo "Repositories linked to project 2:"
+get_project_repos 2
+```
+
+### Find Projects for a Repository
+
+```bash
+# Function to find which projects include a specific repository
+get_repo_projects() {
+  local repo_name=$1
+  local relationships_file=".hiivmind/github/relationships.yaml"
+
+  if [[ ! -f "$relationships_file" ]]; then
+    return 1
+  fi
+
+  # Find all projects that have this repo in their linked_repos
+  yq ".project_repo_links | to_entries | .[] | select(.value.linked_repos[].name == \"$repo_name\") | .key" "$relationships_file" 2>/dev/null
+}
+
+# Usage
+echo "Projects that include hiivmind-pulse-gh:"
+get_repo_projects "hiivmind-pulse-gh"
+```
+
+### Get Repository Dependencies
+
+```bash
+# Function to get repositories that this repo depends on
+get_repo_dependencies() {
+  local repo_name=$1
+  local relationships_file=".hiivmind/github/relationships.yaml"
+
+  if [[ ! -f "$relationships_file" ]]; then
+    return 1
+  fi
+
+  yq ".repo_dependencies[\"$repo_name\"].depends_on[]" "$relationships_file" 2>/dev/null
+}
+
+# Function to get repositories that depend on this repo
+get_repo_dependents() {
+  local repo_name=$1
+  local relationships_file=".hiivmind/github/relationships.yaml"
+
+  if [[ ! -f "$relationships_file" ]]; then
+    return 1
+  fi
+
+  yq ".repo_dependencies[\"$repo_name\"].depended_by[]" "$relationships_file" 2>/dev/null
+}
+
+# Usage
+echo "Dependencies of hiivmind-pulse-gh:"
+get_repo_dependencies "hiivmind-pulse-gh"
+
+echo ""
+echo "Repositories that depend on hiivmind-pulse-gh:"
+get_repo_dependents "hiivmind-pulse-gh"
+```
+
+### Cross-Project Milestone Coordination
+
+```bash
+# Function to find related projects for milestone coordination
+get_coordinated_projects() {
+  local project_num=$1
+  local relationships_file=".hiivmind/github/relationships.yaml"
+
+  if [[ ! -f "$relationships_file" ]]; then
+    return 1
+  fi
+
+  # Find projects coordinated with this one
+  yq ".cross_project_coordination[] | select(.source_project == $project_num or .target_project == $project_num) | if .source_project == $project_num then .target_project else .source_project end" "$relationships_file" 2>/dev/null
+}
+
+# Usage - when creating a milestone, check for coordinated projects
+PROJECT_NUM=2
+MILESTONE_TITLE="v3.0"
+
+echo "Creating milestone '$MILESTONE_TITLE' in project $PROJECT_NUM"
+
+# Check for coordinated projects
+COORDINATED=$(get_coordinated_projects "$PROJECT_NUM")
+
+if [[ -n "$COORDINATED" ]]; then
+  echo ""
+  echo "NOTE: This project coordinates with project(s): $COORDINATED"
+  echo "Consider creating aligned milestones in those projects"
+fi
+```
+
+### Get All Repositories in Dependency Chain
+
+```bash
+# Function to get all repositories in a dependency chain
+get_dependency_chain() {
+  local repo_name=$1
+  local relationships_file=".hiivmind/github/relationships.yaml"
+  local visited=()
+  local chain=()
+
+  _get_deps_recursive() {
+    local current_repo=$1
+
+    # Check if already visited
+    for visited_repo in "${visited[@]}"; do
+      if [[ "$visited_repo" == "$current_repo" ]]; then
+        return
+      fi
+    done
+
+    visited+=("$current_repo")
+    chain+=("$current_repo")
+
+    # Get dependencies
+    local deps=$(yq ".repo_dependencies[\"$current_repo\"].depends_on[]" "$relationships_file" 2>/dev/null)
+
+    if [[ -n "$deps" ]]; then
+      while read -r dep; do
+        _get_deps_recursive "$dep"
+      done <<< "$deps"
+    fi
+  }
+
+  _get_deps_recursive "$repo_name"
+
+  # Print chain
+  printf '%s\n' "${chain[@]}"
+}
+
+# Usage - when running tests, include dependencies
+REPO="hiivmind-pulse-gh-tests"
+
+echo "Dependency chain for $REPO:"
+get_dependency_chain "$REPO"
+
+echo ""
+echo "Ensure all dependencies are tested before $REPO"
+```
+
+### Check Repository Relationship Type
+
+```bash
+# Function to get repository relationship type
+get_repo_type() {
+  local repo_name=$1
+  local relationships_file=".hiivmind/github/relationships.yaml"
+
+  if [[ ! -f "$relationships_file" ]]; then
+    echo "unknown"
+    return
+  fi
+
+  yq ".repo_dependencies[\"$repo_name\"].relationship_type" "$relationships_file" 2>/dev/null || echo "unknown"
+}
+
+# Usage - determine appropriate operations based on repo type
+REPO="hiivmind-pulse-gh-tests"
+REPO_TYPE=$(get_repo_type "$REPO")
+
+case "$REPO_TYPE" in
+  "test")
+    echo "$REPO is a test repository - run tests after dependencies"
+    ;;
+  "plugin")
+    echo "$REPO is a plugin repository - ensure main repo is stable"
+    ;;
+  "main")
+    echo "$REPO is a main repository - changes affect dependent repos"
+    ;;
+  *)
+    echo "$REPO type unknown - proceed with caution"
+    ;;
+esac
+```
+
+---
+
+## Step 6: Determine API Type
 
 Use this routing table to determine GraphQL vs REST:
 
@@ -536,7 +748,7 @@ Use this routing table to determine GraphQL vs REST:
 
 ---
 
-## Step 6: Find Workflow Example
+## Step 7: Find Workflow Example
 
 Check for relevant workflow pattern:
 
@@ -558,7 +770,7 @@ ls "${CLAUDE_PLUGIN_ROOT}/reference/workflows/"
 
 ---
 
-## Step 7: Search Corpus for Syntax
+## Step 8: Search Corpus for Syntax
 
 Use keywords to find exact syntax in the corpus.
 
@@ -606,7 +818,7 @@ grep -n "^enum {EnumName} " "$SCHEMA" -A 20
 
 ---
 
-## Step 8: Execute Operation
+## Step 9: Execute Operation
 
 ### Domain: Issues
 
@@ -964,7 +1176,7 @@ gh release download "$TAG" -R "$REPO_FULL" --pattern "*.tar.gz"
 
 ---
 
-## Step 9: Report Result
+## Step 10: Report Result
 
 After execution:
 

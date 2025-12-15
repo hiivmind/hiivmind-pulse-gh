@@ -1,0 +1,93 @@
+# hiivmind-pulse-gh - Cross-Repo Relationships
+# This file documents relationships between projects and repositories,
+# as well as repository dependencies.
+#
+# Generated/Updated by hiivmind-pulse-gh-refresh on {{synced_at}}
+
+# Workspace identification
+workspace:
+  type: {{workspace_type}}           # organization or user
+  login: {{workspace_login}}         # Workspace login
+
+# Project-Repository Links
+# Documents which repositories are linked to which projects
+project_repo_links:
+  {{project_number}}:                # Project number
+    project_id: {{project_id}}       # GraphQL node ID (PVT_...)
+    project_title: {{project_title}} # Project title
+    linked_repos:
+      - name: {{repo_name}}          # Repository name
+        auto_add_enabled: {{bool}}   # true if auto-add is configured for this repo
+
+# Example:
+# project_repo_links:
+#   2:
+#     project_id: PVT_kwDOBxxxxxx
+#     project_title: "Development Board"
+#     linked_repos:
+#       - name: hiivmind-pulse-gh
+#         auto_add_enabled: true
+#       - name: hiivmind-corpus
+#         auto_add_enabled: true
+#   3:
+#     project_id: PVT_kwDOByyyyyy
+#     project_title: "Research"
+#     linked_repos:
+#       - name: hiivmind-corpus
+#         auto_add_enabled: false
+
+# Repository Dependencies
+# Documents which repositories depend on each other
+# This is typically manually maintained based on project architecture
+repo_dependencies:
+  {{repo_name}}:                     # Repository name
+    depends_on: []                   # Repositories this repo depends on
+    depended_by: []                  # Repositories that depend on this repo
+    relationship_type: {{type}}      # main, plugin, test, documentation
+
+# Example:
+# repo_dependencies:
+#   hiivmind-pulse-gh:
+#     depends_on: []
+#     depended_by:
+#       - hiivmind-pulse-gh-tests
+#     relationship_type: main
+#   hiivmind-pulse-gh-tests:
+#     depends_on:
+#       - hiivmind-pulse-gh
+#     depended_by: []
+#     relationship_type: test
+#   hiivmind-corpus:
+#     depends_on: []
+#     depended_by:
+#       - hiivmind-corpus-data
+#       - hiivmind-corpus-claude
+#     relationship_type: main
+
+# Cross-Project Coordination
+# Documents scenarios where work in one project affects another
+cross_project_coordination:
+  - source_project: {{project_number}} # Project number
+    target_project: {{project_number}} # Related project number
+    coordination_type: {{type}}        # milestone_sync, issue_tracking, dependency
+    description: {{description}}       # How these projects coordinate
+
+# Example:
+# cross_project_coordination:
+#   - source_project: 2
+#     target_project: 3
+#     coordination_type: milestone_sync
+#     description: "Development Board milestones align with Research project phases"
+
+# Metadata
+cache:
+  synced_at: {{synced_at}}           # ISO timestamp of last update
+  schema_version: "1.0"
+  source: "manual"                   # "manual" or "api" (when API support improves)
+
+# Notes:
+# - Project-repo links can be detected via GraphQL (repositories field on ProjectV2)
+# - Auto-add settings are per-project automation configuration
+# - Repository dependencies are typically maintained manually
+# - Cross-project coordination is manually documented
+# - This file enables intelligent cross-repo operations like milestone coordination

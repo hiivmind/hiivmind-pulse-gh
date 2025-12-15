@@ -553,6 +553,133 @@ cache:
 
 ---
 
+## Schema: relationships.yaml (Phase 5)
+
+Cross-repository relationships and project links. Single workspace-level file documenting all relationships.
+
+**Important:** This file is partially auto-generated (project-repo links via API) and partially manual (repository dependencies). Update regularly to reflect your workspace architecture.
+
+### workspace
+
+Workspace identification.
+
+| Path | Type | Description |
+|------|------|-------------|
+| `.workspace.type` | string | `organization` or `user` |
+| `.workspace.login` | string | Workspace login |
+
+### project_repo_links
+
+Documents which repositories are linked to which projects.
+
+| Path | Type | Description |
+|------|------|-------------|
+| `.project_repo_links.{N}` | object | Links for project number N |
+| `.project_repo_links.{N}.project_id` | string | GraphQL node ID (`PVT_...`) |
+| `.project_repo_links.{N}.project_title` | string | Project title |
+| `.project_repo_links.{N}.linked_repos[]` | array | Repositories linked to this project |
+| `.project_repo_links.{N}.linked_repos[].name` | string | Repository name |
+| `.project_repo_links.{N}.linked_repos[].auto_add_enabled` | boolean | `true` if auto-add is configured for this repo |
+
+### repo_dependencies
+
+Documents repository dependency relationships (manually maintained).
+
+| Path | Type | Description |
+|------|------|-------------|
+| `.repo_dependencies.{repo}` | object | Dependencies for a repository |
+| `.repo_dependencies.{repo}.depends_on[]` | array | Repositories this repo depends on |
+| `.repo_dependencies.{repo}.depended_by[]` | array | Repositories that depend on this repo |
+| `.repo_dependencies.{repo}.relationship_type` | string | `main`, `plugin`, `test`, `documentation` |
+
+### cross_project_coordination
+
+Documents scenarios where work in one project affects another (manually maintained).
+
+| Path | Type | Description |
+|------|------|-------------|
+| `.cross_project_coordination[]` | array | List of coordination relationships |
+| `.cross_project_coordination[].source_project` | number | Source project number |
+| `.cross_project_coordination[].target_project` | number | Target project number |
+| `.cross_project_coordination[].coordination_type` | string | `milestone_sync`, `issue_tracking`, `dependency` |
+| `.cross_project_coordination[].description` | string | How these projects coordinate |
+
+**Example:**
+```yaml
+workspace:
+  type: organization
+  login: hiivmind
+
+project_repo_links:
+  2:
+    project_id: PVT_kwDOBxxxxxx
+    project_title: "Development Board"
+    linked_repos:
+      - name: hiivmind-pulse-gh
+        auto_add_enabled: true
+      - name: hiivmind-corpus
+        auto_add_enabled: true
+
+  3:
+    project_id: PVT_kwDOByyyyyy
+    project_title: "Research"
+    linked_repos:
+      - name: hiivmind-corpus
+        auto_add_enabled: false
+      - name: clickhouse_skills
+        auto_add_enabled: true
+
+repo_dependencies:
+  hiivmind-pulse-gh:
+    depends_on: []
+    depended_by:
+      - hiivmind-pulse-gh-tests
+    relationship_type: main
+
+  hiivmind-pulse-gh-tests:
+    depends_on:
+      - hiivmind-pulse-gh
+    depended_by: []
+    relationship_type: test
+
+  hiivmind-corpus:
+    depends_on: []
+    depended_by:
+      - hiivmind-corpus-data
+      - hiivmind-corpus-claude
+    relationship_type: main
+
+  hiivmind-corpus-data:
+    depends_on:
+      - hiivmind-corpus
+    depended_by: []
+    relationship_type: plugin
+
+cross_project_coordination:
+  - source_project: 2
+    target_project: 3
+    coordination_type: milestone_sync
+    description: "Development milestones align with Research project phases"
+
+cache:
+  synced_at: "2025-12-15T16:00:00Z"
+  schema_version: "1.0"
+  source: "api+manual"
+```
+
+### Common Relationship Lookups
+
+| Need | yq Command |
+|------|------------|
+| Get repos for project | `yq '.project_repo_links[2].linked_repos[].name' relationships.yaml` |
+| Find projects for repo | `yq '.project_repo_links \| to_entries \| .[] \| select(.value.linked_repos[].name == "repo-name") \| .key' relationships.yaml` |
+| Get repo dependencies | `yq '.repo_dependencies["repo-name"].depends_on[]' relationships.yaml` |
+| Get repo dependents | `yq '.repo_dependencies["repo-name"].depended_by[]' relationships.yaml` |
+| Get repo type | `yq '.repo_dependencies["repo-name"].relationship_type' relationships.yaml` |
+| Find coordinated projects | `yq '.cross_project_coordination[] \| select(.source_project == 2 or .target_project == 2)' relationships.yaml` |
+
+---
+
 ## Schema: user.yaml (Personal, Git-Ignored)
 
 ### user

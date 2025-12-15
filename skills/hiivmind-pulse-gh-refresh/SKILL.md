@@ -578,6 +578,197 @@ yq -i ".cache.last_updated_at = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
 
 ---
 
+## Refresh Cross-Repo Relationships (Phase 5)
+
+Document relationships between projects and repositories, as well as repository dependencies.
+
+### Fetch Project-Repository Links
+
+```bash
+CONFIG=".hiivmind/github/config.yaml"
+OWNER=$(yq '.workspace.login' "$CONFIG")
+WORKSPACE_TYPE=$(yq '.workspace.type' "$CONFIG")
+
+# Fetch all projects with their linked repositories
+if [[ "$WORKSPACE_TYPE" == "organization" ]]; then
+  PROJECTS_DATA=$(gh api graphql -f query='
+    query($login: String!) {
+      organization(login: $login) {
+        projectsV2(first: 20) {
+          nodes {
+            number
+            id
+            title
+            repositories(first: 50) {
+              nodes {
+                name
+              }
+            }
+          }
+        }
+      }
+    }
+  ' -f login="$OWNER")
+  PROJECTS=$(echo "$PROJECTS_DATA" | jq -r '.data.organization.projectsV2.nodes')
+else
+  PROJECTS_DATA=$(gh api graphql -f query='
+    query($login: String!) {
+      user(login: $login) {
+        projectsV2(first: 20) {
+          nodes {
+            number
+            id
+            title
+            repositories(first: 50) {
+              nodes {
+                name
+              }
+            }
+          }
+        }
+      }
+    }
+  ' -f login="$OWNER")
+  PROJECTS=$(echo "$PROJECTS_DATA" | jq -r '.data.user.projectsV2.nodes')
+fi
+
+# Create relationships file
+cat > ".hiivmind/github/relationships.yaml" << EOF
+# hiivmind-pulse-gh - Cross-Repo Relationships
+# Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+workspace:
+  type: $WORKSPACE_TYPE
+  login: $OWNER
+
+project_repo_links:
+EOF
+
+# Process each project
+echo "$PROJECTS" | jq -c '.[]' | while read -r project; do
+  PROJECT_NUM=$(echo "$project" | jq -r '.number')
+  PROJECT_ID=$(echo "$project" | jq -r '.id')
+  PROJECT_TITLE=$(echo "$project" | jq -r '.title')
+
+  cat >> ".hiivmind/github/relationships.yaml" << PROJECTEOF
+  $PROJECT_NUM:
+    project_id: $PROJECT_ID
+    project_title: "$PROJECT_TITLE"
+    linked_repos:
+PROJECTEOF
+
+  # Get linked repos
+  REPOS=$(echo "$project" | jq -r '.repositories.nodes[].name')
+
+  if [[ -n "$REPOS" ]]; then
+    echo "$REPOS" | while read -r repo; do
+      # Check if auto-add is enabled (from automations file if exists)
+      AUTO_ADD_FILE=".hiivmind/github/automations/project-$PROJECT_NUM.yaml"
+      if [[ -f "$AUTO_ADD_FILE" ]]; then
+        AUTO_ADD=$(yq ".built_in.auto_add.repositories[] | select(. == \"$repo\")" "$AUTO_ADD_FILE" 2>/dev/null)
+        if [[ -n "$AUTO_ADD" ]]; then
+          AUTO_ADD_ENABLED="true"
+        else
+          AUTO_ADD_ENABLED="false"
+        fi
+      else
+        AUTO_ADD_ENABLED="false"
+      fi
+
+      cat >> ".hiivmind/github/relationships.yaml" << REPOEOF
+      - name: $repo
+        auto_add_enabled: $AUTO_ADD_ENABLED
+REPOEOF
+    done
+  else
+    echo "      []" >> ".hiivmind/github/relationships.yaml"
+  fi
+
+  echo "" >> ".hiivmind/github/relationships.yaml"
+done
+
+# Add repository dependencies section (to be filled manually)
+cat >> ".hiivmind/github/relationships.yaml" << 'EOF'
+
+repo_dependencies: {}
+  # Example - update this manually based on your architecture:
+  # hiivmind-pulse-gh:
+  #   depends_on: []
+  #   depended_by: [hiivmind-pulse-gh-tests]
+  #   relationship_type: main
+  # hiivmind-pulse-gh-tests:
+  #   depends_on: [hiivmind-pulse-gh]
+  #   depended_by: []
+  #   relationship_type: test
+
+cross_project_coordination: []
+  # Example - document cross-project coordination:
+  # - source_project: 2
+  #   target_project: 3
+  #   coordination_type: milestone_sync
+  #   description: "Development milestones align with Research phases"
+
+cache:
+  synced_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+  schema_version: "1.0"
+  source: "api+manual"
+EOF
+
+echo "Relationships cached to .hiivmind/github/relationships.yaml"
+echo ""
+echo "NEXT STEPS:"
+echo "1. Review the project-repo links (auto-detected via API)"
+echo "2. Update repo_dependencies section based on your architecture"
+echo "3. Document any cross_project_coordination scenarios"
+```
+
+### Manually Document Repository Dependencies
+
+After creating the relationships file, update it to reflect repository dependencies:
+
+```yaml
+repo_dependencies:
+  hiivmind-pulse-gh:
+    depends_on: []
+    depended_by:
+      - hiivmind-pulse-gh-tests
+    relationship_type: main
+
+  hiivmind-pulse-gh-tests:
+    depends_on:
+      - hiivmind-pulse-gh
+    depended_by: []
+    relationship_type: test
+
+  hiivmind-corpus:
+    depends_on: []
+    depended_by:
+      - hiivmind-corpus-data
+      - hiivmind-corpus-claude
+    relationship_type: main
+
+  hiivmind-corpus-data:
+    depends_on:
+      - hiivmind-corpus
+    depended_by: []
+    relationship_type: plugin
+```
+
+### Update Freshness Tracking
+
+After refreshing relationships:
+
+```bash
+FRESHNESS=".hiivmind/github/freshness.yaml"
+
+# Mark relationships section as fresh
+yq -i ".sections.relationships.last_checked = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
+yq -i ".sections.relationships.stale = false" "$FRESHNESS"
+yq -i ".cache.last_updated_at = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
+```
+
+---
+
 ## Refresh Projects
 
 ### List Current vs Cached Projects
