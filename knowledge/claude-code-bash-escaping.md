@@ -216,7 +216,150 @@ The cause is this escaping bug.
 
 ---
 
+## Recommended Patterns
+
+> **Updated:** 2025-12-16
+> **Based on:** Complete refactoring of init, refresh, and operations skills
+
+### Function-Based Pattern (Safest)
+
+To avoid both Bug #1 and Bug #2, use parameterized functions with local scope:
+
+**Good Example:**
+```bash
+fetch_project_fields() {
+  local owner="$1"
+  local project_num="$2"
+
+  gh api graphql -f query='...' \
+    -f owner="$owner" \
+    -F number="$project_num" | jq '.data.organization.projectV2'
+}
+
+# Usage:
+fetch_project_fields "hiivmind" 2
+```
+
+**Benefits:**
+- ✅ No intermediate variable capture (avoids Bug #1)
+- ✅ Clear parameter contract
+- ✅ Testable and reusable
+- ✅ Local scope prevents variable conflicts
+- ✅ Pipe-first design (stdout composition)
+
+### Key Rules
+
+1. **Always use `local`** for function variables
+   ```bash
+   # GOOD
+   fetch_data() {
+     local owner="$1"
+     local repo="$2"
+     gh api "/repos/$owner/$repo"
+   }
+
+   # BAD - global variables
+   fetch_data() {
+     OWNER="$1"
+     REPO="$2"
+     gh api "/repos/$OWNER/$REPO"
+   }
+   ```
+
+2. **Avoid `VAR=$(... | pipe)` patterns**
+   ```bash
+   # BAD - triggers Bug #1
+   REVIEWERS=$(get_repo_writers "$REPO" | head -3 | tr '\n' ',')
+
+   # GOOD - encapsulate in function
+   format_reviewers() {
+     local repo="$1"
+     get_repo_writers "$repo" | head -3 | tr '\n' ','
+   }
+   REVIEWERS=$(format_reviewers "$REPO")
+   ```
+
+3. **Use `! ... =` instead of `!=`**
+   ```bash
+   # BAD - triggers Bug #2
+   if [[ "$VAR" != "null" ]]; then
+
+   # GOOD - avoids Bug #2
+   if [[ ! "$VAR" = "null" ]]; then
+   ```
+
+4. **Declare variables before assignment**
+   ```bash
+   # GOOD - separate declaration from complex assignment
+   local admin_teams write_teams all_teams
+
+   admin_teams=$(yq "..." "$teams_file" 2>/dev/null)
+   write_teams=$(yq "..." "$teams_file" 2>/dev/null)
+   all_teams=$(printf "%s\n%s" "$admin_teams" "$write_teams" | sort -u)
+   ```
+
+### Examples from Refactoring
+
+#### Init Skill
+```bash
+discover_projects() {
+  local login="$1"
+  local type="$2"  # "organization" or "user"
+
+  if [[ "$type" = "organization" ]]; then
+    gh api graphql -f query='...' -f login="$login" --jq '...'
+  else
+    gh api graphql -f query='...' -f login="$login" --jq '...'
+  fi
+}
+```
+
+#### Refresh Skill
+```bash
+refresh_project_views() {
+  local config="$1"
+  local project_num="$2"
+  local owner view_data project_id project_title
+
+  owner=$(yq '.workspace.login' "$config")
+  view_data=$(gh api graphql -f query='...' -f owner="$owner" -F number="$project_num")
+
+  # Process and generate YAML
+  cat > ".hiivmind/github/views/project-$project_num.yaml" << EOF
+...
+EOF
+}
+```
+
+#### Operations Skill
+```bash
+add_project_item() {
+  local project_id="$1"
+  local content_id="$2"
+
+  gh api graphql -f query='mutation($projectId: ID!, $contentId: ID!) { ... }' \
+    -f projectId="$project_id" -f contentId="$content_id" --jq '.data.addProjectV2ItemById.item.id'
+}
+```
+
+### Pattern Decision Tree
+
+```
+Is it a simple gh CLI command without variables?
+├─ Yes → Use directly (e.g., gh issue create ...)
+└─ No → Does it need variable substitution?
+    ├─ Yes → Does it have pipes or complex logic?
+    │   ├─ Yes → Wrap in a parameterized function
+    │   └─ No → Direct command is safe
+    └─ No → Use directly
+```
+
+---
+
 ## References
 
 - GitHub Issue: hiivmind/hiivmind-pulse-gh#8 (pipe escaping bug)
+- GitHub Issue: hiivmind/hiivmind-pulse-gh#44 (inequality operator bug)
+- Refactoring Summary: `docs/refactoring-summary.md`
+- Example Pattern: `lib/corpus/patterns/scanning.md`
 - Claude Code GitHub: https://github.com/anthropics/claude-code/issues (report if needed)
