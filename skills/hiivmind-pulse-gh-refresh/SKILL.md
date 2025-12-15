@@ -769,6 +769,190 @@ yq -i ".cache.last_updated_at = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
 
 ---
 
+## Refresh Organization Teams (Phase 6)
+
+Cache organization team membership and repository permissions for team-aware operations.
+
+### Fetch Teams and Permissions
+
+```bash
+CONFIG=".hiivmind/github/config.yaml"
+OWNER=$(yq '.workspace.login' "$CONFIG")
+WORKSPACE_TYPE=$(yq '.workspace.type' "$CONFIG")
+
+# Teams are only available for organizations
+if [[ "$WORKSPACE_TYPE" != "organization" ]]; then
+  echo "Teams are only available for organizations, not user accounts"
+  exit 1
+fi
+
+# Fetch all teams with members and repository permissions
+TEAMS_DATA=$(gh api graphql -f query='
+  query($login: String!) {
+    organization(login: $login) {
+      teams(first: 100) {
+        nodes {
+          id
+          slug
+          name
+          privacy
+          members(first: 100) {
+            edges {
+              role
+              node {
+                login
+                id
+              }
+            }
+          }
+          repositories(first: 100) {
+            edges {
+              permission
+              node {
+                name
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+' -f login="$OWNER")
+
+TEAMS=$(echo "$TEAMS_DATA" | jq -r '.data.organization.teams.nodes')
+
+# Create teams file
+cat > ".hiivmind/github/teams.yaml" << EOF
+# hiivmind-pulse-gh - Organization Teams Configuration
+# Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+workspace:
+  type: $WORKSPACE_TYPE
+  login: $OWNER
+
+teams:
+EOF
+
+# Build reverse index of repo -> teams
+declare -A repo_admin_teams
+declare -A repo_write_teams
+declare -A repo_read_teams
+
+# Process each team
+echo "$TEAMS" | jq -c '.[]' | while read -r team; do
+  TEAM_SLUG=$(echo "$team" | jq -r '.slug')
+  TEAM_ID=$(echo "$team" | jq -r '.id')
+  TEAM_NAME=$(echo "$team" | jq -r '.name')
+  TEAM_PRIVACY=$(echo "$team" | jq -r '.privacy')
+
+  cat >> ".hiivmind/github/teams.yaml" << TEAMEOF
+  - slug: $TEAM_SLUG
+    id: $TEAM_ID
+    name: "$TEAM_NAME"
+    privacy: $TEAM_PRIVACY
+    members:
+TEAMEOF
+
+  # Get members
+  MEMBERS=$(echo "$team" | jq -r '.members.edges[] | "\(.node.login)|\(.node.id)|\(.role)"')
+
+  if [[ -n "$MEMBERS" ]]; then
+    echo "$MEMBERS" | while IFS='|' read -r login id role; do
+      cat >> ".hiivmind/github/teams.yaml" << MEMBEREOF
+      - login: $login
+        id: $id
+        role: $role
+MEMBEREOF
+    done
+  else
+    echo "      []" >> ".hiivmind/github/teams.yaml"
+  fi
+
+  # Get repository permissions
+  cat >> ".hiivmind/github/teams.yaml" << PERMEOF
+    repo_permissions:
+PERMEOF
+
+  REPOS=$(echo "$team" | jq -r '.repositories.edges[] | "\(.node.name)|\(.permission)"')
+
+  if [[ -n "$REPOS" ]]; then
+    echo "$REPOS" | while IFS='|' read -r repo_name permission; do
+      echo "      $repo_name: $permission" >> ".hiivmind/github/teams.yaml"
+    done
+  else
+    echo "      {}" >> ".hiivmind/github/teams.yaml"
+  fi
+
+  echo "" >> ".hiivmind/github/teams.yaml"
+done
+
+# Build repo_team_access reverse index
+# First pass: collect all repos
+ALL_REPOS=$(echo "$TEAMS" | jq -r '.[].repositories.edges[].node.name' | sort -u)
+
+cat >> ".hiivmind/github/teams.yaml" << 'EOF'
+
+repo_team_access:
+EOF
+
+echo "$ALL_REPOS" | while read -r repo; do
+  cat >> ".hiivmind/github/teams.yaml" << REPOEOF
+  $repo:
+    admin: []
+    write: []
+    read: []
+REPOEOF
+
+  # Find all teams with access to this repo
+  echo "$TEAMS" | jq -c '.[]' | while read -r team; do
+    TEAM_SLUG=$(echo "$team" | jq -r '.slug')
+    REPO_PERM=$(echo "$team" | jq -r ".repositories.edges[] | select(.node.name == \"$repo\") | .permission")
+
+    if [[ -n "$REPO_PERM" ]]; then
+      # Convert permission to access level
+      case "$REPO_PERM" in
+        ADMIN)
+          # Append to admin list using yq
+          yq -i ".repo_team_access[\"$repo\"].admin += [\"$TEAM_SLUG\"]" ".hiivmind/github/teams.yaml"
+          ;;
+        WRITE|MAINTAIN)
+          yq -i ".repo_team_access[\"$repo\"].write += [\"$TEAM_SLUG\"]" ".hiivmind/github/teams.yaml"
+          ;;
+        READ|TRIAGE)
+          yq -i ".repo_team_access[\"$repo\"].read += [\"$TEAM_SLUG\"]" ".hiivmind/github/teams.yaml"
+          ;;
+      esac
+    fi
+  done
+done
+
+# Add metadata
+cat >> ".hiivmind/github/teams.yaml" << EOF
+
+cache:
+  synced_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+  schema_version: "1.0"
+  source: "graphql"
+EOF
+
+echo "Teams cached to .hiivmind/github/teams.yaml"
+```
+
+### Update Freshness Tracking
+
+After refreshing teams:
+
+```bash
+FRESHNESS=".hiivmind/github/freshness.yaml"
+
+# Mark teams section as fresh
+yq -i ".sections.teams.last_checked = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
+yq -i ".sections.teams.stale = false" "$FRESHNESS"
+yq -i ".cache.last_updated_at = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
+```
+
+---
+
 ## Refresh Projects
 
 ### List Current vs Cached Projects

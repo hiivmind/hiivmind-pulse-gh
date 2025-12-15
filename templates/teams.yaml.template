@@ -1,0 +1,85 @@
+# hiivmind-pulse-gh - Organization Teams Configuration
+# This file documents team membership and repository permissions.
+# Cached at: .hiivmind/github/teams.yaml
+#
+# Generated/Updated by hiivmind-pulse-gh-refresh on {{synced_at}}
+
+# Workspace identification
+workspace:
+  type: {{workspace_type}}           # organization or user
+  login: {{workspace_login}}         # Workspace login
+
+# Teams in this organization
+teams:
+  - slug: {{team_slug}}              # Team slug (URL-friendly name)
+    id: {{team_id}}                  # GraphQL node ID (T_...)
+    name: {{team_name}}              # Team display name
+    privacy: {{privacy}}             # secret or closed
+    members:
+      - login: {{user_login}}        # User login
+        id: {{user_id}}              # User GraphQL node ID
+        role: {{role}}               # maintainer or member
+    repo_permissions:
+      {{repo_name}}: {{permission}}  # Repository: permission level
+
+# Example:
+# teams:
+#   - slug: core-maintainers
+#     id: T_kwDOBxxxxxx
+#     name: "Core Maintainers"
+#     privacy: closed
+#     members:
+#       - login: alice
+#         id: U_kgDOAxxxxxx
+#         role: maintainer
+#       - login: bob
+#         id: U_kgDOAyyyyyy
+#         role: member
+#     repo_permissions:
+#       hiivmind-pulse-gh: admin
+#       hiivmind-corpus: admin
+#   - slug: contributors
+#     id: T_kwDOByyyyyy
+#     name: "Contributors"
+#     privacy: closed
+#     members:
+#       - login: charlie
+#         id: U_kgDOAzzzzzz
+#         role: member
+#     repo_permissions:
+#       hiivmind-pulse-gh: write
+#       hiivmind-corpus: write
+
+# Repository team access (reverse index)
+# Maps repositories to teams by permission level
+repo_team_access:
+  {{repo_name}}:                     # Repository name
+    admin: []                        # Teams with admin access
+    write: []                        # Teams with write access
+    read: []                         # Teams with read access
+
+# Example:
+# repo_team_access:
+#   hiivmind-pulse-gh:
+#     admin: [core-maintainers]
+#     write: [contributors]
+#     read: []
+#   hiivmind-corpus:
+#     admin: [core-maintainers]
+#     write: [contributors]
+#     read: []
+
+# Metadata
+cache:
+  synced_at: {{synced_at}}           # ISO timestamp of last update
+  schema_version: "1.0"
+  source: "graphql"                  # Data source: graphql
+
+# Notes:
+# - Teams are fetched via GraphQL organization.teams query
+# - Member roles: "maintainer" (can manage team) or "member"
+# - Permissions: "admin", "write", "read"
+# - Privacy: "secret" (visible only to org owners and team members) or "closed" (visible to all org members)
+# - This cache enables team-aware operations like reviewer suggestions
+# - CODEOWNERS integration can use this data for intelligent reviewer suggestions
+# - Freshness threshold: 7 days (team membership changes infrequently)

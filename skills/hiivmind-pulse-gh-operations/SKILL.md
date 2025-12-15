@@ -724,7 +724,232 @@ esac
 
 ---
 
-## Step 6: Determine API Type
+## Step 6: Load Organization Teams (Phase 6)
+
+**Optional:** If the operation involves reviewer suggestions, permission checks, or team-aware operations, load team membership and permissions.
+
+### Check if Teams are Cached
+
+```bash
+TEAMS_FILE=".hiivmind/github/teams.yaml"
+
+if [[ -f "$TEAMS_FILE" ]]; then
+  echo "Teams cached"
+else
+  echo "Teams not cached - consider running refresh with teams section"
+fi
+```
+
+### Get Team Members
+
+```bash
+# Function to get members of a specific team
+get_team_members() {
+  local team_slug=$1
+  local teams_file=".hiivmind/github/teams.yaml"
+
+  if [[ ! -f "$teams_file" ]]; then
+    return 1
+  fi
+
+  yq ".teams[] | select(.slug == \"$team_slug\") | .members[].login" "$teams_file" 2>/dev/null
+}
+
+# Usage
+echo "Members of core-maintainers team:"
+get_team_members "core-maintainers"
+```
+
+### Get Team's Repository Access
+
+```bash
+# Function to get repositories a team has access to
+get_team_repos() {
+  local team_slug=$1
+  local permission=${2:-""}  # Optional: filter by permission (ADMIN, WRITE, READ)
+  local teams_file=".hiivmind/github/teams.yaml"
+
+  if [[ ! -f "$teams_file" ]]; then
+    return 1
+  fi
+
+  if [[ -n "$permission" ]]; then
+    # Filter by specific permission
+    yq ".teams[] | select(.slug == \"$team_slug\") | .repo_permissions | to_entries | .[] | select(.value == \"$permission\") | .key" "$teams_file" 2>/dev/null
+  else
+    # All repos regardless of permission
+    yq ".teams[] | select(.slug == \"$team_slug\") | .repo_permissions | keys[]" "$teams_file" 2>/dev/null
+  fi
+}
+
+# Usage
+echo "Repositories core-maintainers has admin access to:"
+get_team_repos "core-maintainers" "ADMIN"
+
+echo ""
+echo "All repositories core-maintainers has access to:"
+get_team_repos "core-maintainers"
+```
+
+### Get Teams with Repository Access
+
+```bash
+# Function to get teams with access to a repository
+get_repo_teams() {
+  local repo_name=$1
+  local permission=${2:-""}  # Optional: filter by permission (admin, write, read)
+  local teams_file=".hiivmind/github/teams.yaml"
+
+  if [[ ! -f "$teams_file" ]]; then
+    return 1
+  fi
+
+  if [[ -n "$permission" ]]; then
+    # Get teams with specific permission level
+    yq ".repo_team_access[\"$repo_name\"].$permission[]" "$teams_file" 2>/dev/null
+  else
+    # Get all teams with any access
+    {
+      yq ".repo_team_access[\"$repo_name\"].admin[]" "$teams_file" 2>/dev/null
+      yq ".repo_team_access[\"$repo_name\"].write[]" "$teams_file" 2>/dev/null
+      yq ".repo_team_access[\"$repo_name\"].read[]" "$teams_file" 2>/dev/null
+    } | sort -u
+  fi
+}
+
+# Usage
+echo "Teams with write access to hiivmind-pulse-gh:"
+get_repo_teams "hiivmind-pulse-gh" "write"
+
+echo ""
+echo "All teams with access to hiivmind-pulse-gh:"
+get_repo_teams "hiivmind-pulse-gh"
+```
+
+### Get Repository Writers (for Reviewer Suggestions)
+
+```bash
+# Function to get all users who can write to a repository
+get_repo_writers() {
+  local repo_name=$1
+  local teams_file=".hiivmind/github/teams.yaml"
+
+  if [[ ! -f "$teams_file" ]]; then
+    return 1
+  fi
+
+  local writers=()
+
+  # Get teams with admin or write access
+  local admin_teams=$(yq ".repo_team_access[\"$repo_name\"].admin[]" "$teams_file" 2>/dev/null)
+  local write_teams=$(yq ".repo_team_access[\"$repo_name\"].write[]" "$teams_file" 2>/dev/null)
+
+  # Combine teams
+  local all_teams=$(echo -e "$admin_teams\n$write_teams" | sort -u)
+
+  # Get members from each team
+  while read -r team_slug; do
+    if [[ -n "$team_slug" ]]; then
+      yq ".teams[] | select(.slug == \"$team_slug\") | .members[].login" "$teams_file" 2>/dev/null
+    fi
+  done <<< "$all_teams" | sort -u
+}
+
+# Usage - suggest reviewers from team members with write access
+REPO="hiivmind-pulse-gh"
+echo "Potential reviewers for $REPO (users with write+ access):"
+get_repo_writers "$REPO"
+
+# Use in PR creation
+REVIEWERS=$(get_repo_writers "$REPO" | head -3 | tr '\n' ',' | sed 's/,$//')
+echo ""
+echo "Suggested reviewers: $REVIEWERS"
+# gh pr create ... --reviewer "$REVIEWERS"
+```
+
+### Check Team Membership
+
+```bash
+# Function to check if a user is a member of a team
+is_team_member() {
+  local team_slug=$1
+  local user_login=$2
+  local teams_file=".hiivmind/github/teams.yaml"
+
+  if [[ ! -f "$teams_file" ]]; then
+    return 1
+  fi
+
+  local member=$(yq ".teams[] | select(.slug == \"$team_slug\") | .members[] | select(.login == \"$user_login\") | .login" "$teams_file" 2>/dev/null)
+
+  if [[ -n "$member" ]]; then
+    return 0  # User is a team member
+  else
+    return 1  # User is not a team member
+  fi
+}
+
+# Usage
+if is_team_member "core-maintainers" "alice"; then
+  echo "alice is a core maintainer - assign critical issues"
+else
+  echo "alice is not a core maintainer - assign routine issues"
+fi
+```
+
+### Get Team Maintainers
+
+```bash
+# Function to get team maintainers (users who can manage the team)
+get_team_maintainers() {
+  local team_slug=$1
+  local teams_file=".hiivmind/github/teams.yaml"
+
+  if [[ ! -f "$teams_file" ]]; then
+    return 1
+  fi
+
+  yq ".teams[] | select(.slug == \"$team_slug\") | .members[] | select(.role == \"MAINTAINER\") | .login" "$teams_file" 2>/dev/null
+}
+
+# Usage - escalate to team maintainers
+TEAM="core-maintainers"
+echo "Team maintainers who can help with $TEAM team issues:"
+get_team_maintainers "$TEAM"
+```
+
+### List All Teams
+
+```bash
+TEAMS_FILE=".hiivmind/github/teams.yaml"
+
+echo "Organization teams:"
+yq '.teams[] | "\(.slug) - \(.name) (\(.privacy))"' "$TEAMS_FILE" 2>/dev/null
+```
+
+### Team-Aware CODEOWNERS Integration
+
+```bash
+# When suggesting reviewers, prefer team members over individual users
+REPO="hiivmind-pulse-gh"
+
+# Get writers who can review
+POTENTIAL_REVIEWERS=$(get_repo_writers "$REPO")
+
+# Filter by team membership (prefer maintainers)
+echo "Suggested reviewers (maintainers first):"
+while read -r user; do
+  if is_team_member "core-maintainers" "$user"; then
+    echo "  $user (core maintainer) ⭐"
+  else
+    echo "  $user"
+  fi
+done <<< "$POTENTIAL_REVIEWERS"
+```
+
+---
+
+## Step 7: Determine API Type
 
 Use this routing table to determine GraphQL vs REST:
 
@@ -748,7 +973,7 @@ Use this routing table to determine GraphQL vs REST:
 
 ---
 
-## Step 7: Find Workflow Example
+## Step 8: Find Workflow Example
 
 Check for relevant workflow pattern:
 
@@ -770,7 +995,7 @@ ls "${CLAUDE_PLUGIN_ROOT}/reference/workflows/"
 
 ---
 
-## Step 8: Search Corpus for Syntax
+## Step 9: Search Corpus for Syntax
 
 Use keywords to find exact syntax in the corpus.
 
@@ -818,7 +1043,7 @@ grep -n "^enum {EnumName} " "$SCHEMA" -A 20
 
 ---
 
-## Step 9: Execute Operation
+## Step 10: Execute Operation
 
 ### Domain: Issues
 
@@ -1176,7 +1401,7 @@ gh release download "$TAG" -R "$REPO_FULL" --pattern "*.tar.gz"
 
 ---
 
-## Step 10: Report Result
+## Step 11: Report Result
 
 After execution:
 

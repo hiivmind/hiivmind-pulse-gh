@@ -680,6 +680,134 @@ cache:
 
 ---
 
+## Schema: teams.yaml (Phase 6)
+
+**File:** `.hiivmind/github/teams.yaml` (workspace-level, single file)
+**Purpose:** Cache organization team membership and repository permissions for team-aware operations
+**Freshness:** 7 days (team membership changes infrequently)
+
+### workspace
+
+Workspace identification (organization only - teams not available for user accounts).
+
+| Path | Type | Description |
+|------|------|-------------|
+| `.workspace.type` | string | `"organization"` (teams only for orgs) |
+| `.workspace.login` | string | Organization login |
+
+### teams
+
+Array of organization teams with members and repository permissions.
+
+| Path | Type | Description |
+|------|------|-------------|
+| `.teams[]` | array | List of teams |
+| `.teams[].slug` | string | Team slug (URL-friendly identifier) |
+| `.teams[].id` | string | GraphQL node ID (`T_...`) |
+| `.teams[].name` | string | Team display name |
+| `.teams[].privacy` | string | `secret` or `closed` |
+| `.teams[].members[]` | array | Team members |
+| `.teams[].members[].login` | string | Member username |
+| `.teams[].members[].id` | string | Member GraphQL node ID |
+| `.teams[].members[].role` | string | `MAINTAINER` or `MEMBER` |
+| `.teams[].repo_permissions` | object | Repositories this team has access to |
+| `.teams[].repo_permissions.{repo}` | string | Permission level: `ADMIN`, `WRITE`, `READ`, `MAINTAIN`, `TRIAGE` |
+
+### repo_team_access
+
+Reverse index mapping repositories to teams by permission level.
+
+| Path | Type | Description |
+|------|------|-------------|
+| `.repo_team_access.{repo}` | object | Teams with access to this repository |
+| `.repo_team_access.{repo}.admin[]` | array | Team slugs with admin access |
+| `.repo_team_access.{repo}.write[]` | array | Team slugs with write/maintain access |
+| `.repo_team_access.{repo}.read[]` | array | Team slugs with read/triage access |
+
+### cache
+
+Metadata about this cached data.
+
+| Path | Type | Description |
+|------|------|-------------|
+| `.cache.synced_at` | string | ISO 8601 timestamp of last sync |
+| `.cache.schema_version` | string | Schema version (`"1.0"`) |
+| `.cache.source` | string | `"graphql"` (fetched via GraphQL API) |
+
+### Example: teams.yaml
+
+```yaml
+workspace:
+  type: organization
+  login: hiivmind
+
+teams:
+  - slug: core-maintainers
+    id: T_kwDOBxxxxxx
+    name: "Core Maintainers"
+    privacy: closed
+    members:
+      - login: alice
+        id: U_kgDOAxxxxxx
+        role: MAINTAINER
+      - login: bob
+        id: U_kgDOAyyyyyy
+        role: MEMBER
+    repo_permissions:
+      hiivmind-pulse-gh: ADMIN
+      hiivmind-corpus: ADMIN
+
+  - slug: contributors
+    id: T_kwDOByyyyyy
+    name: "Contributors"
+    privacy: closed
+    members:
+      - login: charlie
+        id: U_kgDOAzzzzzz
+        role: MEMBER
+    repo_permissions:
+      hiivmind-pulse-gh: WRITE
+      hiivmind-corpus: WRITE
+
+repo_team_access:
+  hiivmind-pulse-gh:
+    admin: [core-maintainers]
+    write: [contributors]
+    read: []
+
+  hiivmind-corpus:
+    admin: [core-maintainers]
+    write: [contributors]
+    read: []
+
+cache:
+  synced_at: "2025-12-15T18:00:00Z"
+  schema_version: "1.0"
+  source: "graphql"
+```
+
+### Common Team Lookups
+
+| Need | yq Command |
+|------|------------|
+| Get team members | `yq '.teams[] \| select(.slug == "core-maintainers") \| .members[].login' teams.yaml` |
+| Get team's repos | `yq '.teams[] \| select(.slug == "core-maintainers") \| .repo_permissions \| keys[]' teams.yaml` |
+| Get teams with repo access | `yq '.repo_team_access["hiivmind-pulse-gh"] \| to_entries \| .[] \| .value[]' teams.yaml` |
+| Get repo writers | `yq '.repo_team_access["hiivmind-pulse-gh"].admin[], .repo_team_access["hiivmind-pulse-gh"].write[]' teams.yaml` |
+| Check team membership | `yq '.teams[] \| select(.slug == "core-maintainers") \| .members[] \| select(.login == "alice") \| .login' teams.yaml` |
+| Get team maintainers | `yq '.teams[] \| select(.slug == "core-maintainers") \| .members[] \| select(.role == "MAINTAINER") \| .login' teams.yaml` |
+
+### Team-Aware Operations
+
+**Use cases:**
+- **Reviewer suggestions:** Get users with write+ access for PR reviewers
+- **Permission checks:** Verify user can perform operation
+- **Team-based assignment:** Assign issues to team maintainers
+- **CODEOWNERS integration:** Intelligent reviewer suggestions based on team membership
+- **Access audits:** Verify who has access to which repositories
+
+---
+
 ## Schema: user.yaml (Personal, Git-Ignored)
 
 ### user
