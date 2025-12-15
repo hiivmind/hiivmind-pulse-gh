@@ -41,6 +41,180 @@ REPO_FULL="$OWNER/$REPO"
 
 ---
 
+## Extended Config Loading Functions (Phase 7)
+
+Consolidated functions to load extended configuration files on demand.
+
+### load_views()
+
+Check if view configuration is cached for a project.
+
+```bash
+# Function to check if views are cached for a project
+load_views() {
+  local project_num=$1
+  local view_file=".hiivmind/github/views/project-$project_num.yaml"
+
+  if [[ -f "$view_file" ]]; then
+    echo "loaded"
+    return 0
+  else
+    echo "not_cached"
+    return 1
+  fi
+}
+
+# Usage
+if load_views 2 >/dev/null; then
+  echo "Views loaded for project 2"
+  # Use view helpers from Step 2
+else
+  echo "Views not cached - operations will proceed without view awareness"
+fi
+```
+
+### load_repo_settings()
+
+Check if repository settings are cached.
+
+```bash
+# Function to check if repo settings are cached
+load_repo_settings() {
+  local repo_name=$1
+  local repo_file=".hiivmind/github/repos/$repo_name.yaml"
+
+  if [[ -f "$repo_file" ]]; then
+    echo "loaded"
+    return 0
+  else
+    echo "not_cached"
+    return 1
+  fi
+}
+
+# Usage
+if load_repo_settings "hiivmind-pulse-gh" >/dev/null; then
+  echo "Repository settings loaded"
+  # Use repo helpers from Step 3
+else
+  echo "Repo settings not cached - using defaults"
+fi
+```
+
+### load_automations()
+
+Check if automations are documented for a project.
+
+```bash
+# Function to check if automations are documented
+load_automations() {
+  local project_num=$1
+  local automations_file=".hiivmind/github/automations/project-$project_num.yaml"
+
+  if [[ -f "$automations_file" ]]; then
+    echo "loaded"
+    return 0
+  else
+    echo "not_cached"
+    return 1
+  fi
+}
+
+# Usage
+if load_automations 2 >/dev/null; then
+  echo "Automations loaded for project 2"
+  # Use automation helpers from Step 4
+else
+  echo "Automations not documented - proceeding without automation awareness"
+fi
+```
+
+### load_relationships()
+
+Check if cross-repo relationships are documented.
+
+```bash
+# Function to check if relationships are documented
+load_relationships() {
+  local relationships_file=".hiivmind/github/relationships.yaml"
+
+  if [[ -f "$relationships_file" ]]; then
+    echo "loaded"
+    return 0
+  else
+    echo "not_cached"
+    return 1
+  fi
+}
+
+# Usage
+if load_relationships >/dev/null; then
+  echo "Relationships loaded"
+  # Use relationship helpers from Step 5
+else
+  echo "Relationships not documented - proceeding without relationship awareness"
+fi
+```
+
+### load_teams()
+
+Check if organization teams are cached.
+
+```bash
+# Function to check if teams are cached
+load_teams() {
+  local teams_file=".hiivmind/github/teams.yaml"
+
+  if [[ -f "$teams_file" ]]; then
+    echo "loaded"
+    return 0
+  else
+    echo "not_cached"
+    return 1
+  fi
+}
+
+# Usage
+if load_teams >/dev/null; then
+  echo "Teams loaded"
+  # Use team helpers from Step 6
+else
+  echo "Teams not cached - proceeding without team awareness"
+fi
+```
+
+### Batch Loading Pattern
+
+Load all extended configs for an operation:
+
+```bash
+# Example: PR creation needs repos, teams, and optionally relationships
+load_pr_configs() {
+  local repo_name=$1
+
+  # Load required configs
+  load_repo_settings "$repo_name" >/dev/null
+  REPO_SETTINGS_LOADED=$?
+
+  load_teams >/dev/null
+  TEAMS_LOADED=$?
+
+  # Optional configs
+  load_relationships >/dev/null
+  RELATIONSHIPS_LOADED=$?
+
+  # Report what's available
+  [[ $REPO_SETTINGS_LOADED -eq 0 ]] && echo "✓ Repo settings loaded"
+  [[ $TEAMS_LOADED -eq 0 ]] && echo "✓ Teams loaded (can suggest reviewers)"
+  [[ $RELATIONSHIPS_LOADED -eq 0 ]] && echo "✓ Relationships loaded (cross-repo awareness)"
+}
+
+# Usage
+load_pr_configs "hiivmind-pulse-gh"
+```
+
+---
+
 ## Step 2: Load View Configuration (Phase 2)
 
 **Optional:** If the operation involves creating/updating project items, load view configuration to respect visible fields.

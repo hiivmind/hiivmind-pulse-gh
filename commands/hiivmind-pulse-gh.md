@@ -106,17 +106,120 @@ fi
 3. If yes → Load `hiivmind-pulse-gh-refresh` skill
 4. After refresh → Continue to Step 3
 
-**Domain to Section Mapping:**
+**Domain to Section Mapping (Phase 7):**
 
-| Domain | Required Section(s) |
-|--------|---------------------|
-| issues | projects (if adding to project) |
-| pull_requests | projects, repo_settings |
-| milestones | repositories |
-| projects | projects, views |
-| branch_protection | repo_settings |
-| rulesets | repo_settings |
-| actions | repositories |
+| Domain | Required Section(s) | Rationale |
+|--------|---------------------|-----------|
+| issues | workspace, projects | Basic issue ops need project IDs if adding to project |
+| pull_requests | workspace, repositories, repo_settings, teams | PR ops need repo settings (merge methods, protection) and teams (reviewers) |
+| milestones | workspace, repositories | Milestone ops need repo catalog |
+| labels | workspace, repositories, repo_settings | Label ops need repo catalog and existing labels |
+| projects | workspace, projects, views, automations | Project ops need field IDs, view configs, automation awareness |
+| branch_protection | workspace, repositories, repo_settings | Protection ops need repo settings for current rules |
+| rulesets | workspace, repositories, repo_settings | Ruleset ops need repo settings for current rules |
+| actions | workspace, repositories | Workflow ops need repo catalog |
+| secrets | workspace, repositories | Secret ops need repo catalog |
+| variables | workspace, repositories | Variable ops need repo catalog |
+| releases | workspace, repositories, relationships | Release ops may involve cross-repo coordination |
+| reviewers | workspace, teams | Reviewer suggestions need team membership |
+| cross_repo | workspace, relationships | Cross-repo ops need dependency mapping |
+
+### Per-Section Staleness Checking (Phase 7)
+
+After Step 3 (Intent Detection), check staleness of required sections:
+
+```bash
+# Function to check section staleness
+check_section_staleness() {
+  local section=$1
+  local freshness_file=".hiivmind/github/freshness.yaml"
+
+  if [[ ! -f "$freshness_file" ]]; then
+    echo "fresh"  # No tracking = assume fresh
+    return 0
+  fi
+
+  local last_checked=$(yq ".sections.$section.last_checked" "$freshness_file")
+  local threshold_hours=$(yq ".sections.$section.threshold_hours" "$freshness_file")
+
+  if [[ "$last_checked" = "null" ]] || [[ -z "$last_checked" ]]; then
+    echo "never_checked"
+    return 2  # Never checked = stale
+  fi
+
+  local last_epoch=$(date -d "$last_checked" +%s 2>/dev/null || echo 0)
+  local now_epoch=$(date +%s)
+  local age_hours=$(( (now_epoch - last_epoch) / 3600 ))
+
+  # Soft staleness: between threshold and 2x threshold
+  if [[ $age_hours -gt $threshold_hours ]] && [[ $age_hours -lt $((threshold_hours * 2)) ]]; then
+    echo "soft_stale"
+    return 1
+  fi
+
+  # Hard staleness: >= 2x threshold
+  if [[ $age_hours -ge $((threshold_hours * 2)) ]]; then
+    echo "hard_stale"
+    return 2
+  fi
+
+  echo "fresh"
+  return 0
+}
+
+# Example: Check required sections for a domain
+DOMAIN="pull_requests"
+REQUIRED_SECTIONS="workspace repositories repo_settings teams"
+
+SOFT_STALE=()
+HARD_STALE=()
+
+for section in $REQUIRED_SECTIONS; do
+  STALENESS=$(check_section_staleness "$section")
+  case "$STALENESS" in
+    "soft_stale")
+      SOFT_STALE+=("$section")
+      ;;
+    "hard_stale"|"never_checked")
+      HARD_STALE+=("$section")
+      ;;
+  esac
+done
+
+# Handle staleness
+if [[ ${#HARD_STALE[@]} -gt 0 ]]; then
+  # BLOCK mutations if hard stale
+  if [[ "$OPERATION" == "create" ]] || [[ "$OPERATION" == "update" ]] || [[ "$OPERATION" == "delete" ]]; then
+    echo "ERROR: Cannot perform mutation - required sections are critically stale:"
+    printf '  - %s\n' "${HARD_STALE[@]}"
+    echo ""
+    echo "Please refresh these sections before proceeding:"
+    echo "  /hiivmind-pulse-gh-refresh [section-name]"
+    exit 1
+  else
+    # Warn but allow reads
+    echo "WARNING: Some required sections are critically stale:"
+    printf '  - %s\n' "${HARD_STALE[@]}"
+    echo ""
+    echo "Results may be inaccurate. Consider refreshing."
+  fi
+elif [[ ${#SOFT_STALE[@]} -gt 0 ]]; then
+  # Warn about soft staleness
+  echo "NOTE: Some sections are getting stale:"
+  printf '  - %s\n' "${SOFT_STALE[@]}"
+  echo ""
+  echo "Consider refreshing soon for best results."
+fi
+```
+
+**Staleness Policy:**
+
+| Staleness Level | Age | Read Ops | Mutation Ops |
+|-----------------|-----|----------|--------------|
+| Fresh | < threshold | ✅ Allow | ✅ Allow |
+| Soft Stale | threshold to 2x | ✅ Allow + warn | ✅ Allow + warn |
+| Hard Stale | >= 2x threshold | ✅ Allow + warn | ❌ Block + require refresh |
+| Never Checked | null | ✅ Allow + warn | ❌ Block + require refresh |
 
 ### 2c: Update Freshness Check Timestamp
 
