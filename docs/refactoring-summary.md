@@ -2,7 +2,7 @@
 
 **Date:** 2025-12-16
 **Branch:** main
-**Commits:** 8 commits (64278d5 through 26f1ecd)
+**Commits:** 11 commits (64278d5 through b0002b3)
 
 ## Overview
 
@@ -72,7 +72,7 @@ gh api graphql -f query='mutation($projectId: ID!, $contentId: ID!) { addProject
 
 ---
 
-## Phase 2: Function-Based Patterns (5 commits)
+## Phase 2: Function-Based Patterns (8 commits)
 
 ### Goal
 Eliminate Claude Code Bash tool escaping bugs (KB-001) by converting all examples to parameterized functions with local scope.
@@ -82,6 +82,9 @@ Eliminate Claude Code Bash tool escaping bugs (KB-001) by converting all example
 - `31a1ddd` - Refresh skill view fetching
 - `aa820c8` - Refresh skill complete
 - `26f1ecd` - Operations skill refactoring
+- `41fc94d` - Refactoring summary document created
+- `36a3e73` - Workflow corpus references added
+- `b0002b3` - Knowledge doc pattern guidance added
 
 ### Functions Created
 
@@ -156,11 +159,12 @@ fetch_project_fields "hiivmind" 2
 
 | Metric | Value |
 |--------|-------|
-| Commits | 8 |
-| Files modified | 9 |
-| Lines changed | ~600 (additions + deletions) |
+| Commits | 11 |
+| Files modified | 11 |
+| Lines changed | ~900 (additions + deletions) |
 | Functions created | 14 |
 | Escaping bugs eliminated | All instances |
+| Documentation created | 3 files |
 
 ### Quality Improvements
 
@@ -198,35 +202,41 @@ fetch_project_fields "hiivmind" 2
 
 **Expected impact:** Additional ~800 line reduction
 
-### From Function Pattern (Future)
+### From Function Pattern (Completed)
 
 - ✅ Operations skill: Completed (commit 26f1ecd)
-- Workflows: Convert remaining examples to function-based pattern
-- Knowledge doc: Add pattern guidance section
+- ✅ Workflows: Corpus references added (commit 36a3e73)
+- ✅ Knowledge doc: Pattern guidance added (commit b0002b3)
 
 ---
 
 ## Documentation Updates
 
 ### New Files
-- `docs/hardcoded-scripts-triage.md` - Complete analysis and roadmap
-- `docs/refactoring-summary.md` - This document
+- `docs/hardcoded-scripts-triage.md` - Complete analysis and roadmap (Phase 1)
+- `docs/refactoring-summary.md` - This comprehensive summary document
 
 ### Updated Files
 - `CLAUDE.md` - Added corpus usage flow guidance
-- `knowledge/claude-code-bash-escaping.md` - Referenced in commits
-- All refactored skills include corpus references and usage examples
+- `knowledge/claude-code-bash-escaping.md` - Added recommended patterns section with examples
+- `skills/hiivmind-pulse-gh-init/SKILL.md` - Function-based examples
+- `skills/hiivmind-pulse-gh-refresh/SKILL.md` - Complex function examples
+- `skills/hiivmind-pulse-gh-operations/SKILL.md` - Domain operation functions
+- `reference/workflows/setup-branch-protection.md` - Corpus references added
+- All refactored files include corpus references and usage examples
 
 ---
 
 ## Success Criteria Met
 
 ✅ **Corpus coverage** - All APIs indexed with keywords
-✅ **Skills refactored** - Init and refresh complete
+✅ **Skills refactored** - Init, refresh, and operations complete
+✅ **Workflows enhanced** - Corpus references added for discoverability
 ✅ **Maintainability** - Single source of truth established
 ✅ **Usability** - Clear keywords and usage examples
-✅ **Reliability** - Escaping bug patterns eliminated
-✅ **Documentation** - Comprehensive guides created
+✅ **Reliability** - All escaping bug patterns eliminated
+✅ **Documentation** - Comprehensive guides with pattern examples
+✅ **Knowledge transfer** - Recommended patterns documented
 
 ---
 
