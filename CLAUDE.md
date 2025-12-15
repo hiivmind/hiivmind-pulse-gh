@@ -168,37 +168,36 @@ preferences:
 
 ## GitHub Documentation Corpus
 
-Embedded at `.claude-plugin/skills/hiivmind-corpus-github/` with specialized GitHub API docs.
+This plugin includes an embedded GitHub API corpus at `.claude-plugin/skills/hiivmind-corpus-github/`.
 
-### Keyword Lookup
+### How to Use the Corpus
 
-Search the corpus index using keywords:
+**Do NOT grep the corpus directly.** Use the proper flow:
 
-| Domain | Keywords |
-|--------|----------|
-| Issues | `createIssue`, `updateIssue`, `closeIssue`, `subjectId` |
-| PRs | `createPullRequest`, `mergePullRequest`, `requestReviews` |
-| Projects v2 | `addProjectV2ItemById`, `updateProjectV2ItemFieldValue`, `createProjectV2StatusUpdate` |
-| Milestones | `milestones`, `due_on`, `milestoneId` (REST for CRUD) |
-| Labels | `addLabelsToLabelable`, `removeLabelsFromLabelable`, `labelIds` |
-| Branch Protection | `required_status_checks`, `enforce_admins` (REST) |
-| Rulesets | `rulesets`, `enforcement`, `conditions` (REST) |
-| Actions | `workflows`, `runs`, `dispatches`, `cancel`, `rerun` |
-| Secrets | `secrets`, `encrypted_value`, `public-key` |
-| Variables | `variables`, `visibility` |
-| Releases | `releases`, `tag_name`, `assets`, `generate-notes` |
+1. **Read routing guide** - `reference/api-routing.md` has routing decisions + search keywords
+2. **Navigate corpus** - Use the corpus's navigate skill with those keywords
+3. **Get syntax** - Corpus returns paths to source docs with current syntax
 
-### GraphQL Schema Search
+### Lookup Flow
 
-For type definitions and mutations (70k+ line schema):
-
-```bash
-# Find type
-grep -n "^type ProjectV2 " .claude-plugin/skills/hiivmind-corpus-github/data/uploads/graphql-schema/schema.docs.graphql -A 50
-
-# Find mutation
-grep -n "createProjectV2StatusUpdate" .claude-plugin/skills/hiivmind-corpus-github/data/uploads/graphql-schema/schema.docs.graphql -B 5 -A 30
 ```
+reference/api-routing.md          →  "Milestones create → REST"
+                                      Keywords: milestones, POST, create, title, due_on
+                                              ↓
+corpus navigate skill             →  Searches index for keywords
+                                              ↓
+corpus index                      →  Returns: rest:repos/milestones.md#create
+                                              ↓
+source doc                        →  Current syntax (POST /repos/{owner}/{repo}/milestones)
+```
+
+### Why This Matters
+
+- **Routing guide** owns the decisions and keywords (updated manually when API changes)
+- **Corpus index** owns the locations (updated by corpus refresh)
+- **Source docs** own the syntax (always current from upstream)
+
+Each layer manages its own concerns. No hardcoded paths in CLAUDE.md.
 
 ---
 
