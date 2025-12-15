@@ -5,16 +5,31 @@
   },
   "repository": "https://github.com/hiivmind/hiivmind-pulse-gh",
   "metadata": {
-    "description": "GitHub skills for Claude Code - Projects v2, Milestones, Branch Protection. Check if repos are linked to projects, manage kanban boards, configure branch rules.",
-    "version": "3.0.0"
+    "description": "GitHub workspace initialization and API documentation corpus. Run init once, then use gh CLI directly with routing guide and corpus for GraphQL/REST operations.",
+    "version": "4.0.0"
   },
   "plugins": [
     {
       "name": "hiivmind-pulse-gh",
       "source": "./",
-      "description": "GitHub skills for Claude Code. Check if a repo is attached/linked to a project, find which projects a repository belongs to, discover project boards, manage kanban items, filter by assignee/status, handle milestones, configure branch protection and rulesets. Includes workspace caching for org structure.",
-      "version": "3.0.0",
-      "keywords": ["hiivmind", "github", "skills", "projects", "project-board", "kanban", "attached", "linked", "connected", "belongs-to", "tracked", "discover", "find", "milestones", "branch-protection", "rulesets", "graphql", "rest-api", "workspace", "configuration", "status-updates", "roadmap"]
+      "description": "GitHub workspace initialization and embedded API documentation corpus. Initialize once to cache project/repo IDs, then use gh CLI directly with routing guide for API decisions and corpus for exact syntax. Covers Projects v2, milestones, issues, PRs, branch protection, rulesets, actions, secrets, variables, and releases.",
+      "version": "4.0.0",
+      "keywords": [
+        "github",
+        "graphql",
+        "rest-api",
+        "projects-v2",
+        "milestones",
+        "issues",
+        "pull-requests",
+        "actions",
+        "workflows",
+        "branch-protection",
+        "rulesets",
+        "releases",
+        "gh-cli",
+        "workspace-init"
+      ]
     }
   ]
 }
