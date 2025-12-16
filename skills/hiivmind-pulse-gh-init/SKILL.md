@@ -130,7 +130,21 @@ Wait for user confirmation before proceeding. If user says no, ask them to speci
 
 **Goal:** Discover projects and their field configurations.
 
-**See:** `lib/github/patterns/graphql-queries.md`
+### The v3 Flow
+
+**Step 1: Read Routing Guide**
+- Read `reference/api-routing.md`
+- Projects v2 → List projects → GraphQL
+- Keywords: `projectsV2`, `organization`, `user`
+
+**Step 2: Search Corpus via Skill**
+- Invoke skill: `.claude-plugin/skills/hiivmind-corpus-github/SKILL.md`
+- Query: "projectsV2 organization list projects GraphQL"
+- The skill searches `data/index.md` and `data/uploads/graphql-schema/schema.docs.graphql`
+- Returns: query syntax for listing organization/user projects
+
+**Step 3: Execute Query**
+- Use temp file pattern from `lib/github/patterns/graphql-execution.md`
 
 ### What to Do
 
@@ -257,5 +271,12 @@ All implementation details are in the pattern library:
 | `lib/github/patterns/tool-detection.md` | Check for gh, jq, yq |
 | `lib/github/patterns/authentication.md` | Verify auth and scopes |
 | `lib/github/patterns/workspace-detection.md` | Detect org/user from context |
-| `lib/github/patterns/graphql-queries.md` | Query projects and fields |
+| `lib/github/patterns/graphql-execution.md` | Execute queries via temp file |
 | `lib/github/patterns/config-parsing.md` | Read/write YAML config |
+
+### v3 Flow References
+
+| Reference | Purpose |
+|-----------|---------|
+| `reference/api-routing.md` | Routing decisions + search keywords |
+| `.claude-plugin/skills/hiivmind-corpus-github/` | GitHub API corpus (GraphQL schema, REST docs) |
