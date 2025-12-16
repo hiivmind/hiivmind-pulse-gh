@@ -98,16 +98,28 @@ grep -E "^key:" config.yaml | cut -d: -f2
 | `graphql-execution.md` | Execute queries via temp file (solves escaping) | Done |
 | `v3-flow.md` | Complete v3 flow: routing → corpus → execute | Done |
 
-### Future Iterations
+### Iteration 2: Patterns + Refresh Skill
 
-| Pattern | Purpose | Iteration |
-|---------|---------|-----------|
-| `rest-operations.md` | REST endpoint patterns | 2 |
-| `project-operations.md` | Project v2 field updates, item management | 2 |
-| `issue-pr-operations.md` | Issue/PR CRUD operations | 2 |
-| `protection-operations.md` | Branch protection, rulesets | 2 |
-| `error-handling.md` | Common errors and recovery | 2 |
-| `id-resolution.md` | Resolve project/field/option IDs from config | 3 |
+| Pattern | Purpose | Status |
+|---------|---------|--------|
+| `id-resolution.md` | Resolve names/numbers to GraphQL IDs with cache-first strategy | Done |
+| `error-handling.md` | Central error reference for all GitHub operations | Done |
+
+### Why No Domain-Specific Patterns?
+
+The v3 flow architecture (`v3-flow.md`) eliminates the need for domain-specific patterns like `rest-operations.md`, `project-operations.md`, etc.
+
+**How v3 flow works:**
+1. **Routing guide** (`reference/api-routing.md`) determines API type (GraphQL/REST/CLI)
+2. **Corpus skill** provides exact syntax from 70k+ line GraphQL schema and REST docs
+3. **Execution patterns** (`graphql-execution.md`) handle all API types uniformly
+
+All domain operations (issues, projects, milestones, protection, etc.) follow the same flow:
+```
+routing → corpus → execute
+```
+
+No separate domain patterns needed - the corpus has the syntax, the routing guide has the decisions.
 
 ## Design Principles
 
