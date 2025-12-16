@@ -1,24 +1,239 @@
 ---
 name: hiivmind-pulse-gh-refresh
 description: >
-  Sync workspace config with current GitHub state. Updates project fields, options, and
-  repository metadata in config.yaml. Run when operations fail with "ID not found" errors
-  or after making changes in GitHub (new fields, renamed options, new projects).
+  Sync workspace config with current GitHub state. Check staleness, select sections to refresh,
+  update config via v3 flow. Run when operations fail with "ID not found" errors or after
+  making changes in GitHub (new fields, renamed options, new projects).
 ---
 
 # GitHub Workspace Refresh
 
-Synchronize cached IDs with current GitHub state. Run when config becomes stale.
+Synchronize cached configuration with current GitHub state. Run when config becomes stale or IDs change.
 
-## Usage
+## Scope
 
-```bash
-# Refresh all sections (default)
-# Use this skill without arguments
+| Does | Does NOT |
+|------|----------|
+| Check staleness per section | Execute GitHub mutations |
+| Refresh selected sections via v3 flow | Initialize new workspaces |
+| Update freshness timestamps | Modify GitHub resources |
+| Update cached IDs and fields | Create new projects/fields |
 
-# Refresh specific section only
-# Pass section name: workspace, projects, views, automations, repositories, repo_settings, relationships, teams
+## Phase Overview
+
 ```
+1. CONTEXT → 2. STALENESS → 3. SELECT → 4. REFRESH → 5. UPDATE → 6. REPORT
+   (load)       (check)       (user)      (query)      (write)      (done)
+      │             │            │            │            │            │
+   STOP if      Show all      STOP for     v3 flow       -         STOP: offer
+   not init     sections      selection    per section             next steps
+```
+
+---
+
+## Phase 1: CONTEXT
+
+**Goal:** Load existing configuration and verify workspace is initialized.
+
+**See:** `lib/github/patterns/config-parsing.md`
+
+### What to Do
+
+1. Check for `.hiivmind/github/config.yaml`
+2. Load workspace info (login, type, repositories)
+3. Check for `freshness.yaml`
+
+### STOP Point
+
+**If not initialized:**
+
+```
+Workspace not initialized.
+
+Config file not found: .hiivmind/github/config.yaml
+
+Run: /hiivmind-pulse-gh init
+```
+
+---
+
+## Phase 2: STALENESS
+
+**Goal:** Check which sections need refreshing based on timestamps and thresholds.
+
+**See:** `lib/github/patterns/config-parsing.md`
+
+### What to Do
+
+1. Read `freshness.yaml`
+2. For each section, compare `last_checked` against `threshold_hours`
+3. Mark sections as stale/fresh
+
+### Staleness Calculation
+
+```
+age_hours = (now - last_checked) / 3600
+stale = age_hours > threshold_hours OR last_checked is null
+```
+
+### Present Status
+
+```
+=== Freshness Status ===
+
+Section          Last Checked         Age      Threshold   Status
+─────────────────────────────────────────────────────────────────
+workspace        2024-01-15 09:00     2h       24h         FRESH
+projects         2024-01-14 12:00     23h      24h         FRESH
+views            2024-01-10 08:00     120h     48h         STALE
+repo_settings    never                -        72h         STALE
+automations      2024-01-12 15:00     70h      168h        FRESH
+relationships    never                -        168h        STALE
+teams            2024-01-08 10:00     168h     168h        STALE
+```
+
+---
+
+## Phase 3: SELECT
+
+**Goal:** Let user choose which sections to refresh.
+
+### STOP Point
+
+**Present options to user:**
+
+```
+Stale sections that need refreshing:
+  1. views (120h old, threshold: 48h)
+  2. repo_settings (never checked)
+  3. relationships (never checked)
+  4. teams (168h old, threshold: 168h)
+
+Fresh sections (optional refresh):
+  5. workspace (2h old)
+  6. projects (23h old)
+  7. automations (70h old)
+
+Which sections to refresh? [1,2,3,4 / stale / all / none]
+```
+
+**Never auto-refresh** without user confirmation.
+
+---
+
+## Phase 4: REFRESH
+
+**Goal:** Refresh each selected section using v3 flow.
+
+**See:** `lib/github/patterns/v3-flow.md`
+**See:** `lib/github/patterns/error-handling.md`
+
+### The v3 Flow (per section)
+
+For each selected section:
+
+1. **Read Routing Guide** - `reference/api-routing.md`
+   - Determine: GraphQL vs REST
+   - Get search keywords
+
+2. **Search Corpus via Skill**
+   - Invoke: `.claude-plugin/skills/hiivmind-corpus-github/SKILL.md`
+   - Query with keywords from routing guide
+   - Get exact query/endpoint syntax
+
+3. **Execute Query**
+   - GraphQL: temp file pattern (`lib/github/patterns/graphql-execution.md`)
+   - REST: `gh api /endpoint`
+   - CLI: `gh` command directly
+
+4. **Update Config Files**
+   - Write results to appropriate config file
+   - Use patterns from `lib/github/patterns/config-parsing.md`
+
+### Refreshable Sections
+
+| Section | Config File | v3 Flow Keywords | Data Updated |
+|---------|-------------|------------------|--------------|
+| workspace | `config.yaml` | `organization`, `user` | Org/user info, login, type |
+| projects | `config.yaml` | `projectsV2`, `fields`, `SingleSelectField` | Project IDs, field IDs, option IDs |
+| views | `views/project-N.yaml` | `projectV2.views`, `layout`, `filter` | View configurations |
+| repo_settings | `repos/REPO.yaml` | `branchProtectionRules`, REST `/branches` | Protection rules, rulesets, labels |
+| automations | `automations/project-N.yaml` | `projectV2.workflows` | Workflow templates (manual update) |
+| relationships | `relationships.yaml` | `projectsV2.repositories` | Project-repo links |
+| teams | `teams.yaml` | `organization.teams`, `members` | Team membership, permissions |
+
+### Notes on Specific Sections
+
+**views:** View CRUD is UI-only (no createProjectV2View mutation). Refresh fetches current state.
+
+**automations:** GitHub Projects v2 automations are configured in UI and not fully exposed via API. Creates template file for manual documentation.
+
+**teams:** Only available for organizations, not user accounts.
+
+---
+
+## Phase 5: UPDATE
+
+**Goal:** Update freshness timestamps after refresh.
+
+**See:** `lib/github/patterns/config-parsing.md`
+
+### What to Do
+
+For each refreshed section:
+
+1. Set `last_checked` to current timestamp
+2. Set `stale` to `false`
+3. Record coverage (projects_covered, repos_covered)
+4. Update `cache.last_updated_at`
+
+### Timestamp Format
+
+ISO 8601 UTC: `2024-01-15T14:30:00Z`
+
+---
+
+## Phase 6: REPORT
+
+**Goal:** Summarize refresh results and offer next steps.
+
+### What to Do
+
+1. Display summary of refreshed sections
+2. Note any errors or warnings
+3. Offer next actions
+
+### STOP Point
+
+**After successful refresh:**
+
+```
+Refresh complete!
+
+Sections refreshed:
+  ✓ views (project 2, 3)
+  ✓ repo_settings (hiivmind-pulse-gh)
+  ✓ relationships
+  ✓ teams
+
+Warnings:
+  ⚠ automations: Template created - update manually
+
+Config files updated:
+  .hiivmind/github/views/project-2.yaml
+  .hiivmind/github/views/project-3.yaml
+  .hiivmind/github/repos/hiivmind-pulse-gh.yaml
+  .hiivmind/github/relationships.yaml
+  .hiivmind/github/teams.yaml
+  .hiivmind/github/freshness.yaml
+
+What would you like to do next?
+  1. Run an operation (use /hiivmind-pulse-gh)
+  2. Refresh more sections
+  3. Done for now
+```
+
+---
 
 ## When to Refresh
 
@@ -28,1176 +243,54 @@ Synchronize cached IDs with current GitHub state. Run when config becomes stale.
 | Option renamed | "Option not found" errors | projects |
 | New project added | Project not in config | projects |
 | Fields added/removed | Missing field in config | projects |
-| View layout changed | View settings outdated | views (Phase 2) |
-| Protection rules changed | Rule not found | repo_settings (Phase 3) |
-| Automation changed | Unexpected behavior | automations (Phase 4) |
+| View layout changed | View settings outdated | views |
+| Protection rules changed | Rule not found | repo_settings |
+| Team membership changed | Wrong permissions | teams |
 
 ---
 
-## Quick Status Check
+## Quick Reference
 
-### Overall Status (Legacy)
+### Check Freshness Status
 
-```bash
-CONFIG=".hiivmind/github/config.yaml"
+**See:** `lib/github/patterns/config-parsing.md` - "Read freshness.yaml" section
 
-echo "Last synced: $(yq '.cache.last_synced_at' "$CONFIG")"
-echo "Projects cached: $(yq '.projects.catalog | length' "$CONFIG")"
-echo "Default project: $(yq '.projects.default' "$CONFIG")"
+### Force Refresh Specific Section
+
+```
+/hiivmind-pulse-gh refresh [section]
 ```
 
-### Per-Section Freshness (Phase 1+)
+Sections: `workspace`, `projects`, `views`, `repo_settings`, `automations`, `relationships`, `teams`
 
-```bash
-FRESHNESS=".hiivmind/github/freshness.yaml"
+### Force Refresh All
 
-echo "=== Freshness Status ==="
-yq '.sections | to_entries | .[] | "\(.key): stale=\(.value.stale), last_checked=\(.value.last_checked // "never")"' "$FRESHNESS"
-
-echo ""
-echo "=== Stale Sections ==="
-yq '.sections | to_entries | .[] | select(.value.stale == true) | .key' "$FRESHNESS"
 ```
+/hiivmind-pulse-gh refresh all
+```
+
+### Related Skills
+
+- **init** - First-time workspace setup
+- **operations** - Execute GitHub operations using cached config
 
 ---
 
-## Refresh Project Views (Phase 2)
-
-Fetch and cache view configurations for a project.
-
-### Fetch Views for a Project
-
-```bash
-# Fetch project views
-# Corpus keywords: views, fields, groupByFields, sortByFields, layout, filter
-# Reference: hiivmind-corpus-github → "project views with field configuration"
-# Schema: projectV2 → views → nodes { id number name layout filter fields groupByFields sortByFields }
-#
-# Note: View CRUD is UI-only (no createProjectV2View mutation exists)
-
-refresh_project_views() {
-    local config="$1"
-    local project_num="$2"
-    local owner view_data project_id project_title
-
-    owner=$(yq '.workspace.login' "$config")
-
-    # Create views directory if needed
-    mkdir -p .hiivmind/github/views
-
-    # Fetch views data (pipe-first: fetch | process)
-    view_data=$(gh api graphql -f query='
-      query($owner: String!, $number: Int!) {
-        organization(login: $owner) {
-          projectV2(number: $number) {
-            id title
-            views(first: 20) {
-              nodes {
-                id number name layout filter
-                fields(first: 50) {
-                  nodes {
-                    ... on ProjectV2Field { id name }
-                    ... on ProjectV2SingleSelectField { id name }
-                    ... on ProjectV2IterationField { id name }
-                  }
-                }
-                groupByFields(first: 10) { nodes { ... on ProjectV2Field { id name } } }
-                sortByFields(first: 10) { nodes { direction field { ... on ProjectV2Field { id name } } } }
-              }
-            }
-          }
-        }
-      }
-    ' -f owner="$owner" -F number="$project_num")
-
-    # Extract project info
-    project_id=$(echo "$view_data" | jq -r '.data.organization.projectV2.id')
-    project_title=$(echo "$view_data" | jq -r '.data.organization.projectV2.title')
-
-    # Build views.yaml
-    cat > ".hiivmind/github/views/project-$project_num.yaml" << EOF
-# hiivmind-pulse-gh - Project Views Configuration
-# Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)
-
-project:
-  number: $project_num
-  id: $project_id
-  title: "$project_title"
-
-views:
-EOF
-
-    # Process each view
-    echo "$view_data" | jq -r '.data.organization.projectV2.views.nodes[] | @json' | while read -r view; do
-        local view_num view_id view_name view_layout view_filter visible_fields group_by sort_by
-
-        view_num=$(echo "$view" | jq -r '.number')
-        view_id=$(echo "$view" | jq -r '.id')
-        view_name=$(echo "$view" | jq -r '.name')
-        view_layout=$(echo "$view" | jq -r '.layout')
-        view_filter=$(echo "$view" | jq -r '.filter // ""')
-
-        # Get visible fields
-        visible_fields=$(echo "$view" | jq -r '.fields.nodes[].name' | sed 's/^/    - /')
-
-        # Get group by fields
-        group_by=$(echo "$view" | jq -r '.groupByFields.nodes[] | "    - field: \(.name)"')
-
-        # Get sort by fields
-        sort_by=$(echo "$view" | jq -r '.sortByFields.nodes[] | "    - field: \(.field.name)\n      direction: \(.direction)"')
-
-        cat >> ".hiivmind/github/views/project-$project_num.yaml" << VIEWEOF
-  - number: $view_num
-    id: $view_id
-    name: "$view_name"
-    layout: $view_layout
-    filter: "$view_filter"
-    visible_fields:
-$visible_fields
-    group_by:
-$group_by
-    sort_by:
-$sort_by
-
-VIEWEOF
-    done
-
-    # Add metadata
-    cat >> ".hiivmind/github/views/project-$project_num.yaml" << EOF
-cache:
-  synced_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
-  schema_version: "1.0"
-EOF
-
-    echo "Views cached to .hiivmind/github/views/project-$project_num.yaml"
-}
-
-# Usage:
-refresh_project_views ".hiivmind/github/config.yaml" 2
-```
-
-### Update Freshness Tracking
-
-After refreshing views:
-
-```bash
-FRESHNESS=".hiivmind/github/freshness.yaml"
-PROJECTS_REFRESHED="$PROJECT_NUM"
-
-# Mark views section as fresh
-yq -i ".sections.views.last_checked = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
-yq -i ".sections.views.stale = false" "$FRESHNESS"
-yq -i ".sections.views.projects_covered = [$PROJECTS_REFRESHED]" "$FRESHNESS"
-yq -i ".cache.last_updated_at = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
-```
-
----
-
-## Refresh Repository Settings (Phase 3)
-
-Fetch and cache repository settings including branch protection, merge settings, and labels.
-
-### Fetch Settings for a Repository
-
-```bash
-# Corpus: REST /repos/{owner}/{repo}/branches/{branch}/protection
-# Keywords: branch protection, required_status_checks, enforce_admins, required_pull_request_reviews
-# Reference: hiivmind-corpus-github → "branch protection settings"
-
-refresh_repo_settings() {
-    local config="$1"
-    local repo="$2"
-    local owner repo_data repo_id default_branch visibility archived protection
-
-    owner=$(yq '.workspace.login' "$config")
-
-    # Create repos directory if needed
-    mkdir -p .hiivmind/github/repos
-
-    # Fetch repository metadata and merge settings
-    repo_data=$(gh api "/repos/$owner/$repo" --jq '{
-      name: .name,
-      id: .node_id,
-      full_name: .full_name,
-      default_branch: .default_branch,
-      visibility: .visibility,
-      archived: .archived,
-      merge_settings: {
-        allow_merge_commit: .allow_merge_commit,
-        allow_squash_merge: .allow_squash_merge,
-        allow_rebase_merge: .allow_rebase_merge,
-        allow_auto_merge: .allow_auto_merge,
-        delete_branch_on_merge: .delete_branch_on_merge,
-        allow_update_branch: .allow_update_branch,
-        squash_merge_commit_title: .squash_merge_commit_title,
-        squash_merge_commit_message: .squash_merge_commit_message,
-        merge_commit_title: .merge_commit_title,
-        merge_commit_message: .merge_commit_message
-      }
-    }')
-
-    # Extract basic info
-    repo_id=$(echo "$repo_data" | jq -r '.id')
-    default_branch=$(echo "$repo_data" | jq -r '.default_branch')
-    visibility=$(echo "$repo_data" | jq -r '.visibility')
-    archived=$(echo "$repo_data" | jq -r '.archived')
-
-    # Build repo config file
-    cat > ".hiivmind/github/repos/$repo.yaml" << EOF
-# hiivmind-pulse-gh - Repository Settings Configuration
-# Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)
-
-repository:
-  name: $repo
-  id: $repo_id
-  full_name: $owner/$repo
-  default_branch: $default_branch
-  visibility: $visibility
-  archived: $archived
-
-branch_protection:
-EOF
-
-    # Fetch branch protection for default branch
-    protection=$(gh api "/repos/$owner/$repo/branches/$default_branch/protection" 2>/dev/null || echo "null")
-
-    # Use = instead of != to avoid escaping bug
-    if [[ ! "$protection" = "null" ]]; then
-        cat >> ".hiivmind/github/repos/$repo.yaml" << EOF
-  $default_branch:
-    enabled: true
-    required_pull_request_reviews:
-$(echo "$protection" | jq -r '.required_pull_request_reviews | if . then "      required_approving_review_count: \(.required_approving_review_count // 0)\n      dismiss_stale_reviews: \(.dismiss_stale_reviews // false)\n      require_code_owner_reviews: \(.require_code_owner_reviews // false)\n      require_last_push_approval: \(.require_last_push_approval // false)" else "      required_approving_review_count: 0" end')
-    required_status_checks:
-$(echo "$protection" | jq -r '.required_status_checks | if . then "      strict: \(.strict)\n      contexts:\n" + (.contexts | map("        - \"" + . + "\"") | join("\n")) else "      strict: false\n      contexts: []" end')
-    enforce_admins:
-$(echo "$protection" | jq -r '.enforce_admins.enabled // false')
-    required_linear_history:
-$(echo "$protection" | jq -r '.required_linear_history.enabled // false')
-    allow_force_pushes:
-$(echo "$protection" | jq -r '.allow_force_pushes.enabled // false')
-    allow_deletions:
-$(echo "$protection" | jq -r '.allow_deletions.enabled // false')
-    required_conversation_resolution:
-$(echo "$protection" | jq -r '.required_conversation_resolution.enabled // false')
-    lock_branch:
-$(echo "$protection" | jq -r '.lock_branch.enabled // false')
-    allow_fork_syncing:
-$(echo "$protection" | jq -r '.allow_fork_syncing.enabled // false')
-    restrictions:
-$(echo "$protection" | jq -r '.restrictions | if . then "      users:\n" + (.users | map("        - " + .login) | join("\n")) + "\n      teams:\n" + (.teams | map("        - " + .slug) | join("\n")) + "\n      apps:\n" + (.apps | map("        - " + .slug) | join("\n")) else "      users: []\n      teams: []\n      apps: []" end')
-
-EOF
-    else
-        cat >> ".hiivmind/github/repos/$repo.yaml" << EOF
-  $default_branch:
-    enabled: false
-
-EOF
-    fi
-
-    # Fetch rulesets (pipe result directly to processing)
-    local rulesets
-    rulesets=$(gh api "/repos/$owner/$repo/rulesets" --jq '.[] | {
-      id: .id,
-      name: .name,
-      target: .target,
-      enforcement: .enforcement,
-      conditions: .conditions,
-      rules: .rules
-    }')
-
-    cat >> ".hiivmind/github/repos/$repo.yaml" << EOF
-rulesets:
-EOF
-
-    if [[ -n "$rulesets" ]]; then
-        echo "$rulesets" | jq -c '.' | while read -r ruleset; do
-            local ruleset_id ruleset_name target enforcement
-
-            ruleset_id=$(echo "$ruleset" | jq -r '.id')
-            ruleset_name=$(echo "$ruleset" | jq -r '.name')
-            target=$(echo "$ruleset" | jq -r '.target')
-            enforcement=$(echo "$ruleset" | jq -r '.enforcement')
-
-            cat >> ".hiivmind/github/repos/$repo.yaml" << RULESETEOF
-  - id: $ruleset_id
-    name: "$ruleset_name"
-    target: $target
-    enforcement: $enforcement
-    conditions:
-$(echo "$ruleset" | jq -r '.conditions | to_entries | map("      \(.key): \(.value | @json)") | join("\n")')
-    rules:
-$(echo "$ruleset" | jq -r '.rules | map("      - type: \(.type)\n        parameters: \(.parameters | @json)") | join("\n")')
-
-RULESETEOF
-        done
-    else
-        echo "  []" >> ".hiivmind/github/repos/$repo.yaml"
-    fi
-
-    # Add merge settings
-    cat >> ".hiivmind/github/repos/$repo.yaml" << EOF
-
-merge_settings:
-$(echo "$repo_data" | jq -r '.merge_settings | to_entries | map("  \(.key): \(.value)") | join("\n")')
-EOF
-
-    # Fetch labels
-    local labels
-    labels=$(gh api "/repos/$owner/$repo/labels" --jq '.[] | {
-      name: .name,
-      color: .color,
-      description: .description,
-      default: .default
-    }')
-
-    cat >> ".hiivmind/github/repos/$repo.yaml" << EOF
-
-labels:
-EOF
-
-    if [[ -n "$labels" ]]; then
-        echo "$labels" | jq -c '.' | while read -r label; do
-            local label_name label_color label_desc label_default
-
-            label_name=$(echo "$label" | jq -r '.name')
-            label_color=$(echo "$label" | jq -r '.color')
-            label_desc=$(echo "$label" | jq -r '.description // ""')
-            label_default=$(echo "$label" | jq -r '.default // false')
-
-            cat >> ".hiivmind/github/repos/$repo.yaml" << LABELEOF
-  - name: "$label_name"
-    color: $label_color
-    description: "$label_desc"
-    default: $label_default
-LABELEOF
-        done
-    fi
-
-    # Add metadata
-    cat >> ".hiivmind/github/repos/$repo.yaml" << EOF
-
-cache:
-  synced_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
-  schema_version: "1.0"
-EOF
-
-    echo "Repository settings cached to .hiivmind/github/repos/$repo.yaml"
-}
-
-# Usage:
-refresh_repo_settings ".hiivmind/github/config.yaml" "hiivmind-pulse-gh"
-```
-
-### Update Freshness Tracking
-
-After refreshing repository settings:
-
-```bash
-FRESHNESS=".hiivmind/github/freshness.yaml"
-REPOS_REFRESHED="\"$REPO\""
-
-# Mark repo_settings section as fresh
-yq -i ".sections.repo_settings.last_checked = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
-yq -i ".sections.repo_settings.stale = false" "$FRESHNESS"
-yq -i ".sections.repo_settings.repos_covered = [$REPOS_REFRESHED]" "$FRESHNESS"
-yq -i ".cache.last_updated_at = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
-```
-
----
-
-## Refresh Project Automations (Phase 4)
-
-Document automation rules configured for a project.
-
-**Note:** GitHub Projects v2 automations are configured in the UI and not fully exposed via API. This refresh creates a template file with common patterns that you can manually update to reflect your project's actual automation rules.
-
-### Initialize Automations Documentation
-
-```bash
-CONFIG=".hiivmind/github/config.yaml"
-OWNER=$(yq '.workspace.login' "$CONFIG")
-PROJECT_NUM=2
-
-# Create automations directory if needed
-mkdir -p .hiivmind/github/automations
-
-# Fetch project info
-PROJECT_DATA=$(gh api graphql -f query='
-  query($owner: String!, $number: Int!) {
-    organization(login: $owner) {
-      projectV2(number: $number) {
-        id
-        title
-      }
-    }
-  }
-' -f owner="$OWNER" -F number="$PROJECT_NUM")
-
-PROJECT_ID=$(echo "$PROJECT_DATA" | jq -r '.data.organization.projectV2.id')
-PROJECT_TITLE=$(echo "$PROJECT_DATA" | jq -r '.data.organization.projectV2.title')
-
-# Create automations file with template
-cat > ".hiivmind/github/automations/project-$PROJECT_NUM.yaml" << 'EOF'
-# hiivmind-pulse-gh - Project Automations Configuration
-# This file documents automation rules for this GitHub Project v2.
-#
-# IMPORTANT: GitHub Projects v2 automations are configured in the project UI
-# and are not fully exposed via API. Update this file manually to reflect
-# your project's actual automation rules.
-
-EOF
-
-# Add project info
-cat >> ".hiivmind/github/automations/project-$PROJECT_NUM.yaml" << EOF
-project:
-  number: $PROJECT_NUM
-  id: $PROJECT_ID
-  title: "$PROJECT_TITLE"
-
-# Built-in GitHub automations (update manually)
-built_in:
-  auto_add:
-    enabled: false
-    repositories: []
-
-  auto_archive:
-    enabled: false
-    trigger: null
-    conditions:
-      status_value: null
-      delay_days: null
-
-# Custom workflow automations (document your workflows here)
-workflows: []
-  # Example:
-  # - name: "Auto-triage new issues"
-  #   description: "Set status to Triage for new issues"
-  #   trigger:
-  #     type: "item_added"
-  #     source: "issue"
-  #   actions:
-  #     - type: "set_field"
-  #       field: "Status"
-  #       value: "Triage"
-
-cache:
-  synced_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
-  schema_version: "1.0"
-  source: "manual"
-
-# Common Automation Patterns:
-#
-# 1. Auto-add new issues/PRs to project
-#    - Configure in project settings > Workflows
-#    - Update built_in.auto_add.enabled and repositories
-#
-# 2. Auto-archive completed items
-#    - Configure in project settings > Workflows
-#    - Update built_in.auto_archive settings
-#
-# 3. Status transitions on events
-#    - When issue closed -> Set Status to "Done"
-#    - When assigned -> Set Status to "In Progress"
-#    - Document these in workflows section
-#
-# 4. Field auto-population
-#    - Set Priority based on labels
-#    - Set Estimate based on issue size
-#    - Document these in workflows section
-EOF
-
-echo "Automations template created at .hiivmind/github/automations/project-$PROJECT_NUM.yaml"
-echo ""
-echo "NEXT STEPS:"
-echo "1. Review your project's automation settings in the GitHub UI"
-echo "2. Update the automations file to reflect actual configured automations"
-echo "3. Re-run this refresh periodically to update the timestamp"
-```
-
-### Manually Update Automations
-
-After creating the template, manually update it to reflect your project's automation rules:
-
-1. **Check Project Settings** - Go to your project > Settings > Workflows in GitHub UI
-2. **Document Auto-Add** - Note which repositories have auto-add enabled
-3. **Document Auto-Archive** - Note if/when items auto-archive
-4. **Document Custom Workflows** - Add any workflow patterns you've configured
-5. **Update the File** - Edit `.hiivmind/github/automations/project-{N}.yaml`
-
-### Example Manual Updates
-
-```yaml
-built_in:
-  auto_add:
-    enabled: true
-    repositories:
-      - hiivmind-pulse-gh
-      - hiivmind-corpus
-
-  auto_archive:
-    enabled: true
-    trigger: "status_changed"
-    conditions:
-      status_value: "Done"
-      delay_days: 30
-
-workflows:
-  - name: "Auto-triage new issues"
-    description: "Set status to Triage for new issues"
-    trigger:
-      type: "item_added"
-      source: "issue"
-    actions:
-      - type: "set_field"
-        field: "Status"
-        value: "Triage"
-
-  - name: "Complete closed issues"
-    description: "Set status to Done when issue is closed"
-    trigger:
-      type: "item_closed"
-    actions:
-      - type: "set_field"
-        field: "Status"
-        value: "Done"
-```
-
-### Update Freshness Tracking
-
-After refreshing/updating automations:
-
-```bash
-FRESHNESS=".hiivmind/github/freshness.yaml"
-PROJECTS_REFRESHED="$PROJECT_NUM"
-
-# Mark automations section as fresh
-yq -i ".sections.automations.last_checked = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
-yq -i ".sections.automations.stale = false" "$FRESHNESS"
-yq -i ".sections.automations.projects_covered = [$PROJECTS_REFRESHED]" "$FRESHNESS"
-yq -i ".cache.last_updated_at = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
-```
-
----
-
-## Refresh Cross-Repo Relationships (Phase 5)
-
-Document relationships between projects and repositories, as well as repository dependencies.
-
-### Fetch Project-Repository Links
-
-```bash
-CONFIG=".hiivmind/github/config.yaml"
-OWNER=$(yq '.workspace.login' "$CONFIG")
-WORKSPACE_TYPE=$(yq '.workspace.type' "$CONFIG")
-
-# Fetch all projects with their linked repositories
-if [[ "$WORKSPACE_TYPE" == "organization" ]]; then
-  PROJECTS_DATA=$(gh api graphql -f query='
-    query($login: String!) {
-      organization(login: $login) {
-        projectsV2(first: 20) {
-          nodes {
-            number
-            id
-            title
-            repositories(first: 50) {
-              nodes {
-                name
-              }
-            }
-          }
-        }
-      }
-    }
-  ' -f login="$OWNER")
-  PROJECTS=$(echo "$PROJECTS_DATA" | jq -r '.data.organization.projectsV2.nodes')
-else
-  PROJECTS_DATA=$(gh api graphql -f query='
-    query($login: String!) {
-      user(login: $login) {
-        projectsV2(first: 20) {
-          nodes {
-            number
-            id
-            title
-            repositories(first: 50) {
-              nodes {
-                name
-              }
-            }
-          }
-        }
-      }
-    }
-  ' -f login="$OWNER")
-  PROJECTS=$(echo "$PROJECTS_DATA" | jq -r '.data.user.projectsV2.nodes')
-fi
-
-# Create relationships file
-cat > ".hiivmind/github/relationships.yaml" << EOF
-# hiivmind-pulse-gh - Cross-Repo Relationships
-# Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)
-
-workspace:
-  type: $WORKSPACE_TYPE
-  login: $OWNER
-
-project_repo_links:
-EOF
-
-# Process each project
-echo "$PROJECTS" | jq -c '.[]' | while read -r project; do
-  PROJECT_NUM=$(echo "$project" | jq -r '.number')
-  PROJECT_ID=$(echo "$project" | jq -r '.id')
-  PROJECT_TITLE=$(echo "$project" | jq -r '.title')
-
-  cat >> ".hiivmind/github/relationships.yaml" << PROJECTEOF
-  $PROJECT_NUM:
-    project_id: $PROJECT_ID
-    project_title: "$PROJECT_TITLE"
-    linked_repos:
-PROJECTEOF
-
-  # Get linked repos
-  REPOS=$(echo "$project" | jq -r '.repositories.nodes[].name')
-
-  if [[ -n "$REPOS" ]]; then
-    echo "$REPOS" | while read -r repo; do
-      # Check if auto-add is enabled (from automations file if exists)
-      AUTO_ADD_FILE=".hiivmind/github/automations/project-$PROJECT_NUM.yaml"
-      if [[ -f "$AUTO_ADD_FILE" ]]; then
-        AUTO_ADD=$(yq ".built_in.auto_add.repositories[] | select(. == \"$repo\")" "$AUTO_ADD_FILE" 2>/dev/null)
-        if [[ -n "$AUTO_ADD" ]]; then
-          AUTO_ADD_ENABLED="true"
-        else
-          AUTO_ADD_ENABLED="false"
-        fi
-      else
-        AUTO_ADD_ENABLED="false"
-      fi
-
-      cat >> ".hiivmind/github/relationships.yaml" << REPOEOF
-      - name: $repo
-        auto_add_enabled: $AUTO_ADD_ENABLED
-REPOEOF
-    done
-  else
-    echo "      []" >> ".hiivmind/github/relationships.yaml"
-  fi
-
-  echo "" >> ".hiivmind/github/relationships.yaml"
-done
-
-# Add repository dependencies section (to be filled manually)
-cat >> ".hiivmind/github/relationships.yaml" << 'EOF'
-
-repo_dependencies: {}
-  # Example - update this manually based on your architecture:
-  # hiivmind-pulse-gh:
-  #   depends_on: []
-  #   depended_by: [hiivmind-pulse-gh-tests]
-  #   relationship_type: main
-  # hiivmind-pulse-gh-tests:
-  #   depends_on: [hiivmind-pulse-gh]
-  #   depended_by: []
-  #   relationship_type: test
-
-cross_project_coordination: []
-  # Example - document cross-project coordination:
-  # - source_project: 2
-  #   target_project: 3
-  #   coordination_type: milestone_sync
-  #   description: "Development milestones align with Research phases"
-
-cache:
-  synced_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
-  schema_version: "1.0"
-  source: "api+manual"
-EOF
-
-echo "Relationships cached to .hiivmind/github/relationships.yaml"
-echo ""
-echo "NEXT STEPS:"
-echo "1. Review the project-repo links (auto-detected via API)"
-echo "2. Update repo_dependencies section based on your architecture"
-echo "3. Document any cross_project_coordination scenarios"
-```
-
-### Manually Document Repository Dependencies
-
-After creating the relationships file, update it to reflect repository dependencies:
-
-```yaml
-repo_dependencies:
-  hiivmind-pulse-gh:
-    depends_on: []
-    depended_by:
-      - hiivmind-pulse-gh-tests
-    relationship_type: main
-
-  hiivmind-pulse-gh-tests:
-    depends_on:
-      - hiivmind-pulse-gh
-    depended_by: []
-    relationship_type: test
-
-  hiivmind-corpus:
-    depends_on: []
-    depended_by:
-      - hiivmind-corpus-data
-      - hiivmind-corpus-claude
-    relationship_type: main
-
-  hiivmind-corpus-data:
-    depends_on:
-      - hiivmind-corpus
-    depended_by: []
-    relationship_type: plugin
-```
-
-### Update Freshness Tracking
-
-After refreshing relationships:
-
-```bash
-FRESHNESS=".hiivmind/github/freshness.yaml"
-
-# Mark relationships section as fresh
-yq -i ".sections.relationships.last_checked = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
-yq -i ".sections.relationships.stale = false" "$FRESHNESS"
-yq -i ".cache.last_updated_at = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
-```
-
----
-
-## Refresh Organization Teams (Phase 6)
-
-Cache organization team membership and repository permissions for team-aware operations.
-
-### Fetch Teams and Permissions
-
-```bash
-CONFIG=".hiivmind/github/config.yaml"
-OWNER=$(yq '.workspace.login' "$CONFIG")
-WORKSPACE_TYPE=$(yq '.workspace.type' "$CONFIG")
-
-# Teams are only available for organizations
-if [[ "$WORKSPACE_TYPE" != "organization" ]]; then
-  echo "Teams are only available for organizations, not user accounts"
-  exit 1
-fi
-
-# Fetch all teams with members and repository permissions
-# Corpus keywords: teams, members, repositories, edges, role, permission
-# Reference: hiivmind-corpus-github → "organization teams with members"
-# Schema: organization → teams → nodes { id slug name privacy members repositories }
-# Note: members/repositories use edges pattern with role/permission metadata
-
-TEAMS_DATA=$(gh api graphql -f query='
-  query($login: String!) {
-    organization(login: $login) {
-      teams(first: 100) {
-        nodes {
-          id slug name privacy
-          members(first: 100) { edges { role node { login id } } }
-          repositories(first: 100) { edges { permission node { name } } }
-        }
-      }
-    }
-  }
-' -f login="$OWNER")
-
-TEAMS=$(echo "$TEAMS_DATA" | jq -r '.data.organization.teams.nodes')
-
-# Create teams file
-cat > ".hiivmind/github/teams.yaml" << EOF
-# hiivmind-pulse-gh - Organization Teams Configuration
-# Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)
-
-workspace:
-  type: $WORKSPACE_TYPE
-  login: $OWNER
-
-teams:
-EOF
-
-# Build reverse index of repo -> teams
-declare -A repo_admin_teams
-declare -A repo_write_teams
-declare -A repo_read_teams
-
-# Process each team
-echo "$TEAMS" | jq -c '.[]' | while read -r team; do
-  TEAM_SLUG=$(echo "$team" | jq -r '.slug')
-  TEAM_ID=$(echo "$team" | jq -r '.id')
-  TEAM_NAME=$(echo "$team" | jq -r '.name')
-  TEAM_PRIVACY=$(echo "$team" | jq -r '.privacy')
-
-  cat >> ".hiivmind/github/teams.yaml" << TEAMEOF
-  - slug: $TEAM_SLUG
-    id: $TEAM_ID
-    name: "$TEAM_NAME"
-    privacy: $TEAM_PRIVACY
-    members:
-TEAMEOF
-
-  # Get members
-  MEMBERS=$(echo "$team" | jq -r '.members.edges[] | "\(.node.login)|\(.node.id)|\(.role)"')
-
-  if [[ -n "$MEMBERS" ]]; then
-    echo "$MEMBERS" | while IFS='|' read -r login id role; do
-      cat >> ".hiivmind/github/teams.yaml" << MEMBEREOF
-      - login: $login
-        id: $id
-        role: $role
-MEMBEREOF
-    done
-  else
-    echo "      []" >> ".hiivmind/github/teams.yaml"
-  fi
-
-  # Get repository permissions
-  cat >> ".hiivmind/github/teams.yaml" << PERMEOF
-    repo_permissions:
-PERMEOF
-
-  REPOS=$(echo "$team" | jq -r '.repositories.edges[] | "\(.node.name)|\(.permission)"')
-
-  if [[ -n "$REPOS" ]]; then
-    echo "$REPOS" | while IFS='|' read -r repo_name permission; do
-      echo "      $repo_name: $permission" >> ".hiivmind/github/teams.yaml"
-    done
-  else
-    echo "      {}" >> ".hiivmind/github/teams.yaml"
-  fi
-
-  echo "" >> ".hiivmind/github/teams.yaml"
-done
-
-# Build repo_team_access reverse index
-# First pass: collect all repos
-ALL_REPOS=$(echo "$TEAMS" | jq -r '.[].repositories.edges[].node.name' | sort -u)
-
-cat >> ".hiivmind/github/teams.yaml" << 'EOF'
-
-repo_team_access:
-EOF
-
-echo "$ALL_REPOS" | while read -r repo; do
-  cat >> ".hiivmind/github/teams.yaml" << REPOEOF
-  $repo:
-    admin: []
-    write: []
-    read: []
-REPOEOF
-
-  # Find all teams with access to this repo
-  echo "$TEAMS" | jq -c '.[]' | while read -r team; do
-    TEAM_SLUG=$(echo "$team" | jq -r '.slug')
-    REPO_PERM=$(echo "$team" | jq -r ".repositories.edges[] | select(.node.name == \"$repo\") | .permission")
-
-    if [[ -n "$REPO_PERM" ]]; then
-      # Convert permission to access level
-      case "$REPO_PERM" in
-        ADMIN)
-          # Append to admin list using yq
-          yq -i ".repo_team_access[\"$repo\"].admin += [\"$TEAM_SLUG\"]" ".hiivmind/github/teams.yaml"
-          ;;
-        WRITE|MAINTAIN)
-          yq -i ".repo_team_access[\"$repo\"].write += [\"$TEAM_SLUG\"]" ".hiivmind/github/teams.yaml"
-          ;;
-        READ|TRIAGE)
-          yq -i ".repo_team_access[\"$repo\"].read += [\"$TEAM_SLUG\"]" ".hiivmind/github/teams.yaml"
-          ;;
-      esac
-    fi
-  done
-done
-
-# Add metadata
-cat >> ".hiivmind/github/teams.yaml" << EOF
-
-cache:
-  synced_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
-  schema_version: "1.0"
-  source: "graphql"
-EOF
-
-echo "Teams cached to .hiivmind/github/teams.yaml"
-```
-
-### Update Freshness Tracking
-
-After refreshing teams:
-
-```bash
-FRESHNESS=".hiivmind/github/freshness.yaml"
-
-# Mark teams section as fresh
-yq -i ".sections.teams.last_checked = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
-yq -i ".sections.teams.stale = false" "$FRESHNESS"
-yq -i ".cache.last_updated_at = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
-```
-
----
-
-## Refresh Projects
-
-### List Current vs Cached Projects
-
-```bash
-CONFIG=".hiivmind/github/config.yaml"
-OWNER=$(yq '.workspace.login' "$CONFIG")
-TYPE=$(yq '.workspace.type' "$CONFIG")
-
-echo "=== Cached Projects ==="
-yq '.projects.catalog[] | "\(.number): \(.title)"' "$CONFIG"
-
-echo ""
-echo "=== GitHub Projects ==="
-if [[ "$TYPE" == "organization" ]]; then
-  gh api graphql -f query='
-    query($login: String!) {
-      organization(login: $login) {
-        projectsV2(first: 20) {
-          nodes { number title closed }
-        }
-      }
-    }
-  ' -f login="$OWNER" --jq '.data.organization.projectsV2.nodes[] | select(.closed == false) | "\(.number): \(.title)"'
-else
-  gh api graphql -f query='
-    query($login: String!) {
-      user(login: $login) {
-        projectsV2(first: 20) {
-          nodes { number title closed }
-        }
-      }
-    }
-  ' -f login="$OWNER" --jq '.data.user.projectsV2.nodes[] | select(.closed == false) | "\(.number): \(.title)"'
-fi
-```
-
-### Refresh Single Project Fields
-
-```bash
-CONFIG=".hiivmind/github/config.yaml"
-OWNER=$(yq '.workspace.login' "$CONFIG")
-PROJECT_NUM=2
-
-# Fetch fresh field data
-gh api graphql -f query='
-  query($owner: String!, $number: Int!) {
-    organization(login: $owner) {
-      projectV2(number: $number) {
-        id
-        title
-        fields(first: 50) {
-          nodes {
-            ... on ProjectV2SingleSelectField {
-              id
-              name
-              options { id name }
-            }
-            ... on ProjectV2Field {
-              id
-              name
-            }
-          }
-        }
-      }
-    }
-  }
-' -f owner="$OWNER" -F number="$PROJECT_NUM" --jq '.data.organization.projectV2.fields.nodes'
-```
-
-Compare output with cached fields and update config.yaml as needed.
-
----
-
-## Refresh Specific Field
-
-If a single field changed:
-
-```bash
-CONFIG=".hiivmind/github/config.yaml"
-OWNER=$(yq '.workspace.login' "$CONFIG")
-PROJECT_NUM=2
-FIELD_NAME="Status"
-
-# Get fresh field data
-gh api graphql -f query='
-  query($owner: String!, $number: Int!) {
-    organization(login: $owner) {
-      projectV2(number: $number) {
-        field(name: "'"$FIELD_NAME"'") {
-          ... on ProjectV2SingleSelectField {
-            id
-            name
-            options { id name }
-          }
-        }
-      }
-    }
-  }
-' -f owner="$OWNER" -F number="$PROJECT_NUM"
-```
-
-Then update config.yaml:
-
-```bash
-# Update field ID
-yq -i '.projects.catalog[] | select(.number == 2) | .fields.Status.id = "NEW_ID"' "$CONFIG"
-
-# Update option ID
-yq -i '.projects.catalog[] | select(.number == 2) | .fields.Status.options["In Progress"] = "NEW_OPTION_ID"' "$CONFIG"
-```
-
----
-
-## Full Config Regeneration
-
-For major changes, regenerate the entire config:
-
-```bash
-CONFIG=".hiivmind/github/config.yaml"
-OWNER=$(yq '.workspace.login' "$CONFIG")
-TYPE=$(yq '.workspace.type' "$CONFIG")
-DEFAULT=$(yq '.projects.default' "$CONFIG")
-
-# Backup current config
-cp "$CONFIG" "$CONFIG.bak"
-
-# Re-run init process (see hiivmind-pulse-gh-init)
-# This regenerates config.yaml with fresh data
-```
-
----
-
-## Update Freshness Tracking
-
-After refreshing any section, update freshness.yaml:
-
-### Update Specific Section
-
-```bash
-FRESHNESS=".hiivmind/github/freshness.yaml"
-SECTION="projects"  # or workspace, views, automations, etc.
-
-# Mark section as fresh
-yq -i ".sections.$SECTION.last_checked = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
-yq -i ".sections.$SECTION.stale = false" "$FRESHNESS"
-
-# Update cache metadata
-yq -i ".cache.last_updated_at = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
-```
-
-### Update Projects Section with Coverage
-
-```bash
-FRESHNESS=".hiivmind/github/freshness.yaml"
-PROJECTS_REFRESHED="2 3"  # Space-separated project numbers
-
-# Mark as fresh and record which projects were covered
-yq -i ".sections.projects.last_checked = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
-yq -i ".sections.projects.stale = false" "$FRESHNESS"
-yq -i ".sections.projects.projects_covered = [$PROJECTS_REFRESHED]" "$FRESHNESS"
-yq -i ".cache.last_updated_at = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$FRESHNESS"
-```
-
-### Legacy Timestamp (Backwards Compatibility)
-
-Also update the legacy config.yaml timestamp:
-
-```bash
-CONFIG=".hiivmind/github/config.yaml"
-yq -i ".cache.last_synced_at = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$CONFIG"
-```
-
----
-
-## Detect Staleness
-
-### Per-Section Staleness (Phase 1+)
-
-Check which sections are stale based on their individual thresholds:
-
-```bash
-FRESHNESS=".hiivmind/github/freshness.yaml"
-
-# Function to check if a section is stale
-check_section_staleness() {
-  local section=$1
-  local last_checked=$(yq ".sections.$section.last_checked" "$FRESHNESS")
-  local threshold_hours=$(yq ".sections.$section.threshold_hours" "$FRESHNESS")
-
-  if [[ "$last_checked" = "null" ]] || [[ -z "$last_checked" ]]; then
-    echo "STALE (never checked)"
-    yq -i ".sections.$section.stale = true" "$FRESHNESS"
-    return 1
-  fi
-
-  local last_epoch=$(date -d "$last_checked" +%s 2>/dev/null || echo 0)
-  local now_epoch=$(date +%s)
-  local age_hours=$(( (now_epoch - last_epoch) / 3600 ))
-
-  if [[ $age_hours -gt $threshold_hours ]]; then
-    echo "STALE (${age_hours}h old, threshold: ${threshold_hours}h)"
-    yq -i ".sections.$section.stale = true" "$FRESHNESS"
-    return 1
-  else
-    echo "FRESH (${age_hours}h old, threshold: ${threshold_hours}h)"
-    yq -i ".sections.$section.stale = false" "$FRESHNESS"
-    return 0
-  fi
-}
-
-# Check all sections
-for section in workspace projects views automations repositories repo_settings relationships teams; do
-  echo -n "$section: "
-  check_section_staleness "$section"
-done
-```
-
-### Legacy Staleness Check
-
-For backwards compatibility with existing workflows:
-
-```bash
-CONFIG=".hiivmind/github/config.yaml"
-LAST_SYNC=$(yq '.cache.last_synced_at' "$CONFIG")
-DAYS_OLD=$(( ($(date +%s) - $(date -d "$LAST_SYNC" +%s)) / 86400 ))
-
-if [[ $DAYS_OLD -gt 7 ]]; then
-  echo "Config is $DAYS_OLD days old - consider refreshing"
-else
-  echo "Config is fresh ($DAYS_OLD days old)"
-fi
-```
-
----
-
-## Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| "Field not found" | Refresh project fields |
-| "Option not found" | Refresh single-select field options |
-| "Project not found" | Check project number, add to catalog |
-| yq syntax errors | Verify config.yaml structure |
-
----
-
-## Corpus Lookup
-
-Search the corpus index using these keywords:
-
-| Need | Keywords |
-|------|----------|
-| Project fields | `ProjectV2Field`, `ProjectV2SingleSelectField` |
-| Field options | `options`, `singleSelectOptions`, `id`, `name` |
-| Project query | `projectV2`, `fields`, `nodes` |
-
-Start with `reference/api-routing.md` → "Projects v2" section.
+## Pattern Library
+
+All implementation details are in the pattern library:
+
+| Pattern | Purpose |
+|---------|---------|
+| `lib/github/patterns/config-parsing.md` | Read/write YAML config files |
+| `lib/github/patterns/v3-flow.md` | Complete routing → corpus → execute flow |
+| `lib/github/patterns/graphql-execution.md` | Execute queries via temp file |
+| `lib/github/patterns/error-handling.md` | Handle API errors |
+| `lib/github/patterns/id-resolution.md` | Resolve names to IDs |
+
+### v3 Flow References
+
+| Reference | Purpose |
+|-----------|---------|
+| `reference/api-routing.md` | Routing decisions + search keywords |
+| `.claude-plugin/skills/hiivmind-corpus-github/` | GitHub API corpus (GraphQL schema, REST docs) |
