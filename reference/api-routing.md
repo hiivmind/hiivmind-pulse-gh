@@ -1,7 +1,8 @@
 # GitHub API Routing Guide
 
-> **Purpose:** Routing decisions + search keywords for corpus lookup.
-> **Usage:** Read this to choose the right API, then search corpus using the keywords.
+> **Purpose:** Quick reference for which API (GraphQL vs REST) to use for each domain.
+> **Standalone:** This guide is useful on its own - you do not need corpus lookup for every operation.
+> **When uncertain:** If you need exact syntax, use `lib/github/patterns/corpus-lookup.md`
 
 ---
 
