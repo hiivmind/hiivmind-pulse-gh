@@ -130,21 +130,24 @@ Wait for user confirmation before proceeding. If user says no, ask them to speci
 
 **Goal:** Discover projects and their field configurations.
 
-### The v3 Flow
+### Discovery Approach
 
-**Step 1: Read Routing Guide**
-- Read `reference/api-routing.md`
-- Projects v2 → List projects → GraphQL
-- Keywords: `projectsV2`, `organization`, `user`
+1. **Read Routing Guide**
+   - Read `reference/api-routing.md`
+   - Projects v2 → List projects → GraphQL
+   - Keywords: `projectsV2`, `organization`, `user`
 
-**Step 2: Search Corpus via Skill**
-- Invoke via: `Skill tool` with `hiivmind-pulse-gh:hiivmind-corpus-github-navigate`
-- Query: "projectsV2 organization list projects GraphQL"
-- The skill searches its index and GraphQL schema
-- Returns: query syntax for listing organization/user projects
+2. **Execute Query**
+   - If syntax is clear: Execute directly
+   - If uncertain: Use corpus lookup (`lib/github/patterns/corpus-lookup.md`)
+   - Use temp file pattern from `lib/github/patterns/graphql-execution.md`
 
-**Step 3: Execute Query**
-- Use temp file pattern from `lib/github/patterns/graphql-execution.md`
+### Corpus Lookup (When Needed)
+
+If uncertain about projectsV2 query syntax:
+- **Invoke:** `hiivmind-pulse-gh:hiivmind-corpus-github`
+- **Query:** "projectsV2 organization list projects GraphQL"
+- **Get:** Query syntax for listing projects
 
 ### What to Do
 
@@ -273,10 +276,11 @@ All implementation details are in the pattern library:
 | `lib/github/patterns/workspace-detection.md` | Detect org/user from context |
 | `lib/github/patterns/graphql-execution.md` | Execute queries via temp file |
 | `lib/github/patterns/config-parsing.md` | Read/write YAML config |
+| `lib/github/patterns/corpus-lookup.md` | Look up API syntax when uncertain |
 
-### v3 Flow References
+### References
 
 | Reference | Purpose |
 |-----------|---------|
-| `reference/api-routing.md` | Routing decisions + search keywords |
-| `hiivmind-pulse-gh:hiivmind-corpus-github-navigate` | GitHub API corpus skill (invoke via Skill tool) |
+| `reference/api-routing.md` | API routing decisions (useful standalone) |
+| `hiivmind-pulse-gh:hiivmind-corpus-github` | GitHub corpus skill for syntax lookup |

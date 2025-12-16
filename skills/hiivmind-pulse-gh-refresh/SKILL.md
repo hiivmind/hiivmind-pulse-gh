@@ -2,7 +2,7 @@
 name: hiivmind-pulse-gh-refresh
 description: >
   Sync workspace config with current GitHub state. Check staleness, select sections to refresh,
-  update config via v3 flow. Run when operations fail with "ID not found" errors or after
+  query GitHub APIs. Run when operations fail with "ID not found" errors or after
   making changes in GitHub (new fields, renamed options, new projects).
 ---
 
@@ -15,7 +15,7 @@ Synchronize cached configuration with current GitHub state. Run when config beco
 | Does | Does NOT |
 |------|----------|
 | Check staleness per section | Execute GitHub mutations |
-| Refresh selected sections via v3 flow | Initialize new workspaces |
+| Refresh selected sections | Initialize new workspaces |
 | Update freshness timestamps | Modify GitHub resources |
 | Update cached IDs and fields | Create new projects/fields |
 
@@ -25,8 +25,8 @@ Synchronize cached configuration with current GitHub state. Run when config beco
 1. CONTEXT → 2. STALENESS → 3. SELECT → 4. REFRESH → 5. UPDATE → 6. REPORT
    (load)       (check)       (user)      (query)      (write)      (done)
       │             │            │            │            │            │
-   STOP if      Show all      STOP for     v3 flow       -         STOP: offer
-   not init     sections      selection    per section             next steps
+   STOP if      Show all      STOP for    Query API      -         STOP: offer
+   not init     sections      selection   per section             next steps
 ```
 
 ---
@@ -123,9 +123,8 @@ Which sections to refresh? [1,2,3,4 / stale / all / none]
 
 ## Phase 4: REFRESH
 
-**Goal:** Refresh each selected section using v3 flow.
+**Goal:** Refresh each selected section by querying GitHub APIs.
 
-**See:** `lib/github/patterns/v3-flow.md`
 **See:** `lib/github/patterns/error-handling.md`
 
 ### PREREQUISITE: Read Routing Guide
@@ -140,33 +139,34 @@ Which sections to refresh? [1,2,3,4 / stale / all / none]
 Read: reference/api-routing.md (full file)
 ```
 
-### The v3 Flow (per section)
+### Refresh Approach
 
 For each selected section:
 
 1. **Check Routing Guide** (already read above)
    - Determine: GraphQL vs REST
-   - Get search keywords from the domain table
+   - Note keywords if you need corpus lookup
 
-2. **Search Corpus via Skill**
-   - Use the **bundled** GitHub corpus skill within this plugin
-   - **DO NOT** use the global `hiivmind-corpus:hiivmind-corpus-navigate` skill
-   - Invoke via: `Skill tool` with `hiivmind-pulse-gh:hiivmind-corpus-github-navigate`
-   - Query with keywords from routing guide
-   - Get exact query/endpoint syntax from GraphQL schema or REST docs
-
-3. **Execute Query**
+2. **Execute Query**
+   - If syntax is clear: Execute directly
+   - If uncertain: Use corpus lookup (`lib/github/patterns/corpus-lookup.md`)
    - GraphQL: temp file pattern (`lib/github/patterns/graphql-execution.md`)
    - REST: `gh api /endpoint`
-   - CLI: `gh` command directly
 
-4. **Update Config Files**
+3. **Update Config Files**
    - Write results to appropriate config file
    - Use patterns from `lib/github/patterns/config-parsing.md`
 
+### Corpus Lookup (When Needed)
+
+If uncertain about query syntax:
+- **Invoke:** `hiivmind-pulse-gh:hiivmind-corpus-github`
+- **Query:** With keywords from routing guide
+- **Get:** Exact query syntax from schema/docs
+
 ### Refreshable Sections
 
-| Section | Config File | v3 Flow Keywords | Data Updated |
+| Section | Config File | Keywords | Data Updated |
 |---------|-------------|------------------|--------------|
 | workspace | `config.yaml` | `organization`, `user` | Org/user info, login, type |
 | projects | `config.yaml` | `projectsV2`, `fields`, `SingleSelectField` | Project IDs, field IDs, option IDs |
@@ -297,16 +297,14 @@ All implementation details are in the pattern library:
 | Pattern | Purpose |
 |---------|---------|
 | `lib/github/patterns/config-parsing.md` | Read/write YAML config files |
-| `lib/github/patterns/v3-flow.md` | Complete routing → corpus → execute flow |
+| `lib/github/patterns/corpus-lookup.md` | Look up API syntax when uncertain |
 | `lib/github/patterns/graphql-execution.md` | Execute queries via temp file |
 | `lib/github/patterns/error-handling.md` | Handle API errors |
 | `lib/github/patterns/id-resolution.md` | Resolve names to IDs |
 
-### v3 Flow References
+### References
 
 | Reference | Purpose |
 |-----------|---------|
-| `reference/api-routing.md` | Routing decisions + search keywords (READ FULL FILE) |
-| `hiivmind-pulse-gh:hiivmind-corpus-github-navigate` | Bundled GitHub corpus skill (use Skill tool) |
-
-**WARNING:** Do NOT use global `hiivmind-corpus:hiivmind-corpus-navigate` - use the bundled skill above.
+| `reference/api-routing.md` | API routing decisions (useful standalone) |
+| `hiivmind-pulse-gh:hiivmind-corpus-github` | GitHub corpus skill for syntax lookup |

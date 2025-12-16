@@ -8,13 +8,13 @@ description: >
 
 # GitHub Operations Execution
 
-Execute GitHub operations across all domains using the v3 flow (routing → corpus → execute).
+Execute GitHub operations across all domains.
 
 ## Scope
 
 | Does | Does NOT |
 |------|----------|
-| Execute GitHub operations via v3 flow | Modify local config files |
+| Execute GitHub operations | Modify local config files |
 | Resolve IDs from cached config | Initialize workspaces |
 | Support all domains (issues, PRs, etc.) | Refresh stale configs |
 | Report operation results | Detect user intent (gateway does this) |
@@ -32,10 +32,10 @@ When invoked by the gateway command, expect:
 
 ```
 1. CONTEXT → 2. RESOLVE → 3. ROUTE → 4. EXECUTE → 5. REPORT
-   (load)      (IDs)       (API)      (v3 flow)    (result)
+   (load)      (IDs)       (API)      (run)        (result)
       │           │           │           │           │
-   STOP if    From cache   Read full   Corpus +    Display
-   not init   via pattern  routing     temp file   result
+   STOP if    From cache   Read full   Direct or   Display
+   not init   via pattern  routing     corpus      result
 ```
 
 ---
@@ -93,7 +93,7 @@ Based on domain and operation, resolve:
 ### Cache-First Strategy
 
 1. Check config.yaml for cached ID
-2. If not found, use v3 flow to query and cache
+2. If not found, use corpus lookup to query and cache
 
 ---
 
@@ -131,31 +131,39 @@ Read: reference/api-routing.md (full file)
 
 ---
 
-## Phase 4: EXECUTE via v3 Flow
+## Phase 4: EXECUTE
 
-**Goal:** Execute the operation using the v3 flow.
+**Goal:** Execute the operation using the appropriate API.
 
-**See:** `lib/github/patterns/v3-flow.md`
 **See:** `lib/github/patterns/graphql-execution.md`
 **See:** `lib/github/patterns/error-handling.md`
 
-### The v3 Flow
+### Execution Approach
 
-1. **Search Corpus via Skill**
-   - Use the **bundled** GitHub corpus skill
-   - **DO NOT** use the global `hiivmind-corpus:hiivmind-corpus-navigate` skill
-   - Invoke via: `Skill tool` with `hiivmind-pulse-gh:hiivmind-corpus-github`
-   - Query with keywords from routing guide
-   - Get exact query/endpoint syntax
+1. **Check routing guide** - `reference/api-routing.md` tells you GraphQL vs REST
+2. **If syntax is clear** - Execute directly using `gh api` or `gh` CLI
+3. **If uncertain** - Use corpus lookup for exact syntax
 
-2. **Execute Operation**
-   - **GraphQL:** Write query to temp file, execute with `gh api graphql -f query="$(cat /tmp/query.graphql)"`
-   - **REST:** Use `gh api /repos/{owner}/{repo}/endpoint -X METHOD`
-   - **CLI shortcut:** Some operations have `gh` CLI equivalents (check corpus)
+### Corpus Lookup (When Needed)
 
-3. **Parse Response**
-   - GraphQL: Check `.errors`, extract from `.data`
-   - REST: Check HTTP status, parse JSON response
+**See:** `lib/github/patterns/corpus-lookup.md`
+
+Use corpus lookup when you need exact syntax:
+
+- **Invoke:** `hiivmind-pulse-gh:hiivmind-corpus-github`
+- **Query:** With keywords from routing guide
+- **Get:** Exact mutation/endpoint syntax
+
+### Execute Operation
+
+- **GraphQL:** Write query to temp file, execute with `gh api graphql -f query="$(cat /tmp/query.graphql)"`
+- **REST:** Use `gh api /repos/{owner}/{repo}/endpoint -X METHOD`
+- **CLI shortcut:** Some operations have `gh` CLI equivalents
+
+### Parse Response
+
+- GraphQL: Check `.errors`, extract from `.data`
+- REST: Check HTTP status, parse JSON response
 
 ---
 
@@ -256,15 +264,13 @@ All implementation details are in the pattern library:
 |---------|---------|
 | `lib/github/patterns/config-parsing.md` | Read/write YAML config files |
 | `lib/github/patterns/id-resolution.md` | Resolve names to IDs (cache-first) |
-| `lib/github/patterns/v3-flow.md` | Complete routing → corpus → execute flow |
+| `lib/github/patterns/corpus-lookup.md` | Look up API syntax when uncertain |
 | `lib/github/patterns/graphql-execution.md` | Execute queries via temp file |
 | `lib/github/patterns/error-handling.md` | Handle API errors |
 
-### v3 Flow References
+### References
 
 | Reference | Purpose |
 |-----------|---------|
-| `reference/api-routing.md` | Routing decisions + search keywords (READ FULL FILE) |
-| `hiivmind-pulse-gh:hiivmind-corpus-github` | Bundled GitHub corpus skill (use Skill tool) |
-
-**WARNING:** Do NOT use global `hiivmind-corpus:hiivmind-corpus-navigate` - use the bundled skill above.
+| `reference/api-routing.md` | API routing decisions (useful standalone) |
+| `hiivmind-pulse-gh:hiivmind-corpus-github` | GitHub corpus skill for syntax lookup |
