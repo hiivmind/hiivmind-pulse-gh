@@ -129,7 +129,7 @@ After detecting intent, invoke the operations skill:
 - Target: {extracted target}
 - Workspace: owner/type from config
 
-The operations skill uses v3 flow (routing → corpus → execute) to perform the operation.
+The operations skill consults the routing guide and corpus (when needed) to perform the operation.
 
 ---
 

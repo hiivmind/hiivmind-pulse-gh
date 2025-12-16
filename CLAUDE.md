@@ -14,33 +14,37 @@ This is **hiivmind-pulse-gh** - a Claude Code plugin for GitHub API operations. 
 
 ---
 
-## v3 Flow Architecture
+## Execution Architecture
 
-All operations use the **v3 flow**:
+Operations follow this approach:
 
 ```
-1. ROUTE   →   2. CORPUS   →   3. EXECUTE
-   (API)         (syntax)        (temp file)
-     │              │               │
-reference/     Skill tool     gh api graphql
-api-routing.md    ↓          or gh api REST
-               hiivmind-pulse-gh:
-               hiivmind-corpus-github
+1. ROUTE       →   2. RESOLVE   →   3. EXECUTE
+   (API choice)      (IDs)           (run)
+     │                 │                │
+reference/         config.yaml      gh api graphql
+api-routing.md     cache            or gh api REST
 ```
 
 ### How It Works
 
-1. **Route** - Read `reference/api-routing.md` for:
-   - API choice (GraphQL vs REST)
-   - Search keywords for corpus lookup
+1. **Route** - Read `reference/api-routing.md` for API choice (GraphQL vs REST)
+   - This guide is useful on its own - not every operation needs corpus lookup
 
-2. **Corpus** - Search bundled corpus for exact syntax:
-   - Invoke: `hiivmind-pulse-gh:hiivmind-corpus-github`
-   - Get mutation/endpoint definitions from schema
+2. **Resolve** - Get IDs from cached config (`lib/github/patterns/id-resolution.md`)
+   - Cache-first strategy avoids unnecessary API calls
 
 3. **Execute** - Run the operation:
-   - **GraphQL**: Write query to temp file, execute with `gh api graphql -f query="$(cat /tmp/query.graphql)"`
-   - **REST**: Use `gh api /repos/{owner}/{repo}/endpoint -X METHOD`
+   - If syntax is clear: Execute directly
+   - If uncertain: Use corpus lookup (`lib/github/patterns/corpus-lookup.md`)
+
+### Corpus Lookup (When Needed)
+
+Use corpus lookup when you have a knowledge gap about exact syntax:
+
+- **Invoke:** `hiivmind-pulse-gh:hiivmind-corpus-github`
+- **Query:** With keywords from routing guide
+- **Get:** Exact mutation/endpoint definitions from schema
 
 ### Key Principle
 
@@ -60,7 +64,7 @@ Skills reference patterns instead of embedding code:
 
 | Pattern | Purpose |
 |---------|---------|
-| `lib/github/patterns/v3-flow.md` | Complete routing → corpus → execute flow |
+| `lib/github/patterns/corpus-lookup.md` | Look up API syntax when uncertain |
 | `lib/github/patterns/config-parsing.md` | Read/write YAML config files |
 | `lib/github/patterns/id-resolution.md` | Resolve names to IDs (cache-first) |
 | `lib/github/patterns/graphql-execution.md` | Execute queries via temp file |
@@ -123,8 +127,8 @@ Each skill follows a phase-based structure:
 ```
 CONTEXT → RESOLVE → ROUTE → EXECUTE → REPORT
    │         │        │        │         │
- config    IDs    api-routing  corpus   result
- check    cache     guide      skill   display
+ config    IDs    api-routing  direct   result
+ check    cache     guide    or corpus  display
 ```
 
 **STOP Points:** Skills have explicit STOP conditions that halt execution and prompt user action.
@@ -201,10 +205,10 @@ This plugin includes an embedded GitHub API corpus at `skills/hiivmind-corpus-gi
 
 ### Using the Corpus
 
-**Do NOT grep the corpus directly.** Use the v3 flow:
+Use the corpus when you need exact API syntax. See `lib/github/patterns/corpus-lookup.md`.
 
-1. Read `reference/api-routing.md` for API choice + search keywords
-2. Invoke corpus skill: `hiivmind-pulse-gh:hiivmind-corpus-github`
+1. Read `reference/api-routing.md` for API choice (useful on its own)
+2. If uncertain about syntax, invoke: `hiivmind-pulse-gh:hiivmind-corpus-github`
 3. Search with keywords from routing guide
 4. Get exact syntax from schema/docs
 
@@ -226,7 +230,7 @@ hiivmind-pulse-gh/
 ├── lib/
 │   └── github/
 │       └── patterns/                     # Pattern library
-│           ├── v3-flow.md
+│           ├── corpus-lookup.md
 │           ├── config-parsing.md
 │           ├── id-resolution.md
 │           ├── graphql-execution.md
