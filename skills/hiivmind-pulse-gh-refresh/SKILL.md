@@ -151,7 +151,7 @@ For each selected section:
 2. **Search Corpus via Skill**
    - Use the **bundled** GitHub corpus skill within this plugin
    - **DO NOT** use the global `hiivmind-corpus:hiivmind-corpus-navigate` skill
-   - Invoke via: `Skill tool` with `hiivmind-pulse-gh:hiivmind-corpus-github`
+   - Invoke via: `Skill tool` with `hiivmind-pulse-gh:hiivmind-corpus-github-navigate`
    - Query with keywords from routing guide
    - Get exact query/endpoint syntax from GraphQL schema or REST docs
 
@@ -307,6 +307,6 @@ All implementation details are in the pattern library:
 | Reference | Purpose |
 |-----------|---------|
 | `reference/api-routing.md` | Routing decisions + search keywords (READ FULL FILE) |
-| `hiivmind-pulse-gh:hiivmind-corpus-github` | Bundled GitHub corpus skill (use Skill tool) |
+| `hiivmind-pulse-gh:hiivmind-corpus-github-navigate` | Bundled GitHub corpus skill (use Skill tool) |
 
 **WARNING:** Do NOT use global `hiivmind-corpus:hiivmind-corpus-navigate` - use the bundled skill above.

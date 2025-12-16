@@ -138,9 +138,9 @@ Wait for user confirmation before proceeding. If user says no, ask them to speci
 - Keywords: `projectsV2`, `organization`, `user`
 
 **Step 2: Search Corpus via Skill**
-- Invoke skill: `.claude-plugin/skills/hiivmind-corpus-github/SKILL.md`
+- Invoke via: `Skill tool` with `hiivmind-pulse-gh:hiivmind-corpus-github-navigate`
 - Query: "projectsV2 organization list projects GraphQL"
-- The skill searches `data/index.md` and `data/uploads/graphql-schema/schema.docs.graphql`
+- The skill searches its index and GraphQL schema
 - Returns: query syntax for listing organization/user projects
 
 **Step 3: Execute Query**
@@ -279,4 +279,4 @@ All implementation details are in the pattern library:
 | Reference | Purpose |
 |-----------|---------|
 | `reference/api-routing.md` | Routing decisions + search keywords |
-| `.claude-plugin/skills/hiivmind-corpus-github/` | GitHub API corpus (GraphQL schema, REST docs) |
+| `hiivmind-pulse-gh:hiivmind-corpus-github-navigate` | GitHub API corpus skill (invoke via Skill tool) |

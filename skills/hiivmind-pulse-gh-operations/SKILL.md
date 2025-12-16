@@ -1183,10 +1183,16 @@ ls "${CLAUDE_PLUGIN_ROOT}/reference/workflows/"
 
 Use keywords to find exact syntax in the corpus.
 
-### Corpus Location
+### Corpus Skill
+
+Invoke via: `Skill tool` with `hiivmind-pulse-gh:hiivmind-corpus-github-navigate`
+
+The corpus skill will search its index and return relevant API documentation.
+
+### Corpus Location (Direct Access)
 
 ```
-${CLAUDE_PLUGIN_ROOT}/.claude-plugin/skills/hiivmind-corpus-github/data/index.md
+${CLAUDE_PLUGIN_ROOT}/skills/hiivmind-corpus-github/data/index.md
 ```
 
 ### GraphQL Schema Search
@@ -1194,7 +1200,7 @@ ${CLAUDE_PLUGIN_ROOT}/.claude-plugin/skills/hiivmind-corpus-github/data/index.md
 For mutations and types (70k+ line schema):
 
 ```bash
-SCHEMA="${CLAUDE_PLUGIN_ROOT}/.claude-plugin/skills/hiivmind-corpus-github/data/uploads/graphql-schema/schema.docs.graphql"
+SCHEMA="${CLAUDE_PLUGIN_ROOT}/skills/hiivmind-corpus-github/data/uploads/graphql-schema/schema.docs.graphql"
 
 # Find mutation signature
 grep -n "{mutationName}" "$SCHEMA" -B 5 -A 30

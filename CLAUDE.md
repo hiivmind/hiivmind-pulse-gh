@@ -175,7 +175,7 @@ This plugin includes an embedded GitHub API corpus at `skills/hiivmind-corpus-gi
 **Do NOT grep the corpus directly.** Use the proper flow:
 
 1. **Read routing guide** - `reference/api-routing.md` has routing decisions + search keywords
-2. **Navigate corpus** - Use the corpus's navigate skill with those keywords
+2. **Navigate corpus** - Use the corpus's `hiivmind-corpus-github-navigate` skill with those keywords
 3. **Get syntax** - Corpus returns paths to source docs with current syntax
 
 ### Lookup Flow

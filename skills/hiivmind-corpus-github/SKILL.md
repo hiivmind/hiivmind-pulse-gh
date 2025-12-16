@@ -1,5 +1,5 @@
 ---
-name: github-navigate
+name: hiivmind-corpus-github-navigate
 description: >-
   Find GitHub API documentation for hiivmind-pulse-gh operations. Use when you need GraphQL schema types, REST endpoint syntax, or gh CLI commands. Trigger keywords: "find in docs", "check the docs", "GraphQL schema", "REST endpoint", "gh command", "API syntax", issue, pullRequest, milestone, projectV2, rulesets, workflows, secrets, releases.
 ---
