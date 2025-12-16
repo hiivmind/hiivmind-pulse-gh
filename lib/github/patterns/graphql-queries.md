@@ -16,27 +16,43 @@ Tested GraphQL query patterns for GitHub project discovery and workspace initial
 - **tool-detection.md** - gh CLI must be available
 - **authentication.md** - Must be authenticated with required scopes
 
-## Critical: The Variable Pattern
+## Critical: Shell Escaping Issues
 
-**Problem:** GraphQL queries use `$variable` syntax that conflicts with bash variable expansion.
+**Problem:** GraphQL queries use `$variable` syntax that conflicts with bash variable expansion in different ways depending on shell context.
 
 ```bash
-# FAILS - bash tries to expand $login as a shell variable
+# FAILS in most contexts - shell tries to expand $login
 gh api graphql -f query='query($login: String!) { organization(login: $login) { id } }'
 # Error: Expected VAR_SIGN, actual: UNKNOWN_CHAR
 ```
 
-**Solution:** Store the query in a bash variable first, then pass it with double quotes.
+### Solution: Temp File Method
+
+**See:** `graphql-execution.md` for the complete execution pattern.
+
+The recommended solution is to write queries to a temp file and execute via `cat` substitution:
 
 ```bash
-# WORKS - query stored in variable, passed with double quotes
-QUERY='query($login: String!) { organization(login: $login) { id } }'
-gh api graphql -f login="myorg" -f query="$QUERY"
+# 1. Write query to temp file (single-quoted HEREDOC delimiter)
+cat > /tmp/query.graphql << 'QUERY'
+query($login: String!) {
+  organization(login: $login) { id }
+}
+QUERY
+
+# 2. Execute with file read
+gh api graphql \
+  -f query="$(cat /tmp/query.graphql)" \
+  -f login="hiivmind"
 ```
 
-**Why this works:**
-1. Single quotes around `QUERY='...'` prevent bash from expanding `$login`
-2. Double quotes around `-f query="$QUERY"` expand `$QUERY` but the query string itself is now a literal
+### What Works Directly
+
+Queries **without** `$variable` parameters work inline:
+
+```bash
+gh api graphql -f query='{ viewer { login id } }' --jq '.data.viewer'
+```
 
 ---
 
@@ -44,21 +60,24 @@ gh api graphql -f login="myorg" -f query="$QUERY"
 
 | GraphQL Type | gh Flag | Example |
 |--------------|---------|---------|
-| `String!` | `-f` | `-f login="hiivmind"` |
+| `String!` | `-F` | `-F login="hiivmind"` |
 | `Int!` | `-F` | `-F number=2` |
 | `Boolean` | `-F` | `-F includeArchived=true` |
-| `ID!` | `-f` | `-f projectId="PVT_xxx"` |
+| `ID!` | `-F` | `-F projectId="PVT_xxx"` |
 
-**Important:** Use `-f` for strings, `-F` for numbers and booleans.
+**Important:** Use `-F` for ALL variable types for maximum reliability. The `-f` flag can cause escaping issues in some contexts.
 
 ---
 
 ## Project Discovery Queries
 
+**Note:** These are reference queries. Due to shell escaping issues, store them in YAML files and execute via functions (see "Critical: Shell Escaping Issues" above).
+
 ### List Organization Projects
 
-```bash
-QUERY='query($login: String!) {
+**Query (for YAML file):**
+```graphql
+query($login: String!) {
   organization(login: $login) {
     id
     projectsV2(first: 20) {
@@ -71,13 +90,12 @@ QUERY='query($login: String!) {
       }
     }
   }
-}'
-
-gh api graphql -f login="$OWNER" -f query="$QUERY" \
-  --jq '.data.organization.projectsV2.nodes'
+}
 ```
 
-**Output:**
+**Variables:** `login` (String!) - organization login
+
+**Expected Output:**
 ```json
 [
   {"number": 2, "title": "Feature Planner", "closed": false, "id": "PVT_xxx", "url": "https://..."},
@@ -89,8 +107,9 @@ gh api graphql -f login="$OWNER" -f query="$QUERY" \
 
 ### List User Projects
 
-```bash
-QUERY='query($login: String!) {
+**Query (for YAML file):**
+```graphql
+query($login: String!) {
   user(login: $login) {
     id
     projectsV2(first: 20) {
@@ -103,18 +122,18 @@ QUERY='query($login: String!) {
       }
     }
   }
-}'
-
-gh api graphql -f login="$OWNER" -f query="$QUERY" \
-  --jq '.data.user.projectsV2.nodes'
+}
 ```
+
+**Variables:** `login` (String!) - user login
 
 ---
 
 ### Get Project with Fields
 
-```bash
-QUERY='query($login: String!, $number: Int!) {
+**Query (for YAML file):**
+```graphql
+query($login: String!, $number: Int!) {
   organization(login: $login) {
     projectV2(number: $number) {
       id
@@ -142,11 +161,10 @@ QUERY='query($login: String!, $number: Int!) {
       }
     }
   }
-}'
-
-gh api graphql -f login="$OWNER" -F number="$PROJECT_NUM" -f query="$QUERY" \
-  --jq '.data.organization.projectV2'
+}
 ```
+
+**Variables:** `login` (String!), `number` (Int!) - organization login and project number
 
 **Output:**
 ```json
@@ -196,68 +214,70 @@ gh api graphql -f query='{ viewer { login id name email } }' \
 
 ### Get Organization ID
 
-```bash
-QUERY='query($login: String!) {
+**Query (for YAML file):**
+```graphql
+query($login: String!) {
   organization(login: $login) {
     id
     name
     login
   }
-}'
-
-gh api graphql -f login="$OWNER" -f query="$QUERY" \
-  --jq '.data.organization.id'
+}
 ```
+
+**Variables:** `login` (String!) - organization login
 
 ---
 
 ### Get User ID
 
-```bash
-QUERY='query($login: String!) {
+**Query (for YAML file):**
+```graphql
+query($login: String!) {
   user(login: $login) {
     id
     name
     login
   }
-}'
-
-gh api graphql -f login="$OWNER" -f query="$QUERY" \
-  --jq '.data.user.id'
+}
 ```
+
+**Variables:** `login` (String!) - user login
 
 ---
 
 ## jq Parsing Patterns
 
+**Important:** Pipe to `jq` separately rather than using `--jq` inline. This avoids escaping conflicts.
+
 ### Extract Project Numbers
 
 ```bash
---jq '.data.organization.projectsV2.nodes[].number'
+| jq '.data.organization.projectsV2.nodes[].number'
 ```
 
 ### Extract Open Projects Only
 
 ```bash
---jq '.data.organization.projectsV2.nodes | map(select(.closed == false))'
+| jq '.data.organization.projectsV2.nodes | map(select(.closed == false))'
 ```
 
 ### Format as "number: title"
 
 ```bash
---jq '.data.organization.projectsV2.nodes[] | "\(.number): \(.title)"'
+| jq -r '.data.organization.projectsV2.nodes[] | "\(.number): \(.title)"'
 ```
 
 ### Extract Single Select Field Options
 
 ```bash
---jq '.data.organization.projectV2.fields.nodes[] | select(.name == "Status") | .options'
+| jq '.data.organization.projectV2.fields.nodes[] | select(.name == "Status") | .options'
 ```
 
 ### Get Field ID by Name
 
 ```bash
---jq '.data.organization.projectV2.fields.nodes[] | select(.name == "Status") | .id'
+| jq -r '.data.organization.projectV2.fields.nodes[] | select(.name == "Status") | .id'
 ```
 
 ---
@@ -268,7 +288,7 @@ gh api graphql -f login="$OWNER" -f query="$QUERY" \
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| `Expected VAR_SIGN, actual: UNKNOWN_CHAR` | Shell expanding `$` in query | Use variable pattern (see above) |
+| `Expected VAR_SIGN, actual: UNKNOWN_CHAR` | Shell expanding `$` in query | Use multiline format with `-F` flag |
 | `Could not resolve to an Organization` | Wrong login or no access | Check spelling, verify membership |
 | `Resource not accessible by integration` | Missing scopes | Run `gh auth refresh --scopes '...'` |
 | `Could not resolve to a ProjectV2` | Wrong project number | Verify project exists and is accessible |
@@ -276,7 +296,11 @@ gh api graphql -f login="$OWNER" -f query="$QUERY" \
 ### Check for Errors in Response
 
 ```bash
-RESPONSE=$(gh api graphql -f login="$OWNER" -f query="$QUERY" 2>&1)
+RESPONSE=$(gh api graphql -F login="$OWNER" -f query='
+query($login: String!) {
+  organization(login: $login) { id }
+}
+' 2>&1)
 
 if echo "$RESPONSE" | jq -e '.errors' >/dev/null 2>&1; then
   echo "GraphQL Error:"
@@ -289,46 +313,41 @@ fi
 
 ## Complete Example: Discover and Cache Projects
 
+**See:** `graphql-execution.md` for the temp file execution method.
+
 ```bash
 #!/bin/bash
-set -e
+# Discover projects for an organization
 
 OWNER="$1"
-TYPE="$2"  # "organization" or "user"
 
-# Build query based on type
-if [[ "$TYPE" == "organization" ]]; then
-  QUERY='query($login: String!) {
-    organization(login: $login) {
-      id
-      projectsV2(first: 20) {
-        nodes { number title closed id url }
-      }
+# Write query to temp file
+cat > /tmp/query.graphql << 'QUERY'
+query($login: String!) {
+  organization(login: $login) {
+    id
+    projectsV2(first: 20) {
+      nodes { number title closed id url }
     }
-  }'
-  JQ_PATH=".data.organization"
-else
-  QUERY='query($login: String!) {
-    user(login: $login) {
-      id
-      projectsV2(first: 20) {
-        nodes { number title closed id url }
-      }
-    }
-  }'
-  JQ_PATH=".data.user"
-fi
+  }
+}
+QUERY
 
-# Execute query
-RESULT=$(gh api graphql -f login="$OWNER" -f query="$QUERY")
+# Execute and extract projects
+RESULT=$(gh api graphql \
+  -f query="$(cat /tmp/query.graphql)" \
+  -f login="$OWNER")
 
 # Extract data
-WORKSPACE_ID=$(echo "$RESULT" | jq -r "$JQ_PATH.id")
-PROJECTS=$(echo "$RESULT" | jq "$JQ_PATH.projectsV2.nodes")
+WORKSPACE_ID=$(echo "$RESULT" | jq -r '.data.organization.id')
+PROJECTS=$(echo "$RESULT" | jq '.data.organization.projectsV2.nodes')
 
 echo "Workspace ID: $WORKSPACE_ID"
 echo "Projects:"
 echo "$PROJECTS" | jq -r '.[] | "  \(.number): \(.title) [\(if .closed then "closed" else "open" end)]"'
+
+# Cleanup
+rm -f /tmp/query.graphql
 ```
 
 ---
@@ -345,6 +364,7 @@ echo "$PROJECTS" | jq -r '.[] | "  \(.number): \(.title) [\(if .closed then "clo
 
 ## Related Patterns
 
+- **graphql-execution.md** - Execute queries with temp file method (solves escaping)
 - **tool-detection.md** - Verify gh CLI available
 - **authentication.md** - Ensure required scopes
 - **config-parsing.md** - Store discovered IDs in config

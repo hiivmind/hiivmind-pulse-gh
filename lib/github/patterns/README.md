@@ -90,11 +90,12 @@ grep -E "^key:" config.yaml | cut -d: -f2
 
 | Pattern | Purpose | Status |
 |---------|---------|--------|
-| `tool-detection.md` | Verify gh, jq, yq availability | Planned |
-| `authentication.md` | Auth verification, scope checking | Planned |
-| `config-parsing.md` | Read/write config.yaml | Planned |
-| `workspace-detection.md` | Git remote parsing, org vs user detection | Planned |
-| `graphql-queries.md` | Tested query patterns (project discovery) | Planned |
+| `tool-detection.md` | Verify gh, jq, yq availability | Done |
+| `authentication.md` | Auth verification, scope checking | Done |
+| `config-parsing.md` | Read/write config.yaml | Done |
+| `workspace-detection.md` | Git remote parsing, org vs user detection | Done |
+| `graphql-queries.md` | Query syntax reference (schema patterns) | Done |
+| `graphql-execution.md` | Execute queries via temp file (solves escaping) | Done |
 
 ### Future Iterations
 
