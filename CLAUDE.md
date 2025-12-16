@@ -10,7 +10,77 @@ This is **hiivmind-pulse-gh** - a Claude Code plugin for GitHub API operations. 
 - **Workspace initialization** - Cache project/repo IDs to config.yaml
 - **Operations execution** - All domains: issues, PRs, milestones, projects, protection, actions, releases
 - **API routing** - Automatic GraphQL vs REST selection
-- **Documentation corpus** - Keyword-tagged GitHub API docs for JIT syntax lookup
+- **Documentation corpus** - GitHub API docs for JIT syntax lookup
+
+---
+
+## v3 Flow Architecture
+
+All operations use the **v3 flow**:
+
+```
+1. ROUTE   →   2. CORPUS   →   3. EXECUTE
+   (API)         (syntax)        (temp file)
+     │              │               │
+reference/     Skill tool     gh api graphql
+api-routing.md    ↓          or gh api REST
+               hiivmind-pulse-gh:
+               hiivmind-corpus-github
+```
+
+### How It Works
+
+1. **Route** - Read `reference/api-routing.md` for:
+   - API choice (GraphQL vs REST)
+   - Search keywords for corpus lookup
+
+2. **Corpus** - Search bundled corpus for exact syntax:
+   - Invoke: `hiivmind-pulse-gh:hiivmind-corpus-github`
+   - Get mutation/endpoint definitions from schema
+
+3. **Execute** - Run the operation:
+   - **GraphQL**: Write query to temp file, execute with `gh api graphql -f query="$(cat /tmp/query.graphql)"`
+   - **REST**: Use `gh api /repos/{owner}/{repo}/endpoint -X METHOD`
+
+### Key Principle
+
+**Skills are orchestration documents, NOT code repositories.**
+
+- Skills are ~150-270 lines
+- No embedded bash functions
+- No hardcoded GraphQL queries
+- Reference patterns via `See:` convention
+- Corpus has the syntax, skills orchestrate the flow
+
+---
+
+## Pattern Library
+
+Skills reference patterns instead of embedding code:
+
+| Pattern | Purpose |
+|---------|---------|
+| `lib/github/patterns/v3-flow.md` | Complete routing → corpus → execute flow |
+| `lib/github/patterns/config-parsing.md` | Read/write YAML config files |
+| `lib/github/patterns/id-resolution.md` | Resolve names to IDs (cache-first) |
+| `lib/github/patterns/graphql-execution.md` | Execute queries via temp file |
+| `lib/github/patterns/error-handling.md` | Handle API errors |
+| `lib/github/patterns/authentication.md` | Verify gh auth and scopes |
+| `lib/github/patterns/tool-detection.md` | Check gh/jq/yq availability |
+| `lib/github/patterns/workspace-detection.md` | Git remote → owner/repo |
+
+### Using Patterns
+
+Skills use `See:` references:
+
+```markdown
+## Phase 1: CONTEXT
+
+**See:** `lib/github/patterns/config-parsing.md`
+
+1. Load config.yaml
+2. Verify initialization
+```
 
 ---
 
@@ -26,59 +96,38 @@ Use natural language to describe any GitHub operation:
 /hiivmind-pulse-gh set milestone v2.0 on issue #42
 /hiivmind-pulse-gh add PR to project
 /hiivmind-pulse-gh trigger workflow ci.yml
-/hiivmind-pulse-gh create milestone v3.0 due June 2025
-/hiivmind-pulse-gh set up branch protection on main
 ```
 
 ### What the Gateway Does
 
 1. **Context Check** - Verifies workspace is initialized
-2. **Freshness Check** - Offers refresh if config is stale (configurable threshold)
+2. **Freshness Check** - Offers refresh if config is stale
 3. **Intent Detection** - Parses natural language → domain + operation + target
-4. **Confirmation** - Asks before mutations (configurable)
-5. **Execution** - Routes to `hiivmind-pulse-gh-operations` skill
-
-**No arguments:** Shows interactive menu of available operations.
-
----
-
-## Architecture
-
-```
-/hiivmind-pulse-gh [request]
-    │
-    ├── Context Check
-    │   ├── Initialized? → if not, invoke init skill
-    │   └── Fresh? → if stale, offer refresh skill
-    │
-    ├── Intent Detection
-    │   ├── Domain: issues, PRs, milestones, projects, etc.
-    │   ├── Operation: create, update, delete, list, link
-    │   └── Target: issue #42, milestone "v2.0", etc.
-    │
-    └── Execution
-        └── hiivmind-pulse-gh-operations skill
-            ├── Consults: api-routing.md
-            ├── References: workflow examples
-            ├── Searches: corpus for syntax
-            └── Executes: gh CLI commands
-```
+4. **Confirmation** - Asks before mutations
+5. **Execution** - Routes to operations skill
 
 ---
 
 ## Skills
 
-| Skill | Purpose | Invoked By |
-|-------|---------|------------|
-| `hiivmind-pulse-gh-init` | First-time workspace setup | Gateway (if not initialized) |
-| `hiivmind-pulse-gh-refresh` | Sync config with GitHub | Gateway (if stale) |
-| `hiivmind-pulse-gh-operations` | Execute GitHub operations | Gateway (after intent detection) |
+| Skill | Purpose | Structure |
+|-------|---------|-----------|
+| `hiivmind-pulse-gh-init` | First-time workspace setup | 5 phases (~150 lines) |
+| `hiivmind-pulse-gh-refresh` | Sync config with GitHub | 4 phases (~200 lines) |
+| `hiivmind-pulse-gh-operations` | Execute GitHub operations | 5 phases (~270 lines) |
 
-### When Skills Are Used
+### Skill Architecture
 
-- **init**: Called automatically when config.yaml doesn't exist
-- **refresh**: Offered when config exceeds freshness threshold (default: 7 days)
-- **operations**: Called for all GitHub operations after intent is detected
+Each skill follows a phase-based structure:
+
+```
+CONTEXT → RESOLVE → ROUTE → EXECUTE → REPORT
+   │         │        │        │         │
+ config    IDs    api-routing  corpus   result
+ check    cache     guide      skill   display
+```
+
+**STOP Points:** Skills have explicit STOP conditions that halt execution and prompt user action.
 
 ---
 
@@ -108,22 +157,22 @@ projects:
 
 cache:
   last_synced_at: "2025-12-08T22:05:29Z"
-  last_freshness_check: null
 ```
 
-### User Config: `.hiivmind/github/user.yaml`
+### Freshness Tracking: `.hiivmind/github/freshness.yaml`
 
-User-specific, NOT committed (add to .gitignore):
+Per-section staleness tracking:
 
 ```yaml
-user:
-  login: username
-  id: U_kgDO...
-
-preferences:
-  freshness_threshold_days: 7    # Days before config is stale
-  confirm_mutations: true        # Ask before create/update/delete
-  default_project: null          # Override team default
+sections:
+  workspace:
+    last_checked: "2025-12-16T12:00:00Z"
+    threshold_hours: 168
+    stale: false
+  projects:
+    last_checked: "2025-12-15T10:00:00Z"
+    threshold_hours: 24
+    stale: true
 ```
 
 ---
@@ -146,58 +195,18 @@ preferences:
 
 ---
 
-## Reference Documentation
-
-| Document | Purpose |
-|----------|---------|
-| `reference/api-routing.md` | Which API (GraphQL vs REST) for each operation |
-| `reference/config-schema.md` | How to read and use config.yaml |
-| `reference/workflows/` | Multi-step workflow examples |
-
-### Workflow Examples
-
-| File | Operations |
-|------|------------|
-| `issue-to-project.md` | Create issue, add to project, set status |
-| `manage-milestones.md` | Milestone CRUD, assign to issues |
-| `setup-branch-protection.md` | Branch protection + rulesets |
-| `project-status-update.md` | Update fields, project status |
-| `bulk-operations.md` | Batch operations with rate limiting |
-
----
-
 ## GitHub Documentation Corpus
 
 This plugin includes an embedded GitHub API corpus at `skills/hiivmind-corpus-github/`.
 
-### How to Use the Corpus
+### Using the Corpus
 
-**Do NOT grep the corpus directly.** Use the proper flow:
+**Do NOT grep the corpus directly.** Use the v3 flow:
 
-1. **Read routing guide** - `reference/api-routing.md` has routing decisions + search keywords
-2. **Navigate corpus** - Use the corpus's `hiivmind-corpus-github-navigate` skill with those keywords
-3. **Get syntax** - Corpus returns paths to source docs with current syntax
-
-### Lookup Flow
-
-```
-reference/api-routing.md          →  "Milestones create → REST"
-                                      Keywords: milestones, POST, create, title, due_on
-                                              ↓
-corpus navigate skill             →  Searches index for keywords
-                                              ↓
-corpus index                      →  Returns: rest:repos/milestones.md#create
-                                              ↓
-source doc                        →  Current syntax (POST /repos/{owner}/{repo}/milestones)
-```
-
-### Why This Matters
-
-- **Routing guide** owns the decisions and keywords (updated manually when API changes)
-- **Corpus index** owns the locations (updated by corpus refresh)
-- **Source docs** own the syntax (always current from upstream)
-
-Each layer manages its own concerns. No hardcoded paths in CLAUDE.md.
+1. Read `reference/api-routing.md` for API choice + search keywords
+2. Invoke corpus skill: `hiivmind-pulse-gh:hiivmind-corpus-github`
+3. Search with keywords from routing guide
+4. Get exact syntax from schema/docs
 
 ---
 
@@ -214,16 +223,21 @@ hiivmind-pulse-gh/
 │   ├── hiivmind-pulse-gh-init/           # Workspace initialization
 │   ├── hiivmind-pulse-gh-refresh/        # Config sync
 │   └── hiivmind-pulse-gh-operations/     # Execute operations
+├── lib/
+│   └── github/
+│       └── patterns/                     # Pattern library
+│           ├── v3-flow.md
+│           ├── config-parsing.md
+│           ├── id-resolution.md
+│           ├── graphql-execution.md
+│           ├── error-handling.md
+│           └── ...
 ├── reference/
 │   ├── api-routing.md                    # API routing decisions
-│   ├── config-schema.md                  # Config.yaml schema
-│   └── workflows/                        # Multi-step examples
-├── templates/
-│   ├── config.yaml.template
-│   └── user.yaml.template
-├── _deprecated/github/                   # Legacy bash functions (reference only)
-└── docs/
-    └── architecture-v3-proposal.md
+│   └── config-schema.md                  # Config.yaml schema
+└── templates/
+    ├── config.yaml.template
+    └── user.yaml.template
 ```
 
 ---
@@ -256,4 +270,3 @@ When working on plugin structure, use the `plugin-dev` skills:
 | `plugin-dev:skill-development` | Writing SKILL.md files |
 | `plugin-dev:command-development` | Slash commands |
 | `plugin-dev:hook-development` | Event hooks |
-| `plugin-dev:mcp-integration` | MCP server configuration |
