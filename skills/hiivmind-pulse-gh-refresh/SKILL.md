@@ -128,18 +128,32 @@ Which sections to refresh? [1,2,3,4 / stale / all / none]
 **See:** `lib/github/patterns/v3-flow.md`
 **See:** `lib/github/patterns/error-handling.md`
 
+### PREREQUISITE: Read Routing Guide
+
+**IMPORTANT:** Before refreshing ANY section, read the FULL `reference/api-routing.md` file.
+
+- The file is ~245 lines - read it completely, do NOT grep or search
+- This gives you routing decisions for ALL domains upfront
+- You need this context to make correct GraphQL vs REST decisions
+
+```
+Read: reference/api-routing.md (full file)
+```
+
 ### The v3 Flow (per section)
 
 For each selected section:
 
-1. **Read Routing Guide** - `reference/api-routing.md`
+1. **Check Routing Guide** (already read above)
    - Determine: GraphQL vs REST
-   - Get search keywords
+   - Get search keywords from the domain table
 
 2. **Search Corpus via Skill**
-   - Invoke: `.claude-plugin/skills/hiivmind-corpus-github/SKILL.md`
+   - Use the **bundled** GitHub corpus skill within this plugin
+   - **DO NOT** use the global `hiivmind-corpus:hiivmind-corpus-navigate` skill
+   - Invoke via: `Skill tool` with `hiivmind-pulse-gh:hiivmind-corpus-github`
    - Query with keywords from routing guide
-   - Get exact query/endpoint syntax
+   - Get exact query/endpoint syntax from GraphQL schema or REST docs
 
 3. **Execute Query**
    - GraphQL: temp file pattern (`lib/github/patterns/graphql-execution.md`)
@@ -292,5 +306,7 @@ All implementation details are in the pattern library:
 
 | Reference | Purpose |
 |-----------|---------|
-| `reference/api-routing.md` | Routing decisions + search keywords |
-| `.claude-plugin/skills/hiivmind-corpus-github/` | GitHub API corpus (GraphQL schema, REST docs) |
+| `reference/api-routing.md` | Routing decisions + search keywords (READ FULL FILE) |
+| `hiivmind-pulse-gh:hiivmind-corpus-github` | Bundled GitHub corpus skill (use Skill tool) |
+
+**WARNING:** Do NOT use global `hiivmind-corpus:hiivmind-corpus-navigate` - use the bundled skill above.
