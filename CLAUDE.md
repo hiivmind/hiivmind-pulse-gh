@@ -168,7 +168,7 @@ preferences:
 
 ## GitHub Documentation Corpus
 
-This plugin includes an embedded GitHub API corpus at `.claude-plugin/skills/hiivmind-corpus-github/`.
+This plugin includes an embedded GitHub API corpus at `skills/hiivmind-corpus-github/`.
 
 ### How to Use the Corpus
 
@@ -206,11 +206,11 @@ Each layer manages its own concerns. No hardcoded paths in CLAUDE.md.
 ```
 hiivmind-pulse-gh/
 ├── .claude-plugin/
-│   ├── plugin.json
-│   └── skills/hiivmind-corpus-github/    # Embedded corpus
+│   └── plugin.json
 ├── commands/
 │   └── hiivmind-pulse-gh.md              # Gateway command
 ├── skills/
+│   ├── hiivmind-corpus-github/           # GitHub API corpus
 │   ├── hiivmind-pulse-gh-init/           # Workspace initialization
 │   ├── hiivmind-pulse-gh-refresh/        # Config sync
 │   └── hiivmind-pulse-gh-operations/     # Execute operations
