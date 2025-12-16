@@ -96,6 +96,7 @@ grep -E "^key:" config.yaml | cut -d: -f2
 | `workspace-detection.md` | Git remote parsing, org vs user detection | Done |
 | `graphql-queries.md` | Query syntax reference (schema patterns) | Done |
 | `graphql-execution.md` | Execute queries via temp file (solves escaping) | Done |
+| `v3-flow.md` | Complete v3 flow: routing → corpus → execute | Done |
 
 ### Future Iterations
 
@@ -106,8 +107,6 @@ grep -E "^key:" config.yaml | cut -d: -f2
 | `issue-pr-operations.md` | Issue/PR CRUD operations | 2 |
 | `protection-operations.md` | Branch protection, rulesets | 2 |
 | `error-handling.md` | Common errors and recovery | 2 |
-| `api-selection.md` | GraphQL vs REST decision logic | 4 |
-| `corpus-lookup.md` | How to find syntax in embedded corpus | 4 |
 | `id-resolution.md` | Resolve project/field/option IDs from config | 3 |
 
 ## Design Principles
