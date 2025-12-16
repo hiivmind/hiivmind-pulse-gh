@@ -624,4 +624,4 @@ api_with_retry() {
 - **tool-detection.md** - Tool availability errors
 - **config-parsing.md** - Config file errors
 - **graphql-execution.md** - GraphQL-specific errors
-- **v3-flow.md** - Flow-level error handling
+- **corpus-lookup.md** - Syntax lookup when uncertain

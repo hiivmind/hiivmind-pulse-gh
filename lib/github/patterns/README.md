@@ -96,7 +96,7 @@ grep -E "^key:" config.yaml | cut -d: -f2
 | `workspace-detection.md` | Git remote parsing, org vs user detection | Done |
 | `graphql-queries.md` | Query syntax reference (schema patterns) | Done |
 | `graphql-execution.md` | Execute queries via temp file (solves escaping) | Done |
-| `v3-flow.md` | Complete v3 flow: routing → corpus → execute | Done |
+| `corpus-lookup.md` | Look up API syntax when uncertain | Done |
 
 ### Iteration 2: Patterns + Refresh Skill
 
@@ -107,17 +107,14 @@ grep -E "^key:" config.yaml | cut -d: -f2
 
 ### Why No Domain-Specific Patterns?
 
-The v3 flow architecture (`v3-flow.md`) eliminates the need for domain-specific patterns like `rest-operations.md`, `project-operations.md`, etc.
+The corpus lookup pattern (`corpus-lookup.md`) provides just-in-time syntax lookup when needed, eliminating domain-specific patterns like `rest-operations.md`, `project-operations.md`, etc.
 
-**How v3 flow works:**
-1. **Routing guide** (`reference/api-routing.md`) determines API type (GraphQL/REST/CLI)
-2. **Corpus skill** provides exact syntax from 70k+ line GraphQL schema and REST docs
+**How it works:**
+1. **Routing guide** (`reference/api-routing.md`) determines API type (GraphQL/REST/CLI) - useful standalone
+2. **Corpus skill** provides exact syntax when uncertain (70k+ line GraphQL schema and REST docs)
 3. **Execution patterns** (`graphql-execution.md`) handle all API types uniformly
 
-All domain operations (issues, projects, milestones, protection, etc.) follow the same flow:
-```
-routing → corpus → execute
-```
+All domain operations (issues, projects, milestones, protection, etc.) can use corpus lookup when syntax is uncertain.
 
 No separate domain patterns needed - the corpus has the syntax, the routing guide has the decisions.
 

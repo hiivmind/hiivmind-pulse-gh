@@ -13,7 +13,7 @@ Resolve user-friendly names and numbers to GraphQL/REST IDs using cache-first st
 ## Prerequisites
 
 - **config-parsing.md** - For cached ID extraction
-- **v3-flow.md** - For API fallback when cache misses
+- **corpus-lookup.md** - For API fallback when cache misses
 - Config exists at `.hiivmind/github/config.yaml`
 
 ---
@@ -32,7 +32,7 @@ User Input (name/number)
     │ Yes       │ No
     ↓           ↓
   Return    ┌───────────────────┐
-  ID        │ 2. v3 FLOW LOOKUP │  ← v3-flow.md
+  ID        │ 2. CORPUS LOOKUP │  ← corpus-lookup.md
             │    Query GitHub   │
             └─────────┬─────────┘
                       │
@@ -50,11 +50,11 @@ User Input (name/number)
 
 | Entity | Lookup Key | Cached? | Cache Path | Fallback |
 |--------|-----------|---------|------------|----------|
-| Project | Number | Yes | `.projects.catalog[].number` → `.id` | v3 flow: projectsV2 |
-| Field | Name + Project | Yes | `.fields[].name` → `.id` | v3 flow: projectV2.fields |
-| Option | Name + Field | Yes | `.options[].name` → `.id` | v3 flow: field.options |
-| Issue | Number | No | — | v3 flow: repository.issue |
-| PR | Number | No | — | v3 flow: repository.pullRequest |
+| Project | Number | Yes | `.projects.catalog[].number` → `.id` | corpus lookup: projectsV2 |
+| Field | Name + Project | Yes | `.fields[].name` → `.id` | corpus lookup: projectV2.fields |
+| Option | Name + Field | Yes | `.options[].name` → `.id` | corpus lookup: field.options |
+| Issue | Number | No | — | corpus lookup: repository.issue |
+| PR | Number | No | — | corpus lookup: repository.pullRequest |
 | Milestone | Title or Number | Partial | `.milestones[repo][]` | REST: /milestones |
 
 ---
@@ -76,8 +76,8 @@ PROJECT_ID=$(yq ".projects.catalog[] | select(.number == $PROJECT_NUM) | .id" "$
 if [[ -n "$PROJECT_ID" && "$PROJECT_ID" != "null" ]]; then
   echo "Resolved from cache: $PROJECT_ID"
 else
-  echo "Not in cache - use v3 flow fallback"
-  # See: lib/github/patterns/v3-flow.md
+  echo "Not in cache - use corpus lookup fallback"
+  # See: lib/github/patterns/corpus-lookup.md
   # routing: Projects → List → GraphQL
   # keywords: projectsV2, organization/user
 fi
@@ -125,8 +125,8 @@ FIELD_ID=$(yq ".projects.catalog[] | select(.number == $PROJECT_NUM) | .fields[\
 if [[ -n "$FIELD_ID" && "$FIELD_ID" != "null" ]]; then
   echo "Resolved from cache: $FIELD_ID"
 else
-  echo "Not in cache - use v3 flow fallback"
-  # See: lib/github/patterns/v3-flow.md
+  echo "Not in cache - use corpus lookup fallback"
+  # See: lib/github/patterns/corpus-lookup.md
   # routing: Projects → Fields → GraphQL
   # keywords: projectV2, fields, SingleSelectField
 fi
@@ -175,8 +175,8 @@ OPTION_ID=$(yq ".projects.catalog[] | select(.number == $PROJECT_NUM) | .fields[
 if [[ -n "$OPTION_ID" && "$OPTION_ID" != "null" ]]; then
   echo "Resolved from cache: $OPTION_ID"
 else
-  echo "Not in cache - use v3 flow fallback"
-  # See: lib/github/patterns/v3-flow.md
+  echo "Not in cache - use corpus lookup fallback"
+  # See: lib/github/patterns/corpus-lookup.md
   # routing: Projects → Fields → GraphQL
   # keywords: SingleSelectField, options
 fi
@@ -200,7 +200,7 @@ print(options.get('In progress', ''))
 
 ### Issue/PR Node ID
 
-Issues and PRs are **not cached** - always use v3 flow to query GitHub.
+Issues and PRs are **not cached** - always use corpus lookup to query GitHub.
 
 **Why not cached:** Issues/PRs are too numerous and change frequently. Caching would be stale immediately.
 
@@ -280,7 +280,7 @@ gh api "/repos/$OWNER/$REPO/milestones/$MILESTONE_NUM" --jq '.node_id'
 
 ## Fallback Strategy
 
-When cache lookup fails, use v3 flow:
+When cache lookup fails, use corpus lookup:
 
 ```
 Cache Miss
@@ -307,7 +307,7 @@ Cache Miss
                     Return ID
 ```
 
-**See:** `lib/github/patterns/v3-flow.md` for complete flow documentation.
+**See:** `lib/github/patterns/corpus-lookup.md` for complete flow documentation.
 
 ---
 
@@ -315,8 +315,8 @@ Cache Miss
 
 | Error | Cause | Recovery |
 |-------|-------|----------|
-| Empty result from cache | Entity not cached | Use v3 flow fallback |
-| `null` returned | Key exists but value is null | Use v3 flow fallback |
+| Empty result from cache | Entity not cached | Use corpus lookup fallback |
+| `null` returned | Key exists but value is null | Use corpus lookup fallback |
 | "yq: command not found" | yq not installed | Fall back to Python |
 | No match in cache | Name/number typo | List available entities, ask user |
 | Multiple matches | Ambiguous name | Present options, ask user to clarify |
@@ -402,7 +402,7 @@ CONFIG=".hiivmind/github/config.yaml"
 # 1. Project ID (cached)
 PROJECT_ID=$(yq '.projects.catalog[] | select(.number == 2) | .id' "$CONFIG")
 
-# 2. Issue ID (v3 flow - not cached)
+# 2. Issue ID (corpus lookup - not cached)
 # See Issue/PR Node ID section above
 ```
 
@@ -426,6 +426,6 @@ yq ".projects.catalog[] | select(.number == $PROJECT_NUM) | .fields[\"$FIELD_NAM
 ## Related Patterns
 
 - **config-parsing.md** - Raw YAML extraction (this pattern uses it for cache lookup)
-- **v3-flow.md** - API fallback flow (routing → corpus → execute)
+- **corpus-lookup.md** - API fallback flow (routing → corpus → execute)
 - **graphql-execution.md** - Temp file pattern for GraphQL queries
 - **tool-detection.md** - Check yq/Python availability before resolution
