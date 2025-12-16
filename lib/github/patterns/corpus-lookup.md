@@ -1,28 +1,37 @@
-# Pattern: v3 Flow (Routing → Corpus → Execute)
+# Pattern: Corpus Lookup
 
 ## Purpose
 
-Standard flow for executing any GitHub API operation using the v3 architecture.
+Look up exact API syntax from the bundled GitHub documentation corpus when you are **uncertain** about query structure, endpoint format, or parameter requirements.
 
 ## When to Use
 
-- Any GitHub API operation (issues, PRs, milestones, projects, etc.)
-- When unsure of exact syntax for a query or mutation
-- When hardcoded patterns don't cover the operation
-- When API behavior may have changed and you need current syntax
+Use corpus lookup when you have a **knowledge gap**:
 
-## Prerequisites
+- **Uncertain syntax** - Unsure of exact GraphQL mutation or query structure
+- **Unfamiliar endpoints** - Don't know REST endpoint path or request body format
+- **Complex operations** - Multi-step operations not covered by cached examples
+- **API changes** - Behavior may have changed since last use
+- **Cache miss** - ID resolution failed and need to query fresh
 
-- **reference/api-routing.md** - Routing decisions and search keywords
-- **Corpus skill** - `.claude-plugin/skills/hiivmind-corpus-github/SKILL.md`
-- **graphql-execution.md** - For GraphQL queries with variables
+## When NOT to Use
+
+Skip corpus lookup for operations where you **already know the syntax**:
+
+- **Simple operations** - Common patterns you've used before
+- **CLI shortcuts** - `gh issue create`, `gh pr merge`, etc. (well-documented)
+- **Explicit examples** - Following workflow docs with exact syntax shown
+- **Read-only checks** - Quick status queries that don't need precise syntax
+- **Cached IDs available** - Just need to substitute values into known patterns
 
 ---
 
-## The Flow
+## The Lookup Flow
+
+When you need syntax help:
 
 ```
-User Request
+Your Request
      ↓
 ┌────────────────────────────────────────────────────────────┐
 │  Step 1: ROUTING DECISION                                  │
@@ -32,7 +41,7 @@ User Request
      ↓
 ┌────────────────────────────────────────────────────────────┐
 │  Step 2: CORPUS DISCOVERY                                  │
-│  Invoke: .claude-plugin/skills/hiivmind-corpus-github/     │
+│  Invoke: hiivmind-pulse-gh:hiivmind-corpus-github          │
 │  Query: Keywords from Step 1                               │
 │  Output: Exact syntax (query/endpoint/command)             │
 └────────────────────────────────────────────────────────────┘
@@ -57,6 +66,8 @@ The routing guide provides:
 1. **API type** - GraphQL, REST, or gh CLI
 2. **Search keywords** - Terms to find in corpus
 
+**Note:** The routing guide is useful on its own - if you know the syntax, you can skip Steps 2-3 and execute directly.
+
 ### Example Routing Lookups
 
 | User Request | Domain | Operation | API | Keywords |
@@ -70,7 +81,7 @@ The routing guide provides:
 
 ## Step 2: Corpus Discovery
 
-**Invoke:** `.claude-plugin/skills/hiivmind-corpus-github/SKILL.md`
+**Invoke:** `hiivmind-pulse-gh:hiivmind-corpus-github`
 
 The corpus skill searches:
 - **Index:** `data/index.md` - Keyword-tagged entries
@@ -168,26 +179,26 @@ gh run list --workflow=ci.yml --limit=10
 ## Decision Tree
 
 ```
-User Request: "Do X with Y"
+Need to execute GitHub operation
            ↓
-    Read api-routing.md
-           ↓
-    ┌──────┴──────┐
-    │  API Type?  │
-    └──────┬──────┘
+    Do you know the exact syntax?
            │
-    ┌──────┼──────────────┐
-    ↓      ↓              ↓
-GraphQL   REST         gh CLI
-    │      │              │
-    ↓      ↓              ↓
-Search   Search        Search
-schema   REST docs     CLI docs
-    │      │              │
-    ↓      ↓              ↓
-Temp     gh api        Direct
-file     endpoint      command
-execute
+    ┌──────┴──────┐
+    │             │
+   YES           NO
+    │             │
+    ↓             ↓
+Execute       Read api-routing.md
+directly      for API type + keywords
+                   │
+                   ↓
+            Search corpus skill
+                   │
+                   ↓
+            Get exact syntax
+                   │
+                   ↓
+               Execute
 ```
 
 ---
@@ -283,30 +294,21 @@ gh api /repos/hiivmind/hiivmind-pulse-gh/actions/workflows/ci.yml/dispatches \
 
 ---
 
-### Example 4: Create Issue (gh CLI)
+### Example 4: Skip Corpus - Known Syntax
 
 **Request:** "Create an issue for the login bug"
 
-**Step 1 - Routing:**
-```
-Read api-routing.md
-→ Issues → Create → GraphQL (but CLI alternative available)
-→ CLI alternative: gh issue create
-```
+**Decision:** You know `gh issue create` syntax already.
 
-**Step 2 - Corpus:**
-```
-Invoke corpus skill with: "gh issue create"
-→ Returns CLI syntax and flags
-```
-
-**Step 3 - Execute:**
+**Execute directly:**
 ```bash
 gh issue create \
   --title "Bug: Login fails with SSO" \
   --body "When using SSO, login redirects to blank page" \
   --label "bug"
 ```
+
+No corpus lookup needed for well-known CLI commands.
 
 ---
 
@@ -331,6 +333,6 @@ gh issue create \
 
 ## Related References
 
-- **reference/api-routing.md** - Routing decisions and keywords
+- **reference/api-routing.md** - Routing decisions and keywords (useful standalone)
 - **reference/config-schema.md** - Config.yaml structure for cached IDs
-- **.claude-plugin/skills/hiivmind-corpus-github/** - GitHub API corpus
+- **hiivmind-pulse-gh:hiivmind-corpus-github** - GitHub API corpus skill
