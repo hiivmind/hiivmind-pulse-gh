@@ -32,20 +32,40 @@ Configure CLAUDE.md with hiivmind-pulse-gh skill awareness using a What/When/How
 
 ---
 
-## Phase 1: CONTEXT
+## Phase 1: CONTEXT - Determine Scope
 
-**Goal:** Check for CLAUDE.md and existing awareness section.
+**Goal:** Determine injection target and check for existing awareness section.
 
-### What to Do
+### Step 1: Determine Injection Target
 
-1. Check if CLAUDE.md exists in project root
-2. Check for existing hiivmind-pulse-gh awareness section
-3. Determine insert location
+Use AskUserQuestion to ask:
+
+```
+Where would you like to add GitHub plugin awareness?
+
+1. **User-level** (~/.claude/CLAUDE.md)
+   - Personal cross-project awareness
+   - Claude suggests this plugin in ANY project you work on
+
+2. **Repo-level** ({repo}/CLAUDE.md)
+   - Team/project-specific awareness
+   - Checked into version control for team use
+
+3. Cancel
+```
+
+**Store selection** for use in Phase 5.
+
+### Step 2: Check Target Existence
+
+Based on selection:
+- **User-level:** Check if `~/.claude/CLAUDE.md` exists
+- **Repo-level:** Check if `CLAUDE.md` exists in project root
 
 ### STOP Point - No CLAUDE.md
 
 ```
-No CLAUDE.md found in this project.
+No CLAUDE.md found at {target path}.
 
 Would you like to:
   1. Create CLAUDE.md with plugin awareness section
@@ -54,12 +74,16 @@ Would you like to:
 [Select option]
 ```
 
+### Step 3: Check for Existing Section
+
+Search target file for "hiivmind-pulse-gh" or "GitHub Operations" section.
+
 ### STOP Point - Existing Awareness
 
-If CLAUDE.md already has "hiivmind-pulse-gh" section:
+If target CLAUDE.md already has awareness section:
 
 ```
-CLAUDE.md already has hiivmind-pulse-gh awareness.
+{target path} already has hiivmind-pulse-gh awareness.
 
 Would you like to:
   1. Update/replace existing section
@@ -186,9 +210,15 @@ Continue to inject into CLAUDE.md? [Yes / Cancel]
 
 ## Phase 5: INJECT
 
-**Goal:** Generate awareness section and edit CLAUDE.md.
+**Goal:** Generate awareness section and edit target CLAUDE.md.
 
 **See:** `lib/github/patterns/capability-awareness.md` (Template section)
+
+### Determine Target Path
+
+Based on Phase 1 selection:
+- **User-level:** `~/.claude/CLAUDE.md`
+- **Repo-level:** `{repo}/CLAUDE.md`
 
 ### Generate Section
 
@@ -247,6 +277,8 @@ Skill: hiivmind-corpus-github
 ```
 === CLAUDE.md Addition Preview ===
 
+Target: {user-level: ~/.claude/CLAUDE.md | repo-level: {repo}/CLAUDE.md}
+
 [Show generated section above]
 
 Insert location: End of file / After [section name]
@@ -262,20 +294,39 @@ Options:
 ### Execute Edit
 
 Use Edit tool to:
+- Target the file selected in Phase 1
 - Append to CLAUDE.md (if appending)
 - Insert after specified section (if location chosen)
 
 ### STOP Point - Success
 
+**If user-level:**
 ```
-CLAUDE.md updated successfully!
+~/.claude/CLAUDE.md updated successfully!
 
 Added hiivmind-pulse-gh skill awareness section.
+This awareness works across ALL your projects.
+
+Next steps:
+  1. Initialize current workspace (/hiivmind-pulse-gh init) [if not initialized]
+  2. Try a GitHub operation
+  3. Done
+
+[Select option]
+```
+
+**If repo-level:**
+```
+{repo}/CLAUDE.md updated successfully!
+
+Added hiivmind-pulse-gh skill awareness section.
+This is team-specific awareness for this repository.
 
 Next steps:
   1. Initialize workspace (/hiivmind-pulse-gh init) [if not initialized]
-  2. Try a GitHub operation
-  3. Done
+  2. Commit CLAUDE.md changes for team use
+  3. Try a GitHub operation
+  4. Done
 
 [Select option]
 ```
