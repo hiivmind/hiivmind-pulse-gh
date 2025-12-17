@@ -80,6 +80,7 @@ Analyze the user's request to determine:
 | variable, env, config | `variables` |
 | release, publish, asset, changelog | `releases` |
 | adr, architecture decision, document decision, decision record, design decision | `adr` |
+| awareness, configure claude, setup claude, enable features, what can, capabilities, tour | `awareness` |
 
 ### Operation Detection
 
@@ -136,6 +137,14 @@ After detecting intent, route based on domain:
 
 The ADR skill handles architecture decision records with file + GitHub issue integration.
 
+### Awareness Domain
+
+**If domain is `awareness`:**
+
+**Invoke:** `hiivmind-pulse-gh:hiivmind-pulse-gh-awareness`
+
+The awareness skill auto-detects capabilities from project context and guides through CLAUDE.md configuration.
+
 ### All Other Domains
 
 **Invoke:** `hiivmind-pulse-gh:hiivmind-pulse-gh-operations`
@@ -185,6 +194,7 @@ What would you like to do with GitHub?
 **Maintenance**
 16. Refresh workspace config
 17. View current configuration
+18. Configure CLAUDE.md awareness (capabilities tour)
 ```
 
 After selection, gather details and route to operations skill.
@@ -249,3 +259,16 @@ After selection, gather details and route to operations skill.
 5. Creates file `doc/adr/NNNN-using-graphql.md`
 6. Creates GitHub issue with `adr` label
 7. Links to milestone if specified
+
+### Capability Awareness
+
+**User:** `/hiivmind-pulse-gh configure Claude for GitHub`
+
+**Flow:**
+1. Intent: domain=awareness
+2. Route to awareness skill
+3. Skill scans project for capability signals
+4. Auto-detects: Actions (3 workflows), Issues (template found), ADR
+5. Offers guided tour of remaining capabilities
+6. User selects which to enable
+7. Edits CLAUDE.md with awareness section

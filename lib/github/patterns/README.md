@@ -111,6 +111,7 @@ grep -E "^key:" config.yaml | cut -d: -f2
 |---------|---------|--------|
 | `adr-management.md` | ADR numbering, file creation, GitHub issue linking, sync | Done |
 | `adr-awareness.md` | Proactive triggers, CLAUDE.md integration, suggestion templates | Done |
+| `capability-awareness.md` | Full capability registry, detection rules, CLAUDE.md templates | Done |
 
 ### Why No Domain-Specific Patterns?
 
