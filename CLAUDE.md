@@ -201,6 +201,8 @@ sections:
 | **Variables** | set, update, delete, list | REST |
 | **Releases** | create, update, delete, upload | REST |
 
+> **Note:** This table shows commonly used domains. The plugin supports **any GitHub domain** via corpus lookup. For unlisted domains, the operations skill uses corpus lookup and defaults to REST API. Some dangerous operations are blocked — see `reference/operation-blocklist.md`.
+
 ---
 
 ## GitHub Documentation Corpus

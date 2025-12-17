@@ -139,6 +139,8 @@ hiivmind-pulse-gh-awareness       ← Independent (edits CLAUDE.md)
 | **Variables** | set, update, delete, list | REST |
 | **Releases** | create, update, delete, upload | REST |
 
+> **Note:** This table shows commonly used domains for quick reference. The plugin supports **any GitHub domain** via corpus lookup — if you have permissions, it can help. Some dangerous operations (delete repository, transfer ownership) are blocked for safety. See `reference/operation-blocklist.md`.
+
 ## Quick Start
 
 ### First-Time Setup
