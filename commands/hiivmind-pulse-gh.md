@@ -43,6 +43,15 @@ Analyze the user's request to determine:
 | secret, credential, encrypted | `secrets` |
 | variable, env, config | `variables` |
 | release, publish, asset, changelog | `releases` |
+| repo, repository, fork, clone | `repositories` |
+| collaborator, contributor, invite | `collaborators` |
+| team, membership | `teams` |
+| check, check run, status check | `checks` |
+| deploy, deployment | `deployments` |
+| scan, alert, security, vulnerability | `security` |
+| dependabot, dependency | `dependabot` |
+| search, find, query | `search` |
+| gist | `gists` |
 | adr, architecture decision, document decision, decision record, design decision | `adr` |
 | awareness, configure claude, setup claude, enable features, what can, capabilities, tour | `awareness` |
 
@@ -68,17 +77,42 @@ Look for:
 - Branch names: `main`, `develop`
 - Workflow names: `ci.yml`, `deploy.yml`
 
+### Blocked Operations
+
+Before proceeding, check if the request matches a blocked operation:
+
+| Domain | Operation | Blocked |
+|--------|-----------|---------|
+| repositories | delete, transfer, archive | ✅ BLOCKED |
+| organizations | delete, remove all members | ✅ BLOCKED |
+| branches | delete default | ✅ BLOCKED |
+
+**If blocked:**
+1. Explain: "This operation is blocked for safety: [reason]"
+2. Offer alternative if available (e.g., "Use archive instead of delete")
+3. Suggest: "For this operation, please use the GitHub web UI"
+4. **Do not proceed** to Step 3
+
+**Reference:** `reference/operation-blocklist.md`
+
+### Unlisted Domains
+
+If the domain is not in the table above:
+1. Set domain to the detected resource name (e.g., `codespaces`, `pages`)
+2. Continue to operations skill
+3. Operations skill will use corpus lookup for syntax
+
 ### Ambiguity Resolution
 
-If intent is unclear, use AskUserQuestion to clarify.
+If intent is still unclear after domain/operation detection, use AskUserQuestion to clarify.
 
 ---
 
 ## Step 3: Context Detection (Conditional)
 
-**Skip this step if domain is:** `adr`, `awareness`
+**Skip this step if domain is:** `adr`, `awareness`, `search`, `gists`
 
-These domains handle their own context checks internally and do not require workspace initialization.
+These domains either handle their own context checks internally or don't require workspace initialization.
 
 **For all other domains, continue below:**
 
@@ -193,14 +227,23 @@ What would you like to do with GitHub?
 12. View workflow runs
 13. Create a release
 
+**Repository & Collaboration**
+14. Manage repository settings
+15. Add or remove collaborators
+16. Manage team permissions
+
+**Security & Compliance**
+17. View security alerts
+18. Manage Dependabot settings
+
 **Documentation**
-14. Create Architecture Decision Record (ADR)
-15. List existing ADRs
+19. Create Architecture Decision Record (ADR)
+20. List existing ADRs
 
 **Maintenance**
-16. Refresh workspace config
-17. View current configuration
-18. Configure CLAUDE.md awareness (capabilities tour)
+21. Refresh workspace config
+22. View current configuration
+23. Configure CLAUDE.md awareness (capabilities tour)
 ```
 
 After selection, gather details and route to operations skill.
@@ -277,3 +320,14 @@ After selection, gather details and route to operations skill.
 3. Context: SKIPPED (awareness doesn't require workspace config)
 4. Route to awareness skill
 5. Skill scans project and edits CLAUDE.md
+
+### Unlisted Domain (Fallback)
+
+**User:** `/hiivmind-pulse-gh list codespaces`
+
+**Flow:**
+1. Arguments provided
+2. Intent: domain=codespaces (not in table), operation=read
+3. Context: Initialized ✓
+4. Route to operations skill with corpus fallback
+5. Operations skill looks up codespaces API in corpus
