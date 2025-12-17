@@ -100,15 +100,16 @@ Use natural language to describe any GitHub operation:
 /hiivmind-pulse-gh set milestone v2.0 on issue #42
 /hiivmind-pulse-gh add PR to project
 /hiivmind-pulse-gh trigger workflow ci.yml
+/hiivmind-pulse-gh document decision about using GraphQL
 ```
 
 ### What the Gateway Does
 
-1. **Context Check** - Verifies workspace is initialized
-2. **Freshness Check** - Offers refresh if config is stale
-3. **Intent Detection** - Parses natural language → domain + operation + target
+1. **Intent Detection** - Parses natural language → domain + operation + target
+2. **Context Check** - Verifies workspace is initialized (skipped for ADR/awareness)
+3. **Freshness Check** - Offers refresh if config is stale
 4. **Confirmation** - Asks before mutations
-5. **Execution** - Routes to operations skill
+5. **Execution** - Routes to appropriate skill (operations, ADR, or awareness)
 
 ---
 
@@ -119,6 +120,9 @@ Use natural language to describe any GitHub operation:
 | `hiivmind-pulse-gh-init` | First-time workspace setup | 5 phases (~150 lines) |
 | `hiivmind-pulse-gh-refresh` | Sync config with GitHub | 4 phases (~200 lines) |
 | `hiivmind-pulse-gh-operations` | Execute GitHub operations | 5 phases (~270 lines) |
+| `hiivmind-corpus-github` | GitHub API syntax lookup | Corpus index + sources |
+| `hiivmind-pulse-gh-adr` | Architecture Decision Records | 6 phases with STOP points |
+| `hiivmind-pulse-gh-awareness` | CLAUDE.md capability injection | 5 phases (What/When/How) |
 
 ### Skill Architecture
 
@@ -226,7 +230,9 @@ hiivmind-pulse-gh/
 │   ├── hiivmind-corpus-github/           # GitHub API corpus
 │   ├── hiivmind-pulse-gh-init/           # Workspace initialization
 │   ├── hiivmind-pulse-gh-refresh/        # Config sync
-│   └── hiivmind-pulse-gh-operations/     # Execute operations
+│   ├── hiivmind-pulse-gh-operations/     # Execute operations
+│   ├── hiivmind-pulse-gh-adr/            # Architecture Decision Records
+│   └── hiivmind-pulse-gh-awareness/      # CLAUDE.md capability injection
 ├── lib/
 │   └── github/
 │       └── patterns/                     # Pattern library
