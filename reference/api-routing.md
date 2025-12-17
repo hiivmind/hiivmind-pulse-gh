@@ -243,3 +243,17 @@ For Projects v2, also need:
    - For GraphQL: search schema for type/mutation names
    - For REST: search REST docs for endpoint keywords
 4. **Read source doc** for exact syntax
+
+---
+
+## Unlisted Domains
+
+This guide covers common domains. For domains not listed:
+
+1. **Default to REST API** - Most GitHub features have REST endpoints
+2. **Use corpus lookup** - Search corpus for endpoint path and parameters
+3. **Check permissions** - Ensure `gh auth status` shows required scopes
+
+To search corpus for unlisted domain:
+- Invoke: `hiivmind-pulse-gh:hiivmind-corpus-github`
+- Search: "[domain name] REST endpoint" or "[domain name] API"
