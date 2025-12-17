@@ -226,24 +226,30 @@ What would you like to do with GitHub?
 11. Trigger a workflow
 12. View workflow runs
 13. Create a release
+14. View check runs / status checks
+15. Manage deployments
 
 **Repository & Collaboration**
-14. Manage repository settings
-15. Add or remove collaborators
-16. Manage team permissions
+16. Manage repository settings
+17. Add or remove collaborators
+18. Manage team permissions
 
 **Security & Compliance**
-17. View security alerts
-18. Manage Dependabot settings
+19. View security alerts
+20. Manage Dependabot settings
+
+**Search & Discovery**
+21. Search issues, PRs, or code
+22. Create or manage gists
 
 **Documentation**
-19. Create Architecture Decision Record (ADR)
-20. List existing ADRs
+23. Create Architecture Decision Record (ADR)
+24. List existing ADRs
 
 **Maintenance**
-21. Refresh workspace config
-22. View current configuration
-23. Configure CLAUDE.md awareness (capabilities tour)
+25. Refresh workspace config
+26. View current configuration
+27. Configure CLAUDE.md awareness (capabilities tour)
 ```
 
 After selection, gather details and route to operations skill.
