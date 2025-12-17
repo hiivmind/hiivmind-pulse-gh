@@ -79,6 +79,7 @@ Analyze the user's request to determine:
 | secret, credential, encrypted | `secrets` |
 | variable, env, config | `variables` |
 | release, publish, asset, changelog | `releases` |
+| adr, architecture decision, document decision, decision record, design decision | `adr` |
 
 ### Operation Detection
 
@@ -91,6 +92,7 @@ Analyze the user's request to determine:
 | link, connect, attach, add to | `link` |
 | trigger, run, start, dispatch | `trigger` |
 | merge, squash, rebase | `merge` |
+| document, record, capture, why | `document` |
 
 ### Target Extraction
 
@@ -117,9 +119,24 @@ For create/update/delete operations:
 
 ---
 
-## Step 5: Route to Operations Skill
+## Step 5: Route to Appropriate Skill
 
-After detecting intent, invoke the operations skill:
+After detecting intent, route based on domain:
+
+### ADR Domain
+
+**If domain is `adr`:**
+
+**Invoke:** `hiivmind-pulse-gh:hiivmind-pulse-gh-adr`
+
+**Pass context:**
+- Operation: {create, list, update, sync}
+- Topic: {extracted from request}
+- Milestone: {if mentioned}
+
+The ADR skill handles architecture decision records with file + GitHub issue integration.
+
+### All Other Domains
 
 **Invoke:** `hiivmind-pulse-gh:hiivmind-pulse-gh-operations`
 
@@ -161,9 +178,13 @@ What would you like to do with GitHub?
 12. View workflow runs
 13. Create a release
 
+**Documentation**
+14. Create Architecture Decision Record (ADR)
+15. List existing ADRs
+
 **Maintenance**
-14. Refresh workspace config
-15. View current configuration
+16. Refresh workspace config
+17. View current configuration
 ```
 
 After selection, gather details and route to operations skill.
@@ -215,3 +236,16 @@ After selection, gather details and route to operations skill.
 2. Block mutation, offer refresh
 3. If yes → Invoke `hiivmind-pulse-gh:hiivmind-pulse-gh-refresh`
 4. After refresh → Continue with intent detection
+
+### ADR Creation
+
+**User:** `/hiivmind-pulse-gh document decision about using GraphQL`
+
+**Flow:**
+1. Context: Initialized ✓, Fresh ✓
+2. Intent: domain=adr, operation=document, topic="using GraphQL"
+3. Route to ADR skill
+4. Skill guides through ADR creation with STOP points
+5. Creates file `doc/adr/NNNN-using-graphql.md`
+6. Creates GitHub issue with `adr` label
+7. Links to milestone if specified

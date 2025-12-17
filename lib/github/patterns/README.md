@@ -105,6 +105,13 @@ grep -E "^key:" config.yaml | cut -d: -f2
 | `id-resolution.md` | Resolve names/numbers to GraphQL IDs with cache-first strategy | Done |
 | `error-handling.md` | Central error reference for all GitHub operations | Done |
 
+### ADR Integration (v5.1.0)
+
+| Pattern | Purpose | Status |
+|---------|---------|--------|
+| `adr-management.md` | ADR numbering, file creation, GitHub issue linking, sync | Done |
+| `adr-awareness.md` | Proactive triggers, CLAUDE.md integration, suggestion templates | Done |
+
 ### Why No Domain-Specific Patterns?
 
 The corpus lookup pattern (`corpus-lookup.md`) provides just-in-time syntax lookup when needed, eliminating domain-specific patterns like `rest-operations.md`, `project-operations.md`, etc.
