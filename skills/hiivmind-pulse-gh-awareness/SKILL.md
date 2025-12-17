@@ -1,66 +1,46 @@
 ---
 name: hiivmind-pulse-gh-awareness
 description: >
-  Add GitHub capability awareness to CLAUDE.md files. Auto-detects relevant capabilities
-  from project context (workflows, issue templates, ADRs), then offers guided tour of
-  remaining features. Modifies CLAUDE.md directly with preview and confirmation.
-  Trigger when: "add awareness", "capability awareness", "what can pulse-gh do",
-  "configure Claude for GitHub", "setup CLAUDE.md", "enable GitHub features",
-  "GitHub capabilities", "pulse-gh tour".
+  Add plugin skill awareness to CLAUDE.md files. Explains what skills this plugin provides,
+  when to use each skill, and how to invoke them. Teaches Claude when to suggest this plugin.
+  Trigger when: "add awareness", "plugin awareness", "what can pulse-gh do",
+  "configure Claude for GitHub", "setup CLAUDE.md", "enable GitHub skills", "plugin tour".
 ---
 
-# Capability Awareness
+# Plugin Skill Awareness
 
-Configure CLAUDE.md with hiivmind-pulse-gh capability awareness through auto-detection and guided tour.
+Configure CLAUDE.md with hiivmind-pulse-gh skill awareness using a What/When/How structure.
 
 ## Scope
 
 | Does | Does NOT |
 |------|----------|
-| Scan project for capability signals | Initialize workspace (use init skill) |
-| Auto-detect relevant capabilities | Execute GitHub operations |
-| Guide through remaining capabilities | Create GitHub resources |
-| Edit CLAUDE.md with confirmation | Modify other files |
-| Generate awareness snippets | Replace existing CLAUDE.md content |
+| Explain what skills this plugin provides | Detect GitHub features in project |
+| Show when to use each skill | Execute GitHub operations |
+| Describe how to invoke skills | Create GitHub resources |
+| Edit CLAUDE.md with awareness section | Initialize workspace (use init skill) |
 
 ## Phase Overview
 
 ```
-1. CONTEXT    -> 2. DETECT     -> 3. TOUR      -> 4. INJECT    -> 5. CONFIRM
-   (analyze)      (auto-match)     (guided)       (edit)          (verify)
-      |              |                |              |               |
-   Scan project   Match signals    STOP for       Preview +      STOP: show
-   for signals    to capabilities  each cap       confirm        summary
+1. CONTEXT  -> 2. WHAT      -> 3. WHEN      -> 4. HOW       -> 5. INJECT
+   (check)      (skills)       (triggers)     (invoke)       (edit)
+      |            |              |              |              |
+   Check for   Present 5     Show trigger   Explain        Preview +
+   existing    skills        mapping        invocation     confirm edit
 ```
 
 ---
 
 ## Phase 1: CONTEXT
 
-**Goal:** Analyze project to understand context and check for existing awareness.
-
-**See:** `lib/github/patterns/capability-awareness.md`
+**Goal:** Check for CLAUDE.md and existing awareness section.
 
 ### What to Do
 
-1. Check if CLAUDE.md exists
+1. Check if CLAUDE.md exists in project root
 2. Check for existing hiivmind-pulse-gh awareness section
-3. Scan project for capability signals (parallel)
-
-### Parallel Scans
-
-Execute these in parallel:
-
-```
-Glob: .github/workflows/*.yml
-Glob: .github/ISSUE_TEMPLATE/**
-Glob: .github/PULL_REQUEST_TEMPLATE*
-Glob: doc/adr/*.md
-Read: .github/labeler.yml (exists?)
-Read: .github/CODEOWNERS (exists?)
-Read: .hiivmind/github/config.yaml (has projects?)
-Read: package.json (has semantic-release?)
-```
+3. Determine insert location
 
 ### STOP Point - No CLAUDE.md
 
@@ -68,7 +48,7 @@ Read: package.json (has semantic-release?)
 No CLAUDE.md found in this project.
 
 Would you like to:
-  1. Create CLAUDE.md with GitHub awareness section
+  1. Create CLAUDE.md with plugin awareness section
   2. Cancel
 
 [Select option]
@@ -76,218 +56,190 @@ Would you like to:
 
 ### STOP Point - Existing Awareness
 
-If CLAUDE.md already has hiivmind-pulse-gh section:
+If CLAUDE.md already has "hiivmind-pulse-gh" section:
 
 ```
-CLAUDE.md already has GitHub capability awareness.
-
-Found existing section with:
-  - Issues
-  - Pull Requests
-  - Actions
+CLAUDE.md already has hiivmind-pulse-gh awareness.
 
 Would you like to:
-  1. Update existing configuration (add more capabilities)
-  2. Replace existing configuration
-  3. View current configuration
-  4. Cancel
+  1. Update/replace existing section
+  2. View current section
+  3. Cancel
 
 [Select option]
 ```
 
 ---
 
-## Phase 2: DETECT
+## Phase 2: WHAT - Plugin Skills
 
-**Goal:** Auto-match capabilities based on project signals.
+**Goal:** Present what skills this plugin provides.
 
-**See:** `lib/github/patterns/capability-awareness.md` (Detection Rules)
+**See:** `lib/github/patterns/capability-awareness.md` (WHAT section)
 
-### Detection Logic
-
-| Signal Found | Enable Capability |
-|--------------|-------------------|
-| `.github/workflows/*.yml` exists | actions |
-| `.github/ISSUE_TEMPLATE/` exists | issues |
-| `.github/PULL_REQUEST_TEMPLATE*` exists | prs |
-| `.github/labeler.yml` exists | labels |
-| `.github/CODEOWNERS` exists | protection, prs |
-| `doc/adr/*.md` files exist | adr |
-| `.hiivmind/github/config.yaml` has `projects:` | projects |
-| `semantic-release` in package.json | releases |
-| `${{ secrets.*` in workflows | secrets |
-| `${{ vars.*` in workflows | variables |
-
-### Workflow Deep Scan
-
-If workflows found, scan each for:
-- `${{ secrets.` → enable secrets
-- `${{ vars.` → enable variables
-- `release` in filename → enable releases
-
-### STOP Point - Present Auto-Detected
+### Present Skills
 
 ```
-Based on your project, I detected these relevant capabilities:
+=== What hiivmind-pulse-gh Provides ===
 
-Auto-enabled (signals found):
-  [x] Issues (found: .github/ISSUE_TEMPLATE/)
-  [x] Pull Requests (found: .github/PULL_REQUEST_TEMPLATE.md)
-  [x] Actions (found: 3 workflow files)
-  [x] Secrets (found: secrets referenced in workflows)
-  [x] ADR (found: doc/adr/ with 1 record)
+This plugin has 5 skills for GitHub automation:
 
-Not detected (no signals, but available):
-  [ ] Milestones
-  [ ] Labels
-  [ ] Projects v2
-  [ ] Branch Protection
-  [ ] Rulesets
-  [ ] Variables
-  [ ] Releases
+1. **Init**
+   Discover workspace, cache project/field IDs for fast operations.
+   Run once per workspace.
 
-Options:
-  1. Accept auto-detected only
-  2. Take guided tour of remaining capabilities
-  3. Enable all capabilities
-  4. Customize selection
+2. **Operations**
+   Execute GitHub operations: issues, PRs, milestones, labels,
+   projects, branch protection, workflows, releases, and more.
 
-[Select option]
+3. **Corpus**
+   Look up GitHub API syntax: 70k+ line GraphQL schema,
+   REST endpoints, gh CLI commands.
+
+4. **ADR**
+   Create Architecture Decision Records as markdown files
+   with linked GitHub issues and milestone assignment.
+
+5. **Refresh**
+   Sync config when stale or when "ID not found" errors occur.
+
+Continue to see when to use each skill? [Yes / Skip to inject]
 ```
 
 ---
 
-## Phase 3: TOUR
+## Phase 3: WHEN - Trigger Mapping
 
-**Goal:** Walk through non-detected capabilities one-by-one.
+**Goal:** Show when each skill should be used.
 
-**Only runs if user selected "guided tour" in Phase 2.**
+**See:** `lib/github/patterns/capability-awareness.md` (WHEN section)
 
-### Tour Order
-
-Present capabilities in logical groups:
-
-1. **Issue Tracking:** milestones, labels
-2. **Code Review:** protection, rulesets
-3. **Project Management:** projects
-4. **CI/CD:** variables, releases
-5. **Documentation:** (adr if not detected)
-
-### STOP Point - Per Capability
-
-For each capability not auto-detected:
+### Present Trigger Table
 
 ```
-=== Capability: Milestones ===
+=== When to Use Each Skill ===
 
-Track release cycles and group related issues.
+| You Need To... | Use This Skill |
+|----------------|----------------|
+| Create, update, close issues or PRs | Operations |
+| Set milestones, labels, project status | Operations |
+| Protect branches, configure rulesets | Operations |
+| Trigger workflows, manage secrets | Operations |
+| Look up GraphQL mutation syntax | Corpus |
+| Find REST endpoint paths | Corpus |
+| Fix "ID not found" errors | Refresh |
+| Sync stale config | Refresh |
+| Document architecture decision | ADR |
+| Plan major refactoring | ADR (proactive) |
+| First-time workspace setup | Init |
 
-When to use:
-  - Plan releases with due dates
-  - Group issues by version
-  - Track progress toward goals
+### Proactive Suggestions
 
-Trigger keywords: milestone, version, due date, release
+Claude should suggest this plugin when:
+- User mentions GitHub operations (issues, PRs, milestones, projects)
+- User asks about GitHub API syntax
+- Major refactoring is planned (suggest ADR)
+- Milestone has 5+ issues (suggest documenting decisions)
 
-Example commands:
-  /hiivmind-pulse-gh create milestone v2.0
+Continue to see how to invoke? [Yes / Skip to inject]
+```
+
+---
+
+## Phase 4: HOW - Invocation Methods
+
+**Goal:** Explain how to invoke the plugin.
+
+**See:** `lib/github/patterns/capability-awareness.md` (HOW section)
+
+### Present Invocation Options
+
+```
+=== How to Invoke ===
+
+### Gateway Command (Recommended)
+
+/hiivmind-pulse-gh [describe what you want]
+
+The gateway auto-detects intent and routes to the appropriate skill.
+
+Examples:
+  /hiivmind-pulse-gh create issue for login bug
   /hiivmind-pulse-gh set milestone v2.0 on #42
-  /hiivmind-pulse-gh list milestones
+  /hiivmind-pulse-gh document decision about using GraphQL
 
-Enable this capability? [Yes / Skip / Stop tour]
+### Direct Skill Invocation
+
+When you know exactly which skill:
+  Skill: hiivmind-pulse-gh-operations
+  Skill: hiivmind-corpus-github
+  Skill: hiivmind-pulse-gh-adr
+
+### Interactive Menu
+
+/hiivmind-pulse-gh (no arguments) → shows numbered menu
+
+Continue to inject into CLAUDE.md? [Yes / Cancel]
 ```
-
-### Tour Flow
-
-- **Yes** → Add to enabled list, continue
-- **Skip** → Don't add, continue to next
-- **Stop tour** → End tour, proceed with current selections
 
 ---
 
-## Phase 4: INJECT
+## Phase 5: INJECT
 
-**Goal:** Generate awareness snippet and edit CLAUDE.md.
+**Goal:** Generate awareness section and edit CLAUDE.md.
 
-**See:** `lib/github/patterns/capability-awareness.md` (Templates)
+**See:** `lib/github/patterns/capability-awareness.md` (Template section)
 
-### Step 1: Build Capability Table
-
-From enabled capabilities, build table:
-
-```markdown
-| Capability | When to Use | Trigger Keywords |
-|------------|-------------|------------------|
-| **Issues** | Create, update, close, comment | issue, bug, task |
-| **Pull Requests** | Create, merge, review | pr, merge, review |
-| **Actions** | Trigger, view workflow runs | workflow, ci |
-| **ADR** | Document architecture decisions | ADR, decision record |
-```
-
-### Step 2: Build Command Examples
-
-Select 3-5 most relevant commands:
-
-```
-/hiivmind-pulse-gh create issue for [description]
-/hiivmind-pulse-gh merge PR #N
-/hiivmind-pulse-gh trigger workflow ci.yml
-/hiivmind-pulse-gh create ADR for [topic]
-```
-
-### Step 3: Build Proactive Triggers
-
-Based on enabled capabilities:
-
-```markdown
-Suggest GitHub operations when:
-- User mentions bugs, features, or tasks (issues)
-- User discusses code changes or reviews (prs)
-- Major refactoring planned (suggest ADR)
-- Milestone has 5+ issues (suggest ADR)
-```
-
-### Step 4: Check Initialization Status
-
-```bash
-# Check if initialized
-if [[ -f ".hiivmind/github/config.yaml" ]]; then
-  INIT_STATUS="Initialized"
-  # Extract default project if set
-  DEFAULT_PROJECT=$(yq '.projects.default // ""' .hiivmind/github/config.yaml 2>/dev/null)
-else
-  INIT_STATUS="Not initialized (run /hiivmind-pulse-gh init)"
-fi
-```
-
-### Step 5: Generate Full Section
+### Generate Section
 
 ```markdown
 ## GitHub Operations (hiivmind-pulse-gh)
 
 This project uses [hiivmind-pulse-gh](https://github.com/hiivmind/hiivmind-pulse-gh) for GitHub automation.
 
-### Available Capabilities
+### What This Plugin Provides
 
-| Capability | When to Use | Trigger Keywords |
-|------------|-------------|------------------|
-{capability_table}
+| Skill | What It Does |
+|-------|--------------|
+| **Init** | Discover workspace, cache project/field IDs for fast operations |
+| **Operations** | Execute GitHub operations (issues, PRs, milestones, projects, etc.) |
+| **Corpus** | Look up GitHub API syntax (GraphQL schema, REST endpoints) |
+| **ADR** | Create Architecture Decision Records linked to milestones/issues |
+| **Refresh** | Sync config when stale or IDs not found |
 
-### Quick Commands
+### When to Use Each Skill
 
-```
-{command_examples}
-```
-
-### Configuration
-
-- **Config:** `.hiivmind/github/config.yaml`
-- **Status:** {init_status}
+| You Need To... | Use This |
+|----------------|----------|
+| Create, update, close issues or PRs | `/hiivmind-pulse-gh [action]` |
+| Set milestones, labels, project status | `/hiivmind-pulse-gh [action]` |
+| Look up GraphQL/REST syntax | Corpus skill |
+| Fix "ID not found" errors | Refresh skill |
+| Document an architecture decision | ADR skill |
+| First-time workspace setup | Init skill |
 
 ### Proactive Suggestions
 
-Suggest GitHub operations when:
-{proactive_triggers}
+Suggest using this plugin when:
+- User mentions GitHub operations (issues, PRs, milestones, projects)
+- User asks about GitHub API syntax or mutations
+- Major refactoring is planned (suggest ADR)
+- Milestone has 5+ issues (suggest documenting decisions)
+- "ID not found" or stale config errors occur
+
+### How to Invoke
+
+**Gateway (recommended):**
+```
+/hiivmind-pulse-gh create issue for [description]
+/hiivmind-pulse-gh document decision about [topic]
+```
+
+**Direct skill invocation** when you know which skill:
+```
+Skill: hiivmind-pulse-gh-operations
+Skill: hiivmind-corpus-github
+```
 ```
 
 ### STOP Point - Preview
@@ -295,86 +247,37 @@ Suggest GitHub operations when:
 ```
 === CLAUDE.md Addition Preview ===
 
-The following section will be added to CLAUDE.md:
+[Show generated section above]
 
----
-## GitHub Operations (hiivmind-pulse-gh)
-
-This project uses hiivmind-pulse-gh for GitHub automation.
-
-### Available Capabilities
-
-| Capability | When to Use | Trigger Keywords |
-|------------|-------------|------------------|
-| **Issues** | Create, update, close, comment | issue, bug, task |
-| **Pull Requests** | Create, merge, review | pr, merge, review |
-| **Actions** | Trigger, view workflow runs | workflow, ci |
-| **ADR** | Document architecture decisions | ADR, decision record |
-
-[... rest of section ...]
----
-
-Insert location: End of file
+Insert location: End of file / After [section name]
 
 Options:
   1. Add to CLAUDE.md
   2. Choose different location
-  3. Edit content
-  4. Cancel
+  3. Cancel
 
 [Select option]
 ```
 
-### Step 6: Execute Edit
+### Execute Edit
 
-Use Claude's Edit tool to modify CLAUDE.md:
-
-**If appending:**
-- Read current CLAUDE.md
-- Append generated section with blank line separator
-
-**If inserting at location:**
-- Find target header
-- Insert after that section
-
----
-
-## Phase 5: CONFIRM
-
-**Goal:** Confirm changes and offer next steps.
+Use Edit tool to:
+- Append to CLAUDE.md (if appending)
+- Insert after specified section (if location chosen)
 
 ### STOP Point - Success
 
 ```
 CLAUDE.md updated successfully!
 
-Added GitHub capability awareness:
-  - Issues
-  - Pull Requests
-  - Actions (3 workflows detected)
-  - Secrets
-  - ADR (1 existing record)
-
-File: CLAUDE.md
+Added hiivmind-pulse-gh skill awareness section.
 
 Next steps:
   1. Initialize workspace (/hiivmind-pulse-gh init) [if not initialized]
-  2. Create your first ADR
+  2. Try a GitHub operation
   3. Done
 
-[Select option or press Enter to finish]
-```
-
-### If Not Initialized
-
-Offer to run init:
-
-```
-Note: Workspace is not initialized yet.
-
-Some features (Projects v2, cached IDs) require initialization.
-
-Run /hiivmind-pulse-gh init now? [Yes / Later]
+[Select option]
 ```
 
 ---
@@ -389,30 +292,17 @@ Run /hiivmind-pulse-gh init now? [Yes / Later]
 /hiivmind-pulse-gh what can you do
 ```
 
-### Update Awareness
-
-```
-/hiivmind-pulse-gh update awareness
-```
-
-### View Capabilities
-
-```
-/hiivmind-pulse-gh list capabilities
-```
-
 ---
 
 ## Related Skills
 
 - **hiivmind-pulse-gh-init** - Initialize workspace after adding awareness
-- **hiivmind-pulse-gh-adr** - ADR creation (often suggested after awareness)
-- **hiivmind-pulse-gh-operations** - All GitHub operations
+- **hiivmind-pulse-gh-operations** - Execute GitHub operations
+- **hiivmind-corpus-github** - API documentation lookup
+- **hiivmind-pulse-gh-adr** - Architecture Decision Records
 
 ## Pattern Library
 
 | Pattern | Purpose |
 |---------|---------|
-| `lib/github/patterns/capability-awareness.md` | Detection rules, capability registry, templates |
-| `lib/github/patterns/adr-awareness.md` | ADR-specific awareness (subset) |
-| `lib/github/patterns/config-parsing.md` | Read cached config for init status |
+| `lib/github/patterns/capability-awareness.md` | Skill registry, trigger mapping, CLAUDE.md template |

@@ -1,301 +1,210 @@
-# Pattern: Capability Awareness
+# Pattern: Plugin Skill Awareness
 
 ## Purpose
 
-Master reference for all hiivmind-pulse-gh capabilities, detection rules, and CLAUDE.md snippets. Used by the awareness skill to auto-detect relevant capabilities and generate awareness sections.
+Define what skills hiivmind-pulse-gh provides, when to use each skill, and how to invoke them. Used by the awareness skill to generate CLAUDE.md sections that teach Claude when to use this plugin.
 
 ## When to Use
 
-- Adding capability awareness to CLAUDE.md
-- Auto-detecting relevant capabilities from project context
-- Generating awareness snippets for specific capabilities
+- Adding plugin awareness to CLAUDE.md
+- Teaching Claude when to invoke each skill
+- Generating awareness documentation
 
 ---
 
-## Capability Registry
+## WHAT - Plugin Skills
 
-### Skills (5 active)
+hiivmind-pulse-gh provides 5 skills:
 
-| ID | Name | Trigger Keywords | Description |
-|----|------|------------------|-------------|
-| `init` | Workspace Init | init, initialize, setup workspace, configure github | One-time workspace setup, discovers projects and caches IDs |
-| `refresh` | Config Refresh | refresh, sync, update config, stale config, ID not found | Sync cached config with GitHub, update stale sections |
-| `operations` | Operations | (see domains below) | Execute GitHub operations across all domains |
-| `adr` | ADR | ADR, architecture decision, document decision, design decision, why did we | Create and manage Architecture Decision Records |
-| `corpus` | API Corpus | find in docs, GraphQL schema, REST endpoint, API syntax | GitHub API documentation lookup |
+| Skill | Name | Purpose |
+|-------|------|---------|
+| `hiivmind-pulse-gh-init` | Init | Discover GitHub workspace, cache project/field IDs for fast operations |
+| `hiivmind-pulse-gh-refresh` | Refresh | Sync stale config sections, fix "ID not found" errors |
+| `hiivmind-pulse-gh-operations` | Operations | Execute GitHub operations (issues, PRs, milestones, projects, labels, etc.) |
+| `hiivmind-corpus-github` | Corpus | Look up GitHub API syntax (GraphQL schema, REST endpoints, gh CLI) |
+| `hiivmind-pulse-gh-adr` | ADR | Create Architecture Decision Records linked to milestones and issues |
 
-### Domains (12 via Operations)
+### Skill Descriptions
 
-| ID | Name | Trigger Keywords | Description |
-|----|------|------------------|-------------|
-| `issues` | Issues | issue, bug, feature, task, ticket | Create, update, close, comment, label issues |
-| `prs` | Pull Requests | pr, pull request, merge, review | Create, merge, review pull requests |
-| `milestones` | Milestones | milestone, version, due date | Create and manage milestones |
-| `labels` | Labels | label, tag, categorize | Create and manage labels |
-| `projects` | Projects v2 | project, board, kanban, status, field | Project boards with custom fields |
-| `protection` | Branch Protection | protect, protection, branch rule | Configure branch protection rules |
-| `rulesets` | Rulesets | ruleset, rules, enforcement | Repository rulesets |
-| `actions` | Actions | workflow, action, run, ci, trigger | Trigger and view workflows |
-| `secrets` | Secrets | secret, credential, encrypted | Manage repository secrets |
-| `variables` | Variables | variable, env, config | Manage environment variables |
-| `releases` | Releases | release, publish, asset, changelog | Create and manage releases |
-| `adr` | ADR | architecture decision, decision record | Architecture Decision Records |
+#### Init
+- **What:** One-time workspace setup
+- **Does:** Discovers org/user, queries Projects v2, caches field IDs and option IDs
+- **Output:** `.hiivmind/github/config.yaml`, `user.yaml`, `freshness.yaml`
+- **Run when:** First time in a workspace, or after major GitHub project restructuring
 
----
+#### Refresh
+- **What:** Config synchronization
+- **Does:** Checks staleness per section, re-queries GitHub for stale data
+- **Run when:** "ID not found" errors, config stale warnings, after GitHub UI changes
 
-## Detection Rules
+#### Operations
+- **What:** Execute GitHub operations
+- **Does:** Issues, PRs, milestones, labels, projects, branch protection, actions, secrets, variables, releases
+- **Run when:** User wants to create/update/delete/list any GitHub entity
 
-### Signal → Capability Mapping
-
-| Signal | Detection Method | Enables |
-|--------|------------------|---------|
-| `.github/workflows/*.yml` | Glob for files | actions |
-| `.github/ISSUE_TEMPLATE/` | Directory exists | issues |
-| `.github/PULL_REQUEST_TEMPLATE*` | Glob for file | prs |
-| `.github/labeler.yml` | File exists | labels |
-| `.github/CODEOWNERS` | File exists | protection, prs |
-| `doc/adr/*.md` | Glob for files | adr |
-| `.hiivmind/github/config.yaml` | File exists with `projects:` | projects |
-| `semantic-release` in package.json | Grep in file | releases |
-| `release` in workflow filename | Grep workflow names | releases |
-| `${{ secrets.*` in workflows | Grep in workflow files | secrets |
-| `${{ vars.*` in workflows | Grep in workflow files | variables |
-
-### Detection Algorithm
-
-```
-1. PARALLEL SCAN
-   - Glob: .github/workflows/*.yml → count
-   - Glob: .github/ISSUE_TEMPLATE/** → exists
-   - Glob: .github/PULL_REQUEST_TEMPLATE* → exists
-   - Read: .github/labeler.yml → exists
-   - Read: .github/CODEOWNERS → exists
-   - Glob: doc/adr/*.md → count
-   - Read: .hiivmind/github/config.yaml → has projects
-
-2. WORKFLOW ANALYSIS (if workflows found)
-   For each workflow file:
-   - Grep: \$\{\{ secrets\. → enable secrets
-   - Grep: \$\{\{ vars\. → enable variables
-   - Check filename for "release" → enable releases
-
-3. PACKAGE.JSON ANALYSIS (if exists)
-   - Grep: semantic-release → enable releases
-
-4. BUILD CAPABILITY LIST
-   Return: { detected: [...], available: [...] }
-```
-
-### Using Claude Tools
-
-**Parallel detection:**
-```
-Glob: .github/workflows/*.yml
-Glob: .github/ISSUE_TEMPLATE/**
-Glob: .github/PULL_REQUEST_TEMPLATE*
-Glob: doc/adr/*.md
-```
-
-**File checks:**
-```
-Read: .github/labeler.yml (check exists)
-Read: .github/CODEOWNERS (check exists)
-Read: .hiivmind/github/config.yaml (check for projects:)
-Read: package.json (check for semantic-release)
-```
-
-**Workflow analysis:**
-```
-Grep: \$\{\{ secrets\. in .github/workflows/
-Grep: \$\{\{ vars\. in .github/workflows/
-```
-
----
-
-## Snippet Templates
-
-### Per-Capability Snippets
-
-#### Issues
-```markdown
-| **Issues** | Create, update, close, comment, label | issue, bug, task, ticket |
-```
-Commands: `create issue for [desc]`, `close issue #N`, `add label to #N`
-
-#### Pull Requests
-```markdown
-| **Pull Requests** | Create, merge, review, comment | pr, pull request, merge, review |
-```
-Commands: `create PR`, `merge PR #N`, `request review on #N`
-
-#### Milestones
-```markdown
-| **Milestones** | Create, assign, track progress | milestone, version, due date |
-```
-Commands: `create milestone v2.0`, `set milestone on #N`
-
-#### Labels
-```markdown
-| **Labels** | Create, add/remove from issues | label, tag, categorize |
-```
-Commands: `create label`, `add bug label to #N`
-
-#### Projects v2
-```markdown
-| **Projects v2** | Add items, update fields, set status | project, board, kanban, status |
-```
-Commands: `add #N to project`, `set status "In Progress" on #N`
-
-#### Branch Protection
-```markdown
-| **Branch Protection** | Configure rules, require reviews | protect, branch rule, required reviews |
-```
-Commands: `protect main branch`, `require 2 reviews on main`
-
-#### Rulesets
-```markdown
-| **Rulesets** | Repository-wide rules, enforcement | ruleset, rules, enforcement |
-```
-Commands: `create ruleset`, `list rulesets`
-
-#### Actions
-```markdown
-| **Actions** | Trigger workflows, view runs | workflow, action, ci, trigger |
-```
-Commands: `trigger ci workflow`, `view workflow runs`
-
-#### Secrets
-```markdown
-| **Secrets** | Manage repository secrets | secret, credential, encrypted |
-```
-Commands: `set secret API_KEY`, `list secrets`
-
-#### Variables
-```markdown
-| **Variables** | Manage environment variables | variable, env, config |
-```
-Commands: `set variable ENV=production`, `list variables`
-
-#### Releases
-```markdown
-| **Releases** | Create releases, add assets | release, publish, asset, changelog |
-```
-Commands: `create release v1.0.0`, `list releases`
+#### Corpus
+- **What:** API documentation lookup
+- **Does:** Searches 70k+ line GraphQL schema, REST docs, gh CLI reference
+- **Run when:** Need exact mutation syntax, REST endpoint path, or gh command options
 
 #### ADR
-```markdown
-| **ADR** | Document architecture decisions | ADR, architecture decision, decision record |
-```
-Commands: `create ADR for [topic]`, `list ADRs`
-Proactive: Suggest when milestone has 5+ issues or major refactoring planned
+- **What:** Architecture Decision Records
+- **Does:** Creates ADR markdown files in `doc/adr/`, creates linked GitHub issues, assigns to milestones
+- **Run when:** Documenting architecture decisions, major refactoring, milestone planning
 
 ---
 
-## CLAUDE.md Section Template
+## WHEN - Trigger Mapping
 
-### Full Template
+Maps operational needs to skills:
+
+### Operations Triggers
+
+| User Says / Needs | Skill | Confidence |
+|-------------------|-------|------------|
+| "create issue", "open bug", "new feature request" | operations | High |
+| "close issue", "resolve #42" | operations | High |
+| "create PR", "open pull request" | operations | High |
+| "merge PR", "squash merge" | operations | High |
+| "set milestone", "add to v2.0" | operations | High |
+| "add label", "tag as bug" | operations | High |
+| "add to project", "set status" | operations | High |
+| "protect branch", "require reviews" | operations | High |
+| "trigger workflow", "run CI" | operations | High |
+| "create release", "publish v1.0" | operations | High |
+
+### Corpus Triggers
+
+| User Says / Needs | Skill | Confidence |
+|-------------------|-------|------------|
+| "what's the GraphQL syntax for..." | corpus | High |
+| "REST endpoint for milestones" | corpus | High |
+| "how do I use updateIssue mutation" | corpus | High |
+| "gh command for..." | corpus | Medium |
+| API syntax uncertainty during operations | corpus | Medium |
+
+### ADR Triggers
+
+| User Says / Needs | Skill | Confidence |
+|-------------------|-------|------------|
+| "document decision", "create ADR" | adr | High |
+| "architecture decision", "design decision" | adr | High |
+| "why did we choose...", "record rationale" | adr | High |
+| Major refactoring planned (3+ files) | adr | Medium (proactive) |
+| Milestone has 5+ issues | adr | Medium (proactive) |
+| Keywords: restructure, migrate, redesign | adr | Medium (proactive) |
+
+### Init/Refresh Triggers
+
+| User Says / Needs | Skill | Confidence |
+|-------------------|-------|------------|
+| "initialize", "setup workspace" | init | High |
+| "first time setup" | init | High |
+| "ID not found", "project not in config" | refresh | High |
+| "config stale", "refresh config" | refresh | High |
+| "sync with GitHub" | refresh | Medium |
+
+---
+
+## HOW - Invocation Methods
+
+### Gateway Command (Recommended)
+
+```
+/hiivmind-pulse-gh [describe what you want]
+```
+
+The gateway auto-detects intent and routes to the appropriate skill.
+
+**Examples:**
+```
+/hiivmind-pulse-gh create issue for login timeout bug
+/hiivmind-pulse-gh set milestone v2.0 on #42
+/hiivmind-pulse-gh document decision about using GraphQL
+/hiivmind-pulse-gh refresh config
+```
+
+### Direct Skill Invocation
+
+When you know exactly which skill is needed:
+
+```
+Invoke skill: hiivmind-pulse-gh:hiivmind-pulse-gh-operations
+Invoke skill: hiivmind-pulse-gh:hiivmind-corpus-github
+Invoke skill: hiivmind-pulse-gh:hiivmind-pulse-gh-adr
+```
+
+### Interactive Menu
+
+```
+/hiivmind-pulse-gh
+```
+
+Without arguments, presents numbered menu of all operations.
+
+---
+
+## CLAUDE.md Template
+
+Generate this section for CLAUDE.md:
 
 ```markdown
 ## GitHub Operations (hiivmind-pulse-gh)
 
 This project uses [hiivmind-pulse-gh](https://github.com/hiivmind/hiivmind-pulse-gh) for GitHub automation.
 
-### Available Capabilities
+### What This Plugin Provides
 
-| Capability | When to Use | Trigger Keywords |
-|------------|-------------|------------------|
-{{CAPABILITY_TABLE}}
+| Skill | What It Does |
+|-------|--------------|
+| **Init** | Discover workspace, cache project/field IDs for fast operations |
+| **Operations** | Execute GitHub operations (issues, PRs, milestones, projects, etc.) |
+| **Corpus** | Look up GitHub API syntax (GraphQL schema, REST endpoints) |
+| **ADR** | Create Architecture Decision Records linked to milestones/issues |
+| **Refresh** | Sync config when stale or IDs not found |
 
-### Quick Commands
+### When to Use Each Skill
 
-```
-{{COMMAND_EXAMPLES}}
-```
-
-### Configuration
-
-- **Config:** `.hiivmind/github/config.yaml`
-- **Status:** {{INIT_STATUS}}
-{{#if DEFAULT_PROJECT}}
-- **Default Project:** {{DEFAULT_PROJECT}}
-{{/if}}
+| You Need To... | Use This |
+|----------------|----------|
+| Create, update, close issues or PRs | `/hiivmind-pulse-gh [action]` |
+| Set milestones, labels, project status | `/hiivmind-pulse-gh [action]` |
+| Look up GraphQL/REST syntax | Corpus skill |
+| Fix "ID not found" errors | Refresh skill |
+| Document an architecture decision | ADR skill |
+| First-time workspace setup | Init skill |
 
 ### Proactive Suggestions
 
-Suggest GitHub operations when:
-{{PROACTIVE_TRIGGERS}}
+Suggest using this plugin when:
+- User mentions GitHub operations (issues, PRs, milestones, projects)
+- User asks about GitHub API syntax or mutations
+- Major refactoring is planned (suggest ADR)
+- Milestone has 5+ issues (suggest documenting decisions)
+- "ID not found" or stale config errors occur
+
+### How to Invoke
+
+**Gateway (recommended):**
+```
+/hiivmind-pulse-gh create issue for [description]
+/hiivmind-pulse-gh document decision about [topic]
 ```
 
-### Proactive Triggers by Capability
-
-| Capability | Trigger Condition |
-|------------|-------------------|
-| issues | User mentions bugs, features, or tasks |
-| prs | User discusses code changes or reviews |
-| milestones | User plans releases or versions |
-| projects | User discusses work tracking or status |
-| adr | Major refactoring planned, milestone has 5+ issues |
-| actions | CI/CD or deployment discussed |
-
----
-
-## Capability Groupings
-
-### Core (always relevant)
-- init, refresh, operations
-
-### Issue Tracking
-- issues, labels, milestones
-
-### Code Review
-- prs, protection, rulesets
-
-### Project Management
-- projects, adr
-
-### CI/CD
-- actions, secrets, variables, releases
-
-### Documentation
-- adr, corpus
-
----
-
-## Integration Notes
-
-### Existing Awareness Check
-
-Before adding awareness, check CLAUDE.md for existing section:
-
+**Direct skill invocation** when you know which skill:
 ```
-Grep: "## GitHub Operations" in CLAUDE.md
-Grep: "hiivmind-pulse-gh" in CLAUDE.md
+Skill: hiivmind-pulse-gh-operations
+Skill: hiivmind-corpus-github
 ```
-
-If found, offer to update rather than duplicate.
-
-### Placement Preference
-
-1. After existing tool/automation sections
-2. Before development/contributing sections
-3. End of file if no clear section structure
-
-### Preserving Existing Content
-
-Always:
-- Read full CLAUDE.md before editing
-- Preview changes to user
-- Use Edit tool to insert, not Write to overwrite
+```
 
 ---
 
 ## Related Patterns
 
-- **adr-awareness.md** - ADR-specific awareness (subset of this)
-- **config-parsing.md** - Read cached config for project detection
-- **workspace-detection.md** - Detect repository context
+- **adr-awareness.md** - ADR-specific triggers and proactive suggestions
+- **config-parsing.md** - Read cached config for init status
 
 ## Related Skills
 
-- **hiivmind-pulse-gh-awareness** - Uses this pattern for detection and snippets
-- **hiivmind-pulse-gh-init** - Should be suggested if not initialized
+- **hiivmind-pulse-gh-awareness** - Uses this pattern to generate CLAUDE.md sections
