@@ -201,58 +201,135 @@ The operations skill consults the routing guide and corpus (when needed) to perf
 
 ## Mode: Interactive Menu (No Arguments)
 
-When invoked without arguments, present options:
+When invoked without arguments, use AskUserQuestion for hierarchical navigation.
+
+### Menu Step 1: Category Selection
+
+Use AskUserQuestion:
 
 ```
-What would you like to do with GitHub?
-
-**Issue & PR Management**
-1. Create an issue
-2. Update or close an issue
-3. Create a pull request
-4. Merge a pull request
-
-**Project Management**
-5. Add item to project board
-6. Update project field/status
-7. View project items
-
-**Repository Configuration**
-8. Manage milestones
-9. Set up branch protection
-10. Configure rulesets
-
-**CI/CD & Releases**
-11. Trigger a workflow
-12. View workflow runs
-13. Create a release
-14. View check runs / status checks
-15. Manage deployments
-
-**Repository & Collaboration**
-16. Manage repository settings
-17. Add or remove collaborators
-18. Manage team permissions
-
-**Security & Compliance**
-19. View security alerts
-20. Manage Dependabot settings
-
-**Search & Discovery**
-21. Search issues, PRs, or code
-22. Create or manage gists
-
-**Documentation**
-23. Create Architecture Decision Record (ADR)
-24. List existing ADRs
-
-**Maintenance**
-25. Refresh workspace config
-26. View current configuration
-27. Configure CLAUDE.md awareness (capabilities tour)
+question: "What type of GitHub operation?"
+header: "Category"
+options:
+  - label: "Issues & PRs"
+    description: "Create, update, close issues and pull requests"
+  - label: "Projects & Milestones"
+    description: "Project boards, fields, status, milestones"
+  - label: "CI/CD & Releases"
+    description: "Workflows, actions, releases, deployments"
+  - label: "More options..."
+    description: "Repository config, security, search, documentation"
 ```
 
-After selection, gather details and route to operations skill.
+### Menu Step 2: Action Selection
+
+Based on category selected, present specific actions:
+
+**If "Issues & PRs":**
+```
+question: "What would you like to do?"
+header: "Action"
+options:
+  - label: "Create an issue"
+    description: "Open a new issue with title and body"
+  - label: "Update or close an issue"
+    description: "Modify, comment on, or close an existing issue"
+  - label: "Create a pull request"
+    description: "Open a new PR from a branch"
+  - label: "Merge a pull request"
+    description: "Merge, squash, or rebase a PR"
+```
+
+**If "Projects & Milestones":**
+```
+question: "What would you like to do?"
+header: "Action"
+options:
+  - label: "Add item to project"
+    description: "Add issue or PR to a project board"
+  - label: "Update project field"
+    description: "Change status, priority, or custom fields"
+  - label: "Manage milestones"
+    description: "Create, update, or assign milestones"
+  - label: "View project items"
+    description: "List items in a project board"
+```
+
+**If "CI/CD & Releases":**
+```
+question: "What would you like to do?"
+header: "Action"
+options:
+  - label: "Trigger a workflow"
+    description: "Dispatch a GitHub Actions workflow"
+  - label: "View workflow runs"
+    description: "Check status of recent runs"
+  - label: "Create a release"
+    description: "Publish a new release with assets"
+  - label: "View checks & deployments"
+    description: "Check run status, deployment history"
+```
+
+**If "More options...":**
+```
+question: "Select a category:"
+header: "Category"
+options:
+  - label: "Repository config"
+    description: "Branch protection, rulesets, collaborators"
+  - label: "Security & compliance"
+    description: "Alerts, Dependabot, vulnerability scanning"
+  - label: "Search & discovery"
+    description: "Search issues/PRs/code, manage gists"
+  - label: "Documentation & maintenance"
+    description: "ADRs, refresh config, CLAUDE.md awareness"
+```
+
+### Menu Step 2b: Expanded Categories
+
+**If "Repository config":**
+```
+options:
+  - label: "Branch protection"
+  - label: "Configure rulesets"
+  - label: "Manage collaborators"
+  - label: "Repository settings"
+```
+
+**If "Security & compliance":**
+```
+options:
+  - label: "View security alerts"
+  - label: "Manage Dependabot"
+  - label: "Code scanning settings"
+  - label: "Secret scanning"
+```
+
+**If "Search & discovery":**
+```
+options:
+  - label: "Search issues & PRs"
+  - label: "Search code"
+  - label: "Create a gist"
+  - label: "Manage gists"
+```
+
+**If "Documentation & maintenance":**
+```
+options:
+  - label: "Create ADR"
+    description: "Architecture Decision Record"
+  - label: "List existing ADRs"
+  - label: "Refresh workspace config"
+  - label: "Configure CLAUDE.md awareness"
+```
+
+### Menu Step 3: Execute
+
+After action selection:
+1. Map selection to domain + operation
+2. Continue to **Step 3: Context Detection**
+3. Route to appropriate skill
 
 ---
 

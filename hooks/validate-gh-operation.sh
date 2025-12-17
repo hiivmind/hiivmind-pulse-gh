@@ -5,13 +5,14 @@
 # This script provides defense-in-depth safety by blocking dangerous
 # operations at execution time, even if the LLM or skill-level checks fail.
 
-set -euo pipefail
+# Read input - default to empty if fails
+input=$(cat 2>/dev/null || echo '{}')
 
-input=$(cat)
-command=$(echo "$input" | jq -r '.tool_input.command // ""')
+# Extract command - default to empty string if jq fails
+command=$(echo "$input" | jq -r '.tool_input.command // ""' 2>/dev/null || echo "")
 
-# Exit early if not a gh command
-if [[ ! "$command" =~ ^gh[[:space:]] ]]; then
+# Exit early if not a gh command - ALLOW all non-gh commands
+if [[ -z "$command" ]] || [[ ! "$command" =~ ^gh[[:space:]] ]]; then
   echo '{"decision": "allow"}'
   exit 0
 fi
@@ -36,9 +37,10 @@ BLOCKED_PATTERNS=(
 )
 
 for pattern in "${BLOCKED_PATTERNS[@]}"; do
-  if echo "$command" | grep -qiE "$pattern"; then
-    echo '{"decision": "deny", "reason": "BLOCKED: This operation is too dangerous for automation. Please use the GitHub web UI instead."}' >&2
-    exit 2
+  if echo "$command" | grep -qiE "$pattern" 2>/dev/null; then
+    # Output to STDOUT (not stderr) for Claude Code to read
+    echo '{"decision": "block", "reason": "BLOCKED: This operation is too dangerous for automation. Please use the GitHub web UI instead."}'
+    exit 0
   fi
 done
 
