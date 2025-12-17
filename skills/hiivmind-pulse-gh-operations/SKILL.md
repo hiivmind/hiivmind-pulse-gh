@@ -23,10 +23,12 @@ Execute GitHub operations across all domains.
 
 When invoked by the gateway command, expect:
 
-- **Domain**: issues, pull_requests, milestones, labels, projects, branch_protection, rulesets, actions, secrets, variables, releases
+- **Domain**: issues, pull_requests, milestones, labels, projects, branch_protection, rulesets, actions, secrets, variables, releases, repositories, collaborators, teams, checks, deployments, security, dependabot, search, gists, or **any unlisted domain**
 - **Operation**: create, read, update, delete, link, trigger, merge
 - **Target**: Specific entity (issue #42, milestone "v2.0", etc.)
 - **Config**: `.hiivmind/github/config.yaml`
+
+**Note:** For unlisted domains, the gateway passes the detected resource name. Use corpus lookup for API syntax.
 
 ## Phase Overview
 
@@ -89,6 +91,21 @@ Based on domain and operation, resolve:
 | Secrets | Repository name |
 | Variables | Repository name |
 | Releases | Repository name |
+| Repositories | Repository name (or owner for org-level) |
+| Collaborators | Repository name |
+| Teams | Organization name |
+| Checks | Repository name |
+| Deployments | Repository name |
+| Security | Repository name |
+| Dependabot | Repository name |
+| Search | Query string (no IDs needed) |
+| Gists | Gist ID (if updating existing) |
+
+### Unknown Domains
+
+For domains not listed above:
+1. Default to repository name from config
+2. Corpus lookup will determine exact endpoint requirements
 
 ### Cache-First Strategy
 
@@ -103,10 +120,10 @@ Based on domain and operation, resolve:
 
 ### PREREQUISITE: Read Routing Guide
 
-**IMPORTANT:** Read the FULL `reference/api-routing.md` file (~245 lines).
+**IMPORTANT:** Read the FULL `reference/api-routing.md` file.
 
 - Do NOT grep or search - read it completely
-- This gives you routing decisions for ALL domains
+- This gives you routing decisions for documented domains
 - You need this context to make correct API decisions
 
 ```
@@ -128,6 +145,26 @@ Read: reference/api-routing.md (full file)
 | Secrets | REST | `PUT /secrets/{name}` (requires encryption) |
 | Variables | REST | `POST /variables`, `PATCH /variables/{name}` |
 | Releases | REST | `POST /releases` |
+| Repositories | REST | `POST /user/repos`, `PATCH /repos/{owner}/{repo}` |
+| Collaborators | REST | `PUT /collaborators/{username}` |
+| Teams | REST | `POST /orgs/{org}/teams` |
+| Checks | REST | `POST /check-runs`, `PATCH /check-runs/{id}` |
+| Deployments | REST | `POST /deployments` |
+| Security | REST | `GET /code-scanning/alerts`, `PATCH /code-scanning/alerts/{number}` |
+| Dependabot | REST | `GET /dependabot/alerts`, `PATCH /dependabot/alerts/{number}` |
+| Search | REST/GraphQL | `GET /search/{type}` (read-only) |
+| Gists | REST | `POST /gists`, `PATCH /gists/{id}` |
+
+### Unknown Domains (Fallback)
+
+**If domain is not in routing guide:**
+
+1. **Default to REST API** - Most GitHub features use REST for mutations
+2. **Invoke corpus skill** for endpoint syntax:
+   - `hiivmind-pulse-gh:hiivmind-corpus-github`
+   - Search: `{domain} REST API endpoint`
+3. **Confirm with user** before executing unknown patterns
+4. **Endpoint pattern:** `gh api /repos/{owner}/{repo}/{resource}` or `gh api /{resource}`
 
 ---
 
@@ -229,6 +266,37 @@ Suggested fix: {based on error-handling.md}
 **Trigger workflow:** Requires `workflow_dispatch` event configured in workflow file.
 
 **CLI shortcut:** `gh workflow run WORKFLOW` is simpler than REST API.
+
+### Repositories
+
+**Create:** `POST /user/repos` (personal) or `POST /orgs/{org}/repos` (organization)
+
+**BLOCKED operations:** Delete, transfer, archive - see `reference/operation-blocklist.md`
+
+### Collaborators
+
+**Add:** `PUT /repos/{owner}/{repo}/collaborators/{username}` with permission level
+
+**Remove:** `DELETE /repos/{owner}/{repo}/collaborators/{username}`
+
+### Teams
+
+**Requires org admin permissions** - Most team operations need `admin:org` scope.
+
+### Search
+
+**Read-only domain** - No mutations available.
+
+**Endpoint:** `GET /search/issues`, `GET /search/code`, `GET /search/repositories`
+
+### Unknown Domains
+
+**Default approach for unlisted domains:**
+
+1. Use corpus lookup for exact endpoint syntax
+2. Default to REST API with repository scope
+3. Confirm with user before execution
+4. Report any errors with suggested fixes
 
 ---
 
