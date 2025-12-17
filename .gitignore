@@ -11,6 +11,9 @@ Thumbs.db
 # User-specific config (contains personal GitHub identity)
 .hiivmind/github/user.yaml
 
+# Local state tracking (per-machine freshness)
+.hiivmind/github/freshness.yaml
+
 # Corpus skills - cloned sources and caches
 .claude-plugin/skills/*/.source/
 .claude-plugin/skills/*/.cache/

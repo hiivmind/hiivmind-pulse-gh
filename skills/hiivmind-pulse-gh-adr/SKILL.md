@@ -1,10 +1,13 @@
 ---
 name: hiivmind-pulse-gh-adr
 description: >
-  Create and manage Architecture Decision Records (ADRs) as markdown files and linked GitHub issues.
-  Trigger when: "architecture decision", "ADR", "document decision", "design decision", "technical decision",
-  "milestone planning", "why did we", "record decision", "decision log". Proactively suggest when milestone
-  has 5+ issues or major refactoring is planned.
+  Create and manage Architecture Decision Records (ADRs) as markdown files with linked GitHub issues.
+  This skill should be used when: documenting architecture decisions, creating ADRs, recording technical
+  choices, explaining design rationale, capturing "why we chose X over Y". Trigger phrases: "create an
+  ADR", "document this decision", "record why we", "architecture decision record", "design decision",
+  "technical decision", "why did we choose", "decision log", "document the rationale". Proactively
+  suggest when: milestone has 5+ issues, major refactoring planned, breaking API changes, new patterns
+  introduced, technology migrations, or user asks "should we document this".
 ---
 
 # Architecture Decision Records

@@ -1,7 +1,12 @@
 ---
 name: hiivmind-corpus-github-navigate
 description: >-
-  Find GitHub API documentation for hiivmind-pulse-gh operations. Use when you need GraphQL schema types, REST endpoint syntax, or gh CLI commands. Trigger keywords: "find in docs", "check the docs", "GraphQL schema", "REST endpoint", "gh command", "API syntax", issue, pullRequest, milestone, projectV2, rulesets, workflows, secrets, releases.
+  GitHub API documentation corpus for JIT syntax lookup. This skill should be used when looking up
+  GraphQL mutations, REST endpoints, gh CLI commands, or schema definitions. Trigger when: "how do I
+  create an issue via API", "what's the GraphQL mutation for", "find the REST endpoint", "check GitHub
+  docs", "API syntax for", "schema for projectV2", "addProjectV2ItemById parameters", "updateIssue
+  mutation", "branch protection endpoint", "workflow dispatch API". Domains: issues, PRs, milestones,
+  labels, projects, protection, rulesets, actions, secrets, variables, releases, teams, deployments.
 ---
 
 # GitHub API Documentation Navigator (Pulse Edition)

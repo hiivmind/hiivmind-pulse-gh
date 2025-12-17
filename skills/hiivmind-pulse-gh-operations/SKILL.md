@@ -1,9 +1,13 @@
 ---
 name: hiivmind-pulse-gh-operations
 description: >
-  Execute GitHub operations across all domains (issues, PRs, milestones, projects, protection,
-  actions, releases). Receives intent from gateway command, consults routing guide and corpus,
-  executes via gh CLI. Use when the gateway command routes an operation here after intent detection.
+  Execute GitHub operations across all domains. This skill should be used when: creating issues,
+  closing issues, merging PRs, setting milestones, adding labels, updating project status, protecting
+  branches, triggering workflows, creating releases, managing secrets. Trigger phrases: "create issue",
+  "close issue #", "merge PR", "set milestone on", "add label to", "update project status", "add to
+  project board", "protect branch", "trigger workflow", "create release", "set secret", "list PRs".
+  Domains: issues, PRs, milestones, labels, projects, protection, rulesets, actions, secrets,
+  variables, releases, repositories, collaborators, teams, checks, deployments, search.
 ---
 
 # GitHub Operations Execution

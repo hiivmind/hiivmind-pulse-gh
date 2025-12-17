@@ -1,9 +1,12 @@
 ---
 name: hiivmind-pulse-gh-init
 description: >
-  Initialize GitHub workspace: detect context, verify tools and auth, discover projects,
-  and cache IDs to config.yaml. Run once per workspace. After init, use operations skill
-  or gh CLI directly with routing guide.
+  Initialize GitHub workspace for hiivmind-pulse-gh operations. This skill should be used when:
+  setting up a new workspace, first-time configuration, config.yaml is missing, or "workspace not
+  initialized" errors occur. Trigger phrases: "initialize workspace", "setup GitHub", "first time
+  setup", "init pulse-gh", "configure workspace", "cache project IDs", "workspace not initialized".
+  Verifies gh CLI, jq, yq tools and authentication. Discovers projects and caches field IDs for
+  fast operations. Run once per repository.
 ---
 
 # GitHub Workspace Initialization

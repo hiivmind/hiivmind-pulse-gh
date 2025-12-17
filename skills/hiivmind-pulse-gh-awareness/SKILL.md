@@ -1,10 +1,12 @@
 ---
 name: hiivmind-pulse-gh-awareness
 description: >
-  Add plugin skill awareness to CLAUDE.md files. Explains what skills this plugin provides,
-  when to use each skill, and how to invoke them. Teaches Claude when to suggest this plugin.
-  Trigger when: "add awareness", "plugin awareness", "what can pulse-gh do",
-  "configure Claude for GitHub", "setup CLAUDE.md", "enable GitHub skills", "plugin tour".
+  Configure CLAUDE.md with hiivmind-pulse-gh skill awareness using What/When/How structure. This skill
+  should be used when: adding GitHub capabilities to CLAUDE.md, teaching Claude about this plugin,
+  onboarding a new project, or explaining available GitHub skills. Trigger phrases: "add GitHub
+  awareness", "configure Claude for GitHub", "what can pulse-gh do", "setup CLAUDE.md for GitHub",
+  "enable GitHub skills", "plugin tour", "what GitHub operations are available", "teach Claude about
+  GitHub", "add plugin to CLAUDE.md". Supports user-level (~/.claude/CLAUDE.md) and repo-level scope.
 ---
 
 # Plugin Skill Awareness
