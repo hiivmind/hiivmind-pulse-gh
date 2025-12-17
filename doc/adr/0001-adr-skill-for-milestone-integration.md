@@ -1,7 +1,7 @@
 ---
 adr: 1
 title: "ADR Skill for Milestone Integration"
-status: Proposed
+status: Accepted
 date: 2025-12-17
 milestone: "v5.1.0 - ADR Integration"
 issue: 83
@@ -12,7 +12,7 @@ deciders: [nathanielramm]
 
 ## Status
 
-Proposed
+Accepted
 
 ## Context
 
