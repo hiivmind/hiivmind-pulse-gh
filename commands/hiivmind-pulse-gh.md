@@ -201,135 +201,115 @@ The operations skill consults the routing guide and corpus (when needed) to perf
 
 ## Mode: Interactive Menu (No Arguments)
 
-When invoked without arguments, use AskUserQuestion for hierarchical navigation.
+When invoked without arguments, display a reference table for discoverability, then present context-aware quick actions.
 
-### Menu Step 1: Category Selection
+### Step A: Display Reference Table
 
-Use AskUserQuestion:
+Output this table to show users what's available:
 
 ```
-question: "What type of GitHub operation?"
-header: "Category"
+## GitHub Operations Reference
+
+| Domain | Typical Operations |
+|--------|-------------------|
+| **Issues** | create, update, close, comment, label, assign |
+| **Pull Requests** | create, merge, review, comment, request reviewers |
+| **Projects** | add item, update status/fields, archive, view board |
+| **Milestones** | create, assign to issue/PR, update, delete |
+| **Actions** | trigger workflow, view runs, cancel, rerun |
+| **Releases** | create, upload assets, publish, delete |
+| **Labels** | create, add/remove from issue, update color |
+| **Branch Protection** | set rules, require reviews, status checks |
+| **Secrets & Variables** | set, update, delete, list |
+| **ADR** | document decision, list ADRs, sync to GitHub |
+| **Setup** | initialize workspace, refresh config, awareness |
+
+Select a quick action below, or choose "Other" to describe what you need.
+```
+
+### Step B: Detect Context
+
+Gather context to suggest relevant actions:
+
+```bash
+# 1. Check workspace initialization
+initialized=$(test -f .hiivmind/github/config.yaml && echo "yes" || echo "no")
+
+# 2. Check git state
+current_branch=$(git branch --show-current 2>/dev/null)
+is_main=$(test "$current_branch" = "main" -o "$current_branch" = "master" && echo "yes" || echo "no")
+has_changes=$(test -n "$(git status --porcelain 2>/dev/null)" && echo "yes" || echo "no")
+
+# 3. Check for open PRs on current branch
+# (optional - only if gh is available and authenticated)
+```
+
+### Step C: Context-Aware Quick Actions
+
+Based on detected context, select 3 relevant options:
+
+**If NOT initialized:**
+```yaml
+question: "What would you like to do?"
+header: "Action"
 options:
-  - label: "Issues & PRs"
-    description: "Create, update, close issues and pull requests"
-  - label: "Projects & Milestones"
-    description: "Project boards, fields, status, milestones"
-  - label: "CI/CD & Releases"
-    description: "Workflows, actions, releases, deployments"
-  - label: "More options..."
-    description: "Repository config, security, search, documentation"
+  - label: "Initialize workspace"
+    description: "Set up GitHub integration for this repo"
+  - label: "Create an issue"
+    description: "Will initialize first, then create issue"
+  - label: "Configure CLAUDE.md"
+    description: "Add GitHub plugin awareness to your config"
+# "Other" auto-added - user can type any request
 ```
 
-### Menu Step 2: Action Selection
-
-Based on category selected, present specific actions:
-
-**If "Issues & PRs":**
+**If on feature branch with changes:**
+```yaml
+question: "What would you like to do?"
+header: "Action"
+options:
+  - label: "Create a PR"
+    description: "Open pull request for current branch"
+  - label: "Create an issue"
+    description: "Open a new issue"
+  - label: "View open PRs"
+    description: "List pull requests in this repo"
+# "Other" auto-added
 ```
+
+**If on main/master branch (clean state):**
+```yaml
 question: "What would you like to do?"
 header: "Action"
 options:
   - label: "Create an issue"
-    description: "Open a new issue with title and body"
-  - label: "Update or close an issue"
-    description: "Modify, comment on, or close an existing issue"
-  - label: "Create a pull request"
-    description: "Open a new PR from a branch"
-  - label: "Merge a pull request"
-    description: "Merge, squash, or rebase a PR"
-```
-
-**If "Projects & Milestones":**
-```
-question: "What would you like to do?"
-header: "Action"
-options:
-  - label: "Add item to project"
-    description: "Add issue or PR to a project board"
-  - label: "Update project field"
-    description: "Change status, priority, or custom fields"
-  - label: "Manage milestones"
-    description: "Create, update, or assign milestones"
-  - label: "View project items"
-    description: "List items in a project board"
-```
-
-**If "CI/CD & Releases":**
-```
-question: "What would you like to do?"
-header: "Action"
-options:
+    description: "Open a new issue"
+  - label: "View project board"
+    description: "See project items and status"
   - label: "Trigger a workflow"
     description: "Dispatch a GitHub Actions workflow"
-  - label: "View workflow runs"
-    description: "Check status of recent runs"
-  - label: "Create a release"
-    description: "Publish a new release with assets"
-  - label: "View checks & deployments"
-    description: "Check run status, deployment history"
+# "Other" auto-added
 ```
 
-**If "More options...":**
-```
-question: "Select a category:"
-header: "Category"
+**If config is stale:**
+```yaml
+question: "What would you like to do?"
+header: "Action"
 options:
-  - label: "Repository config"
-    description: "Branch protection, rulesets, collaborators"
-  - label: "Security & compliance"
-    description: "Alerts, Dependabot, vulnerability scanning"
-  - label: "Search & discovery"
-    description: "Search issues/PRs/code, manage gists"
-  - label: "Documentation & maintenance"
-    description: "ADRs, refresh config, CLAUDE.md awareness"
+  - label: "Refresh config"
+    description: "Sync workspace config with GitHub"
+  - label: "Create an issue"
+    description: "Open a new issue"
+  - label: "View status"
+    description: "Check repo and config status"
+# "Other" auto-added
 ```
 
-### Menu Step 2b: Expanded Categories
+### Step D: Handle Selection
 
-**If "Repository config":**
-```
-options:
-  - label: "Branch protection"
-  - label: "Configure rulesets"
-  - label: "Manage collaborators"
-  - label: "Repository settings"
-```
-
-**If "Security & compliance":**
-```
-options:
-  - label: "View security alerts"
-  - label: "Manage Dependabot"
-  - label: "Code scanning settings"
-  - label: "Secret scanning"
-```
-
-**If "Search & discovery":**
-```
-options:
-  - label: "Search issues & PRs"
-  - label: "Search code"
-  - label: "Create a gist"
-  - label: "Manage gists"
-```
-
-**If "Documentation & maintenance":**
-```
-options:
-  - label: "Create ADR"
-    description: "Architecture Decision Record"
-  - label: "List existing ADRs"
-  - label: "Refresh workspace config"
-  - label: "Configure CLAUDE.md awareness"
-```
-
-### Menu Step 3: Execute
-
-After action selection:
-1. Map selection to domain + operation
-2. Continue to **Step 3: Context Detection**
-3. Route to appropriate skill
+| Selection | Action |
+|-----------|--------|
+| Quick action selected | Map to domain + operation, continue to **Step 3: Context Detection** |
+| "Other" selected | User provides text → treat as `$ARGUMENTS`, continue to **Step 2: Intent Detection** |
 
 ---
 
