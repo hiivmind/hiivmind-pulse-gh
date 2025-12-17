@@ -20,43 +20,7 @@ Unified entry point for all GitHub operations via hiivmind-pulse-gh.
 
 ---
 
-## Step 2: Context Detection
-
-### 2a: Check Initialization
-
-**See:** `lib/github/patterns/config-parsing.md`
-
-Check for `.hiivmind/github/config.yaml`:
-
-**If not found:**
-1. Inform user: "This workspace hasn't been initialized for GitHub operations."
-2. Ask: "Would you like to initialize now?"
-3. If yes → Invoke skill: `hiivmind-pulse-gh:hiivmind-pulse-gh-init`
-4. After init completes → Return and continue
-
-### 2b: Check Freshness
-
-**See:** `lib/github/patterns/config-parsing.md` (freshness section)
-
-Check `.hiivmind/github/freshness.yaml`:
-
-**Staleness Policy:**
-
-| Level | Age | Read Ops | Mutations |
-|-------|-----|----------|-----------|
-| Fresh | < threshold | ✅ Allow | ✅ Allow |
-| Soft Stale | 1-2x threshold | ✅ Warn | ✅ Warn |
-| Hard Stale | >= 2x threshold | ✅ Warn | ❌ Block |
-
-**If hard stale and mutation requested:**
-1. Block: "Config is critically stale. Cannot perform mutation."
-2. Offer: "Would you like to refresh first?"
-3. If yes → Invoke skill: `hiivmind-pulse-gh:hiivmind-pulse-gh-refresh`
-4. After refresh → Continue
-
----
-
-## Step 3: Intent Detection
+## Step 2: Intent Detection
 
 Analyze the user's request to determine:
 
@@ -107,6 +71,48 @@ Look for:
 ### Ambiguity Resolution
 
 If intent is unclear, use AskUserQuestion to clarify.
+
+---
+
+## Step 3: Context Detection (Conditional)
+
+**Skip this step if domain is:** `adr`, `awareness`
+
+These domains handle their own context checks internally and do not require workspace initialization.
+
+**For all other domains, continue below:**
+
+### 3a: Check Initialization
+
+**See:** `lib/github/patterns/config-parsing.md`
+
+Check for `.hiivmind/github/config.yaml`:
+
+**If not found:**
+1. Inform user: "This workspace hasn't been initialized for GitHub operations."
+2. Ask: "Would you like to initialize now?"
+3. If yes → Invoke skill: `hiivmind-pulse-gh:hiivmind-pulse-gh-init`
+4. After init completes → Return and continue
+
+### 3b: Check Freshness
+
+**See:** `lib/github/patterns/config-parsing.md` (freshness section)
+
+Check `.hiivmind/github/freshness.yaml`:
+
+**Staleness Policy:**
+
+| Level | Age | Read Ops | Mutations |
+|-------|-----|----------|-----------|
+| Fresh | < threshold | ✅ Allow | ✅ Allow |
+| Soft Stale | 1-2x threshold | ✅ Warn | ✅ Warn |
+| Hard Stale | >= 2x threshold | ✅ Warn | ❌ Block |
+
+**If hard stale and mutation requested:**
+1. Block: "Config is critically stale. Cannot perform mutation."
+2. Offer: "Would you like to refresh first?"
+3. If yes → Invoke skill: `hiivmind-pulse-gh:hiivmind-pulse-gh-refresh`
+4. After refresh → Continue
 
 ---
 
@@ -222,53 +228,52 @@ After selection, gather details and route to operations skill.
 **User:** `/hiivmind-pulse-gh create issue for login timeout bug`
 
 **Flow:**
-1. Context: Initialized ✓, Fresh ✓
+1. Arguments provided
 2. Intent: domain=issues, operation=create, target="login timeout bug"
-3. Confirm: "Create issue titled 'login timeout bug'?"
-4. Route to operations skill
+3. Context: Initialized ✓, Fresh ✓
+4. Confirm: "Create issue titled 'login timeout bug'?"
+5. Route to operations skill
 
 ### Not Initialized
 
 **User:** `/hiivmind-pulse-gh create issue for bug`
 
 **Flow:**
-1. Context: NOT initialized
-2. Ask: "Initialize workspace first?"
-3. If yes → Invoke `hiivmind-pulse-gh:hiivmind-pulse-gh-init`
-4. After init → Resume with original request
+1. Arguments provided
+2. Intent: domain=issues, operation=create
+3. Context: NOT initialized → Ask "Initialize workspace first?"
+4. If yes → Invoke `hiivmind-pulse-gh:hiivmind-pulse-gh-init`
+5. After init → Resume with original request
 
 ### Stale Config
 
 **User:** `/hiivmind-pulse-gh add PR to project`
 
 **Flow:**
-1. Context: Initialized ✓, Hard Stale
-2. Block mutation, offer refresh
-3. If yes → Invoke `hiivmind-pulse-gh:hiivmind-pulse-gh-refresh`
-4. After refresh → Continue with intent detection
+1. Arguments provided
+2. Intent: domain=projects, operation=link
+3. Context: Initialized ✓, Hard Stale → Block mutation, offer refresh
+4. If yes → Invoke `hiivmind-pulse-gh:hiivmind-pulse-gh-refresh`
+5. After refresh → Continue
 
 ### ADR Creation
 
 **User:** `/hiivmind-pulse-gh document decision about using GraphQL`
 
 **Flow:**
-1. Context: Initialized ✓, Fresh ✓
+1. Arguments provided
 2. Intent: domain=adr, operation=document, topic="using GraphQL"
-3. Route to ADR skill
-4. Skill guides through ADR creation with STOP points
-5. Creates file `doc/adr/NNNN-using-graphql.md`
-6. Creates GitHub issue with `adr` label
-7. Links to milestone if specified
+3. Context: SKIPPED (ADR doesn't require workspace config)
+4. Route to ADR skill
+5. Skill guides through ADR creation with STOP points
 
 ### Capability Awareness
 
 **User:** `/hiivmind-pulse-gh configure Claude for GitHub`
 
 **Flow:**
-1. Intent: domain=awareness
-2. Route to awareness skill
-3. Skill scans project for capability signals
-4. Auto-detects: Actions (3 workflows), Issues (template found), ADR
-5. Offers guided tour of remaining capabilities
-6. User selects which to enable
-7. Edits CLAUDE.md with awareness section
+1. Arguments provided
+2. Intent: domain=awareness
+3. Context: SKIPPED (awareness doesn't require workspace config)
+4. Route to awareness skill
+5. Skill scans project and edits CLAUDE.md
