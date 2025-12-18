@@ -10,7 +10,7 @@
 
 | Domain | Read | Create | Update | Delete | Notes |
 |--------|------|--------|--------|--------|-------|
-| **Issues** | CLI/REST/GraphQL/UI | CLI/REST/GraphQL/UI | CLI/REST/GraphQL/UI | REST/UI | All 4 methods supported (see details) |
+| **Issues** | GraphQL | GraphQL | GraphQL | GraphQL | Full support |
 | **Pull Requests** | GraphQL | GraphQL | GraphQL | GraphQL | Full support |
 | **Milestones** | GraphQL | REST | REST | REST | CRUD is REST-only |
 | **Labels** | GraphQL | REST | REST | REST | CRUD is REST-only |
@@ -27,27 +27,18 @@
 
 ### Issues
 
-**All 4 methods fully supported for core operations.**
+**All operations via GraphQL.**
 
-| Operation | gh CLI | REST | GraphQL | Web UI | Notes |
-|-----------|--------|------|---------|--------|-------|
-| List | `gh issue list` | ✓ | ✓ | ✓ | All methods work |
-| Get | `gh issue view` | ✓ | ✓ | ✓ | All methods work |
-| Create | `gh issue create` | ✓ | ✓ | ✓ | All methods work |
-| Update | `gh issue edit` | ✓ | ✓ | ✓ | All methods work |
-| Close | `gh issue close` | ✓ | ✓ | ✓ | All methods work |
-| Add comment | `gh issue comment` | ✓ | ✓ | ✓ | All methods work |
-| Add labels | `gh issue edit` | ✓ | ✓ | ✓ | Separate endpoint in REST |
-| Set milestone | `gh issue edit` | ✓ | ✓ | ✓ | Via PATCH in REST |
-| Lock | ✗ | ✓ | ✗ | ✓ | REST-only, no GraphQL |
-| Unlock | ✗ | ✓ | ✗ | ✓ | REST-only, no GraphQL |
-
-**Corpus Lookup Guide** (for exact syntax):
-
-| API | When to Use | Search Keywords |
-|-----|-------------|-----------------|
-| REST | CRUD, state management | `GET /repos/{owner}/{repo}/issues`, `POST /issues`, `PATCH /issues/{issue_number}`, `issues/{issue_number}/comments`, `issues/{issue_number}/labels` |
-| GraphQL | Complex queries, batch operations | `issue`, `issues` (query), `createIssue`, `updateIssue`, `closeIssue`, `addComment`, `addLabelsToLabelable`, `removeLabelsFromLabelable` (mutations) |
+| Operation | API | Search Keywords |
+|-----------|-----|-----------------|
+| Get issue | GraphQL | `issue`, `repository`, `query`, `number` |
+| List issues | GraphQL | `issues`, `repository`, `filter`, `states` |
+| Create issue | GraphQL | `createIssue`, `mutation`, `repositoryId` |
+| Update issue | GraphQL | `updateIssue`, `mutation`, `title`, `body`, `state` |
+| Close issue | GraphQL | `closeIssue`, `mutation`, `stateReason` |
+| Add comment | GraphQL | `addComment`, `mutation`, `subjectId` |
+| Add labels | GraphQL | `addLabelsToLabelable`, `mutation`, `labelIds` |
+| Set milestone | GraphQL | `updateIssue`, `milestoneId` |
 
 ---
 
