@@ -981,8 +981,8 @@ Check automation settings before manual operations:
 
 | Document | Purpose |
 |----------|---------|
-| `reference/api-routing.md` | Which API (GraphQL vs REST) for each operation |
-| `reference/workflows/` | Multi-step workflow examples |
+| `lib/examples/operations/api-routing.md` | Which API (GraphQL vs REST) for each operation |
+| `lib/examples/operations/corpus-lookup.md` | How to look up exact API syntax |
 | `templates/config.yaml.template` | Template used to generate config |
 | `templates/user.yaml.template` | Template for user-specific config |
 | `templates/freshness.yaml.template` | Template for per-section freshness tracking (Phase 1) |

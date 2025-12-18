@@ -50,7 +50,7 @@ When invoked by the gateway command, expect:
 
 **Goal:** Load workspace configuration.
 
-**See:** `lib/github/patterns/config-parsing.md`
+**See:** `lib/examples/introspection/config-parsing.md`
 
 ### What to Do
 
@@ -76,7 +76,7 @@ Run: /hiivmind-pulse-gh init
 
 **Goal:** Resolve any IDs needed for the operation from cached config.
 
-**See:** `lib/github/patterns/id-resolution.md`
+**See:** `lib/examples/introspection/id-resolution.md`
 
 ### What to Do
 
@@ -124,14 +124,14 @@ For domains not listed above:
 
 ### PREREQUISITE: Read Routing Guide
 
-**IMPORTANT:** Read the FULL `reference/api-routing.md` file.
+**IMPORTANT:** Read the FULL `lib/examples/operations/api-routing.md` file.
 
 - Do NOT grep or search - read it completely
 - This gives you routing decisions for documented domains
 - You need this context to make correct API decisions
 
 ```
-Read: reference/api-routing.md (full file)
+Read: lib/examples/operations/api-routing.md (full file)
 ```
 
 ### Domain Quick Reference
@@ -176,18 +176,18 @@ Read: reference/api-routing.md (full file)
 
 **Goal:** Execute the operation using the appropriate API.
 
-**See:** `lib/github/patterns/graphql-execution.md`
-**See:** `lib/github/patterns/error-handling.md`
+**See:** `lib/examples/introspection/graphql-execution.md`
+**See:** `lib/examples/introspection/error-handling.md`
 
 ### Execution Approach
 
-1. **Check routing guide** - `reference/api-routing.md` tells you GraphQL vs REST
+1. **Check routing guide** - `lib/examples/operations/api-routing.md` tells you GraphQL vs REST
 2. **If syntax is clear** - Execute directly using `gh api` or `gh` CLI
 3. **If uncertain** - Use corpus lookup for exact syntax
 
 ### Corpus Lookup (When Needed)
 
-**See:** `lib/github/patterns/corpus-lookup.md`
+**See:** `lib/examples/operations/corpus-lookup.md`
 
 Use corpus lookup when you need exact syntax:
 
@@ -212,7 +212,7 @@ Use corpus lookup when you need exact syntax:
 
 **Goal:** Report operation result to user.
 
-**See:** `lib/github/patterns/error-handling.md`
+**See:** `lib/examples/introspection/error-handling.md`
 
 ### Success Report
 
@@ -246,7 +246,7 @@ Suggested fix: {based on error-handling.md}
 
 **Required IDs:** Project ID, Field ID (for updates), Option ID (for single-select)
 
-**See:** `lib/github/patterns/id-resolution.md` for resolving from config
+**See:** `lib/examples/introspection/id-resolution.md` for resolving from config
 
 **Special cases:**
 - Status field: Single-select, needs Option ID
@@ -275,7 +275,7 @@ Suggested fix: {based on error-handling.md}
 
 **Create:** `POST /user/repos` (personal) or `POST /orgs/{org}/repos` (organization)
 
-**BLOCKED operations:** Delete, transfer, archive - see `reference/operation-blocklist.md`
+**BLOCKED operations:** Delete, transfer, archive - see `docs/operation-blocklist.md`
 
 ### Collaborators
 
@@ -328,21 +328,28 @@ Suggested fix: {based on error-handling.md}
 
 ---
 
-## Pattern Library
+## Examples Library
 
-All implementation details are in the pattern library:
+All implementation details are in the examples library:
 
-| Pattern | Purpose |
+### Introspection Examples (HEAVY)
+
+| Example | Purpose |
 |---------|---------|
-| `lib/github/patterns/config-parsing.md` | Read/write YAML config files |
-| `lib/github/patterns/id-resolution.md` | Resolve names to IDs (cache-first) |
-| `lib/github/patterns/corpus-lookup.md` | Look up API syntax when uncertain |
-| `lib/github/patterns/graphql-execution.md` | Execute queries via temp file |
-| `lib/github/patterns/error-handling.md` | Handle API errors |
+| `lib/examples/introspection/config-parsing.md` | Read/write YAML config files |
+| `lib/examples/introspection/id-resolution.md` | Resolve names to IDs (cache-first) |
+| `lib/examples/introspection/graphql-execution.md` | Execute queries via temp file |
+| `lib/examples/introspection/error-handling.md` | Handle API errors |
 
-### References
+### Operations Examples (LIGHT)
 
-| Reference | Purpose |
-|-----------|---------|
-| `reference/api-routing.md` | API routing decisions (useful standalone) |
+| Example | Purpose |
+|---------|---------|
+| `lib/examples/operations/api-routing.md` | API routing decisions (THE canonical source) |
+| `lib/examples/operations/corpus-lookup.md` | Look up API syntax when uncertain |
+
+### External Resources
+
+| Resource | Purpose |
+|----------|---------|
 | `hiivmind-corpus-github-docs:hiivmind-corpus-navigate-github-docs` | GitHub corpus skill for syntax lookup |

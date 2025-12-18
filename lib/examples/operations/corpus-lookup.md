@@ -35,7 +35,7 @@ Your Request
      ↓
 ┌────────────────────────────────────────────────────────────┐
 │  Step 1: ROUTING DECISION                                  │
-│  Read: reference/api-routing.md                            │
+│  Read: lib/examples/operations/api-routing.md                            │
 │  Output: API type (GraphQL/REST/CLI) + search keywords     │
 └────────────────────────────────────────────────────────────┘
      ↓
@@ -60,7 +60,7 @@ Your Request
 
 ## Step 1: Routing Decision
 
-**Read:** `reference/api-routing.md`
+**Read:** `lib/examples/operations/api-routing.md`
 
 The routing guide provides:
 1. **API type** - GraphQL, REST, or gh CLI
@@ -115,7 +115,7 @@ Choose execution method based on API type from Step 1.
 
 ### GraphQL Execution
 
-**Pattern:** `lib/github/patterns/graphql-execution.md`
+**Pattern:** `lib/examples/introspection/graphql-execution.md`
 
 Use the temp file method for queries with `$variable` parameters:
 
@@ -333,6 +333,6 @@ No corpus lookup needed for well-known CLI commands.
 
 ## Related References
 
-- **reference/api-routing.md** - Routing decisions and keywords (useful standalone)
-- **reference/config-schema.md** - Config.yaml structure for cached IDs
+- **lib/examples/operations/api-routing.md** - Routing decisions and keywords (useful standalone)
+- **docs/config-schema.md** - Config.yaml structure for cached IDs
 - **hiivmind-corpus-github-docs:hiivmind-corpus-navigate-github-docs** - GitHub API corpus skill

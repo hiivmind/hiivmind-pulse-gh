@@ -38,7 +38,7 @@ Synchronize cached configuration with current GitHub state. Run when config beco
 
 **Goal:** Load existing configuration and verify workspace is initialized.
 
-**See:** `lib/github/patterns/config-parsing.md`
+**See:** `lib/examples/introspection/config-parsing.md`
 
 ### What to Do
 
@@ -64,7 +64,7 @@ Run: /hiivmind-pulse-gh init
 
 **Goal:** Check which sections need refreshing based on timestamps and thresholds.
 
-**See:** `lib/github/patterns/config-parsing.md`
+**See:** `lib/examples/introspection/config-parsing.md`
 
 ### What to Do
 
@@ -128,18 +128,18 @@ Which sections to refresh? [1,2,3,4 / stale / all / none]
 
 **Goal:** Refresh each selected section by querying GitHub APIs.
 
-**See:** `lib/github/patterns/error-handling.md`
+**See:** `lib/examples/introspection/error-handling.md`
 
 ### PREREQUISITE: Read Routing Guide
 
-**IMPORTANT:** Before refreshing ANY section, read the FULL `reference/api-routing.md` file.
+**IMPORTANT:** Before refreshing ANY section, read the FULL `lib/examples/operations/api-routing.md` file.
 
 - The file is ~245 lines - read it completely, do NOT grep or search
 - This gives you routing decisions for ALL domains upfront
 - You need this context to make correct GraphQL vs REST decisions
 
 ```
-Read: reference/api-routing.md (full file)
+Read: lib/examples/operations/api-routing.md (full file)
 ```
 
 ### Refresh Approach
@@ -152,13 +152,13 @@ For each selected section:
 
 2. **Execute Query**
    - If syntax is clear: Execute directly
-   - If uncertain: Use corpus lookup (`lib/github/patterns/corpus-lookup.md`)
-   - GraphQL: temp file pattern (`lib/github/patterns/graphql-execution.md`)
+   - If uncertain: Use corpus lookup (`lib/examples/operations/corpus-lookup.md`)
+   - GraphQL: temp file pattern (`lib/examples/introspection/graphql-execution.md`)
    - REST: `gh api /endpoint`
 
 3. **Update Config Files**
    - Write results to appropriate config file
-   - Use patterns from `lib/github/patterns/config-parsing.md`
+   - Use patterns from `lib/examples/introspection/config-parsing.md`
 
 ### Corpus Lookup (When Needed)
 
@@ -193,7 +193,7 @@ If uncertain about query syntax:
 
 **Goal:** Update freshness timestamps after refresh.
 
-**See:** `lib/github/patterns/config-parsing.md`
+**See:** `lib/examples/introspection/config-parsing.md`
 
 ### What to Do
 
@@ -270,7 +270,7 @@ What would you like to do next?
 
 ### Check Freshness Status
 
-**See:** `lib/github/patterns/config-parsing.md` - "Read freshness.yaml" section
+**See:** `lib/examples/introspection/config-parsing.md` - "Read freshness.yaml" section
 
 ### Force Refresh Specific Section
 
@@ -293,21 +293,28 @@ Sections: `workspace`, `projects`, `views`, `repo_settings`, `automations`, `rel
 
 ---
 
-## Pattern Library
+## Examples Library
 
-All implementation details are in the pattern library:
+All implementation details are in the examples library:
 
-| Pattern | Purpose |
+**Introspection Examples (HEAVY):**
+
+| Example | Purpose |
 |---------|---------|
-| `lib/github/patterns/config-parsing.md` | Read/write YAML config files |
-| `lib/github/patterns/corpus-lookup.md` | Look up API syntax when uncertain |
-| `lib/github/patterns/graphql-execution.md` | Execute queries via temp file |
-| `lib/github/patterns/error-handling.md` | Handle API errors |
-| `lib/github/patterns/id-resolution.md` | Resolve names to IDs |
+| `lib/examples/introspection/config-parsing.md` | Read/write YAML config files |
+| `lib/examples/introspection/graphql-execution.md` | Execute queries via temp file |
+| `lib/examples/introspection/error-handling.md` | Handle API errors |
+| `lib/examples/introspection/id-resolution.md` | Resolve names to IDs |
 
-### References
+**Operations Examples (LIGHT):**
 
-| Reference | Purpose |
-|-----------|---------|
-| `reference/api-routing.md` | API routing decisions (useful standalone) |
+| Example | Purpose |
+|---------|---------|
+| `lib/examples/operations/api-routing.md` | API routing decisions (canonical source) |
+| `lib/examples/operations/corpus-lookup.md` | Look up API syntax when uncertain |
+
+**External Resources:**
+
+| Resource | Purpose |
+|----------|---------|
 | `hiivmind-corpus-github-docs:hiivmind-corpus-navigate-github-docs` | GitHub corpus skill for syntax lookup |

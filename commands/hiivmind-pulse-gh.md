@@ -93,7 +93,7 @@ Before proceeding, check if the request matches a blocked operation:
 3. Suggest: "For this operation, please use the GitHub web UI"
 4. **Do not proceed** to Step 3
 
-**Reference:** `reference/operation-blocklist.md`
+**Reference:** `docs/operation-blocklist.md`
 
 ### Unlisted Domains
 
@@ -118,7 +118,7 @@ These domains either handle their own context checks internally or don't require
 
 ### 3a: Check Initialization
 
-**See:** `lib/github/patterns/config-parsing.md`
+**See:** `lib/examples/introspection/config-parsing.md`
 
 Check for `.hiivmind/github/config.yaml`:
 
@@ -130,7 +130,7 @@ Check for `.hiivmind/github/config.yaml`:
 
 ### 3b: Check Freshness
 
-**See:** `lib/github/patterns/config-parsing.md` (freshness section)
+**See:** `lib/examples/introspection/config-parsing.md` (freshness section)
 
 Check `.hiivmind/github/freshness.yaml`:
 
@@ -315,7 +315,7 @@ options:
 
 ## Error Handling
 
-**See:** `lib/github/patterns/error-handling.md`
+**See:** `lib/examples/introspection/error-handling.md`
 
 | Error | Cause | Action |
 |-------|-------|--------|

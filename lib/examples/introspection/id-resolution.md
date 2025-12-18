@@ -77,7 +77,7 @@ if [[ -n "$PROJECT_ID" && "$PROJECT_ID" != "null" ]]; then
   echo "Resolved from cache: $PROJECT_ID"
 else
   echo "Not in cache - use corpus lookup fallback"
-  # See: lib/github/patterns/corpus-lookup.md
+  # See: lib/examples/operations/corpus-lookup.md
   # routing: Projects → List → GraphQL
   # keywords: projectsV2, organization/user
 fi
@@ -126,7 +126,7 @@ if [[ -n "$FIELD_ID" && "$FIELD_ID" != "null" ]]; then
   echo "Resolved from cache: $FIELD_ID"
 else
   echo "Not in cache - use corpus lookup fallback"
-  # See: lib/github/patterns/corpus-lookup.md
+  # See: lib/examples/operations/corpus-lookup.md
   # routing: Projects → Fields → GraphQL
   # keywords: projectV2, fields, SingleSelectField
 fi
@@ -176,7 +176,7 @@ if [[ -n "$OPTION_ID" && "$OPTION_ID" != "null" ]]; then
   echo "Resolved from cache: $OPTION_ID"
 else
   echo "Not in cache - use corpus lookup fallback"
-  # See: lib/github/patterns/corpus-lookup.md
+  # See: lib/examples/operations/corpus-lookup.md
   # routing: Projects → Fields → GraphQL
   # keywords: SingleSelectField, options
 fi
@@ -286,7 +286,7 @@ When cache lookup fails, use corpus lookup:
 Cache Miss
     ↓
 ┌─────────────────────────────────────────────────────────┐
-│ 1. Read routing guide (reference/api-routing.md)        │
+│ 1. Read routing guide (lib/examples/operations/api-routing.md)        │
 │    → Determine: GraphQL vs REST                         │
 │    → Get search keywords                                │
 └────────────────────────┬────────────────────────────────┘
@@ -307,7 +307,7 @@ Cache Miss
                     Return ID
 ```
 
-**See:** `lib/github/patterns/corpus-lookup.md` for complete flow documentation.
+**See:** `lib/examples/operations/corpus-lookup.md` for complete flow documentation.
 
 ---
 

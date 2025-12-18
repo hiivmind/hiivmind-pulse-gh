@@ -22,21 +22,22 @@ Operations follow this approach:
 1. ROUTE       →   2. RESOLVE   →   3. EXECUTE
    (API choice)      (IDs)           (run)
      │                 │                │
-reference/         config.yaml      gh api graphql
-api-routing.md     cache            or gh api REST
+lib/examples/      config.yaml      gh api graphql
+operations/        cache            or gh api REST
+api-routing.md
 ```
 
 ### How It Works
 
-1. **Route** - Read `reference/api-routing.md` for API choice (GraphQL vs REST)
+1. **Route** - Read `lib/examples/operations/api-routing.md` for API choice (GraphQL vs REST)
    - This guide is useful on its own - not every operation needs corpus lookup
 
-2. **Resolve** - Get IDs from cached config (`lib/github/patterns/id-resolution.md`)
+2. **Resolve** - Get IDs from cached config (`lib/examples/introspection/id-resolution.md`)
    - Cache-first strategy avoids unnecessary API calls
 
 3. **Execute** - Run the operation:
    - If syntax is clear: Execute directly
-   - If uncertain: Use corpus lookup (`lib/github/patterns/corpus-lookup.md`)
+   - If uncertain: Use corpus lookup (`lib/examples/operations/corpus-lookup.md`)
 
 ### Corpus Lookup (When Needed)
 
@@ -58,29 +59,41 @@ Use corpus lookup when you have a knowledge gap about exact syntax:
 
 ---
 
-## Pattern Library
+## Examples Library
 
-Skills reference patterns instead of embedding code:
+Skills reference examples instead of embedding code. The library is organized by purpose:
 
-| Pattern | Purpose |
+### Introspection Examples (HEAVY)
+
+Detailed, repeatable examples for state-checking operations:
+
+| Example | Purpose |
 |---------|---------|
-| `lib/github/patterns/corpus-lookup.md` | Look up API syntax when uncertain |
-| `lib/github/patterns/config-parsing.md` | Read/write YAML config files |
-| `lib/github/patterns/id-resolution.md` | Resolve names to IDs (cache-first) |
-| `lib/github/patterns/graphql-execution.md` | Execute queries via temp file |
-| `lib/github/patterns/error-handling.md` | Handle API errors |
-| `lib/github/patterns/authentication.md` | Verify gh auth and scopes |
-| `lib/github/patterns/tool-detection.md` | Check gh/jq/yq availability |
-| `lib/github/patterns/workspace-detection.md` | Git remote → owner/repo |
+| `lib/examples/introspection/config-parsing.md` | Read/write YAML config files |
+| `lib/examples/introspection/id-resolution.md` | Resolve names to IDs (cache-first) |
+| `lib/examples/introspection/graphql-execution.md` | Execute queries via temp file |
+| `lib/examples/introspection/error-handling.md` | Handle API errors |
+| `lib/examples/introspection/authentication.md` | Verify gh auth and scopes |
+| `lib/examples/introspection/tool-detection.md` | Check gh/jq/yq availability |
+| `lib/examples/introspection/workspace-detection.md` | Git remote → owner/repo |
 
-### Using Patterns
+### Operations Examples (LIGHT)
+
+Lightweight routing guidance (corpus provides JIT syntax):
+
+| Example | Purpose |
+|---------|---------|
+| `lib/examples/operations/api-routing.md` | API routing decisions (THE canonical source) |
+| `lib/examples/operations/corpus-lookup.md` | Look up API syntax when uncertain |
+
+### Using Examples
 
 Skills use `See:` references:
 
 ```markdown
 ## Phase 1: CONTEXT
 
-**See:** `lib/github/patterns/config-parsing.md`
+**See:** `lib/examples/introspection/config-parsing.md`
 
 1. Load config.yaml
 2. Verify initialization
@@ -117,10 +130,9 @@ Use natural language to describe any GitHub operation:
 
 | Skill | Purpose | Structure |
 |-------|---------|-----------|
-| `hiivmind-pulse-gh-init` | First-time workspace setup | 5 phases (~150 lines) |
-| `hiivmind-pulse-gh-refresh` | Sync config with GitHub | 4 phases (~200 lines) |
+| `hiivmind-pulse-gh-init` | First-time workspace setup | 6 phases (~150 lines) |
+| `hiivmind-pulse-gh-refresh` | Sync config with GitHub | 6 phases (~200 lines) |
 | `hiivmind-pulse-gh-operations` | Execute GitHub operations | 5 phases (~270 lines) |
-| `hiivmind-corpus-github` | GitHub API syntax lookup | Corpus index + sources |
 | `hiivmind-pulse-gh-adr` | Architecture Decision Records | 6 phases with STOP points |
 | `hiivmind-pulse-gh-awareness` | CLAUDE.md capability injection | 5 phases (What/When/How) |
 
@@ -201,19 +213,19 @@ sections:
 | **Variables** | set, update, delete, list | REST |
 | **Releases** | create, update, delete, upload | REST |
 
-> **Note:** This table shows commonly used domains. The plugin supports **any GitHub domain** via corpus lookup. For unlisted domains, the operations skill uses corpus lookup and defaults to REST API. Some dangerous operations are blocked — see `reference/operation-blocklist.md`.
+> **Note:** This table shows commonly used domains. For complete routing decisions, see `lib/examples/operations/api-routing.md`. The plugin supports **any GitHub domain** via corpus lookup. For unlisted domains, the operations skill uses corpus lookup and defaults to REST API. Some dangerous operations are blocked — see `docs/operation-blocklist.md`.
 
 ---
 
 ## GitHub Documentation Corpus
 
-This plugin includes an embedded GitHub API corpus at `skills/hiivmind-corpus-github/`.
+This plugin uses an external GitHub API corpus (declared as dependency in plugin.json).
 
 ### Using the Corpus
 
-Use the corpus when you need exact API syntax. See `lib/github/patterns/corpus-lookup.md`.
+Use the corpus when you need exact API syntax. See `lib/examples/operations/corpus-lookup.md`.
 
-1. Read `reference/api-routing.md` for API choice (useful on its own)
+1. Read `lib/examples/operations/api-routing.md` for API choice (useful on its own)
 2. If uncertain about syntax, invoke: `hiivmind-corpus-github-docs:hiivmind-corpus-navigate-github-docs`
 3. Search with keywords from routing guide
 4. Get exact syntax from schema/docs
@@ -225,28 +237,30 @@ Use the corpus when you need exact API syntax. See `lib/github/patterns/corpus-l
 ```
 hiivmind-pulse-gh/
 ├── .claude-plugin/
-│   └── plugin.json
+│   └── plugin.json                       # Plugin manifest + dependencies
 ├── commands/
 │   └── hiivmind-pulse-gh.md              # Gateway command
 ├── skills/
-│   ├── hiivmind-corpus-github/           # GitHub API corpus
 │   ├── hiivmind-pulse-gh-init/           # Workspace initialization
 │   ├── hiivmind-pulse-gh-refresh/        # Config sync
 │   ├── hiivmind-pulse-gh-operations/     # Execute operations
 │   ├── hiivmind-pulse-gh-adr/            # Architecture Decision Records
 │   └── hiivmind-pulse-gh-awareness/      # CLAUDE.md capability injection
+│       └── examples/                     # Skill-local awareness patterns
 ├── lib/
-│   └── github/
-│       └── patterns/                     # Pattern library
-│           ├── corpus-lookup.md
-│           ├── config-parsing.md
-│           ├── id-resolution.md
-│           ├── graphql-execution.md
-│           ├── error-handling.md
-│           └── ...
-├── reference/
-│   ├── api-routing.md                    # API routing decisions
-│   └── config-schema.md                  # Config.yaml schema
+│   └── examples/                         # Centralized examples library
+│       ├── introspection/                # HEAVY - detailed state-checking
+│       │   ├── config-parsing.md
+│       │   ├── id-resolution.md
+│       │   ├── graphql-execution.md
+│       │   └── ...
+│       └── operations/                   # LIGHT - routing (corpus has syntax)
+│           ├── api-routing.md            # THE canonical routing source
+│           └── corpus-lookup.md
+├── docs/
+│   ├── adr/                              # Architecture Decision Records
+│   ├── config-schema.md                  # Config.yaml schema
+│   └── operation-blocklist.md            # Dangerous operations blocked
 └── templates/
     ├── config.yaml.template
     └── user.yaml.template

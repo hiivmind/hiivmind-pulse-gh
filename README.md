@@ -104,7 +104,7 @@ The plugin provides **six skills** with a clear dependency structure:
 | `hiivmind-pulse-gh-init` | Validate environment, discover org structure, create config.yaml | First-time setup (once per workspace) |
 | `hiivmind-pulse-gh-refresh` | Sync cached config with GitHub | Periodically, or when "ID not found" errors occur |
 | `hiivmind-pulse-gh-operations` | Execute GitHub operations (all domains) | Via gateway command |
-| `hiivmind-corpus-github` | Look up GitHub API syntax (GraphQL/REST) | When uncertain about exact API syntax |
+| `hiivmind-corpus-github-docs` | Look up GitHub API syntax (GraphQL/REST) | When uncertain about exact API syntax (external corpus) |
 | `hiivmind-pulse-gh-adr` | Create Architecture Decision Records | Document major decisions linked to milestones |
 | `hiivmind-pulse-gh-awareness` | Inject skill awareness into CLAUDE.md | Help Claude suggest this plugin proactively |
 
@@ -117,7 +117,7 @@ hiivmind-pulse-gh-init            ← Run FIRST (creates config.yaml)
 hiivmind-pulse-gh-operations      ← Requires init completed
 hiivmind-pulse-gh-refresh         ← Requires init completed
        │
-       ├── hiivmind-corpus-github     ← Used by operations (corpus lookup)
+       ├── hiivmind-corpus-github-docs ← External corpus (syntax lookup)
        │
 hiivmind-pulse-gh-adr             ← Optional (can work without init)
 hiivmind-pulse-gh-awareness       ← Independent (edits CLAUDE.md)
@@ -139,7 +139,7 @@ hiivmind-pulse-gh-awareness       ← Independent (edits CLAUDE.md)
 | **Variables** | set, update, delete, list | REST |
 | **Releases** | create, update, delete, upload | REST |
 
-> **Note:** This table shows commonly used domains for quick reference. The plugin supports **any GitHub domain** via corpus lookup — if you have permissions, it can help. Some dangerous operations (delete repository, transfer ownership) are blocked for safety. See `reference/operation-blocklist.md`.
+> **Note:** This table shows commonly used domains for quick reference. The plugin supports **any GitHub domain** via corpus lookup — if you have permissions, it can help. Some dangerous operations (delete repository, transfer ownership) are blocked for safety. See `docs/operation-blocklist.md`.
 
 ## Quick Start
 
@@ -276,38 +276,38 @@ hiivmind-pulse-gh/
 │   └── hiivmind-pulse-gh.md              # Gateway command
 │
 ├── skills/
-│   ├── hiivmind-corpus-github/           # GitHub API corpus (70k+ lines)
 │   ├── hiivmind-pulse-gh-init/           # Workspace initialization
 │   ├── hiivmind-pulse-gh-refresh/        # Config sync
 │   ├── hiivmind-pulse-gh-operations/     # Execute operations
 │   ├── hiivmind-pulse-gh-adr/            # Architecture Decision Records
 │   └── hiivmind-pulse-gh-awareness/      # CLAUDE.md injection
 │
-├── lib/github/
-│   └── patterns/                         # Pattern library (markdown)
-│       ├── tool-detection.md
-│       ├── authentication.md
-│       ├── config-parsing.md
-│       ├── workspace-detection.md
-│       ├── graphql-execution.md
-│       ├── corpus-lookup.md
-│       ├── id-resolution.md
-│       ├── error-handling.md
-│       ├── adr-management.md
-│       └── ...
+├── lib/examples/                         # Centralized examples library
+│   ├── introspection/                    # HEAVY - state checking patterns
+│   │   ├── config-parsing.md
+│   │   ├── workspace-detection.md
+│   │   ├── authentication.md
+│   │   ├── tool-detection.md
+│   │   ├── id-resolution.md
+│   │   ├── graphql-execution.md
+│   │   └── error-handling.md
+│   │
+│   └── operations/                       # LIGHT - routing + corpus lookup
+│       ├── api-routing.md                # GraphQL vs REST decisions
+│       └── corpus-lookup.md              # External corpus invocation
 │
-├── reference/
-│   ├── api-routing.md                    # GraphQL vs REST decisions
+├── docs/
+│   ├── adr/                              # Architecture Decision Records
 │   ├── config-schema.md                  # Config.yaml schema
+│   ├── operation-blocklist.md            # Blocked dangerous operations
 │   └── adr-template.md                   # ADR markdown template
 │
 ├── templates/
 │   ├── config.yaml.template
 │   ├── user.yaml.template
-│   ├── freshness.yaml.template
-│   └── ...
+│   └── freshness.yaml.template
 │
-└── docs/                                 # Historical design docs
+└── # External dependency: hiivmind-corpus-github-docs
 ```
 
 ### Design Principles
@@ -325,13 +325,14 @@ hiivmind-pulse-gh/
 1. ROUTE   →   2. CORPUS   →   3. EXECUTE
    (API)         (syntax)        (temp file)
      │              │               │
-reference/     Corpus skill    gh api graphql
-api-routing.md    ↓           or gh api REST
-               hiivmind-corpus-github
+lib/examples/  External         gh api graphql
+operations/    corpus skill     or gh api REST
+api-routing.md    ↓
+               hiivmind-corpus-github-docs
 ```
 
-1. **Route** — Consult `reference/api-routing.md` for GraphQL vs REST decision
-2. **Corpus** — If uncertain about syntax, query the bundled GitHub API corpus
+1. **Route** — Consult `lib/examples/operations/api-routing.md` for GraphQL vs REST decision
+2. **Corpus** — If uncertain about syntax, query the external GitHub API corpus
 3. **Execute** — Run the operation via `gh api` with temp file for complex queries
 
 ## Troubleshooting
@@ -375,11 +376,11 @@ cd hiivmind-pulse-gh-tests
 ## Contributing
 
 ```
-commands/*.md                    → Gateway and slash commands
-skills/*/SKILL.md                → Skill documentation
-lib/github/patterns/*.md         → Pattern library
-reference/*.md                   → API routing, schemas, templates
-docs/                            → Architecture and design docs
+commands/*.md                              → Gateway and slash commands
+skills/*/SKILL.md                          → Skill documentation
+lib/examples/introspection/*.md            → Introspection patterns (state checking)
+lib/examples/operations/*.md               → Operations patterns (routing, corpus)
+docs/                                      → Architecture docs, schemas, templates
 ```
 
 ## License

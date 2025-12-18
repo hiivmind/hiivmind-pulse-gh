@@ -35,7 +35,7 @@ This skill may be **proactively suggested** when:
 3. **Architecture Change** - Keywords: "restructure", "migrate", "redesign", "new pattern"
 4. **Breaking Change** - Modifying public APIs or interfaces
 
-**See:** `lib/github/patterns/adr-awareness.md`
+**See:** `skills/hiivmind-pulse-gh-awareness/examples/adr-awareness.md`
 
 ### Suggestion Format
 
@@ -68,8 +68,8 @@ Create ADR? [Yes / No / Later]
 
 **Goal:** Load configuration and determine ADR numbering.
 
-**See:** `lib/github/patterns/config-parsing.md`
-**See:** `lib/github/patterns/adr-management.md`
+**See:** `lib/examples/introspection/config-parsing.md`
+**See:** `skills/hiivmind-pulse-gh-awareness/examples/adr-management.md`
 
 ### What to Do
 
@@ -178,7 +178,7 @@ After core fields:
 
 **Goal:** Generate ADR markdown file.
 
-**See:** `reference/adr-template.md`
+**See:** `docs/adr-template.md`
 
 ### What to Do
 
@@ -232,7 +232,7 @@ Write this file? [Yes / Edit / Cancel]
 
 **Goal:** Create GitHub issue linked to ADR.
 
-**See:** `lib/github/patterns/adr-management.md`
+**See:** `skills/hiivmind-pulse-gh-awareness/examples/adr-management.md`
 
 ### Prerequisites
 
@@ -284,7 +284,7 @@ _This issue tracks the ADR. Update the markdown file for authoritative content._
 
 **Goal:** Link ADR issue to milestone and optionally project.
 
-**See:** `lib/github/patterns/id-resolution.md`
+**See:** `lib/examples/introspection/id-resolution.md`
 
 ### What to Do
 
@@ -337,7 +337,7 @@ Add ADR to a project board?
 
 ### Update ADR Frontmatter
 
-**See:** `lib/github/patterns/adr-management.md`
+**See:** `skills/hiivmind-pulse-gh-awareness/examples/adr-management.md`
 
 ```bash
 # Update frontmatter with yq
@@ -413,15 +413,15 @@ Syncs content between markdown file and GitHub issue (file is authoritative).
 
 | Pattern | Purpose |
 |---------|---------|
-| `lib/github/patterns/adr-management.md` | ADR numbering, file creation, GitHub sync |
-| `lib/github/patterns/adr-awareness.md` | Proactive triggers, CLAUDE.md integration |
-| `lib/github/patterns/config-parsing.md` | Read workspace config |
-| `lib/github/patterns/id-resolution.md` | Resolve milestone/issue IDs |
-| `lib/github/patterns/graphql-execution.md` | Execute mutations |
+| `skills/hiivmind-pulse-gh-awareness/examples/adr-management.md` | ADR numbering, file creation, GitHub sync |
+| `skills/hiivmind-pulse-gh-awareness/examples/adr-awareness.md` | Proactive triggers, CLAUDE.md integration |
+| `lib/examples/introspection/config-parsing.md` | Read workspace config |
+| `lib/examples/introspection/id-resolution.md` | Resolve milestone/issue IDs |
+| `lib/examples/introspection/graphql-execution.md` | Execute mutations |
 
 ## References
 
 | Reference | Purpose |
 |-----------|---------|
-| `reference/adr-template.md` | ADR markdown template and schema |
-| `reference/api-routing.md` | Routing for issue/milestone operations |
+| `docs/adr-template.md` | ADR markdown template and schema |
+| `lib/examples/operations/api-routing.md` | Routing for issue/milestone operations |

@@ -101,7 +101,7 @@ Would you like to:
 
 **Goal:** Present what skills this plugin provides.
 
-**See:** `lib/github/patterns/capability-awareness.md` (WHAT section)
+**See:** `skills/hiivmind-pulse-gh-awareness/examples/capability-awareness.md` (WHAT section)
 
 ### Present Skills
 
@@ -138,7 +138,7 @@ Continue to see when to use each skill? [Yes / Skip to inject]
 
 **Goal:** Show when each skill should be used.
 
-**See:** `lib/github/patterns/capability-awareness.md` (WHEN section)
+**See:** `skills/hiivmind-pulse-gh-awareness/examples/capability-awareness.md` (WHEN section)
 
 ### Present Trigger Table
 
@@ -176,7 +176,7 @@ Continue to see how to invoke? [Yes / Skip to inject]
 
 **Goal:** Explain how to invoke the plugin.
 
-**See:** `lib/github/patterns/capability-awareness.md` (HOW section)
+**See:** `skills/hiivmind-pulse-gh-awareness/examples/capability-awareness.md` (HOW section)
 
 ### Present Invocation Options
 
@@ -214,7 +214,7 @@ Continue to inject into CLAUDE.md? [Yes / Cancel]
 
 **Goal:** Generate awareness section and edit target CLAUDE.md.
 
-**See:** `lib/github/patterns/capability-awareness.md` (Template section)
+**See:** `skills/hiivmind-pulse-gh-awareness/examples/capability-awareness.md` (Template section)
 
 ### Determine Target Path
 
@@ -358,4 +358,4 @@ Next steps:
 
 | Pattern | Purpose |
 |---------|---------|
-| `lib/github/patterns/capability-awareness.md` | Skill registry, trigger mapping, CLAUDE.md template |
+| `skills/hiivmind-pulse-gh-awareness/examples/capability-awareness.md` | Skill registry, trigger mapping, CLAUDE.md template |

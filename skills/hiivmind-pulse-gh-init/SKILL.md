@@ -39,7 +39,7 @@ One-time setup for a GitHub workspace. Creates configuration files that enable a
 
 **Goal:** Detect the GitHub workspace (organization or user) from context.
 
-**See:** `lib/github/patterns/workspace-detection.md`
+**See:** `lib/examples/introspection/workspace-detection.md`
 
 ### What to Do
 
@@ -66,8 +66,8 @@ Please specify the GitHub organization or username to initialize:
 
 **Goal:** Verify required tools and authentication.
 
-**See:** `lib/github/patterns/tool-detection.md`
-**See:** `lib/github/patterns/authentication.md`
+**See:** `lib/examples/introspection/tool-detection.md`
+**See:** `lib/examples/introspection/authentication.md`
 
 ### What to Do
 
@@ -136,14 +136,14 @@ Wait for user confirmation before proceeding. If user says no, ask them to speci
 ### Discovery Approach
 
 1. **Read Routing Guide**
-   - Read `reference/api-routing.md`
+   - Read `lib/examples/operations/api-routing.md`
    - Projects v2 → List projects → GraphQL
    - Keywords: `projectsV2`, `organization`, `user`
 
 2. **Execute Query**
    - If syntax is clear: Execute directly
-   - If uncertain: Use corpus lookup (`lib/github/patterns/corpus-lookup.md`)
-   - Use temp file pattern from `lib/github/patterns/graphql-execution.md`
+   - If uncertain: Use corpus lookup (`lib/examples/operations/corpus-lookup.md`)
+   - Use temp file pattern from `lib/examples/introspection/graphql-execution.md`
 
 ### Corpus Lookup (When Needed)
 
@@ -187,7 +187,7 @@ Set default project for operations?
 
 **Goal:** Write configuration files.
 
-**See:** `lib/github/patterns/config-parsing.md`
+**See:** `lib/examples/introspection/config-parsing.md`
 
 ### What to Do
 
@@ -268,22 +268,29 @@ To re-initialize (updates existing config):
 - **refresh** - Update stale sections of config
 - **operations** - Execute GitHub operations using cached config
 
-### Pattern Library
+### Examples Library
 
-All implementation details are in the pattern library:
+All implementation details are in the examples library:
 
-| Pattern | Purpose |
+**Introspection Examples (HEAVY):**
+
+| Example | Purpose |
 |---------|---------|
-| `lib/github/patterns/tool-detection.md` | Check for gh, jq, yq |
-| `lib/github/patterns/authentication.md` | Verify auth and scopes |
-| `lib/github/patterns/workspace-detection.md` | Detect org/user from context |
-| `lib/github/patterns/graphql-execution.md` | Execute queries via temp file |
-| `lib/github/patterns/config-parsing.md` | Read/write YAML config |
-| `lib/github/patterns/corpus-lookup.md` | Look up API syntax when uncertain |
+| `lib/examples/introspection/tool-detection.md` | Check for gh, jq, yq |
+| `lib/examples/introspection/authentication.md` | Verify auth and scopes |
+| `lib/examples/introspection/workspace-detection.md` | Detect org/user from context |
+| `lib/examples/introspection/graphql-execution.md` | Execute queries via temp file |
+| `lib/examples/introspection/config-parsing.md` | Read/write YAML config |
 
-### References
+**Operations Examples (LIGHT):**
 
-| Reference | Purpose |
-|-----------|---------|
-| `reference/api-routing.md` | API routing decisions (useful standalone) |
+| Example | Purpose |
+|---------|---------|
+| `lib/examples/operations/api-routing.md` | API routing decisions (canonical source) |
+| `lib/examples/operations/corpus-lookup.md` | Look up API syntax when uncertain |
+
+**External Resources:**
+
+| Resource | Purpose |
+|----------|---------|
 | `hiivmind-corpus-github-docs:hiivmind-corpus-navigate-github-docs` | GitHub corpus skill for syntax lookup |
