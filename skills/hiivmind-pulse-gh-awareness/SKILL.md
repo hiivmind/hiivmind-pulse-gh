@@ -1,12 +1,16 @@
 ---
 name: hiivmind-pulse-gh-awareness
+version: 0.1.0
 description: >
   Configure CLAUDE.md with hiivmind-pulse-gh skill awareness using What/When/How structure. This skill
   should be used when: adding GitHub capabilities to CLAUDE.md, teaching Claude about this plugin,
   onboarding a new project, or explaining available GitHub skills. Trigger phrases: "add GitHub
   awareness", "configure Claude for GitHub", "what can pulse-gh do", "setup CLAUDE.md for GitHub",
   "enable GitHub skills", "plugin tour", "what GitHub operations are available", "teach Claude about
-  GitHub", "add plugin to CLAUDE.md". Supports user-level (~/.claude/CLAUDE.md) and repo-level scope.
+  GitHub", "add plugin to CLAUDE.md", "enable github suggestions", "setup github documentation",
+  "configure CLAUDE.md for github", "github plugin docs", "show plugin capabilities", "document
+  github skills", "inject github awareness". Supports user-level (~/.claude/CLAUDE.md) and repo-level
+  scope.
 ---
 
 # Plugin Skill Awareness
@@ -28,7 +32,7 @@ Configure CLAUDE.md with hiivmind-pulse-gh skill awareness using a What/When/How
 1. CONTEXT  -> 2. WHAT      -> 3. WHEN      -> 4. HOW       -> 5. INJECT
    (check)      (skills)       (triggers)     (invoke)       (edit)
       |            |              |              |              |
-   Check for   Present 5     Show trigger   Explain        Preview +
+   Check for   Present 4     Show trigger   Explain        Preview +
    existing    skills        mapping        invocation     confirm edit
 ```
 
@@ -108,7 +112,7 @@ Would you like to:
 ```
 === What hiivmind-pulse-gh Provides ===
 
-This plugin has 5 skills for GitHub automation:
+This plugin has 4 skills for GitHub automation:
 
 1. **Init**
    Discover workspace, cache project/field IDs for fast operations.
@@ -122,11 +126,7 @@ This plugin has 5 skills for GitHub automation:
    Look up GitHub API syntax: 70k+ line GraphQL schema,
    REST endpoints, gh CLI commands.
 
-4. **ADR**
-   Create Architecture Decision Records as markdown files
-   with linked GitHub issues and milestone assignment.
-
-5. **Refresh**
+4. **Refresh**
    Sync config when stale or when "ID not found" errors occur.
 
 Continue to see when to use each skill? [Yes / Skip to inject]
@@ -155,8 +155,6 @@ Continue to see when to use each skill? [Yes / Skip to inject]
 | Find REST endpoint paths | Corpus |
 | Fix "ID not found" errors | Refresh |
 | Sync stale config | Refresh |
-| Document architecture decision | ADR |
-| Plan major refactoring | ADR (proactive) |
 | First-time workspace setup | Init |
 
 ### Proactive Suggestions
@@ -164,8 +162,7 @@ Continue to see when to use each skill? [Yes / Skip to inject]
 Claude should suggest this plugin when:
 - User mentions GitHub operations (issues, PRs, milestones, projects)
 - User asks about GitHub API syntax
-- Major refactoring is planned (suggest ADR)
-- Milestone has 5+ issues (suggest documenting decisions)
+- "ID not found" or stale config errors occur
 
 Continue to see how to invoke? [Yes / Skip to inject]
 ```
@@ -192,14 +189,12 @@ The gateway auto-detects intent and routes to the appropriate skill.
 Examples:
   /hiivmind-pulse-gh create issue for login bug
   /hiivmind-pulse-gh set milestone v2.0 on #42
-  /hiivmind-pulse-gh document decision about using GraphQL
 
 ### Direct Skill Invocation
 
 When you know exactly which skill:
   Skill: hiivmind-pulse-gh-operations
   Skill: hiivmind-corpus-github
-  Skill: hiivmind-pulse-gh-adr
 
 ### Interactive Menu
 
@@ -236,7 +231,6 @@ This project uses [hiivmind-pulse-gh](https://github.com/hiivmind/hiivmind-pulse
 | **Init** | Discover workspace, cache project/field IDs for fast operations |
 | **Operations** | Execute GitHub operations (issues, PRs, milestones, projects, etc.) |
 | **Corpus** | Look up GitHub API syntax (GraphQL schema, REST endpoints) |
-| **ADR** | Create Architecture Decision Records linked to milestones/issues |
 | **Refresh** | Sync config when stale or IDs not found |
 
 ### When to Use Each Skill
@@ -247,7 +241,6 @@ This project uses [hiivmind-pulse-gh](https://github.com/hiivmind/hiivmind-pulse
 | Set milestones, labels, project status | `/hiivmind-pulse-gh [action]` |
 | Look up GraphQL/REST syntax | Corpus skill |
 | Fix "ID not found" errors | Refresh skill |
-| Document an architecture decision | ADR skill |
 | First-time workspace setup | Init skill |
 
 ### Proactive Suggestions
@@ -255,8 +248,6 @@ This project uses [hiivmind-pulse-gh](https://github.com/hiivmind/hiivmind-pulse
 Suggest using this plugin when:
 - User mentions GitHub operations (issues, PRs, milestones, projects)
 - User asks about GitHub API syntax or mutations
-- Major refactoring is planned (suggest ADR)
-- Milestone has 5+ issues (suggest documenting decisions)
 - "ID not found" or stale config errors occur
 
 ### How to Invoke
@@ -264,7 +255,6 @@ Suggest using this plugin when:
 **Gateway (recommended):**
 ```
 /hiivmind-pulse-gh create issue for [description]
-/hiivmind-pulse-gh document decision about [topic]
 ```
 
 **Direct skill invocation** when you know which skill:
@@ -352,7 +342,6 @@ Next steps:
 - **hiivmind-pulse-gh-init** - Initialize workspace after adding awareness
 - **hiivmind-pulse-gh-operations** - Execute GitHub operations
 - **hiivmind-corpus-github** - API documentation lookup
-- **hiivmind-pulse-gh-adr** - Architecture Decision Records
 
 ## Pattern Library
 

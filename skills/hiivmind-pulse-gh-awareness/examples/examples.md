@@ -15,8 +15,6 @@ This skill has additional local examples:
 | File | Purpose |
 |------|---------|
 | `capability-awareness.md` | Skill registry, trigger mapping, CLAUDE.md template |
-| `adr-awareness.md` | ADR proactive triggers, suggestion format |
-| `adr-management.md` | ADR numbering, file creation, GitHub sync patterns |
 
 ## Awareness-Specific Notes
 
@@ -42,8 +40,6 @@ The awareness section follows this structure:
 Claude should suggest this plugin when:
 - User mentions GitHub operations (issues, PRs, milestones, projects)
 - User asks about GitHub API syntax
-- Major refactoring is planned (suggest ADR)
-- Milestone has 5+ issues (suggest documenting decisions)
 - "ID not found" or stale config errors occur
 
 ### Checking Existing Awareness
@@ -60,5 +56,3 @@ grep -q "hiivmind-pulse-gh" "$TARGET_FILE" && echo "Already has awareness"
 
 - [Awareness SKILL.md](../SKILL.md) - Full skill documentation
 - [Capability Awareness](./capability-awareness.md) - Skill registry and templates
-- [ADR Awareness](./adr-awareness.md) - ADR proactive triggers
-- [ADR Management](./adr-management.md) - ADR file/issue patterns

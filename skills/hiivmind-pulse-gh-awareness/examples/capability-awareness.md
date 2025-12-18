@@ -14,7 +14,7 @@ Define what skills hiivmind-pulse-gh provides, when to use each skill, and how t
 
 ## WHAT - Plugin Skills
 
-hiivmind-pulse-gh provides 5 skills:
+hiivmind-pulse-gh provides 4 skills:
 
 | Skill | Name | Purpose |
 |-------|------|---------|
@@ -22,7 +22,6 @@ hiivmind-pulse-gh provides 5 skills:
 | `hiivmind-pulse-gh-refresh` | Refresh | Sync stale config sections, fix "ID not found" errors |
 | `hiivmind-pulse-gh-operations` | Operations | Execute GitHub operations (issues, PRs, milestones, projects, labels, etc.) |
 | `hiivmind-corpus-github` | Corpus | Look up GitHub API syntax (GraphQL schema, REST endpoints, gh CLI) |
-| `hiivmind-pulse-gh-adr` | ADR | Create Architecture Decision Records linked to milestones and issues |
 
 ### Skill Descriptions
 
@@ -46,11 +45,6 @@ hiivmind-pulse-gh provides 5 skills:
 - **What:** API documentation lookup
 - **Does:** Searches 70k+ line GraphQL schema, REST docs, gh CLI reference
 - **Run when:** Need exact mutation syntax, REST endpoint path, or gh command options
-
-#### ADR
-- **What:** Architecture Decision Records
-- **Does:** Creates ADR markdown files in `doc/adr/`, creates linked GitHub issues, assigns to milestones
-- **Run when:** Documenting architecture decisions, major refactoring, milestone planning
 
 ---
 
@@ -83,17 +77,6 @@ Maps operational needs to skills:
 | "gh command for..." | corpus | Medium |
 | API syntax uncertainty during operations | corpus | Medium |
 
-### ADR Triggers
-
-| User Says / Needs | Skill | Confidence |
-|-------------------|-------|------------|
-| "document decision", "create ADR" | adr | High |
-| "architecture decision", "design decision" | adr | High |
-| "why did we choose...", "record rationale" | adr | High |
-| Major refactoring planned (3+ files) | adr | Medium (proactive) |
-| Milestone has 5+ issues | adr | Medium (proactive) |
-| Keywords: restructure, migrate, redesign | adr | Medium (proactive) |
-
 ### Init/Refresh Triggers
 
 | User Says / Needs | Skill | Confidence |
@@ -120,7 +103,6 @@ The gateway auto-detects intent and routes to the appropriate skill.
 ```
 /hiivmind-pulse-gh create issue for login timeout bug
 /hiivmind-pulse-gh set milestone v2.0 on #42
-/hiivmind-pulse-gh document decision about using GraphQL
 /hiivmind-pulse-gh refresh config
 ```
 
@@ -131,7 +113,6 @@ When you know exactly which skill is needed:
 ```
 Invoke skill: hiivmind-pulse-gh:hiivmind-pulse-gh-operations
 Invoke skill: hiivmind-corpus-github-docs:hiivmind-corpus-navigate-github-docs
-Invoke skill: hiivmind-pulse-gh:hiivmind-pulse-gh-adr
 ```
 
 ### Interactive Menu
@@ -160,7 +141,6 @@ This project uses [hiivmind-pulse-gh](https://github.com/hiivmind/hiivmind-pulse
 | **Init** | Discover workspace, cache project/field IDs for fast operations |
 | **Operations** | Execute GitHub operations (issues, PRs, milestones, projects, etc.) |
 | **Corpus** | Look up GitHub API syntax (GraphQL schema, REST endpoints) |
-| **ADR** | Create Architecture Decision Records linked to milestones/issues |
 | **Refresh** | Sync config when stale or IDs not found |
 
 ### When to Use Each Skill
@@ -171,7 +151,6 @@ This project uses [hiivmind-pulse-gh](https://github.com/hiivmind/hiivmind-pulse
 | Set milestones, labels, project status | `/hiivmind-pulse-gh [action]` |
 | Look up GraphQL/REST syntax | Corpus skill |
 | Fix "ID not found" errors | Refresh skill |
-| Document an architecture decision | ADR skill |
 | First-time workspace setup | Init skill |
 
 ### Proactive Suggestions
@@ -179,8 +158,6 @@ This project uses [hiivmind-pulse-gh](https://github.com/hiivmind/hiivmind-pulse
 Suggest using this plugin when:
 - User mentions GitHub operations (issues, PRs, milestones, projects)
 - User asks about GitHub API syntax or mutations
-- Major refactoring is planned (suggest ADR)
-- Milestone has 5+ issues (suggest documenting decisions)
 - "ID not found" or stale config errors occur
 
 ### How to Invoke
@@ -188,7 +165,6 @@ Suggest using this plugin when:
 **Gateway (recommended):**
 ```
 /hiivmind-pulse-gh create issue for [description]
-/hiivmind-pulse-gh document decision about [topic]
 ```
 
 **Direct skill invocation** when you know which skill:
@@ -202,7 +178,6 @@ Skill: hiivmind-corpus-github
 
 ## Related Patterns
 
-- **adr-awareness.md** - ADR-specific triggers and proactive suggestions
 - **config-parsing.md** - Read cached config for init status
 
 ## Related Skills

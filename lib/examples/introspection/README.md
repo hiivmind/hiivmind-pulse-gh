@@ -8,11 +8,11 @@ These examples need to be HEAVY on detail because they check state and need to b
 
 | Example | Purpose | Used By |
 |---------|---------|---------|
-| `config-parsing.md` | Read/write YAML config files | init, refresh, operations, adr, awareness |
+| `config-parsing.md` | Read/write YAML config files | init, refresh, operations, awareness |
 | `workspace-detection.md` | Git remote → owner/repo extraction | init |
 | `authentication.md` | gh auth verification and scope checking | init, operations |
 | `tool-detection.md` | gh, jq, yq availability checking | init |
-| `id-resolution.md` | Name → ID resolution with cache-first strategy | operations, adr |
+| `id-resolution.md` | Name → ID resolution with cache-first strategy | operations |
 | `graphql-execution.md` | Temp file method for GraphQL queries | operations |
 | `graphql-queries.md` | Common GraphQL query patterns | operations, refresh |
 | `error-handling.md` | API error patterns and recovery | refresh, operations |

@@ -1,12 +1,14 @@
 ---
 name: hiivmind-pulse-gh-refresh
+version: 0.1.0
 description: >
   Sync cached workspace config with current GitHub state. This skill should be used when: config is
   stale, "ID not found" errors occur, project fields changed, new projects created, options renamed,
   or after making changes in GitHub UI. Trigger phrases: "refresh config", "sync workspace", "update
   cache", "ID not found", "field not found", "stale config", "refresh projects", "config out of date",
-  "resync GitHub". Supports selective refresh of sections: workspace, projects, views, repo_settings,
-  automations, relationships, teams.
+  "resync GitHub", "fix stale config", "revalidate github IDs", "config refresh", "github settings
+  changed", "reload github config", "update github cache", "sync github state". Supports selective
+  refresh of sections: workspace, projects, views, repo_settings, automations, relationships, teams.
 ---
 
 # GitHub Workspace Refresh

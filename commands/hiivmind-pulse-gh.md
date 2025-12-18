@@ -52,7 +52,6 @@ Analyze the user's request to determine:
 | dependabot, dependency | `dependabot` |
 | search, find, query | `search` |
 | gist | `gists` |
-| adr, architecture decision, document decision, decision record, design decision | `adr` |
 | awareness, configure claude, setup claude, enable features, what can, capabilities, tour | `awareness` |
 
 ### Operation Detection
@@ -66,7 +65,6 @@ Analyze the user's request to determine:
 | link, connect, attach, add to | `link` |
 | trigger, run, start, dispatch | `trigger` |
 | merge, squash, rebase | `merge` |
-| document, record, capture, why | `document` |
 
 ### Target Extraction
 
@@ -110,7 +108,7 @@ If intent is still unclear after domain/operation detection, use AskUserQuestion
 
 ## Step 3: Context Detection (Conditional)
 
-**Skip this step if domain is:** `adr`, `awareness`, `search`, `gists`
+**Skip this step if domain is:** `awareness`, `search`, `gists`
 
 These domains either handle their own context checks internally or don't require workspace initialization.
 
@@ -164,19 +162,6 @@ For create/update/delete operations:
 
 After detecting intent, route based on domain:
 
-### ADR Domain
-
-**If domain is `adr`:**
-
-**Invoke:** `hiivmind-pulse-gh:hiivmind-pulse-gh-adr`
-
-**Pass context:**
-- Operation: {create, list, update, sync}
-- Topic: {extracted from request}
-- Milestone: {if mentioned}
-
-The ADR skill handles architecture decision records with file + GitHub issue integration.
-
 ### Awareness Domain
 
 **If domain is `awareness`:**
@@ -221,7 +206,6 @@ Output this table to show users what's available:
 | **Labels** | create, add/remove from issue, update color |
 | **Branch Protection** | set rules, require reviews, status checks |
 | **Secrets & Variables** | set, update, delete, list |
-| **ADR** | document decision, list ADRs, sync to GitHub |
 | **Setup** | initialize workspace, refresh config, awareness |
 
 Select a quick action below, or choose "Other" to describe what you need.
@@ -361,17 +345,6 @@ options:
 3. Context: Initialized ✓, Hard Stale → Block mutation, offer refresh
 4. If yes → Invoke `hiivmind-pulse-gh:hiivmind-pulse-gh-refresh`
 5. After refresh → Continue
-
-### ADR Creation
-
-**User:** `/hiivmind-pulse-gh document decision about using GraphQL`
-
-**Flow:**
-1. Arguments provided
-2. Intent: domain=adr, operation=document, topic="using GraphQL"
-3. Context: SKIPPED (ADR doesn't require workspace config)
-4. Route to ADR skill
-5. Skill guides through ADR creation with STOP points
 
 ### Capability Awareness
 

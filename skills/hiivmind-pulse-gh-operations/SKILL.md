@@ -1,13 +1,18 @@
 ---
 name: hiivmind-pulse-gh-operations
+version: 0.1.0
 description: >
   Execute GitHub operations across all domains. This skill should be used when: creating issues,
   closing issues, merging PRs, setting milestones, adding labels, updating project status, protecting
   branches, triggering workflows, creating releases, managing secrets. Trigger phrases: "create issue",
   "close issue #", "merge PR", "set milestone on", "add label to", "update project status", "add to
-  project board", "protect branch", "trigger workflow", "create release", "set secret", "list PRs".
-  Domains: issues, PRs, milestones, labels, projects, protection, rulesets, actions, secrets,
-  variables, releases, repositories, collaborators, teams, checks, deployments, search.
+  project board", "protect branch", "trigger workflow", "create release", "set secret", "list PRs",
+  "merge pull request", "remove label", "create milestone", "archive project item", "rerun workflow",
+  "cancel action", "github issue", "github pr", "github milestone", "make a new issue", "open pull
+  request", "start workflow", "new issue for", "assign to milestone", "move to column", "update issue",
+  "request review", "approve PR", "comment on issue", "link issue to project". Domains: issues, PRs,
+  milestones, labels, projects, protection, rulesets, actions, secrets, variables, releases,
+  repositories, collaborators, teams, checks, deployments, search.
 ---
 
 # GitHub Operations Execution

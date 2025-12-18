@@ -75,7 +75,6 @@ The primary entry point for all GitHub operations:
 /hiivmind-pulse-gh add PR to project
 /hiivmind-pulse-gh protect main branch with required reviews
 /hiivmind-pulse-gh trigger workflow ci.yml
-/hiivmind-pulse-gh document decision about using GraphQL
 ```
 
 ### How It Works
@@ -95,7 +94,7 @@ Run without arguments for a guided menu:
 
 ## Skills
 
-The plugin provides **six skills** with a clear dependency structure:
+The plugin provides **five skills** with a clear dependency structure:
 
 ### Skill Overview
 
@@ -105,7 +104,6 @@ The plugin provides **six skills** with a clear dependency structure:
 | `hiivmind-pulse-gh-refresh` | Sync cached config with GitHub | Periodically, or when "ID not found" errors occur |
 | `hiivmind-pulse-gh-operations` | Execute GitHub operations (all domains) | Via gateway command |
 | `hiivmind-corpus-github-docs` | Look up GitHub API syntax (GraphQL/REST) | When uncertain about exact API syntax (external corpus) |
-| `hiivmind-pulse-gh-adr` | Create Architecture Decision Records | Document major decisions linked to milestones |
 | `hiivmind-pulse-gh-awareness` | Inject skill awareness into CLAUDE.md | Help Claude suggest this plugin proactively |
 
 ### Skill Hierarchy
@@ -119,7 +117,6 @@ hiivmind-pulse-gh-refresh         ← Requires init completed
        │
        ├── hiivmind-corpus-github-docs ← External corpus (syntax lookup)
        │
-hiivmind-pulse-gh-adr             ← Optional (can work without init)
 hiivmind-pulse-gh-awareness       ← Independent (edits CLAUDE.md)
 ```
 
@@ -182,24 +179,6 @@ Claude: Create issue in acme-corp/api?
 You: Yes
 
 Claude: Issue #143 created: https://github.com/acme-corp/api/issues/143
-```
-
-### Architecture Decision Records
-
-```
-You: /hiivmind-pulse-gh document decision about using GraphQL
-
-Claude: [Runs hiivmind-pulse-gh-adr]
-
-        Let's document this architecture decision.
-
-        **Title:** (brief, descriptive)
-
-You: Use GraphQL for GitHub API operations
-
-Claude: **Context:** What is the issue motivating this decision?
-
-... [guided ADR creation with GitHub issue linking]
 ```
 
 ## Workspace Configuration
@@ -279,7 +258,6 @@ hiivmind-pulse-gh/
 │   ├── hiivmind-pulse-gh-init/           # Workspace initialization
 │   ├── hiivmind-pulse-gh-refresh/        # Config sync
 │   ├── hiivmind-pulse-gh-operations/     # Execute operations
-│   ├── hiivmind-pulse-gh-adr/            # Architecture Decision Records
 │   └── hiivmind-pulse-gh-awareness/      # CLAUDE.md injection
 │
 ├── lib/examples/                         # Centralized examples library
@@ -297,10 +275,9 @@ hiivmind-pulse-gh/
 │       └── corpus-lookup.md              # External corpus invocation
 │
 ├── docs/
-│   ├── adr/                              # Architecture Decision Records
+│   ├── decisions/                        # Historical architecture decisions
 │   ├── config-schema.md                  # Config.yaml schema
-│   ├── operation-blocklist.md            # Blocked dangerous operations
-│   └── adr-template.md                   # ADR markdown template
+│   └── operation-blocklist.md            # Blocked dangerous operations
 │
 ├── templates/
 │   ├── config.yaml.template

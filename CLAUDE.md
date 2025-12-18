@@ -113,16 +113,15 @@ Use natural language to describe any GitHub operation:
 /hiivmind-pulse-gh set milestone v2.0 on issue #42
 /hiivmind-pulse-gh add PR to project
 /hiivmind-pulse-gh trigger workflow ci.yml
-/hiivmind-pulse-gh document decision about using GraphQL
 ```
 
 ### What the Gateway Does
 
 1. **Intent Detection** - Parses natural language → domain + operation + target
-2. **Context Check** - Verifies workspace is initialized (skipped for ADR/awareness)
+2. **Context Check** - Verifies workspace is initialized (skipped for awareness)
 3. **Freshness Check** - Offers refresh if config is stale
 4. **Confirmation** - Asks before mutations
-5. **Execution** - Routes to appropriate skill (operations, ADR, or awareness)
+5. **Execution** - Routes to appropriate skill (operations or awareness)
 
 ---
 
@@ -133,7 +132,6 @@ Use natural language to describe any GitHub operation:
 | `hiivmind-pulse-gh-init` | First-time workspace setup | 6 phases (~150 lines) |
 | `hiivmind-pulse-gh-refresh` | Sync config with GitHub | 6 phases (~200 lines) |
 | `hiivmind-pulse-gh-operations` | Execute GitHub operations | 5 phases (~270 lines) |
-| `hiivmind-pulse-gh-adr` | Architecture Decision Records | 6 phases with STOP points |
 | `hiivmind-pulse-gh-awareness` | CLAUDE.md capability injection | 5 phases (What/When/How) |
 
 ### Skill Architecture
@@ -244,7 +242,6 @@ hiivmind-pulse-gh/
 │   ├── hiivmind-pulse-gh-init/           # Workspace initialization
 │   ├── hiivmind-pulse-gh-refresh/        # Config sync
 │   ├── hiivmind-pulse-gh-operations/     # Execute operations
-│   ├── hiivmind-pulse-gh-adr/            # Architecture Decision Records
 │   └── hiivmind-pulse-gh-awareness/      # CLAUDE.md capability injection
 │       └── examples/                     # Skill-local awareness patterns
 ├── lib/
@@ -258,7 +255,7 @@ hiivmind-pulse-gh/
 │           ├── api-routing.md            # THE canonical routing source
 │           └── corpus-lookup.md
 ├── docs/
-│   ├── adr/                              # Architecture Decision Records
+│   ├── decisions/                        # Historical architecture decisions
 │   ├── config-schema.md                  # Config.yaml schema
 │   └── operation-blocklist.md            # Dangerous operations blocked
 └── templates/
