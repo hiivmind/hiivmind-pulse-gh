@@ -8,18 +8,82 @@
 
 ## Quick Reference
 
-| Domain | Read | Create | Update | Delete | Notes |
-|--------|------|--------|--------|--------|-------|
-| **Issues** | CLI/REST/GraphQL/UI | CLI/REST/GraphQL/UI | CLI/REST/GraphQL/UI | REST/UI | All 4 methods supported (see details) |
-| **Pull Requests** | GraphQL | GraphQL | GraphQL | GraphQL | Full support |
-| **Milestones** | GraphQL | REST | REST | REST | CRUD is REST-only |
-| **Labels** | GraphQL | REST | REST | REST | CRUD is REST-only |
-| **Projects v2** | GraphQL | GraphQL | GraphQL | GraphQL | Except views (UI only) |
-| **Branch Protection** | REST | REST | REST | REST | GraphQL is read-only |
-| **Rulesets** | Both | REST | REST | REST | GraphQL for queries |
-| **Actions** | REST | REST | REST | REST | No GraphQL support |
-| **Secrets** | REST | REST | REST | REST | No GraphQL support |
-| **Releases** | Both | REST | REST | REST | GraphQL for queries |
+**Legend:** ✓ = Supported | ✗ = Not available | ⊗ = Blocked for safety | See domain sections for CLI commands
+
+| Domain | gh CLI | REST | GraphQL | Web UI | Notes |
+|--------|--------|------|---------|--------|-------|
+| **Issues** | ✓ | ✓ | ✓ | ✓ | Full CRUD via all 4 methods |
+| **Pull Requests** | ✓ | ✓ | ✓ | ✓ | Full CRUD via all 4 methods |
+| **Milestones** | ✗ | ✓ | Read only | ✓ | CRUD via REST, assign via GraphQL |
+| **Labels** | ✓ | ✓ | Add/remove only | ✓ | CLI has full CRUD |
+| **Projects v2** | ✓ | ✗ | ✓ | ✓ | CLI has items/fields, views UI-only |
+| **Branch Protection** | ✗ | ✓ | Read only | ✓ | Prefer Rulesets for new repos |
+| **Rulesets** | Read only | ✓ | Read only | ✓ | Mutations via REST |
+| **Actions** | ✓ | ✓ | ✗ | ✓ | Workflows, runs, jobs |
+| **Secrets** | ✓ | ✓ | ✗ | ✓ | CLI handles encryption |
+| **Variables** | ✓ | ✓ | ✗ | ✓ | No encryption needed |
+| **Releases** | ✓ | ✓ | Read only | ✓ | Mutations via REST + CLI |
+| **Repository** | ✓ | ✓ | ✓ | ✓ | Some ops ⊗ blocked |
+| **Gists** | ✓ | ✓ | Read only | ✓ | No GraphQL mutations |
+| **Search** | ✓ | ✓ | ✓ | ✓ | Read-only operations |
+| **Collaborators** | ✗ | ✓ | Read only | ✓ | REST for mutations |
+| **Teams** | ✗ | ✓ | Read + discussions | ✓ | REST for CRUD |
+| **Webhooks** | ✗ | ✓ | ✗ | ✓ | REST only |
+| **Checks** | ✗ | ✓ | ✓ | ✓ | GitHub App required |
+| **Deployments** | ✗ | ✓ | ✓ | ✓ | Full GraphQL support |
+| **Environments** | ✗ | ✓ | ✓ | ✓ | Full GraphQL support |
+| **Dependabot** | ✗ | ✓ | ✗ | ✓ | REST only |
+| **Code Scanning** | ✗ | ✓ | ✗ | ✓ | REST only |
+| **Secret Scanning** | ✗ | ✓ | ✗ | ✓ | REST only |
+| **Notifications** | ✗ | ✓ | ✗ | ✓ | REST only |
+| **Reactions** | ✗ | ✓ | ✓ | ✓ | Full GraphQL support |
+
+---
+
+## How to Choose an API Method
+
+Use this guide to select the right method for your operation:
+
+### 1. gh CLI (Try First)
+
+**When:** Operation has CLI support (check ✓ in gh CLI column)
+
+**Pros:** Simple syntax, handles auth/pagination automatically, human-readable output
+
+**Example:** `gh issue create --title "Bug" --body "Description"`
+
+### 2. REST API (CRUD Operations)
+
+**When:** Creating/updating/deleting resources, or CLI not available
+
+**Pros:** Full CRUD support, well-documented, predictable endpoints
+
+**Example:** `gh api POST /repos/{owner}/{repo}/milestones -f title="v2.0"`
+
+### 3. GraphQL (Complex Queries)
+
+**When:** Reading nested data, need field selection, batch operations, or Projects v2
+
+**Pros:** Get exactly what you need, fewer roundtrips, powerful filtering
+
+**Example:** `gh api graphql -f query='{ repository(owner:"cli",name:"cli") { issues(first:10) { nodes { title } } } }'`
+
+### 4. Web UI (Fallback)
+
+**When:** Operation marked ⊗ (blocked) or ✓ only in Web UI column
+
+**Why:** Some features are UI-only (e.g., Projects v2 views), dangerous operations require manual confirmation
+
+**Example:** Project view creation, repository deletion
+
+### Symbol Reference
+
+| Symbol | Meaning |
+|--------|---------|
+| ✓ | Method is supported and available |
+| ✗ | Method not available for this operation |
+| ⊗ | Method exists but blocked for safety (see `docs/operation-blocklist.md`) |
+| Read only | Can query but not mutate |
 
 ---
 
@@ -146,14 +210,15 @@
 
 ### Labels
 
-**Hybrid: Read via GraphQL, CRUD via REST. Add/remove via GraphQL.**
+**Full CLI + REST support. GraphQL for read and add/remove only.**
 
 | Operation | gh CLI | REST | GraphQL | Web UI | Notes |
 |-----------|--------|------|---------|--------|-------|
-| List | ✗ | ✓ | ✓ | ✓ | No CLI direct support |
-| Create | ✗ | ✓ | ✗ | ✓ | No GraphQL mutation |
-| Update | ✗ | ✓ | ✗ | ✓ | No GraphQL mutation |
-| Delete | ✗ | ✓ | ✗ | ✓ | No GraphQL mutation |
+| List | ✓ | ✓ | ✓ | ✓ | All methods work |
+| Create | ✓ | ✓ | ✗ | ✓ | No GraphQL mutation |
+| Update | ✓ | ✓ | ✗ | ✓ | No GraphQL mutation |
+| Delete | ✓ | ✓ | ✗ | ✓ | No GraphQL mutation |
+| Clone | ✓ | ✗ | ✗ | ✗ | CLI-only bulk copy |
 | Add to issue | ✓ | ✓ | ✓ | ✓ | Via gh issue edit or GraphQL |
 | Remove from issue | ✓ | ✓ | ✓ | ✓ | Via gh issue edit or GraphQL |
 
@@ -161,10 +226,11 @@
 
 | Operation | Command | Notes |
 |-----------|---------|-------|
-| List | (Not available) | Use REST or GraphQL |
-| Create | (Not available) | Use REST API |
-| Update | (Not available) | Use REST API |
-| Delete | (Not available) | Use REST API |
+| List | `gh label list` | |
+| Create | `gh label create {name} --color {hex}` | Color without # prefix |
+| Update | `gh label edit {name} --name {new-name}` | Rename, change color/description |
+| Delete | `gh label delete {name}` | |
+| Clone | `gh label clone {source-repo}` | Copy all labels from another repo |
 | Add to issue | `gh issue edit {number} --add-label {label}` | |
 | Remove from issue | `gh issue edit {number} --remove-label {label}` | |
 
@@ -179,31 +245,61 @@
 
 ### Projects v2
 
-**Everything via GraphQL except views (UI-only). REST has no project v2 support.**
+**Full CLI + GraphQL support. REST has no project v2 support. Views are UI-only.**
 
 | Operation | gh CLI | REST | GraphQL | Web UI | Notes |
 |-----------|--------|------|---------|--------|-------|
-| List | ✗ | ✗ | ✓ | ✓ | GraphQL only |
-| Get | ✗ | ✗ | ✓ | ✓ | GraphQL only |
-| Create | ✗ | ✗ | ✓ | ✓ | GraphQL only |
-| Add item | ✗ | ✗ | ✓ | ✓ | GraphQL only |
-| Update field | ✗ | ✗ | ✓ | ✓ | GraphQL only |
-| Archive item | ✗ | ✗ | ✓ | ✓ | GraphQL only |
+| List | ✓ | ✗ | ✓ | ✓ | |
+| Get/View | ✓ | ✗ | ✓ | ✓ | |
+| Create | ✓ | ✗ | ✓ | ✓ | |
+| Edit | ✓ | ✗ | ✓ | ✓ | Title, description, visibility |
+| Delete | ✓ | ✗ | ✓ | ✓ | |
+| Close | ✓ | ✗ | ✓ | ✓ | |
+| Copy | ✓ | ✗ | ✓ | ✓ | |
+| Add item | ✓ | ✗ | ✓ | ✓ | Issue or PR |
+| Create draft item | ✓ | ✗ | ✓ | ✓ | Draft issue in project |
+| Edit item | ✓ | ✗ | ✓ | ✓ | Update field value |
+| Archive item | ✓ | ✗ | ✓ | ✓ | |
+| Delete item | ✓ | ✗ | ✓ | ✓ | |
+| List items | ✓ | ✗ | ✓ | ✓ | |
+| Create field | ✓ | ✗ | ✓ | ✓ | |
+| Delete field | ✓ | ✗ | ✓ | ✓ | |
+| List fields | ✓ | ✗ | ✓ | ✓ | |
+| Link repository | ✓ | ✗ | ✓ | ✓ | |
+| Unlink repository | ✓ | ✗ | ✓ | ✓ | |
+| Mark as template | ✓ | ✗ | ✓ | ✓ | |
 | Create view | ✗ | ✗ | ✗ | ✓ | UI-only, no API |
 | Delete view | ✗ | ✗ | ✗ | ✓ | UI-only, no API |
-| Link repository | ✗ | ✗ | ✓ | ✓ | GraphQL only |
 
 **CLI Command Reference:**
 
 | Operation | Command | Notes |
 |-----------|---------|-------|
-| All | (Not available) | Use GraphQL API or Web UI |
+| List | `gh project list --owner {owner}` | |
+| View | `gh project view {number} --owner {owner}` | |
+| Create | `gh project create --owner {owner} --title {title}` | |
+| Edit | `gh project edit {number} --title {title}` | |
+| Delete | `gh project delete {number}` | |
+| Close | `gh project close {number}` | |
+| Copy | `gh project copy {number} --target-owner {owner}` | |
+| Add item | `gh project item-add {number} --owner {owner} --url {issue-url}` | |
+| Create draft | `gh project item-create {number} --owner {owner} --title {title}` | |
+| Edit item | `gh project item-edit --id {item-id} --field-id {field-id} --text {value}` | |
+| Archive item | `gh project item-archive {number} --owner {owner} --id {item-id}` | |
+| Delete item | `gh project item-delete {number} --owner {owner} --id {item-id}` | |
+| List items | `gh project item-list {number} --owner {owner}` | |
+| Create field | `gh project field-create {number} --owner {owner} --name {name} --data-type {type}` | |
+| Delete field | `gh project field-delete --id {field-id}` | |
+| List fields | `gh project field-list {number} --owner {owner}` | |
+| Link repo | `gh project link {number} --owner {owner} --repo {repo}` | |
+| Unlink repo | `gh project unlink {number} --owner {owner} --repo {repo}` | |
+| Mark template | `gh project mark-template {number} --owner {owner}` | |
 
 **Corpus Lookup Guide** (for exact API syntax):
 
 | API | Mutations/Queries | Search Keywords |
 |-----|-------------------|-----------------|
-| GraphQL | `projectsV2`, `projectV2` (queries), `createProjectV2`, `updateProjectV2ItemFieldValue`, `archiveProjectV2Item`, `addProjectV2ItemById`, `linkProjectV2ToRepository` (mutations) | `query { organization { projectsV2 } }`, `mutation { addProjectV2ItemById }`, `mutation { updateProjectV2ItemFieldValue }` |
+| GraphQL | `projectsV2`, `projectV2` (queries), `createProjectV2`, `updateProjectV2`, `deleteProjectV2`, `copyProjectV2`, `updateProjectV2ItemFieldValue`, `archiveProjectV2Item`, `addProjectV2ItemById`, `addProjectV2DraftIssue`, `deleteProjectV2Item`, `linkProjectV2ToRepository`, `unlinkProjectV2FromRepository`, `markProjectV2AsTemplate` (mutations) | `query { organization { projectsV2 } }`, `mutation { addProjectV2ItemById }`, `mutation { updateProjectV2ItemFieldValue }` |
 
 **Config prereqs:** Project ID, Field ID, Option ID from `.hiivmind/github/config.yaml`
 
@@ -425,6 +521,492 @@
 | GraphQL | `releases` (query), `release` (query) - No mutations available | `query { repository { releases { edges { node } } } }` |
 
 **Note:** GraphQL has no mutations for release management. Upload asset uses special `uploads.github.com` endpoint.
+
+---
+
+### Repository
+
+**Full CLI support. REST and GraphQL both support most operations. Some operations blocked for safety.**
+
+| Operation | gh CLI | REST | GraphQL | Web UI | Notes |
+|-----------|--------|------|---------|--------|-------|
+| List | ✓ | ✓ | ✓ | ✓ | User or org repos |
+| Get | ✓ | ✓ | ✓ | ✓ | |
+| Create | ✓ | ✓ | ✓ | ✓ | |
+| Update/Edit | ✓ | ✓ | ✓ | ✓ | Settings, description, visibility |
+| Delete | ✓ | ✓ | ✗ | ✓ | ⊗ Blocked for safety |
+| Archive | ✓ | ✗ | ✓ | ✓ | ⊗ Blocked for safety |
+| Unarchive | ✓ | ✗ | ✓ | ✓ | |
+| Fork | ✓ | ✓ | ✗ | ✓ | No GraphQL mutation |
+| Clone | ✓ | ✗ | ✗ | ✗ | CLI only (git operation) |
+| Rename | ✓ | ✓ | ✓ | ✓ | Via PATCH or updateRepository |
+| Transfer | ✗ | ✓ | ✗ | ✓ | ⊗ Blocked for safety |
+| Sync (fork) | ✓ | ✓ | ✗ | ✓ | Sync fork with upstream |
+| Update topics | ✗ | ✓ | ✓ | ✓ | Via updateTopics mutation |
+
+**CLI Command Reference:**
+
+| Operation | Command | Notes |
+|-----------|---------|-------|
+| List | `gh repo list [owner]` | List repos for user/org |
+| Get | `gh repo view [repo]` | View repo details |
+| Create | `gh repo create [name]` | Interactive or with flags |
+| Edit | `gh repo edit [repo]` | Update settings |
+| Delete | `gh repo delete [repo]` | ⊗ Blocked |
+| Archive | `gh repo archive [repo]` | ⊗ Blocked |
+| Unarchive | `gh repo unarchive [repo]` | |
+| Fork | `gh repo fork [repo]` | |
+| Clone | `gh repo clone [repo]` | |
+| Rename | `gh repo rename [new-name]` | |
+| Sync | `gh repo sync [repo]` | Sync fork with upstream |
+
+**Corpus Lookup Guide** (for exact API syntax):
+
+| API | Endpoints/Mutations | Search Keywords |
+|-----|---------------------|-----------------|
+| REST | `GET /repos/{owner}/{repo}`, `GET /user/repos`, `GET /orgs/{org}/repos`, `POST /user/repos`, `POST /orgs/{org}/repos`, `PATCH /repos/{owner}/{repo}`, `DELETE /repos/{owner}/{repo}`, `POST /repos/{owner}/{repo}/forks`, `POST /repos/{owner}/{repo}/transfer`, `POST /repos/{owner}/{repo}/merge-upstream`, `PUT /repos/{owner}/{repo}/topics` | `GET /repos`, `POST /user/repos`, `PATCH /repos/{owner}/{repo}`, `POST /forks`, `PUT /topics` |
+| GraphQL | `repository`, `repositories` (queries), `createRepository`, `updateRepository`, `archiveRepository`, `unarchiveRepository`, `updateTopics` (mutations) | `query { repository }`, `mutation { createRepository }`, `mutation { updateRepository }`, `mutation { archiveRepository }` |
+
+**Note:** No GraphQL mutation for delete, fork, or transfer. Archive/unarchive use REST-like patterns but via GraphQL mutations. Repository delete/transfer/archive blocked for safety - see `docs/operation-blocklist.md`.
+
+---
+
+### Gists
+
+**Full CLI + REST support. GraphQL read-only. No authentication required to read public gists.**
+
+| Operation | gh CLI | REST | GraphQL | Web UI | Notes |
+|-----------|--------|------|---------|--------|-------|
+| List | ✓ | ✓ | ✓ | ✓ | User's gists |
+| Get | ✓ | ✓ | ✓ | ✓ | By ID |
+| Create | ✓ | ✓ | ✗ | ✓ | No GraphQL mutation |
+| Update/Edit | ✓ | ✓ | ✗ | ✓ | No GraphQL mutation |
+| Delete | ✓ | ✓ | ✗ | ✓ | No GraphQL mutation |
+| Clone | ✓ | ✗ | ✗ | ✗ | CLI only (git operation) |
+| Rename file | ✓ | ✓ | ✗ | ✓ | Rename file within gist |
+| Fork | ✗ | ✓ | ✗ | ✓ | No CLI support |
+| Star | ✗ | ✓ | ✗ | ✓ | No CLI support |
+| Unstar | ✗ | ✓ | ✗ | ✓ | No CLI support |
+| List starred | ✗ | ✓ | ✓ | ✓ | Via user gists query |
+
+**CLI Command Reference:**
+
+| Operation | Command | Notes |
+|-----------|---------|-------|
+| List | `gh gist list` | Your gists |
+| Get | `gh gist view {id}` | View gist contents |
+| Create | `gh gist create {file}` | Use `--public` for public gists |
+| Edit | `gh gist edit {id}` | Opens editor |
+| Delete | `gh gist delete {id}` | |
+| Clone | `gh gist clone {id}` | Clone to local directory |
+| Rename | `gh gist rename {id} {old} {new}` | Rename file in gist |
+
+**Corpus Lookup Guide** (for exact API syntax):
+
+| API | Endpoints/Queries | Search Keywords |
+|-----|-------------------|-----------------|
+| REST | `GET /gists`, `GET /gists/{gist_id}`, `GET /users/{username}/gists`, `POST /gists`, `PATCH /gists/{gist_id}`, `DELETE /gists/{gist_id}`, `POST /gists/{gist_id}/forks`, `PUT /gists/{gist_id}/star`, `DELETE /gists/{gist_id}/star`, `GET /gists/starred` | `GET /gists`, `POST /gists`, `PATCH /gists/{gist_id}`, `PUT /star`, `DELETE /star` |
+| GraphQL | `gist`, `gists` (queries via user/viewer) - No mutations available | `query { viewer { gists } }`, `query { user { gists } }` |
+
+**Note:** GraphQL has no mutations for gist management. Use CLI (simplest) or REST API.
+
+---
+
+### Search
+
+**Full CLI + REST + GraphQL support. Read-only operations (search is inherently read-only).**
+
+| Operation | gh CLI | REST | GraphQL | Web UI | Notes |
+|-----------|--------|------|---------|--------|-------|
+| Search repos | ✓ | ✓ | ✓ | ✓ | Full search syntax support |
+| Search issues | ✓ | ✓ | ✓ | ✓ | Full search syntax support |
+| Search PRs | ✓ | ✓ | ✓ | ✓ | Full search syntax support |
+| Search code | ✓ | ✓ | ✓ | ✓ | Rate limited |
+| Search commits | ✓ | ✓ | ✗ | ✓ | No GraphQL support |
+| Search users | ✗ | ✓ | ✓ | ✓ | No CLI support |
+| Search topics | ✗ | ✓ | ✗ | ✓ | REST only |
+| Search labels | ✗ | ✓ | ✗ | ✓ | REST only |
+| Search discussions | ✗ | ✗ | ✓ | ✓ | GraphQL only |
+
+**CLI Command Reference:**
+
+| Operation | Command | Notes |
+|-----------|---------|-------|
+| Search repos | `gh search repos {query}` | Rich filtering flags |
+| Search issues | `gh search issues {query}` | Use `--` for queries with `-` |
+| Search PRs | `gh search prs {query}` | Same syntax as issues |
+| Search code | `gh search code {query}` | Rate limited |
+| Search commits | `gh search commits {query}` | |
+
+**Corpus Lookup Guide** (for exact API syntax):
+
+| API | Endpoints/Queries | Search Keywords |
+|-----|-------------------|-----------------|
+| REST | `GET /search/repositories`, `GET /search/issues`, `GET /search/code`, `GET /search/commits`, `GET /search/users`, `GET /search/topics`, `GET /search/labels` | `GET /search/repositories`, `q=`, `sort=`, `order=`, `per_page` |
+| GraphQL | `search(query: String!, type: SearchType!, first: Int)` - Types: REPOSITORY, ISSUE, ISSUE_ADVANCED, DISCUSSION, USER | `query { search(query: "...", type: REPOSITORY) { ... } }` |
+
+**Note:** Search is read-only. GraphQL search returns a union type that includes Repository, Issue, PullRequest, Discussion, User. Code search is heavily rate limited.
+
+---
+
+### Collaborators
+
+**REST API only for mutations. GraphQL read-only. No CLI support.**
+
+| Operation | gh CLI | REST | GraphQL | Web UI | Notes |
+|-----------|--------|------|---------|--------|-------|
+| List | ✗ | ✓ | ✓ | ✓ | Via repository.collaborators |
+| Get | ✗ | ✓ | ✓ | ✓ | Check permission level |
+| Add | ✗ | ✓ | ✗ | ✓ | No GraphQL mutation |
+| Remove | ✗ | ✓ | ✗ | ✓ | No GraphQL mutation |
+| Check permission | ✗ | ✓ | ✓ | ✓ | Permission level for user |
+| List invitations | ✗ | ✓ | ✗ | ✓ | Pending invites |
+| Update invitation | ✗ | ✓ | ✗ | ✓ | Change permission |
+| Delete invitation | ✗ | ✓ | ✗ | ✓ | Cancel invite |
+
+**CLI Command Reference:**
+
+| Operation | Command | Notes |
+|-----------|---------|-------|
+| All | (Not available) | Use REST API |
+
+**Corpus Lookup Guide** (for exact API syntax):
+
+| API | Endpoints/Queries | Search Keywords |
+|-----|-------------------|-----------------|
+| REST | `GET /repos/{owner}/{repo}/collaborators`, `GET /collaborators/{username}`, `PUT /collaborators/{username}`, `DELETE /collaborators/{username}`, `GET /collaborators/{username}/permission`, `GET /repos/{owner}/{repo}/invitations`, `PATCH /invitations/{invitation_id}`, `DELETE /invitations/{invitation_id}` | `GET /collaborators`, `PUT /collaborators/{username}`, `permission`, `invitations` |
+| GraphQL | `repository { collaborators }` (read-only query) | `query { repository { collaborators { edges { permission } } } }` |
+
+**Note:** No GraphQL mutations for collaborator management. Use REST API for all write operations.
+
+---
+
+### Teams
+
+**Primarily REST API. GraphQL has read + discussion mutations only. No CLI support.**
+
+| Operation | gh CLI | REST | GraphQL | Web UI | Notes |
+|-----------|--------|------|---------|--------|-------|
+| List (org) | ✗ | ✓ | ✓ | ✓ | Organization teams |
+| Get | ✗ | ✓ | ✓ | ✓ | By slug |
+| Create | ✗ | ✓ | ✗ | ✓ | No GraphQL mutation |
+| Update | ✗ | ✓ | ✗ | ✓ | No GraphQL mutation |
+| Delete | ✗ | ✓ | ✗ | ✓ | No GraphQL mutation |
+| List members | ✗ | ✓ | ✓ | ✓ | Team membership |
+| Add member | ✗ | ✓ | ✗ | ✓ | No GraphQL mutation |
+| Remove member | ✗ | ✓ | ✗ | ✓ | No GraphQL mutation |
+| Get membership | ✗ | ✓ | ✓ | ✓ | User's role in team |
+| List repos | ✗ | ✓ | ✓ | ✓ | Team's repos |
+| Add repo | ✗ | ✓ | ✓ | ✓ | updateTeamsRepository mutation |
+| Remove repo | ✗ | ✓ | ✗ | ✓ | No GraphQL mutation |
+| Team discussions | ✗ | ✓ | ✓ | ✓ | Full CRUD via GraphQL |
+
+**CLI Command Reference:**
+
+| Operation | Command | Notes |
+|-----------|---------|-------|
+| All | (Not available) | Use REST API |
+
+**Corpus Lookup Guide** (for exact API syntax):
+
+| API | Endpoints/Mutations | Search Keywords |
+|-----|---------------------|-----------------|
+| REST | `GET /orgs/{org}/teams`, `GET /orgs/{org}/teams/{team_slug}`, `POST /orgs/{org}/teams`, `PATCH /teams/{team_id}`, `DELETE /teams/{team_id}`, `GET /teams/{team_id}/members`, `PUT /teams/{team_id}/memberships/{username}`, `DELETE /teams/{team_id}/memberships/{username}`, `GET /teams/{team_id}/repos`, `PUT /teams/{team_id}/repos/{owner}/{repo}`, `DELETE /teams/{team_id}/repos/{owner}/{repo}` | `GET /orgs/{org}/teams`, `POST /teams`, `PUT /memberships`, `PUT /repos` |
+| GraphQL | `team`, `teams` (queries), `createTeamDiscussion`, `updateTeamDiscussion`, `deleteTeamDiscussion`, `updateTeamsRepository` (mutations) | `query { organization { teams } }`, `mutation { updateTeamsRepository }` |
+
+**Note:** Team CRUD and membership mutations are REST-only. GraphQL supports team discussions and repository assignments.
+
+---
+
+### Webhooks
+
+**REST API only. No GraphQL support. No CLI support.**
+
+| Operation | gh CLI | REST | GraphQL | Web UI | Notes |
+|-----------|--------|------|---------|--------|-------|
+| List (repo) | ✗ | ✓ | ✗ | ✓ | Repository webhooks |
+| Get | ✗ | ✓ | ✗ | ✓ | By ID |
+| Create | ✗ | ✓ | ✗ | ✓ | |
+| Update | ✗ | ✓ | ✗ | ✓ | |
+| Delete | ✗ | ✓ | ✗ | ✓ | |
+| Test (ping) | ✗ | ✓ | ✗ | ✓ | Trigger ping event |
+| List deliveries | ✗ | ✓ | ✗ | ✓ | Delivery history |
+| Get delivery | ✗ | ✓ | ✗ | ✓ | Specific delivery |
+| Redeliver | ✗ | ✓ | ✗ | ✓ | Retry delivery |
+| List (org) | ✗ | ✓ | ✗ | ✓ | Organization webhooks |
+
+**CLI Command Reference:**
+
+| Operation | Command | Notes |
+|-----------|---------|-------|
+| All | (Not available) | Use REST API |
+
+**Corpus Lookup Guide** (for exact API syntax):
+
+| API | Endpoints | Search Keywords |
+|-----|-----------|-----------------|
+| REST | `GET /repos/{owner}/{repo}/hooks`, `GET /hooks/{hook_id}`, `POST /repos/{owner}/{repo}/hooks`, `PATCH /hooks/{hook_id}`, `DELETE /hooks/{hook_id}`, `POST /hooks/{hook_id}/pings`, `GET /hooks/{hook_id}/deliveries`, `GET /hooks/{hook_id}/deliveries/{delivery_id}`, `POST /hooks/{hook_id}/deliveries/{delivery_id}/attempts`, `GET /orgs/{org}/hooks` | `GET /hooks`, `POST /hooks`, `PATCH /hooks`, `pings`, `deliveries` |
+
+**Note:** Webhooks are entirely REST-based. No GraphQL schema coverage for webhook management.
+
+---
+
+### Checks
+
+**REST + GraphQL support. No CLI support. Used by GitHub Apps for CI status reporting.**
+
+| Operation | gh CLI | REST | GraphQL | Web UI | Notes |
+|-----------|--------|------|---------|--------|-------|
+| Create check run | ✗ | ✓ | ✓ | ✗ | GitHub App only |
+| Update check run | ✗ | ✓ | ✓ | ✗ | GitHub App only |
+| Get check run | ✗ | ✓ | ✓ | ✓ | |
+| List check runs | ✗ | ✓ | ✓ | ✓ | For ref or check suite |
+| Rerequest check run | ✗ | ✓ | ✓ | ✓ | rerequestCheckSuite mutation |
+| Create check suite | ✗ | ✓ | ✗ | ✗ | REST only |
+| Get check suite | ✗ | ✓ | ✓ | ✓ | |
+| List check suites | ✗ | ✓ | ✓ | ✓ | For ref |
+| Set preferences | ✗ | ✓ | ✗ | ✓ | Auto-trigger settings |
+| List annotations | ✗ | ✓ | ✓ | ✓ | Per check run |
+
+**CLI Command Reference:**
+
+| Operation | Command | Notes |
+|-----------|---------|-------|
+| View PR checks | `gh pr checks {number}` | View check status only |
+| All mutations | (Not available) | Use REST API or GraphQL |
+
+**Corpus Lookup Guide** (for exact API syntax):
+
+| API | Endpoints/Mutations | Search Keywords |
+|-----|---------------------|-----------------|
+| REST | `POST /repos/{owner}/{repo}/check-runs`, `PATCH /check-runs/{check_run_id}`, `GET /check-runs/{check_run_id}`, `GET /repos/{owner}/{repo}/commits/{ref}/check-runs`, `POST /check-suites`, `GET /check-suites/{check_suite_id}`, `GET /commits/{ref}/check-suites`, `PATCH /repos/{owner}/{repo}/check-suites/preferences`, `GET /check-runs/{check_run_id}/annotations` | `POST /check-runs`, `PATCH /check-runs`, `check-suites`, `annotations` |
+| GraphQL | `checkRun`, `checkSuite` (queries), `createCheckRun`, `updateCheckRun`, `rerequestCheckSuite` (mutations) | `query { repository { checkSuites } }`, `mutation { createCheckRun }`, `mutation { updateCheckRun }` |
+
+**Note:** Check run creation/updates require a GitHub App installation. PATs cannot create checks. CLI can only view check status via `gh pr checks`.
+
+---
+
+### Deployments
+
+**REST + GraphQL support. No CLI support.**
+
+| Operation | gh CLI | REST | GraphQL | Web UI | Notes |
+|-----------|--------|------|---------|--------|-------|
+| List | ✗ | ✓ | ✓ | ✓ | |
+| Get | ✗ | ✓ | ✓ | ✓ | |
+| Create | ✗ | ✓ | ✓ | ✗ | createDeployment mutation |
+| Delete | ✗ | ✓ | ✗ | ✗ | REST only, inactive only |
+| Create status | ✗ | ✓ | ✓ | ✗ | createDeploymentStatus mutation |
+| List statuses | ✗ | ✓ | ✓ | ✓ | |
+| Get status | ✗ | ✓ | ✓ | ✓ | |
+
+**CLI Command Reference:**
+
+| Operation | Command | Notes |
+|-----------|---------|-------|
+| All | (Not available) | Use REST API or GraphQL |
+
+**Corpus Lookup Guide** (for exact API syntax):
+
+| API | Endpoints/Mutations | Search Keywords |
+|-----|---------------------|-----------------|
+| REST | `GET /repos/{owner}/{repo}/deployments`, `GET /deployments/{deployment_id}`, `POST /repos/{owner}/{repo}/deployments`, `DELETE /deployments/{deployment_id}`, `POST /deployments/{deployment_id}/statuses`, `GET /deployments/{deployment_id}/statuses` | `GET /deployments`, `POST /deployments`, `POST /statuses`, `environment`, `ref`, `task` |
+| GraphQL | `deployment`, `deployments` (queries), `createDeployment`, `createDeploymentStatus` (mutations) | `query { repository { deployments } }`, `mutation { createDeployment }`, `mutation { createDeploymentStatus }` |
+
+**Note:** Deployments track code being deployed to environments. Use with environments for full deployment workflow.
+
+---
+
+### Environments
+
+**Full GraphQL support. REST API available. No CLI support.**
+
+| Operation | gh CLI | REST | GraphQL | Web UI | Notes |
+|-----------|--------|------|---------|--------|-------|
+| List | ✗ | ✓ | ✓ | ✓ | |
+| Get | ✗ | ✓ | ✓ | ✓ | By name |
+| Create | ✗ | ✓ | ✓ | ✓ | createEnvironment mutation |
+| Update | ✗ | ✓ | ✓ | ✓ | updateEnvironment mutation |
+| Delete | ✗ | ✓ | ✓ | ✓ | deleteEnvironment mutation |
+| Get secrets | ✗ | ✓ | ✗ | ✓ | Via secrets endpoints |
+| Set secret | ✗ | ✓ | ✗ | ✓ | Via secrets endpoints |
+| Get variables | ✗ | ✓ | ✗ | ✓ | Via variables endpoints |
+| Set variable | ✗ | ✓ | ✗ | ✓ | Via variables endpoints |
+| Set protection rules | ✗ | ✓ | ✓ | ✓ | Reviewers, wait timer, branch policy |
+
+**CLI Command Reference:**
+
+| Operation | Command | Notes |
+|-----------|---------|-------|
+| All | (Not available) | Use REST API or GraphQL |
+
+**Corpus Lookup Guide** (for exact API syntax):
+
+| API | Endpoints/Mutations | Search Keywords |
+|-----|---------------------|-----------------|
+| REST | `GET /repos/{owner}/{repo}/environments`, `GET /environments/{environment_name}`, `PUT /environments/{environment_name}`, `DELETE /environments/{environment_name}`, `GET /environments/{environment_name}/secrets`, `PUT /environments/{environment_name}/secrets/{secret_name}`, `GET /environments/{environment_name}/variables` | `GET /environments`, `PUT /environments`, `DELETE /environments`, `secrets`, `variables`, `protection_rules` |
+| GraphQL | `environment` (query), `createEnvironment`, `updateEnvironment`, `deleteEnvironment` (mutations) | `query { repository { environments } }`, `mutation { createEnvironment }`, `mutation { updateEnvironment }` |
+
+**Note:** Environments provide deployment targets with protection rules (required reviewers, wait timers, branch policies). Environment secrets/variables use REST endpoints under `/environments/{name}/secrets` and `/environments/{name}/variables`.
+
+---
+
+### Dependabot
+
+**REST API only. No GraphQL support. No CLI support.**
+
+| Operation | gh CLI | REST | GraphQL | Web UI | Notes |
+|-----------|--------|------|---------|--------|-------|
+| List alerts | ✗ | ✓ | ✗ | ✓ | |
+| Get alert | ✗ | ✓ | ✗ | ✓ | |
+| Update alert | ✗ | ✓ | ✗ | ✓ | Dismiss/reopen |
+| List org alerts | ✗ | ✓ | ✗ | ✓ | Enterprise scope |
+| Enable/disable | ✗ | ✓ | ✗ | ✓ | Via repo settings |
+| List secrets | ✗ | ✓ | ✗ | ✓ | Dependabot secrets |
+| Set secret | ✗ | ✓ | ✗ | ✓ | Encrypted |
+
+**CLI Command Reference:**
+
+| Operation | Command | Notes |
+|-----------|---------|-------|
+| All | (Not available) | Use REST API |
+
+**Corpus Lookup Guide** (for exact API syntax):
+
+| API | Endpoints | Search Keywords |
+|-----|-----------|-----------------|
+| REST | `GET /repos/{owner}/{repo}/dependabot/alerts`, `GET /dependabot/alerts/{alert_number}`, `PATCH /dependabot/alerts/{alert_number}`, `GET /orgs/{org}/dependabot/alerts`, `GET /repos/{owner}/{repo}/dependabot/secrets`, `PUT /dependabot/secrets/{secret_name}` | `GET /dependabot/alerts`, `PATCH /dependabot/alerts`, `state`, `dismissed_reason`, `dependabot/secrets` |
+
+**Note:** Dependabot alerts are REST-only. No GraphQL schema coverage for security alerts.
+
+---
+
+### Code Scanning
+
+**REST API only. No GraphQL support. No CLI support.**
+
+| Operation | gh CLI | REST | GraphQL | Web UI | Notes |
+|-----------|--------|------|---------|--------|-------|
+| List alerts | ✗ | ✓ | ✗ | ✓ | |
+| Get alert | ✗ | ✓ | ✗ | ✓ | |
+| Update alert | ✗ | ✓ | ✗ | ✓ | Dismiss/reopen |
+| List instances | ✗ | ✓ | ✗ | ✓ | Alert instances |
+| List analyses | ✗ | ✓ | ✗ | ✓ | |
+| Get analysis | ✗ | ✓ | ✗ | ✓ | |
+| Delete analysis | ✗ | ✓ | ✗ | ✗ | REST only |
+| Upload SARIF | ✗ | ✓ | ✗ | ✗ | For custom tools |
+| Get SARIF | ✗ | ✓ | ✗ | ✗ | Upload status |
+| List org alerts | ✗ | ✓ | ✗ | ✓ | Enterprise scope |
+| Get default setup | ✗ | ✓ | ✗ | ✓ | CodeQL config |
+| Update default setup | ✗ | ✓ | ✗ | ✓ | Enable/configure |
+
+**CLI Command Reference:**
+
+| Operation | Command | Notes |
+|-----------|---------|-------|
+| All | (Not available) | Use REST API |
+
+**Corpus Lookup Guide** (for exact API syntax):
+
+| API | Endpoints | Search Keywords |
+|-----|-----------|-----------------|
+| REST | `GET /repos/{owner}/{repo}/code-scanning/alerts`, `GET /code-scanning/alerts/{alert_number}`, `PATCH /code-scanning/alerts/{alert_number}`, `GET /code-scanning/alerts/{alert_number}/instances`, `GET /repos/{owner}/{repo}/code-scanning/analyses`, `DELETE /code-scanning/analyses/{analysis_id}`, `POST /repos/{owner}/{repo}/code-scanning/sarifs`, `GET /code-scanning/sarifs/{sarif_id}`, `GET /repos/{owner}/{repo}/code-scanning/default-setup`, `PATCH /repos/{owner}/{repo}/code-scanning/default-setup` | `GET /code-scanning/alerts`, `PATCH /code-scanning/alerts`, `sarifs`, `default-setup`, `state`, `dismissed_reason` |
+
+**Note:** Code scanning alerts are REST-only. SARIF upload enables integration with third-party security tools.
+
+---
+
+### Secret Scanning
+
+**REST API only. No GraphQL support. No CLI support.**
+
+| Operation | gh CLI | REST | GraphQL | Web UI | Notes |
+|-----------|--------|------|---------|--------|-------|
+| List alerts | ✗ | ✓ | ✗ | ✓ | |
+| Get alert | ✗ | ✓ | ✗ | ✓ | |
+| Update alert | ✗ | ✓ | ✗ | ✓ | Resolve/reopen |
+| List locations | ✗ | ✓ | ✗ | ✓ | Where secret found |
+| List org alerts | ✗ | ✓ | ✗ | ✓ | Enterprise scope |
+| Enable push protection | ✗ | ✓ | ✗ | ✓ | Via repo settings |
+| Bypass push protection | ✗ | ✓ | ✗ | ✗ | Requires reason |
+
+**CLI Command Reference:**
+
+| Operation | Command | Notes |
+|-----------|---------|-------|
+| All | (Not available) | Use REST API |
+
+**Corpus Lookup Guide** (for exact API syntax):
+
+| API | Endpoints | Search Keywords |
+|-----|-----------|-----------------|
+| REST | `GET /repos/{owner}/{repo}/secret-scanning/alerts`, `GET /secret-scanning/alerts/{alert_number}`, `PATCH /secret-scanning/alerts/{alert_number}`, `GET /secret-scanning/alerts/{alert_number}/locations`, `GET /orgs/{org}/secret-scanning/alerts` | `GET /secret-scanning/alerts`, `PATCH /secret-scanning/alerts`, `locations`, `state`, `resolution` |
+
+**Note:** Secret scanning alerts are REST-only. No GraphQL schema coverage for security alerts.
+
+---
+
+### Notifications
+
+**REST API only. No GraphQL support. No CLI support.**
+
+| Operation | gh CLI | REST | GraphQL | Web UI | Notes |
+|-----------|--------|------|---------|--------|-------|
+| List | ✗ | ✓ | ✗ | ✓ | All notifications |
+| Mark as read | ✗ | ✓ | ✗ | ✓ | Single notification |
+| Mark all read | ✗ | ✓ | ✗ | ✓ | All or per-repo |
+| Get thread | ✗ | ✓ | ✗ | ✓ | |
+| Mark thread read | ✗ | ✓ | ✗ | ✓ | |
+| Get subscription | ✗ | ✓ | ✗ | ✓ | Thread subscription |
+| Set subscription | ✗ | ✓ | ✗ | ✓ | Subscribe/ignore |
+| Delete subscription | ✗ | ✓ | ✗ | ✓ | Unsubscribe |
+| List repo notifications | ✗ | ✓ | ✗ | ✓ | Scoped to repo |
+| Mark repo read | ✗ | ✓ | ✗ | ✓ | All in repo |
+
+**CLI Command Reference:**
+
+| Operation | Command | Notes |
+|-----------|---------|-------|
+| View status | `gh status` | Shows notifications summary |
+| All mutations | (Not available) | Use REST API |
+
+**Corpus Lookup Guide** (for exact API syntax):
+
+| API | Endpoints | Search Keywords |
+|-----|-----------|-----------------|
+| REST | `GET /notifications`, `PUT /notifications`, `GET /notifications/threads/{thread_id}`, `PATCH /notifications/threads/{thread_id}`, `GET /notifications/threads/{thread_id}/subscription`, `PUT /notifications/threads/{thread_id}/subscription`, `DELETE /notifications/threads/{thread_id}/subscription`, `GET /repos/{owner}/{repo}/notifications`, `PUT /repos/{owner}/{repo}/notifications` | `GET /notifications`, `PUT /notifications`, `threads`, `subscription`, `all`, `participating` |
+
+**Note:** Notifications are REST-only. The `gh status` command shows a summary but doesn't support mutations.
+
+---
+
+### Reactions
+
+**Full GraphQL support. REST API available. No CLI support.**
+
+| Operation | gh CLI | REST | GraphQL | Web UI | Notes |
+|-----------|--------|------|---------|--------|-------|
+| List (issue) | ✗ | ✓ | ✓ | ✓ | |
+| List (comment) | ✗ | ✓ | ✓ | ✓ | |
+| List (PR) | ✗ | ✓ | ✓ | ✓ | |
+| Add | ✗ | ✓ | ✓ | ✓ | addReaction mutation |
+| Remove | ✗ | ✓ | ✓ | ✓ | removeReaction mutation |
+| Delete (by ID) | ✗ | ✓ | ✗ | ✗ | REST only |
+
+**CLI Command Reference:**
+
+| Operation | Command | Notes |
+|-----------|---------|-------|
+| All | (Not available) | Use REST API or GraphQL |
+
+**Corpus Lookup Guide** (for exact API syntax):
+
+| API | Endpoints/Mutations | Search Keywords |
+|-----|---------------------|-----------------|
+| REST | `GET /repos/{owner}/{repo}/issues/{issue_number}/reactions`, `POST /issues/{issue_number}/reactions`, `DELETE /reactions/{reaction_id}`, `GET /issues/comments/{comment_id}/reactions`, `POST /issues/comments/{comment_id}/reactions`, `GET /pulls/comments/{comment_id}/reactions` | `GET /reactions`, `POST /reactions`, `DELETE /reactions`, `content` (+1, -1, laugh, confused, heart, hooray, rocket, eyes) |
+| GraphQL | `reactions` (query on Reactable types), `addReaction`, `removeReaction` (mutations) | `query { issue { reactions } }`, `mutation { addReaction(input: {subjectId: ..., content: THUMBS_UP}) }` |
+
+**Reaction types:** `+1`, `-1`, `laugh`, `confused`, `heart`, `hooray`, `rocket`, `eyes`. GraphQL uses enum: `THUMBS_UP`, `THUMBS_DOWN`, `LAUGH`, `CONFUSED`, `HEART`, `HOORAY`, `ROCKET`, `EYES`.
 
 ---
 
