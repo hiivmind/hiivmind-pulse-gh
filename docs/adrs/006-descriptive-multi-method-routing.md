@@ -1,7 +1,8 @@
 # ADR-006: Descriptive Multi-Method API Routing Visibility
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2025-12-19
+**Accepted:** 2025-12-19
 **Related Milestone:** API Routing Guide: Multi-Method Visibility
 **Related Issues:** (to be linked during issue creation phase)
 
@@ -119,16 +120,16 @@ Document **all GitHub domains**, organized by category:
 
 ## Success Criteria
 
-- [ ] All documented domains show support for all 4 methods
-- [ ] Quick Reference table includes method indicators (not just single API)
-- [ ] Domain detail sections have 4-column method support tables
-- [ ] Legend clearly explains ✓/✗/⊗ symbols
-- [ ] CLI commands shown in table (e.g., `gh issue create`)
-- [ ] Search keywords moved to separate "Corpus Lookup Guide" subsections
-- [ ] Method Selection Guide added explaining decision tree
-- [ ] No changes required to skills (api-routing.md remains consumable as-is)
-- [ ] Cross-references to operation-blocklist.md in place
-- [ ] File remains standalone useful (no corpus required for basic routing)
+- [x] All documented domains show support for all 4 methods
+- [x] Quick Reference table includes method indicators (not just single API)
+- [x] Domain detail sections have 4-column method support tables
+- [x] Legend clearly explains ✓/✗/⊗ symbols
+- [x] CLI commands shown in table (e.g., `gh issue create`)
+- [x] Search keywords moved to separate "Corpus Lookup Guide" subsections
+- [x] Method Selection Guide added explaining decision tree
+- [x] No changes required to skills (api-routing.md remains consumable as-is)
+- [x] Cross-references to operation-blocklist.md in place
+- [x] File remains standalone useful (no corpus required for basic routing)
 
 ## Risks and Mitigations
 
