@@ -163,7 +163,7 @@ For each selected section:
 ### Corpus Lookup (When Needed)
 
 If uncertain about query syntax:
-- **Invoke:** `hiivmind-pulse-gh:hiivmind-corpus-github`
+- **Invoke:** `hiivmind-corpus-github-docs:hiivmind-corpus-navigate-github-docs`
 - **Query:** With keywords from routing guide
 - **Get:** Exact query syntax from schema/docs
 
@@ -310,4 +310,4 @@ All implementation details are in the pattern library:
 | Reference | Purpose |
 |-----------|---------|
 | `reference/api-routing.md` | API routing decisions (useful standalone) |
-| `hiivmind-pulse-gh:hiivmind-corpus-github` | GitHub corpus skill for syntax lookup |
+| `hiivmind-corpus-github-docs:hiivmind-corpus-navigate-github-docs` | GitHub corpus skill for syntax lookup |

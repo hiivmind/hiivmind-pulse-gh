@@ -21,5 +21,8 @@
     "gh-cli",
     "workspace-init"
   ],
-  "repository": "https://github.com/hiivmind/hiivmind-pulse-gh"
+  "repository": "https://github.com/hiivmind/hiivmind-pulse-gh",
+  "dependencies": {
+    "plugins": ["hiivmind-corpus-github-docs@hiivmind-corpus-github"]
+  }
 }

@@ -148,7 +148,7 @@ Wait for user confirmation before proceeding. If user says no, ask them to speci
 ### Corpus Lookup (When Needed)
 
 If uncertain about projectsV2 query syntax:
-- **Invoke:** `hiivmind-pulse-gh:hiivmind-corpus-github`
+- **Invoke:** `hiivmind-corpus-github-docs:hiivmind-corpus-navigate-github-docs`
 - **Query:** "projectsV2 organization list projects GraphQL"
 - **Get:** Query syntax for listing projects
 
@@ -286,4 +286,4 @@ All implementation details are in the pattern library:
 | Reference | Purpose |
 |-----------|---------|
 | `reference/api-routing.md` | API routing decisions (useful standalone) |
-| `hiivmind-pulse-gh:hiivmind-corpus-github` | GitHub corpus skill for syntax lookup |
+| `hiivmind-corpus-github-docs:hiivmind-corpus-navigate-github-docs` | GitHub corpus skill for syntax lookup |

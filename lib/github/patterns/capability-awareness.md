@@ -130,7 +130,7 @@ When you know exactly which skill is needed:
 
 ```
 Invoke skill: hiivmind-pulse-gh:hiivmind-pulse-gh-operations
-Invoke skill: hiivmind-pulse-gh:hiivmind-corpus-github
+Invoke skill: hiivmind-corpus-github-docs:hiivmind-corpus-navigate-github-docs
 Invoke skill: hiivmind-pulse-gh:hiivmind-pulse-gh-adr
 ```
 
