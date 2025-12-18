@@ -83,7 +83,8 @@ Lightweight routing guidance (corpus provides JIT syntax):
 
 | Example | Purpose |
 |---------|---------|
-| `lib/examples/operations/api-routing.md` | API routing decisions (THE canonical source) |
+| `lib/examples/operations/api-routing.md` | Quick reference + method selection guide |
+| `lib/examples/operations/domains/*.md` | Per-domain detailed syntax (25 files) |
 | `lib/examples/operations/corpus-lookup.md` | Look up API syntax when uncertain |
 
 ### Using Examples
@@ -252,8 +253,12 @@ hiivmind-pulse-gh/
 │       │   ├── graphql-execution.md
 │       │   └── ...
 │       └── operations/                   # LIGHT - routing (corpus has syntax)
-│           ├── api-routing.md            # THE canonical routing source
-│           └── corpus-lookup.md
+│           ├── api-routing.md            # Quick reference + method selection
+│           ├── corpus-lookup.md
+│           └── domains/                  # Per-domain detailed syntax (25 files)
+│               ├── issues.md
+│               ├── pull-requests.md
+│               └── ...
 ├── docs/
 │   ├── decisions/                        # Historical architecture decisions
 │   ├── config-schema.md                  # Config.yaml schema

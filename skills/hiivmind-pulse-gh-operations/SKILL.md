@@ -127,42 +127,56 @@ For domains not listed above:
 
 **Goal:** Determine the correct API (GraphQL vs REST) and get search keywords.
 
-### PREREQUISITE: Read Routing Guide
+### Step 1: Read Quick Reference
 
-**IMPORTANT:** Read the FULL `lib/examples/operations/api-routing.md` file.
-
-- Do NOT grep or search - read it completely
-- This gives you routing decisions for documented domains
-- You need this context to make correct API decisions
+Read `lib/examples/operations/api-routing.md` (~170 lines) to:
+- Identify which API method to use (gh CLI, REST, GraphQL, Web UI)
+- Check the Quick Reference table for high-level support
 
 ```
-Read: lib/examples/operations/api-routing.md (full file)
+Read: lib/examples/operations/api-routing.md
 ```
 
-### Domain Quick Reference
+### Step 2: Read Domain Details
 
-| Domain | API | Key Operations |
-|--------|-----|----------------|
-| Issues | GraphQL | `createIssue`, `updateIssue`, `closeIssue`, `addLabelsToLabelable` |
-| PRs | GraphQL | `createPullRequest`, `mergePullRequest`, `requestReviews` |
-| Milestones | REST | `POST /milestones`, `PATCH /milestones/{number}` |
-| Labels | REST | `POST /labels`, `PATCH /labels/{name}` |
-| Projects v2 | GraphQL | `addProjectV2ItemById`, `updateProjectV2ItemFieldValue` |
-| Branch Protection | REST | `PUT /branches/{branch}/protection` |
-| Rulesets | REST | `POST /rulesets`, `PUT /rulesets/{id}` |
-| Actions | REST | `POST /dispatches`, `GET /runs` |
-| Secrets | REST | `PUT /secrets/{name}` (requires encryption) |
-| Variables | REST | `POST /variables`, `PATCH /variables/{name}` |
-| Releases | REST | `POST /releases` |
-| Repositories | REST | `POST /user/repos`, `PATCH /repos/{owner}/{repo}` |
-| Collaborators | REST | `PUT /collaborators/{username}` |
-| Teams | REST | `POST /orgs/{org}/teams` |
-| Checks | REST | `POST /check-runs`, `PATCH /check-runs/{id}` |
-| Deployments | REST | `POST /deployments` |
-| Security | REST | `GET /code-scanning/alerts`, `PATCH /code-scanning/alerts/{number}` |
-| Dependabot | REST | `GET /dependabot/alerts`, `PATCH /dependabot/alerts/{number}` |
-| Search | REST/GraphQL | `GET /search/{type}` (read-only) |
-| Gists | REST | `POST /gists`, `PATCH /gists/{id}` |
+Based on the domain identified, read the domain-specific file for:
+- Detailed operation support matrix
+- Exact CLI commands
+- Corpus lookup keywords for syntax
+
+```
+Read: lib/examples/operations/domains/{domain}.md
+```
+
+**Domain file mapping:**
+
+| Domain | File |
+|--------|------|
+| Issues | `domains/issues.md` |
+| Pull Requests | `domains/pull-requests.md` |
+| Milestones | `domains/milestones.md` |
+| Labels | `domains/labels.md` |
+| Projects v2 | `domains/projects-v2.md` |
+| Branch Protection | `domains/branch-protection.md` |
+| Rulesets | `domains/rulesets.md` |
+| Actions | `domains/actions.md` |
+| Secrets | `domains/secrets.md` |
+| Variables | `domains/variables.md` |
+| Releases | `domains/releases.md` |
+| Repository | `domains/repository.md` |
+| Gists | `domains/gists.md` |
+| Search | `domains/search.md` |
+| Collaborators | `domains/collaborators.md` |
+| Teams | `domains/teams.md` |
+| Webhooks | `domains/webhooks.md` |
+| Checks | `domains/checks.md` |
+| Deployments | `domains/deployments.md` |
+| Environments | `domains/environments.md` |
+| Dependabot | `domains/dependabot.md` |
+| Code Scanning | `domains/code-scanning.md` |
+| Secret Scanning | `domains/secret-scanning.md` |
+| Notifications | `domains/notifications.md` |
+| Reactions | `domains/reactions.md` |
 
 ### Unknown Domains (Fallback)
 
