@@ -19,11 +19,20 @@
 | Set | `gh secret set {name} < value.txt` | Handles encryption automatically |
 | Delete | `gh secret delete {name}` | |
 
-## Corpus Lookup Guide
+## REST API Reference
 
-| API | Endpoints | Search Keywords |
-|-----|-----------|-----------------|
-| REST | `GET /repos/{owner}/{repo}/actions/secrets`, `GET /secrets/{secret_name}`, `PUT /secrets/{name}`, `DELETE /secrets/{name}` | `GET /actions/secrets`, `PUT /secrets/{name}`, `encrypted_value`, `key_id`, `public_key` |
+| Operation | Method | Endpoint | Notes |
+|-----------|--------|----------|-------|
+| List (repo) | GET | `/repos/{owner}/{repo}/actions/secrets` | |
+| Get (repo) | GET | `/repos/{owner}/{repo}/actions/secrets/{secret_name}` | |
+| Set (repo) | PUT | `/repos/{owner}/{repo}/actions/secrets/{secret_name}` | Requires encryption |
+| Delete (repo) | DELETE | `/repos/{owner}/{repo}/actions/secrets/{secret_name}` | |
+| Get public key | GET | `/repos/{owner}/{repo}/actions/secrets/public-key` | For encryption |
+| List (org) | GET | `/orgs/{org}/actions/secrets` | |
+| Set (org) | PUT | `/orgs/{org}/actions/secrets/{secret_name}` | |
+| Delete (org) | DELETE | `/orgs/{org}/actions/secrets/{secret_name}` | |
+| List (env) | GET | `/repos/{owner}/{repo}/environments/{env}/secrets` | |
+| Set (env) | PUT | `/repos/{owner}/{repo}/environments/{env}/secrets/{secret_name}` | |
 
 ## Key Concepts
 

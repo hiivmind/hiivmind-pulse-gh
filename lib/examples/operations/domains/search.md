@@ -24,11 +24,26 @@
 | Search code | `gh search code {query}` | Rate limited |
 | Search commits | `gh search commits {query}` | |
 
-## Corpus Lookup Guide
+## REST API Reference
 
-| API | Endpoints/Queries | Search Keywords |
-|-----|-------------------|-----------------|
-| REST | `GET /search/repositories`, `GET /search/issues`, `GET /search/code`, `GET /search/commits`, `GET /search/users`, `GET /search/topics`, `GET /search/labels` | `GET /search/repositories`, `q=`, `sort=`, `order=`, `per_page` |
-| GraphQL | `search(query: String!, type: SearchType!, first: Int)` - Types: REPOSITORY, ISSUE, ISSUE_ADVANCED, DISCUSSION, USER | `query { search(query: "...", type: REPOSITORY) { ... } }` |
+| Operation | Method | Endpoint | Notes |
+|-----------|--------|----------|-------|
+| Search repos | GET | `/search/repositories` | |
+| Search issues | GET | `/search/issues` | Also includes PRs |
+| Search code | GET | `/search/code` | Rate limited |
+| Search commits | GET | `/search/commits` | |
+| Search users | GET | `/search/users` | |
+| Search topics | GET | `/search/topics` | |
+| Search labels | GET | `/search/labels` | |
 
-**Note:** Search is read-only. GraphQL search returns a union type that includes Repository, Issue, PullRequest, Discussion, User. Code search is heavily rate limited.
+## GraphQL Reference
+
+| Operation | Type | Name | Notes |
+|-----------|------|------|-------|
+| Search repos | Query | `search(type: REPOSITORY)` | |
+| Search issues | Query | `search(type: ISSUE)` | Also includes PRs |
+| Search issues (advanced) | Query | `search(type: ISSUE_ADVANCED)` | Extended filters |
+| Search discussions | Query | `search(type: DISCUSSION)` | |
+| Search users | Query | `search(type: USER)` | |
+
+**Note:** Search is read-only. Code search is heavily rate limited.

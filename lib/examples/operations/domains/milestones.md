@@ -24,9 +24,21 @@
 | Delete | (Not available) | Use REST API |
 | Set on issue | `gh issue edit {number} --milestone {milestone}` | Via issue edit |
 
-## Corpus Lookup Guide
+## REST API Reference
 
-| API | Endpoints/Mutations | Search Keywords |
-|-----|---------------------|-----------------|
-| REST | `GET /repos/{owner}/{repo}/milestones`, `GET /milestones/{number}`, `POST /milestones`, `PATCH /milestones/{number}`, `DELETE /milestones/{number}` | `GET /repos`, `POST /milestones`, `PATCH /milestones/{number}`, `DELETE /milestones/{number}` |
-| GraphQL | `milestones` (query), `updateIssue` with `milestoneId` (mutation) | `query { repository { milestones } }`, `mutation { updateIssue(input: {milestoneId: }) }` |
+| Operation | Method | Endpoint | Notes |
+|-----------|--------|----------|-------|
+| List | GET | `/repos/{owner}/{repo}/milestones` | |
+| Get | GET | `/repos/{owner}/{repo}/milestones/{number}` | |
+| Create | POST | `/repos/{owner}/{repo}/milestones` | |
+| Update | PATCH | `/repos/{owner}/{repo}/milestones/{number}` | |
+| Close | PATCH | `/repos/{owner}/{repo}/milestones/{number}` | Set `state: closed` |
+| Delete | DELETE | `/repos/{owner}/{repo}/milestones/{number}` | |
+
+## GraphQL Reference
+
+| Operation | Type | Name | Notes |
+|-----------|------|------|-------|
+| List | Query | `repository.milestones` | |
+| Get | Query | `node(id:)` | Use `Milestone` type |
+| Set on issue | Mutation | `updateIssue` | Set `milestoneId` field |

@@ -18,11 +18,26 @@
 |-----------|---------|-------|
 | All | (Not available) | Use REST API or GraphQL |
 
-## Corpus Lookup Guide
+## REST API Reference
 
-| API | Endpoints/Mutations | Search Keywords |
-|-----|---------------------|-----------------|
-| REST | `GET /repos/{owner}/{repo}/deployments`, `GET /deployments/{deployment_id}`, `POST /repos/{owner}/{repo}/deployments`, `DELETE /deployments/{deployment_id}`, `POST /deployments/{deployment_id}/statuses`, `GET /deployments/{deployment_id}/statuses` | `GET /deployments`, `POST /deployments`, `POST /statuses`, `environment`, `ref`, `task` |
-| GraphQL | `deployment`, `deployments` (queries), `createDeployment`, `createDeploymentStatus` (mutations) | `query { repository { deployments } }`, `mutation { createDeployment }`, `mutation { createDeploymentStatus }` |
+| Operation | Method | Endpoint | Notes |
+|-----------|--------|----------|-------|
+| List | GET | `/repos/{owner}/{repo}/deployments` | |
+| Get | GET | `/repos/{owner}/{repo}/deployments/{deployment_id}` | |
+| Create | POST | `/repos/{owner}/{repo}/deployments` | |
+| Delete | DELETE | `/repos/{owner}/{repo}/deployments/{deployment_id}` | Inactive only |
+| List statuses | GET | `/repos/{owner}/{repo}/deployments/{deployment_id}/statuses` | |
+| Get status | GET | `/repos/{owner}/{repo}/deployments/{deployment_id}/statuses/{status_id}` | |
+| Create status | POST | `/repos/{owner}/{repo}/deployments/{deployment_id}/statuses` | |
+
+## GraphQL Reference
+
+| Operation | Type | Name | Notes |
+|-----------|------|------|-------|
+| List | Query | `repository.deployments` | |
+| Get | Query | `node(id:)` | Use `Deployment` type |
+| List statuses | Query | `deployment.statuses` | |
+| Create | Mutation | `createDeployment` | |
+| Create status | Mutation | `createDeploymentStatus` | |
 
 **Note:** Deployments track code being deployed to environments. Use with environments for full deployment workflow.

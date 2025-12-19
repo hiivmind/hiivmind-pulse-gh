@@ -22,10 +22,18 @@
 | View status | `gh status` | Shows notifications summary |
 | All mutations | (Not available) | Use REST API |
 
-## Corpus Lookup Guide
+## REST API Reference
 
-| API | Endpoints | Search Keywords |
-|-----|-----------|-----------------|
-| REST | `GET /notifications`, `PUT /notifications`, `GET /notifications/threads/{thread_id}`, `PATCH /notifications/threads/{thread_id}`, `GET /notifications/threads/{thread_id}/subscription`, `PUT /notifications/threads/{thread_id}/subscription`, `DELETE /notifications/threads/{thread_id}/subscription`, `GET /repos/{owner}/{repo}/notifications`, `PUT /repos/{owner}/{repo}/notifications` | `GET /notifications`, `PUT /notifications`, `threads`, `subscription`, `all`, `participating` |
+| Operation | Method | Endpoint | Notes |
+|-----------|--------|----------|-------|
+| List | GET | `/notifications` | All notifications |
+| Mark all read | PUT | `/notifications` | |
+| Get thread | GET | `/notifications/threads/{thread_id}` | |
+| Mark thread read | PATCH | `/notifications/threads/{thread_id}` | |
+| Get subscription | GET | `/notifications/threads/{thread_id}/subscription` | |
+| Set subscription | PUT | `/notifications/threads/{thread_id}/subscription` | Subscribe/ignore |
+| Delete subscription | DELETE | `/notifications/threads/{thread_id}/subscription` | |
+| List repo notifications | GET | `/repos/{owner}/{repo}/notifications` | |
+| Mark repo read | PUT | `/repos/{owner}/{repo}/notifications` | |
 
 **Note:** Notifications are REST-only. The `gh status` command shows a summary but doesn't support mutations.

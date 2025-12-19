@@ -63,13 +63,50 @@
 | Unlink repo | `gh project unlink {number} --owner {owner} --repo {repo}` | |
 | Mark template | `gh project mark-template {number} --owner {owner}` | |
 
-## Corpus Lookup Guide
+## REST API Reference
 
-| API | Endpoints/Mutations | Search Keywords |
-|-----|---------------------|-----------------|
-| REST | `GET /orgs/{org}/projectsV2`, `GET /orgs/{org}/projectsV2/{number}`, `GET /users/{username}/projectsV2`, `GET /users/{username}/projectsV2/{number}` | `GET /projectsV2`, `list projects`, `project number` |
-| GraphQL Queries | `projectsV2`, `projectV2`, `projectV2.items`, `projectV2.fields` | `query { organization { projectsV2 } }`, `query { node(id: ...) { ... on ProjectV2 } }` |
-| GraphQL Mutations | `createProjectV2`, `updateProjectV2`, `deleteProjectV2`, `copyProjectV2`, `addProjectV2ItemById`, `addProjectV2DraftIssue`, `updateProjectV2DraftIssue`, `convertProjectV2DraftIssueItemToIssue`, `updateProjectV2ItemFieldValue`, `clearProjectV2ItemFieldValue`, `updateProjectV2ItemPosition`, `archiveProjectV2Item`, `unarchiveProjectV2Item`, `deleteProjectV2Item`, `createProjectV2Field`, `updateProjectV2Field`, `deleteProjectV2Field`, `linkProjectV2ToRepository`, `unlinkProjectV2FromRepository`, `linkProjectV2ToTeam`, `unlinkProjectV2FromTeam`, `updateProjectV2Collaborators`, `markProjectV2AsTemplate`, `createProjectV2StatusUpdate`, `updateProjectV2StatusUpdate`, `deleteProjectV2StatusUpdate`, `deleteProjectV2Workflow` | `mutation { addProjectV2ItemById }`, `mutation { updateProjectV2ItemFieldValue }` |
+| Operation | Method | Endpoint | Notes |
+|-----------|--------|----------|-------|
+| List (org) | GET | `/orgs/{org}/projectsV2` | Read-only |
+| Get (org) | GET | `/orgs/{org}/projectsV2/{number}` | Read-only |
+| List (user) | GET | `/users/{username}/projectsV2` | Read-only |
+| Get (user) | GET | `/users/{username}/projectsV2/{number}` | Read-only |
+
+## GraphQL Reference
+
+| Operation | Type | Name | Notes |
+|-----------|------|------|-------|
+| List | Query | `organization.projectsV2` | Or `user.projectsV2` |
+| Get | Query | `node(id:)` | Use `ProjectV2` type |
+| List items | Query | `projectV2.items` | |
+| List fields | Query | `projectV2.fields` | |
+| Create | Mutation | `createProjectV2` | |
+| Edit | Mutation | `updateProjectV2` | Title, description, visibility |
+| Delete | Mutation | `deleteProjectV2` | |
+| Copy | Mutation | `copyProjectV2` | |
+| Add item | Mutation | `addProjectV2ItemById` | Issue or PR |
+| Create draft | Mutation | `addProjectV2DraftIssue` | |
+| Edit draft | Mutation | `updateProjectV2DraftIssue` | |
+| Convert draft | Mutation | `convertProjectV2DraftIssueItemToIssue` | |
+| Update field value | Mutation | `updateProjectV2ItemFieldValue` | |
+| Clear field value | Mutation | `clearProjectV2ItemFieldValue` | |
+| Move item | Mutation | `updateProjectV2ItemPosition` | |
+| Archive item | Mutation | `archiveProjectV2Item` | |
+| Unarchive item | Mutation | `unarchiveProjectV2Item` | |
+| Delete item | Mutation | `deleteProjectV2Item` | |
+| Create field | Mutation | `createProjectV2Field` | |
+| Update field | Mutation | `updateProjectV2Field` | Replaces all options |
+| Delete field | Mutation | `deleteProjectV2Field` | |
+| Link repo | Mutation | `linkProjectV2ToRepository` | |
+| Unlink repo | Mutation | `unlinkProjectV2FromRepository` | |
+| Link team | Mutation | `linkProjectV2ToTeam` | |
+| Unlink team | Mutation | `unlinkProjectV2FromTeam` | |
+| Update collaborators | Mutation | `updateProjectV2Collaborators` | |
+| Mark template | Mutation | `markProjectV2AsTemplate` | |
+| Create status update | Mutation | `createProjectV2StatusUpdate` | |
+| Update status update | Mutation | `updateProjectV2StatusUpdate` | |
+| Delete status update | Mutation | `deleteProjectV2StatusUpdate` | |
+| Delete workflow | Mutation | `deleteProjectV2Workflow` | |
 
 ## Prerequisites
 

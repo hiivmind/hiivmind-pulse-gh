@@ -30,9 +30,31 @@
 | Lock | (Web UI only) |
 | Unlock | (Web UI only) |
 
-## Corpus Lookup Guide
+## REST API Reference
 
-| API | Endpoints/Mutations | Search Keywords |
-|-----|---------------------|-----------------|
-| REST | `GET /repos/{owner}/{repo}/issues`, `GET /issues/{number}`, `POST /issues`, `PATCH /issues/{number}`, `POST /issues/{number}/comments`, `POST /issues/{number}/labels` | `GET /repos`, `POST /issues`, `PATCH /issues/{number}`, `issues/{number}/comments`, `issues/{number}/labels` |
-| GraphQL | `issue`, `issues` (queries), `createIssue`, `updateIssue`, `closeIssue`, `addComment`, `addLabelsToLabelable`, `removeLabelsFromLabelable` (mutations) | `query { issue }`, `query { repository { issues } }`, `mutation { createIssue }`, `mutation { updateIssue }` |
+| Operation | Method | Endpoint | Notes |
+|-----------|--------|----------|-------|
+| List | GET | `/repos/{owner}/{repo}/issues` | |
+| Get | GET | `/repos/{owner}/{repo}/issues/{number}` | |
+| Create | POST | `/repos/{owner}/{repo}/issues` | |
+| Update | PATCH | `/repos/{owner}/{repo}/issues/{number}` | |
+| Close | PATCH | `/repos/{owner}/{repo}/issues/{number}` | Set `state: closed` |
+| Add comment | POST | `/repos/{owner}/{repo}/issues/{number}/comments` | |
+| Add labels | POST | `/repos/{owner}/{repo}/issues/{number}/labels` | |
+| Set milestone | PATCH | `/repos/{owner}/{repo}/issues/{number}` | Set `milestone` field |
+| Lock | PUT | `/repos/{owner}/{repo}/issues/{number}/lock` | |
+| Unlock | DELETE | `/repos/{owner}/{repo}/issues/{number}/lock` | |
+
+## GraphQL Reference
+
+| Operation | Type | Name | Notes |
+|-----------|------|------|-------|
+| List | Query | `repository.issues` | |
+| Get | Query | `node(id:)` | Use `Issue` type |
+| Create | Mutation | `createIssue` | |
+| Update | Mutation | `updateIssue` | |
+| Close | Mutation | `closeIssue` | |
+| Add comment | Mutation | `addComment` | |
+| Add labels | Mutation | `addLabelsToLabelable` | |
+| Remove labels | Mutation | `removeLabelsFromLabelable` | |
+| Set milestone | Mutation | `updateIssue` | Set `milestoneId` field |

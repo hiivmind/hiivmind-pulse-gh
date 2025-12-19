@@ -18,10 +18,15 @@
 |-----------|---------|-------|
 | All | (Not available) | Use REST API |
 
-## Corpus Lookup Guide
+## REST API Reference
 
-| API | Endpoints | Search Keywords |
-|-----|-----------|-----------------|
-| REST | `GET /repos/{owner}/{repo}/secret-scanning/alerts`, `GET /secret-scanning/alerts/{alert_number}`, `PATCH /secret-scanning/alerts/{alert_number}`, `GET /secret-scanning/alerts/{alert_number}/locations`, `GET /orgs/{org}/secret-scanning/alerts` | `GET /secret-scanning/alerts`, `PATCH /secret-scanning/alerts`, `locations`, `state`, `resolution` |
+| Operation | Method | Endpoint | Notes |
+|-----------|--------|----------|-------|
+| List alerts | GET | `/repos/{owner}/{repo}/secret-scanning/alerts` | |
+| Get alert | GET | `/repos/{owner}/{repo}/secret-scanning/alerts/{alert_number}` | |
+| Update alert | PATCH | `/repos/{owner}/{repo}/secret-scanning/alerts/{alert_number}` | Resolve/reopen |
+| List locations | GET | `/repos/{owner}/{repo}/secret-scanning/alerts/{alert_number}/locations` | Where secret found |
+| List org alerts | GET | `/orgs/{org}/secret-scanning/alerts` | Enterprise scope |
+| Bypass push protection | POST | `/repos/{owner}/{repo}/secret-scanning/push-protection-bypasses` | Requires reason |
 
 **Note:** Secret scanning alerts are REST-only. No GraphQL schema coverage for security alerts.

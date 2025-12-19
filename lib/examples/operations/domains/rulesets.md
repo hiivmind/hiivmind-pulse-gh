@@ -17,11 +17,22 @@
 |-----------|---------|-------|
 | All | (Not available) | Use REST API or Web UI |
 
-## Corpus Lookup Guide
+## REST API Reference
 
-| API | Endpoints/Queries | Search Keywords |
-|-----|-------------------|-----------------|
-| REST | `GET /repos/{owner}/{repo}/rulesets`, `GET /rulesets/{ruleset_id}`, `POST /rulesets`, `PUT /rulesets/{ruleset_id}`, `DELETE /rulesets/{ruleset_id}`, `POST /rulesets/test` | `GET /repos`, `POST /rulesets`, `enforcement`, `conditions`, `rules` |
-| GraphQL | `repository { rulesets }` (read-only query) | `query { repository { rulesets { edges { node } } } }` |
+| Operation | Method | Endpoint | Notes |
+|-----------|--------|----------|-------|
+| List | GET | `/repos/{owner}/{repo}/rulesets` | |
+| Get | GET | `/repos/{owner}/{repo}/rulesets/{ruleset_id}` | |
+| Create | POST | `/repos/{owner}/{repo}/rulesets` | |
+| Update | PUT | `/repos/{owner}/{repo}/rulesets/{ruleset_id}` | |
+| Delete | DELETE | `/repos/{owner}/{repo}/rulesets/{ruleset_id}` | |
+| Test rule | POST | `/repos/{owner}/{repo}/rulesets/test` | Check if ref matches |
+
+## GraphQL Reference
+
+| Operation | Type | Name | Notes |
+|-----------|------|------|-------|
+| List | Query | `repository.rulesets` | Read-only |
+| Get | Query | `node(id:)` | Use `RepositoryRuleset` type |
 
 **Key concepts:** `target`, `enforcement` level, `conditions`, `ref_name` pattern, `rules` array

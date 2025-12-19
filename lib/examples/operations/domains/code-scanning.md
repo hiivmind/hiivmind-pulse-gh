@@ -23,10 +23,21 @@
 |-----------|---------|-------|
 | All | (Not available) | Use REST API |
 
-## Corpus Lookup Guide
+## REST API Reference
 
-| API | Endpoints | Search Keywords |
-|-----|-----------|-----------------|
-| REST | `GET /repos/{owner}/{repo}/code-scanning/alerts`, `GET /code-scanning/alerts/{alert_number}`, `PATCH /code-scanning/alerts/{alert_number}`, `GET /code-scanning/alerts/{alert_number}/instances`, `GET /repos/{owner}/{repo}/code-scanning/analyses`, `DELETE /code-scanning/analyses/{analysis_id}`, `POST /repos/{owner}/{repo}/code-scanning/sarifs`, `GET /code-scanning/sarifs/{sarif_id}`, `GET /repos/{owner}/{repo}/code-scanning/default-setup`, `PATCH /repos/{owner}/{repo}/code-scanning/default-setup` | `GET /code-scanning/alerts`, `PATCH /code-scanning/alerts`, `sarifs`, `default-setup`, `state`, `dismissed_reason` |
+| Operation | Method | Endpoint | Notes |
+|-----------|--------|----------|-------|
+| List alerts | GET | `/repos/{owner}/{repo}/code-scanning/alerts` | |
+| Get alert | GET | `/repos/{owner}/{repo}/code-scanning/alerts/{alert_number}` | |
+| Update alert | PATCH | `/repos/{owner}/{repo}/code-scanning/alerts/{alert_number}` | Dismiss/reopen |
+| List instances | GET | `/repos/{owner}/{repo}/code-scanning/alerts/{alert_number}/instances` | |
+| List analyses | GET | `/repos/{owner}/{repo}/code-scanning/analyses` | |
+| Get analysis | GET | `/repos/{owner}/{repo}/code-scanning/analyses/{analysis_id}` | |
+| Delete analysis | DELETE | `/repos/{owner}/{repo}/code-scanning/analyses/{analysis_id}` | |
+| Upload SARIF | POST | `/repos/{owner}/{repo}/code-scanning/sarifs` | For custom tools |
+| Get SARIF status | GET | `/repos/{owner}/{repo}/code-scanning/sarifs/{sarif_id}` | |
+| List org alerts | GET | `/orgs/{org}/code-scanning/alerts` | Enterprise scope |
+| Get default setup | GET | `/repos/{owner}/{repo}/code-scanning/default-setup` | CodeQL config |
+| Update default setup | PATCH | `/repos/{owner}/{repo}/code-scanning/default-setup` | Enable/configure |
 
 **Note:** Code scanning alerts are REST-only. SARIF upload enables integration with third-party security tools.

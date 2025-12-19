@@ -16,11 +16,23 @@
 |-----------|---------|-------|
 | All | (Not available) | Use REST API or Web UI |
 
-## Corpus Lookup Guide
+## REST API Reference
 
-| API | Endpoints | Search Keywords |
-|-----|-----------|-----------------|
-| REST | `GET /repos/{owner}/{repo}/branches/{branch}/protection`, `PUT /branches/{branch}/protection`, `DELETE /branches/{branch}/protection` | `GET /repos`, `PUT /branches/{branch}/protection`, `required_status_checks`, `required_pull_request_reviews` |
-| GraphQL | `branchProtectionRule` (read-only query) | `query { repository { branchProtectionRules } }` |
+| Operation | Method | Endpoint | Notes |
+|-----------|--------|----------|-------|
+| Get | GET | `/repos/{owner}/{repo}/branches/{branch}/protection` | |
+| Set | PUT | `/repos/{owner}/{repo}/branches/{branch}/protection` | Full replacement |
+| Delete | DELETE | `/repos/{owner}/{repo}/branches/{branch}/protection` | |
+| Get status checks | GET | `/repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks` | |
+| Update status checks | PATCH | `/repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks` | |
+| Get PR reviews | GET | `/repos/{owner}/{repo}/branches/{branch}/protection/required_pull_request_reviews` | |
+| Update PR reviews | PATCH | `/repos/{owner}/{repo}/branches/{branch}/protection/required_pull_request_reviews` | |
 
-**Note:** `BranchProtectionRule` GraphQL type is read-only. Use REST for mutations or prefer Rulesets for new repos.
+## GraphQL Reference
+
+| Operation | Type | Name | Notes |
+|-----------|------|------|-------|
+| List | Query | `repository.branchProtectionRules` | Read-only |
+| Get | Query | `node(id:)` | Use `BranchProtectionRule` type |
+
+**Note:** GraphQL is read-only for branch protection. Use REST for mutations or prefer Rulesets for new repos.

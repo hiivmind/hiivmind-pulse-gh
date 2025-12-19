@@ -26,11 +26,22 @@
 | Org operations | (Not available) | Use REST API |
 | Env operations | (Not available) | Use REST API |
 
-## Corpus Lookup Guide
+## REST API Reference
 
-| API | Endpoints | Search Keywords |
-|-----|-----------|-----------------|
-| REST | Repository: `GET /repos/{owner}/{repo}/actions/variables`, `POST /variables`, `PATCH /variables/{name}`, `DELETE /variables/{name}` | Organization: `GET /orgs/{org}/actions/variables`, `POST /variables` | Environment: `GET /repos/{owner}/{repo}/environments/{env_name}/variables` | `GET /actions/variables`, `POST /variables`, `PATCH /variables/{name}`, `visibility`, `selected_repository_ids` |
+| Operation | Method | Endpoint | Notes |
+|-----------|--------|----------|-------|
+| List (repo) | GET | `/repos/{owner}/{repo}/actions/variables` | |
+| Get (repo) | GET | `/repos/{owner}/{repo}/actions/variables/{name}` | |
+| Create (repo) | POST | `/repos/{owner}/{repo}/actions/variables` | |
+| Update (repo) | PATCH | `/repos/{owner}/{repo}/actions/variables/{name}` | |
+| Delete (repo) | DELETE | `/repos/{owner}/{repo}/actions/variables/{name}` | |
+| List (org) | GET | `/orgs/{org}/actions/variables` | |
+| Get (org) | GET | `/orgs/{org}/actions/variables/{name}` | |
+| Create (org) | POST | `/orgs/{org}/actions/variables` | With visibility control |
+| Update (org) | PATCH | `/orgs/{org}/actions/variables/{name}` | |
+| Delete (org) | DELETE | `/orgs/{org}/actions/variables/{name}` | |
+| List (env) | GET | `/repos/{owner}/{repo}/environments/{env}/variables` | |
+| Create (env) | POST | `/repos/{owner}/{repo}/environments/{env}/variables` | |
 
 ## Key Differences from Secrets
 

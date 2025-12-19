@@ -17,12 +17,25 @@
 |-----------|---------|-------|
 | All | (Not available) | Use REST API or GraphQL |
 
-## Corpus Lookup Guide
+## REST API Reference
 
-| API | Endpoints/Mutations | Search Keywords |
-|-----|---------------------|-----------------|
-| REST | `GET /repos/{owner}/{repo}/issues/{issue_number}/reactions`, `POST /issues/{issue_number}/reactions`, `DELETE /reactions/{reaction_id}`, `GET /issues/comments/{comment_id}/reactions`, `POST /issues/comments/{comment_id}/reactions`, `GET /pulls/comments/{comment_id}/reactions` | `GET /reactions`, `POST /reactions`, `DELETE /reactions`, `content` (+1, -1, laugh, confused, heart, hooray, rocket, eyes) |
-| GraphQL | `reactions` (query on Reactable types), `addReaction`, `removeReaction` (mutations) | `query { issue { reactions } }`, `mutation { addReaction(input: {subjectId: ..., content: THUMBS_UP}) }` |
+| Operation | Method | Endpoint | Notes |
+|-----------|--------|----------|-------|
+| List (issue) | GET | `/repos/{owner}/{repo}/issues/{issue_number}/reactions` | |
+| Add (issue) | POST | `/repos/{owner}/{repo}/issues/{issue_number}/reactions` | |
+| List (issue comment) | GET | `/repos/{owner}/{repo}/issues/comments/{comment_id}/reactions` | |
+| Add (issue comment) | POST | `/repos/{owner}/{repo}/issues/comments/{comment_id}/reactions` | |
+| List (PR comment) | GET | `/repos/{owner}/{repo}/pulls/comments/{comment_id}/reactions` | |
+| Add (PR comment) | POST | `/repos/{owner}/{repo}/pulls/comments/{comment_id}/reactions` | |
+| Delete | DELETE | `/repos/{owner}/{repo}/issues/{issue_number}/reactions/{reaction_id}` | By ID |
+
+## GraphQL Reference
+
+| Operation | Type | Name | Notes |
+|-----------|------|------|-------|
+| List | Query | `issue.reactions`, `pullRequest.reactions` | On Reactable types |
+| Add | Mutation | `addReaction` | `subjectId` + `content` |
+| Remove | Mutation | `removeReaction` | `subjectId` + `content` |
 
 ## Reaction Types
 

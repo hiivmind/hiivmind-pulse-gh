@@ -31,11 +31,29 @@
 | Download | `gh release download {tag}` |
 | Verify attestation | `gh release verify {tag}` |
 
-## Corpus Lookup Guide
+## REST API Reference
 
-| API | Endpoints/Queries | Search Keywords |
-|-----|-------------------|-----------------|
-| REST | `GET /repos/{owner}/{repo}/releases`, `GET /releases/{release_id}`, `GET /releases/tags/{tag}`, `GET /releases/latest`, `POST /releases`, `PATCH /releases/{release_id}`, `DELETE /releases/{release_id}`, `POST /releases/generate-notes`, `POST https://uploads.github.com/repos/{owner}/{repo}/releases/{release_id}/assets` | `GET /releases`, `POST /releases`, `tag_name`, `target_commitish`, `uploads.github.com`, `generate-notes` |
-| GraphQL | `releases` (query), `release` (query) - No mutations available | `query { repository { releases { edges { node } } } }` |
+| Operation | Method | Endpoint | Notes |
+|-----------|--------|----------|-------|
+| List | GET | `/repos/{owner}/{repo}/releases` | |
+| Get by ID | GET | `/repos/{owner}/{repo}/releases/{release_id}` | |
+| Get by tag | GET | `/repos/{owner}/{repo}/releases/tags/{tag}` | |
+| Get latest | GET | `/repos/{owner}/{repo}/releases/latest` | |
+| Create | POST | `/repos/{owner}/{repo}/releases` | |
+| Update | PATCH | `/repos/{owner}/{repo}/releases/{release_id}` | |
+| Delete | DELETE | `/repos/{owner}/{repo}/releases/{release_id}` | |
+| Generate notes | POST | `/repos/{owner}/{repo}/releases/generate-notes` | |
+| Upload asset | POST | `https://uploads.github.com/repos/{owner}/{repo}/releases/{release_id}/assets` | Special endpoint |
+| Update asset | PATCH | `/repos/{owner}/{repo}/releases/assets/{asset_id}` | Metadata only |
+| Delete asset | DELETE | `/repos/{owner}/{repo}/releases/assets/{asset_id}` | |
+| List assets | GET | `/repos/{owner}/{repo}/releases/{release_id}/assets` | |
+
+## GraphQL Reference
+
+| Operation | Type | Name | Notes |
+|-----------|------|------|-------|
+| List | Query | `repository.releases` | |
+| Get | Query | `node(id:)` | Use `Release` type |
+| Get latest | Query | `repository.latestRelease` | |
 
 **Note:** GraphQL has no mutations for release management. Upload asset uses special `uploads.github.com` endpoint.

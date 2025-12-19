@@ -22,11 +22,32 @@
 | View PR checks | `gh pr checks {number}` | View check status only |
 | All mutations | (Not available) | Use REST API or GraphQL |
 
-## Corpus Lookup Guide
+## REST API Reference
 
-| API | Endpoints/Mutations | Search Keywords |
-|-----|---------------------|-----------------|
-| REST | `POST /repos/{owner}/{repo}/check-runs`, `PATCH /check-runs/{check_run_id}`, `GET /check-runs/{check_run_id}`, `GET /repos/{owner}/{repo}/commits/{ref}/check-runs`, `POST /check-suites`, `GET /check-suites/{check_suite_id}`, `GET /commits/{ref}/check-suites`, `PATCH /repos/{owner}/{repo}/check-suites/preferences`, `GET /check-runs/{check_run_id}/annotations` | `POST /check-runs`, `PATCH /check-runs`, `check-suites`, `annotations` |
-| GraphQL | `checkRun`, `checkSuite` (queries), `createCheckRun`, `updateCheckRun`, `rerequestCheckSuite` (mutations) | `query { repository { checkSuites } }`, `mutation { createCheckRun }`, `mutation { updateCheckRun }` |
+| Operation | Method | Endpoint | Notes |
+|-----------|--------|----------|-------|
+| Create check run | POST | `/repos/{owner}/{repo}/check-runs` | GitHub App only |
+| Update check run | PATCH | `/repos/{owner}/{repo}/check-runs/{check_run_id}` | |
+| Get check run | GET | `/repos/{owner}/{repo}/check-runs/{check_run_id}` | |
+| List check runs (ref) | GET | `/repos/{owner}/{repo}/commits/{ref}/check-runs` | |
+| List check runs (suite) | GET | `/repos/{owner}/{repo}/check-suites/{check_suite_id}/check-runs` | |
+| List annotations | GET | `/repos/{owner}/{repo}/check-runs/{check_run_id}/annotations` | |
+| Create check suite | POST | `/repos/{owner}/{repo}/check-suites` | |
+| Get check suite | GET | `/repos/{owner}/{repo}/check-suites/{check_suite_id}` | |
+| List check suites | GET | `/repos/{owner}/{repo}/commits/{ref}/check-suites` | |
+| Set preferences | PATCH | `/repos/{owner}/{repo}/check-suites/preferences` | |
+| Rerequest suite | POST | `/repos/{owner}/{repo}/check-suites/{check_suite_id}/rerequest` | |
 
-**Note:** Check run creation/updates require a GitHub App installation. PATs cannot create checks. CLI can only view check status via `gh pr checks`.
+## GraphQL Reference
+
+| Operation | Type | Name | Notes |
+|-----------|------|------|-------|
+| Get check run | Query | `node(id:)` | Use `CheckRun` type |
+| List check runs | Query | `checkSuite.checkRuns` | |
+| Get check suite | Query | `node(id:)` | Use `CheckSuite` type |
+| List check suites | Query | `commit.checkSuites` | |
+| Create check run | Mutation | `createCheckRun` | GitHub App only |
+| Update check run | Mutation | `updateCheckRun` | |
+| Rerequest suite | Mutation | `rerequestCheckSuite` | |
+
+**Note:** Check run creation/updates require a GitHub App installation. PATs cannot create checks.

@@ -28,11 +28,27 @@
 | Clone | `gh gist clone {id}` | Clone to local directory |
 | Rename | `gh gist rename {id} {old} {new}` | Rename file in gist |
 
-## Corpus Lookup Guide
+## REST API Reference
 
-| API | Endpoints/Queries | Search Keywords |
-|-----|-------------------|-----------------|
-| REST | `GET /gists`, `GET /gists/{gist_id}`, `GET /users/{username}/gists`, `POST /gists`, `PATCH /gists/{gist_id}`, `DELETE /gists/{gist_id}`, `POST /gists/{gist_id}/forks`, `PUT /gists/{gist_id}/star`, `DELETE /gists/{gist_id}/star`, `GET /gists/starred` | `GET /gists`, `POST /gists`, `PATCH /gists/{gist_id}`, `PUT /star`, `DELETE /star` |
-| GraphQL | `gist`, `gists` (queries via user/viewer) - No mutations available | `query { viewer { gists } }`, `query { user { gists } }` |
+| Operation | Method | Endpoint | Notes |
+|-----------|--------|----------|-------|
+| List (user) | GET | `/users/{username}/gists` | |
+| List (viewer) | GET | `/gists` | Authenticated user |
+| Get | GET | `/gists/{gist_id}` | |
+| Create | POST | `/gists` | |
+| Update | PATCH | `/gists/{gist_id}` | |
+| Delete | DELETE | `/gists/{gist_id}` | |
+| Fork | POST | `/gists/{gist_id}/forks` | |
+| Star | PUT | `/gists/{gist_id}/star` | |
+| Unstar | DELETE | `/gists/{gist_id}/star` | |
+| List starred | GET | `/gists/starred` | |
+| List commits | GET | `/gists/{gist_id}/commits` | |
+
+## GraphQL Reference
+
+| Operation | Type | Name | Notes |
+|-----------|------|------|-------|
+| List | Query | `viewer.gists` or `user.gists` | |
+| Get | Query | `node(id:)` | Use `Gist` type |
 
 **Note:** GraphQL has no mutations for gist management. Use CLI (simplest) or REST API.

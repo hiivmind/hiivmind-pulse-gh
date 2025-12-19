@@ -34,11 +34,32 @@
 | Rename | `gh repo rename [new-name]` | |
 | Sync | `gh repo sync [repo]` | Sync fork with upstream |
 
-## Corpus Lookup Guide
+## REST API Reference
 
-| API | Endpoints/Mutations | Search Keywords |
-|-----|---------------------|-----------------|
-| REST | `GET /repos/{owner}/{repo}`, `GET /user/repos`, `GET /orgs/{org}/repos`, `POST /user/repos`, `POST /orgs/{org}/repos`, `PATCH /repos/{owner}/{repo}`, `DELETE /repos/{owner}/{repo}`, `POST /repos/{owner}/{repo}/forks`, `POST /repos/{owner}/{repo}/transfer`, `POST /repos/{owner}/{repo}/merge-upstream`, `PUT /repos/{owner}/{repo}/topics` | `GET /repos`, `POST /user/repos`, `PATCH /repos/{owner}/{repo}`, `POST /forks`, `PUT /topics` |
-| GraphQL | `repository`, `repositories` (queries), `createRepository`, `updateRepository`, `archiveRepository`, `unarchiveRepository`, `updateTopics` (mutations) | `query { repository }`, `mutation { createRepository }`, `mutation { updateRepository }`, `mutation { archiveRepository }` |
+| Operation | Method | Endpoint | Notes |
+|-----------|--------|----------|-------|
+| List (user) | GET | `/user/repos` | Authenticated user's repos |
+| List (org) | GET | `/orgs/{org}/repos` | |
+| Get | GET | `/repos/{owner}/{repo}` | |
+| Create (user) | POST | `/user/repos` | |
+| Create (org) | POST | `/orgs/{org}/repos` | |
+| Update | PATCH | `/repos/{owner}/{repo}` | |
+| Delete | DELETE | `/repos/{owner}/{repo}` | ⊗ Blocked |
+| Fork | POST | `/repos/{owner}/{repo}/forks` | |
+| Transfer | POST | `/repos/{owner}/{repo}/transfer` | ⊗ Blocked |
+| Sync fork | POST | `/repos/{owner}/{repo}/merge-upstream` | |
+| Update topics | PUT | `/repos/{owner}/{repo}/topics` | |
 
-**Note:** No GraphQL mutation for delete, fork, or transfer. Archive/unarchive use REST-like patterns but via GraphQL mutations. Repository delete/transfer/archive blocked for safety - see `docs/operation-blocklist.md`.
+## GraphQL Reference
+
+| Operation | Type | Name | Notes |
+|-----------|------|------|-------|
+| Get | Query | `repository` | |
+| List | Query | `user.repositories` or `organization.repositories` | |
+| Create | Mutation | `createRepository` | |
+| Update | Mutation | `updateRepository` | |
+| Archive | Mutation | `archiveRepository` | ⊗ Blocked |
+| Unarchive | Mutation | `unarchiveRepository` | |
+| Update topics | Mutation | `updateTopics` | |
+
+**Note:** No GraphQL mutation for delete, fork, or transfer. See `docs/operation-blocklist.md` for blocked operations.

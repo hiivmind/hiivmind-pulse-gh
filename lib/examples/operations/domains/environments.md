@@ -21,11 +21,29 @@
 |-----------|---------|-------|
 | All | (Not available) | Use REST API or GraphQL |
 
-## Corpus Lookup Guide
+## REST API Reference
 
-| API | Endpoints/Mutations | Search Keywords |
-|-----|---------------------|-----------------|
-| REST | `GET /repos/{owner}/{repo}/environments`, `GET /environments/{environment_name}`, `PUT /environments/{environment_name}`, `DELETE /environments/{environment_name}`, `GET /environments/{environment_name}/secrets`, `PUT /environments/{environment_name}/secrets/{secret_name}`, `GET /environments/{environment_name}/variables` | `GET /environments`, `PUT /environments`, `DELETE /environments`, `secrets`, `variables`, `protection_rules` |
-| GraphQL | `environment` (query), `createEnvironment`, `updateEnvironment`, `deleteEnvironment` (mutations) | `query { repository { environments } }`, `mutation { createEnvironment }`, `mutation { updateEnvironment }` |
+| Operation | Method | Endpoint | Notes |
+|-----------|--------|----------|-------|
+| List | GET | `/repos/{owner}/{repo}/environments` | |
+| Get | GET | `/repos/{owner}/{repo}/environments/{environment_name}` | |
+| Create/Update | PUT | `/repos/{owner}/{repo}/environments/{environment_name}` | Upsert |
+| Delete | DELETE | `/repos/{owner}/{repo}/environments/{environment_name}` | |
+| List secrets | GET | `/repos/{owner}/{repo}/environments/{environment_name}/secrets` | |
+| Get secret | GET | `/repos/{owner}/{repo}/environments/{environment_name}/secrets/{secret_name}` | |
+| Set secret | PUT | `/repos/{owner}/{repo}/environments/{environment_name}/secrets/{secret_name}` | |
+| Delete secret | DELETE | `/repos/{owner}/{repo}/environments/{environment_name}/secrets/{secret_name}` | |
+| List variables | GET | `/repos/{owner}/{repo}/environments/{environment_name}/variables` | |
+| Set variable | POST | `/repos/{owner}/{repo}/environments/{environment_name}/variables` | |
 
-**Note:** Environments provide deployment targets with protection rules (required reviewers, wait timers, branch policies). Environment secrets/variables use REST endpoints under `/environments/{name}/secrets` and `/environments/{name}/variables`.
+## GraphQL Reference
+
+| Operation | Type | Name | Notes |
+|-----------|------|------|-------|
+| List | Query | `repository.environments` | |
+| Get | Query | `node(id:)` | Use `Environment` type |
+| Create | Mutation | `createEnvironment` | |
+| Update | Mutation | `updateEnvironment` | |
+| Delete | Mutation | `deleteEnvironment` | |
+
+**Note:** Environments provide deployment targets with protection rules (required reviewers, wait timers, branch policies).

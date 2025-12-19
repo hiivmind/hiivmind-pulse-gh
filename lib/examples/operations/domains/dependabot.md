@@ -18,10 +18,18 @@
 |-----------|---------|-------|
 | All | (Not available) | Use REST API |
 
-## Corpus Lookup Guide
+## REST API Reference
 
-| API | Endpoints | Search Keywords |
-|-----|-----------|-----------------|
-| REST | `GET /repos/{owner}/{repo}/dependabot/alerts`, `GET /dependabot/alerts/{alert_number}`, `PATCH /dependabot/alerts/{alert_number}`, `GET /orgs/{org}/dependabot/alerts`, `GET /repos/{owner}/{repo}/dependabot/secrets`, `PUT /dependabot/secrets/{secret_name}` | `GET /dependabot/alerts`, `PATCH /dependabot/alerts`, `state`, `dismissed_reason`, `dependabot/secrets` |
+| Operation | Method | Endpoint | Notes |
+|-----------|--------|----------|-------|
+| List alerts | GET | `/repos/{owner}/{repo}/dependabot/alerts` | |
+| Get alert | GET | `/repos/{owner}/{repo}/dependabot/alerts/{alert_number}` | |
+| Update alert | PATCH | `/repos/{owner}/{repo}/dependabot/alerts/{alert_number}` | Dismiss/reopen |
+| List org alerts | GET | `/orgs/{org}/dependabot/alerts` | Enterprise scope |
+| List secrets | GET | `/repos/{owner}/{repo}/dependabot/secrets` | |
+| Get secret | GET | `/repos/{owner}/{repo}/dependabot/secrets/{secret_name}` | |
+| Set secret | PUT | `/repos/{owner}/{repo}/dependabot/secrets/{secret_name}` | Encrypted |
+| Delete secret | DELETE | `/repos/{owner}/{repo}/dependabot/secrets/{secret_name}` | |
+| Get public key | GET | `/repos/{owner}/{repo}/dependabot/secrets/public-key` | For encryption |
 
 **Note:** Dependabot alerts are REST-only. No GraphQL schema coverage for security alerts.

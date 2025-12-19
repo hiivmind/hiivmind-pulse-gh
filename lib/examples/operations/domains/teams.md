@@ -24,11 +24,34 @@
 |-----------|---------|-------|
 | All | (Not available) | Use REST API |
 
-## Corpus Lookup Guide
+## REST API Reference
 
-| API | Endpoints/Mutations | Search Keywords |
-|-----|---------------------|-----------------|
-| REST | `GET /orgs/{org}/teams`, `GET /orgs/{org}/teams/{team_slug}`, `POST /orgs/{org}/teams`, `PATCH /teams/{team_id}`, `DELETE /teams/{team_id}`, `GET /teams/{team_id}/members`, `PUT /teams/{team_id}/memberships/{username}`, `DELETE /teams/{team_id}/memberships/{username}`, `GET /teams/{team_id}/repos`, `PUT /teams/{team_id}/repos/{owner}/{repo}`, `DELETE /teams/{team_id}/repos/{owner}/{repo}` | `GET /orgs/{org}/teams`, `POST /teams`, `PUT /memberships`, `PUT /repos` |
-| GraphQL | `team`, `teams` (queries), `createTeamDiscussion`, `updateTeamDiscussion`, `deleteTeamDiscussion`, `updateTeamsRepository` (mutations) | `query { organization { teams } }`, `mutation { updateTeamsRepository }` |
+| Operation | Method | Endpoint | Notes |
+|-----------|--------|----------|-------|
+| List (org) | GET | `/orgs/{org}/teams` | |
+| Get | GET | `/orgs/{org}/teams/{team_slug}` | |
+| Create | POST | `/orgs/{org}/teams` | |
+| Update | PATCH | `/orgs/{org}/teams/{team_slug}` | |
+| Delete | DELETE | `/orgs/{org}/teams/{team_slug}` | |
+| List members | GET | `/orgs/{org}/teams/{team_slug}/members` | |
+| Get membership | GET | `/orgs/{org}/teams/{team_slug}/memberships/{username}` | |
+| Add member | PUT | `/orgs/{org}/teams/{team_slug}/memberships/{username}` | |
+| Remove member | DELETE | `/orgs/{org}/teams/{team_slug}/memberships/{username}` | |
+| List repos | GET | `/orgs/{org}/teams/{team_slug}/repos` | |
+| Add repo | PUT | `/orgs/{org}/teams/{team_slug}/repos/{owner}/{repo}` | |
+| Remove repo | DELETE | `/orgs/{org}/teams/{team_slug}/repos/{owner}/{repo}` | |
 
-**Note:** Team CRUD and membership mutations are REST-only. GraphQL supports team discussions and repository assignments.
+## GraphQL Reference
+
+| Operation | Type | Name | Notes |
+|-----------|------|------|-------|
+| List | Query | `organization.teams` | |
+| Get | Query | `organization.team(slug:)` | |
+| List members | Query | `team.members` | |
+| List repos | Query | `team.repositories` | |
+| Add repo | Mutation | `updateTeamsRepository` | |
+| Create discussion | Mutation | `createTeamDiscussion` | |
+| Update discussion | Mutation | `updateTeamDiscussion` | |
+| Delete discussion | Mutation | `deleteTeamDiscussion` | |
+
+**Note:** Team CRUD and membership mutations are REST-only. GraphQL supports discussions and repository assignments.

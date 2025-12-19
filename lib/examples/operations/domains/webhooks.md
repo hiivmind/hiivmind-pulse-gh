@@ -21,10 +21,20 @@
 |-----------|---------|-------|
 | All | (Not available) | Use REST API |
 
-## Corpus Lookup Guide
+## REST API Reference
 
-| API | Endpoints | Search Keywords |
-|-----|-----------|-----------------|
-| REST | `GET /repos/{owner}/{repo}/hooks`, `GET /hooks/{hook_id}`, `POST /repos/{owner}/{repo}/hooks`, `PATCH /hooks/{hook_id}`, `DELETE /hooks/{hook_id}`, `POST /hooks/{hook_id}/pings`, `GET /hooks/{hook_id}/deliveries`, `GET /hooks/{hook_id}/deliveries/{delivery_id}`, `POST /hooks/{hook_id}/deliveries/{delivery_id}/attempts`, `GET /orgs/{org}/hooks` | `GET /hooks`, `POST /hooks`, `PATCH /hooks`, `pings`, `deliveries` |
+| Operation | Method | Endpoint | Notes |
+|-----------|--------|----------|-------|
+| List (repo) | GET | `/repos/{owner}/{repo}/hooks` | |
+| Get | GET | `/repos/{owner}/{repo}/hooks/{hook_id}` | |
+| Create | POST | `/repos/{owner}/{repo}/hooks` | |
+| Update | PATCH | `/repos/{owner}/{repo}/hooks/{hook_id}` | |
+| Delete | DELETE | `/repos/{owner}/{repo}/hooks/{hook_id}` | |
+| Test (ping) | POST | `/repos/{owner}/{repo}/hooks/{hook_id}/pings` | |
+| List deliveries | GET | `/repos/{owner}/{repo}/hooks/{hook_id}/deliveries` | |
+| Get delivery | GET | `/repos/{owner}/{repo}/hooks/{hook_id}/deliveries/{delivery_id}` | |
+| Redeliver | POST | `/repos/{owner}/{repo}/hooks/{hook_id}/deliveries/{delivery_id}/attempts` | |
+| List (org) | GET | `/orgs/{org}/hooks` | |
+| Create (org) | POST | `/orgs/{org}/hooks` | |
 
 **Note:** Webhooks are entirely REST-based. No GraphQL schema coverage for webhook management.

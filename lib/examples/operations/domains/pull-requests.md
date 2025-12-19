@@ -32,9 +32,33 @@
 | Lock | (Web UI only) |
 | Unlock | (Web UI only) |
 
-## Corpus Lookup Guide
+## REST API Reference
 
-| API | Endpoints/Mutations | Search Keywords |
-|-----|---------------------|-----------------|
-| REST | `GET /repos/{owner}/{repo}/pulls`, `GET /pulls/{number}`, `POST /pulls`, `PATCH /pulls/{number}`, `PUT /pulls/{number}/merge`, `POST /pulls/{number}/comments`, `DELETE /pulls/{number}/requested_reviewers` | `GET /repos`, `POST /pulls`, `PATCH /pulls/{number}`, `PUT /pulls/{number}/merge`, `pulls/{number}/comments`, `pulls/{number}/requested_reviewers` |
-| GraphQL | `pullRequest`, `pullRequests` (queries), `createPullRequest`, `updatePullRequest`, `mergePullRequest`, `closePullRequest`, `requestReviews`, `addComment`, `dismissPullRequestReview` (mutations) | `query { pullRequest }`, `query { repository { pullRequests } }`, `mutation { createPullRequest }`, `mutation { mergePullRequest }` |
+| Operation | Method | Endpoint | Notes |
+|-----------|--------|----------|-------|
+| List | GET | `/repos/{owner}/{repo}/pulls` | |
+| Get | GET | `/repos/{owner}/{repo}/pulls/{number}` | |
+| Create | POST | `/repos/{owner}/{repo}/pulls` | |
+| Update | PATCH | `/repos/{owner}/{repo}/pulls/{number}` | |
+| Merge | PUT | `/repos/{owner}/{repo}/pulls/{number}/merge` | |
+| Close | PATCH | `/repos/{owner}/{repo}/pulls/{number}` | Set `state: closed` |
+| Request review | POST | `/repos/{owner}/{repo}/pulls/{number}/requested_reviewers` | |
+| Remove reviewer | DELETE | `/repos/{owner}/{repo}/pulls/{number}/requested_reviewers` | |
+| Add comment | POST | `/repos/{owner}/{repo}/pulls/{number}/comments` | |
+| Dismiss review | PUT | `/repos/{owner}/{repo}/pulls/{number}/reviews/{review_id}/dismissals` | |
+| Lock | PUT | `/repos/{owner}/{repo}/issues/{number}/lock` | Uses issues endpoint |
+| Unlock | DELETE | `/repos/{owner}/{repo}/issues/{number}/lock` | Uses issues endpoint |
+
+## GraphQL Reference
+
+| Operation | Type | Name | Notes |
+|-----------|------|------|-------|
+| List | Query | `repository.pullRequests` | |
+| Get | Query | `node(id:)` | Use `PullRequest` type |
+| Create | Mutation | `createPullRequest` | |
+| Update | Mutation | `updatePullRequest` | |
+| Merge | Mutation | `mergePullRequest` | |
+| Close | Mutation | `closePullRequest` | |
+| Request review | Mutation | `requestReviews` | |
+| Add comment | Mutation | `addComment` | |
+| Dismiss review | Mutation | `dismissPullRequestReview` | |

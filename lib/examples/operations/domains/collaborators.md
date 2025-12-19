@@ -19,11 +19,24 @@
 |-----------|---------|-------|
 | All | (Not available) | Use REST API |
 
-## Corpus Lookup Guide
+## REST API Reference
 
-| API | Endpoints/Queries | Search Keywords |
-|-----|-------------------|-----------------|
-| REST | `GET /repos/{owner}/{repo}/collaborators`, `GET /collaborators/{username}`, `PUT /collaborators/{username}`, `DELETE /collaborators/{username}`, `GET /collaborators/{username}/permission`, `GET /repos/{owner}/{repo}/invitations`, `PATCH /invitations/{invitation_id}`, `DELETE /invitations/{invitation_id}` | `GET /collaborators`, `PUT /collaborators/{username}`, `permission`, `invitations` |
-| GraphQL | `repository { collaborators }` (read-only query) | `query { repository { collaborators { edges { permission } } } }` |
+| Operation | Method | Endpoint | Notes |
+|-----------|--------|----------|-------|
+| List | GET | `/repos/{owner}/{repo}/collaborators` | |
+| Get | GET | `/repos/{owner}/{repo}/collaborators/{username}` | |
+| Add | PUT | `/repos/{owner}/{repo}/collaborators/{username}` | Set permission level |
+| Remove | DELETE | `/repos/{owner}/{repo}/collaborators/{username}` | |
+| Check permission | GET | `/repos/{owner}/{repo}/collaborators/{username}/permission` | |
+| List invitations | GET | `/repos/{owner}/{repo}/invitations` | Pending invites |
+| Update invitation | PATCH | `/repos/{owner}/{repo}/invitations/{invitation_id}` | |
+| Delete invitation | DELETE | `/repos/{owner}/{repo}/invitations/{invitation_id}` | |
+
+## GraphQL Reference
+
+| Operation | Type | Name | Notes |
+|-----------|------|------|-------|
+| List | Query | `repository.collaborators` | Read-only |
+| Check permission | Query | `repository.collaborators.edges.permission` | |
 
 **Note:** No GraphQL mutations for collaborator management. Use REST API for all write operations.
