@@ -16,7 +16,7 @@
 | **Pull Requests** | ✓ | ✓ | ✓ | ✓ | Full CRUD via all 4 methods |
 | **Milestones** | ✗ | ✓ | Read only | ✓ | CRUD via REST, assign via GraphQL |
 | **Labels** | ✓ | ✓ | Add/remove only | ✓ | CLI has full CRUD |
-| **Projects v2** | ✓ | ✗ | ✓ | ✓ | CLI has items/fields, views UI-only |
+| **Projects v2** | ✓ | Read only | ✓ | ✓ | CLI has items/fields, views UI-only |
 | **Branch Protection** | ✗ | ✓ | Read only | ✓ | Prefer Rulesets for new repos |
 | **Rulesets** | Read only | ✓ | Read only | ✓ | Mutations via REST |
 | **Actions** | ✓ | ✓ | ✗ | ✓ | Workflows, runs, jobs |
