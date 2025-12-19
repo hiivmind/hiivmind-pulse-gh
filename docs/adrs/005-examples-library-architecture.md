@@ -25,8 +25,8 @@ Additionally:
 
 **Create a unified `lib/examples/` structure with explicit separation:**
 
-- `lib/examples/introspection/` - HEAVY examples for repeatable state-checking operations
-- `lib/examples/operations/` - LIGHT examples, just API routing (corpus handles syntax)
+- `lib/patterns/` - HEAVY examples for repeatable state-checking operations
+- `lib/references/` - LIGHT examples, just API routing (corpus handles syntax)
 - `skills/*/examples/` - Local files that REFER to central examples + add clarifications
 
 ### Key Principle
@@ -97,13 +97,13 @@ Each skill gets `examples/examples.md` that:
 ## Introspection Examples
 | Example | Location | Notes |
 |---------|----------|-------|
-| Tool Detection | `lib/examples/introspection/tool-detection.md` | Run first |
-| Authentication | `lib/examples/introspection/authentication.md` | Check scopes |
+| Tool Detection | `lib/patterns/tool-detection.md` | Run first |
+| Authentication | `lib/patterns/authentication.md` | Check scopes |
 
 ## Operations Examples
 | Example | Location | Notes |
 |---------|----------|-------|
-| API Routing | `lib/examples/operations/api-routing.md` | For project discovery |
+| API Routing | `lib/references/api-routing.md` | For project discovery |
 ```
 
 ## Consequences
@@ -128,10 +128,10 @@ Each skill gets `examples/examples.md` that:
 
 | Action | Files |
 |--------|-------|
-| CREATE | `lib/examples/introspection/README.md` |
-| CREATE | `lib/examples/operations/README.md` |
-| MOVE | 8 patterns → `lib/examples/introspection/` |
-| MOVE | api-routing.md, corpus-lookup.md → `lib/examples/operations/` |
+| CREATE | `lib/patterns/README.md` |
+| CREATE | `lib/references/README.md` |
+| MOVE | 8 patterns → `lib/patterns/` |
+| MOVE | api-routing.md, corpus-lookup.md → `lib/references/` |
 | CREATE | `skills/*/examples/examples.md` (5 files) |
 | DELETE | `skills/hiivmind-pulse-gh-operations/examples/*.md` (domain examples) |
 | DELETE | `lib/github/patterns/` (after moving) |
@@ -144,8 +144,8 @@ After implementation:
 
 ```bash
 # Verify new structure exists
-ls lib/examples/introspection/
-ls lib/examples/operations/
+ls lib/patterns/
+ls lib/references/
 
 # Verify old structure removed
 ls lib/github/patterns/  # Should not exist

@@ -55,7 +55,7 @@ When invoked by the gateway command, expect:
 
 **Goal:** Load workspace configuration.
 
-**See:** `lib/examples/introspection/config-parsing.md`
+**See:** `lib/patterns/config-parsing.md`
 
 ### What to Do
 
@@ -81,7 +81,7 @@ Run: /hiivmind-pulse-gh init
 
 **Goal:** Resolve any IDs needed for the operation from cached config.
 
-**See:** `lib/examples/introspection/id-resolution.md`
+**See:** `lib/patterns/id-resolution.md`
 
 ### What to Do
 
@@ -129,12 +129,12 @@ For domains not listed above:
 
 ### Step 1: Read Quick Reference
 
-Read `lib/examples/operations/api-routing.md` (~170 lines) to:
+Read `lib/references/api-routing.md` (~170 lines) to:
 - Identify which API method to use (gh CLI, REST, GraphQL, Web UI)
 - Check the Quick Reference table for high-level support
 
 ```
-Read: lib/examples/operations/api-routing.md
+Read: lib/references/api-routing.md
 ```
 
 ### Step 2: Read Domain Details
@@ -145,7 +145,7 @@ Based on the domain identified, read the domain-specific file for:
 - Corpus lookup keywords for syntax
 
 ```
-Read: lib/examples/operations/domains/{domain}.md
+Read: lib/references/domains/{domain}.md
 ```
 
 **Domain file mapping:**
@@ -195,18 +195,18 @@ Read: lib/examples/operations/domains/{domain}.md
 
 **Goal:** Execute the operation using the appropriate API.
 
-**See:** `lib/examples/introspection/graphql-execution.md`
-**See:** `lib/examples/introspection/error-handling.md`
+**See:** `lib/patterns/graphql-execution.md`
+**See:** `lib/patterns/error-handling.md`
 
 ### Execution Approach
 
-1. **Check routing guide** - `lib/examples/operations/api-routing.md` tells you GraphQL vs REST
+1. **Check routing guide** - `lib/references/api-routing.md` tells you GraphQL vs REST
 2. **If syntax is clear** - Execute directly using `gh api` or `gh` CLI
 3. **If uncertain** - Use corpus lookup for exact syntax
 
 ### Corpus Lookup (When Needed)
 
-**See:** `lib/examples/operations/corpus-lookup.md`
+**See:** `lib/patterns/corpus-lookup.md`
 
 Use corpus lookup when you need exact syntax:
 
@@ -231,7 +231,7 @@ Use corpus lookup when you need exact syntax:
 
 **Goal:** Report operation result to user.
 
-**See:** `lib/examples/introspection/error-handling.md`
+**See:** `lib/patterns/error-handling.md`
 
 ### Success Report
 
@@ -265,7 +265,7 @@ Suggested fix: {based on error-handling.md}
 
 **Required IDs:** Project ID, Field ID (for updates), Option ID (for single-select)
 
-**See:** `lib/examples/introspection/id-resolution.md` for resolving from config
+**See:** `lib/patterns/id-resolution.md` for resolving from config
 
 **Special cases:**
 - Status field: Single-select, needs Option ID
@@ -355,17 +355,17 @@ All implementation details are in the examples library:
 
 | Example | Purpose |
 |---------|---------|
-| `lib/examples/introspection/config-parsing.md` | Read/write YAML config files |
-| `lib/examples/introspection/id-resolution.md` | Resolve names to IDs (cache-first) |
-| `lib/examples/introspection/graphql-execution.md` | Execute queries via temp file |
-| `lib/examples/introspection/error-handling.md` | Handle API errors |
+| `lib/patterns/config-parsing.md` | Read/write YAML config files |
+| `lib/patterns/id-resolution.md` | Resolve names to IDs (cache-first) |
+| `lib/patterns/graphql-execution.md` | Execute queries via temp file |
+| `lib/patterns/error-handling.md` | Handle API errors |
 
 ### Operations Examples (LIGHT)
 
 | Example | Purpose |
 |---------|---------|
-| `lib/examples/operations/api-routing.md` | API routing decisions (THE canonical source) |
-| `lib/examples/operations/corpus-lookup.md` | Look up API syntax when uncertain |
+| `lib/references/api-routing.md` | API routing decisions (THE canonical source) |
+| `lib/patterns/corpus-lookup.md` | Look up API syntax when uncertain |
 
 ### External Resources
 

@@ -28,11 +28,11 @@ This duplication creates:
 
 ## Decision
 
-**`lib/examples/operations/api-routing.md` is THE canonical source of truth for API routing decisions. All other files must reference it, not embed copies.**
+**`lib/references/api-routing.md` is THE canonical source of truth for API routing decisions. All other files must reference it, not embed copies.**
 
 ### Implementation
 
-1. Move `reference/api-routing.md` to `lib/examples/operations/api-routing.md`
+1. Move `reference/api-routing.md` to `lib/references/api-routing.md`
 
 2. Remove domain tables from:
    - `CLAUDE.md` (development guidance only)
@@ -41,7 +41,7 @@ This duplication creates:
 
 3. Update all files to reference the canonical location:
    ```markdown
-   **See:** `lib/examples/operations/api-routing.md`
+   **See:** `lib/references/api-routing.md`
    ```
 
 4. Keep intent detection keywords in `commands/hiivmind-pulse-gh.md` (different purpose: natural language → domain mapping, not API routing)
@@ -87,7 +87,7 @@ This duplication creates:
 
 | File | Change |
 |------|--------|
-| `reference/api-routing.md` | MOVE to `lib/examples/operations/` |
+| `reference/api-routing.md` | MOVE to `lib/references/` |
 | `CLAUDE.md` | Remove domain table, link to api-routing.md |
 | `README.md` | Remove domain table, link to api-routing.md |
 | `skills/hiivmind-pulse-gh-operations/SKILL.md` | Remove Domain Quick Reference, add reference |
@@ -102,5 +102,5 @@ After implementation:
 grep -r "| Issues | GraphQL |" skills/ commands/ CLAUDE.md README.md
 
 # Verify references point to new location
-grep -r "lib/examples/operations/api-routing.md" skills/ commands/
+grep -r "lib/references/api-routing.md" skills/ commands/
 ```

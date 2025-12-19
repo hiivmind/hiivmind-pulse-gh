@@ -7,7 +7,7 @@
 
 ## Context
 
-Following ADR-006, `lib/examples/operations/api-routing.md` grew to 1,052 lines covering 25 GitHub domains. Each domain has:
+Following ADR-006, `lib/references/api-routing.md` grew to 1,052 lines covering 25 GitHub domains. Each domain has:
 - Support matrix table (4 methods × operations)
 - CLI command reference
 - Corpus lookup guide
@@ -17,7 +17,7 @@ The operations skill requires reading this file in Phase 3 for routing decisions
 ### Current State
 
 ```
-lib/examples/operations/
+lib/references/
 └── api-routing.md (1,052 lines, ~50 KB)
     ├── Quick Reference table (30 lines)
     ├── Method Selection Guide (45 lines)
@@ -40,7 +40,7 @@ Split `api-routing.md` into:
 ### New Structure
 
 ```
-lib/examples/operations/
+lib/references/
 ├── api-routing.md (~150 lines)
 │   ├── Quick Reference table (25 domains × 4 methods)
 │   ├── Method Selection Guide
@@ -81,15 +81,15 @@ Update `hiivmind-pulse-gh-operations` Phase 3:
 
 **Before:**
 ```
-Read the FULL lib/examples/operations/api-routing.md file.
+Read the FULL lib/references/api-routing.md file.
 Do NOT grep or search - read it completely.
 ```
 
 **After:**
 ```
-1. Read lib/examples/operations/api-routing.md (quick reference, ~150 lines)
+1. Read lib/references/api-routing.md (quick reference, ~150 lines)
 2. Identify domain from quick reference table
-3. Read lib/examples/operations/domains/{domain}.md for detailed syntax
+3. Read lib/references/domains/{domain}.md for detailed syntax
 ```
 
 ## Consequences
@@ -120,7 +120,7 @@ Do NOT grep or search - read it completely.
 
 ## Implementation
 
-1. Create `lib/examples/operations/domains/` directory
+1. Create `lib/references/domains/` directory
 2. Extract each domain section to its own file
 3. Slim `api-routing.md` to quick reference only
 4. Update `hiivmind-pulse-gh-operations` Phase 3

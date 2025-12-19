@@ -8,19 +8,19 @@ These are the primary examples used by the init skill:
 
 | Example | Location | Init Usage |
 |---------|----------|------------|
-| Tool Detection | `lib/examples/introspection/tool-detection.md` | Check gh, jq, yq availability |
-| Authentication | `lib/examples/introspection/authentication.md` | Verify gh auth and required scopes |
-| Workspace Detection | `lib/examples/introspection/workspace-detection.md` | Git remote → owner/repo extraction |
-| Config Parsing | `lib/examples/introspection/config-parsing.md` | Write discovered config to YAML |
-| GraphQL Execution | `lib/examples/introspection/graphql-execution.md` | Query organization/user structure |
-| Error Handling | `lib/examples/introspection/error-handling.md` | Handle API errors during discovery |
+| Tool Detection | `lib/patterns/tool-detection.md` | Check gh, jq, yq availability |
+| Authentication | `lib/patterns/authentication.md` | Verify gh auth and required scopes |
+| Workspace Detection | `lib/patterns/workspace-detection.md` | Git remote → owner/repo extraction |
+| Config Parsing | `lib/patterns/config-parsing.md` | Write discovered config to YAML |
+| GraphQL Execution | `lib/patterns/graphql-execution.md` | Query organization/user structure |
+| Error Handling | `lib/patterns/error-handling.md` | Handle API errors during discovery |
 
 ## Operations Examples
 
 | Example | Location | Init Usage |
 |---------|----------|------------|
-| API Routing | `lib/examples/operations/api-routing.md` | Determine GraphQL vs REST for discovery |
-| Corpus Lookup | `lib/examples/operations/corpus-lookup.md` | Look up projectsV2 query syntax |
+| API Routing | `lib/references/api-routing.md` | Determine GraphQL vs REST for discovery |
+| Corpus Lookup | `lib/patterns/corpus-lookup.md` | Look up projectsV2 query syntax |
 
 ## Init-Specific Notes
 

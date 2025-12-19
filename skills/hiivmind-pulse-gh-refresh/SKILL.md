@@ -40,7 +40,7 @@ Synchronize cached configuration with current GitHub state. Run when config beco
 
 **Goal:** Load existing configuration and verify workspace is initialized.
 
-**See:** `lib/examples/introspection/config-parsing.md`
+**See:** `lib/patterns/config-parsing.md`
 
 ### What to Do
 
@@ -66,7 +66,7 @@ Run: /hiivmind-pulse-gh init
 
 **Goal:** Check which sections need refreshing based on timestamps and thresholds.
 
-**See:** `lib/examples/introspection/config-parsing.md`
+**See:** `lib/patterns/config-parsing.md`
 
 ### What to Do
 
@@ -130,18 +130,18 @@ Which sections to refresh? [1,2,3,4 / stale / all / none]
 
 **Goal:** Refresh each selected section by querying GitHub APIs.
 
-**See:** `lib/examples/introspection/error-handling.md`
+**See:** `lib/patterns/error-handling.md`
 
 ### PREREQUISITE: Read Routing Guide
 
-**IMPORTANT:** Before refreshing ANY section, read the FULL `lib/examples/operations/api-routing.md` file.
+**IMPORTANT:** Before refreshing ANY section, read the FULL `lib/references/api-routing.md` file.
 
 - The file is ~245 lines - read it completely, do NOT grep or search
 - This gives you routing decisions for ALL domains upfront
 - You need this context to make correct GraphQL vs REST decisions
 
 ```
-Read: lib/examples/operations/api-routing.md (full file)
+Read: lib/references/api-routing.md (full file)
 ```
 
 ### Refresh Approach
@@ -154,13 +154,13 @@ For each selected section:
 
 2. **Execute Query**
    - If syntax is clear: Execute directly
-   - If uncertain: Use corpus lookup (`lib/examples/operations/corpus-lookup.md`)
-   - GraphQL: temp file pattern (`lib/examples/introspection/graphql-execution.md`)
+   - If uncertain: Use corpus lookup (`lib/patterns/corpus-lookup.md`)
+   - GraphQL: temp file pattern (`lib/patterns/graphql-execution.md`)
    - REST: `gh api /endpoint`
 
 3. **Update Config Files**
    - Write results to appropriate config file
-   - Use patterns from `lib/examples/introspection/config-parsing.md`
+   - Use patterns from `lib/patterns/config-parsing.md`
 
 ### Corpus Lookup (When Needed)
 
@@ -195,7 +195,7 @@ If uncertain about query syntax:
 
 **Goal:** Update freshness timestamps after refresh.
 
-**See:** `lib/examples/introspection/config-parsing.md`
+**See:** `lib/patterns/config-parsing.md`
 
 ### What to Do
 
@@ -272,7 +272,7 @@ What would you like to do next?
 
 ### Check Freshness Status
 
-**See:** `lib/examples/introspection/config-parsing.md` - "Read freshness.yaml" section
+**See:** `lib/patterns/config-parsing.md` - "Read freshness.yaml" section
 
 ### Force Refresh Specific Section
 
@@ -303,17 +303,17 @@ All implementation details are in the examples library:
 
 | Example | Purpose |
 |---------|---------|
-| `lib/examples/introspection/config-parsing.md` | Read/write YAML config files |
-| `lib/examples/introspection/graphql-execution.md` | Execute queries via temp file |
-| `lib/examples/introspection/error-handling.md` | Handle API errors |
-| `lib/examples/introspection/id-resolution.md` | Resolve names to IDs |
+| `lib/patterns/config-parsing.md` | Read/write YAML config files |
+| `lib/patterns/graphql-execution.md` | Execute queries via temp file |
+| `lib/patterns/error-handling.md` | Handle API errors |
+| `lib/patterns/id-resolution.md` | Resolve names to IDs |
 
 **Operations Examples (LIGHT):**
 
 | Example | Purpose |
 |---------|---------|
-| `lib/examples/operations/api-routing.md` | API routing decisions (canonical source) |
-| `lib/examples/operations/corpus-lookup.md` | Look up API syntax when uncertain |
+| `lib/references/api-routing.md` | API routing decisions (canonical source) |
+| `lib/patterns/corpus-lookup.md` | Look up API syntax when uncertain |
 
 **External Resources:**
 

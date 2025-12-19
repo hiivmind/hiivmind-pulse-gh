@@ -8,10 +8,10 @@ Used before executing operations:
 
 | Example | Location | Operations Usage |
 |---------|----------|------------------|
-| Config Parsing | `lib/examples/introspection/config-parsing.md` | Load workspace context |
-| ID Resolution | `lib/examples/introspection/id-resolution.md` | Resolve names to IDs (cache-first) |
-| GraphQL Execution | `lib/examples/introspection/graphql-execution.md` | Execute GraphQL mutations |
-| Error Handling | `lib/examples/introspection/error-handling.md` | Handle API errors |
+| Config Parsing | `lib/patterns/config-parsing.md` | Load workspace context |
+| ID Resolution | `lib/patterns/id-resolution.md` | Resolve names to IDs (cache-first) |
+| GraphQL Execution | `lib/patterns/graphql-execution.md` | Execute GraphQL mutations |
+| Error Handling | `lib/patterns/error-handling.md` | Handle API errors |
 
 ## Operations Examples
 
@@ -19,8 +19,8 @@ Used for routing and syntax lookup:
 
 | Example | Location | Operations Usage |
 |---------|----------|------------------|
-| API Routing | `lib/examples/operations/api-routing.md` | Determine GraphQL vs REST (THE source) |
-| Corpus Lookup | `lib/examples/operations/corpus-lookup.md` | Look up exact syntax when uncertain |
+| API Routing | `lib/references/api-routing.md` | Determine GraphQL vs REST (THE source) |
+| Corpus Lookup | `lib/patterns/corpus-lookup.md` | Look up exact syntax when uncertain |
 
 ## Architecture: Corpus-First
 
@@ -72,5 +72,5 @@ Some dangerous operations are blocked. Check `docs/operation-blocklist.md` befor
 ## Related
 
 - [Operations SKILL.md](../SKILL.md) - Full skill documentation
-- [API Routing](../../../lib/examples/operations/api-routing.md) - Domain → API decisions
+- [API Routing](../../../lib/references/api-routing.md) - Domain → API decisions
 - [External Corpus](https://github.com/hiivmind/hiivmind-corpus-github-docs) - GitHub API documentation

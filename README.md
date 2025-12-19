@@ -260,19 +260,21 @@ hiivmind-pulse-gh/
 │   ├── hiivmind-pulse-gh-operations/     # Execute operations
 │   └── hiivmind-pulse-gh-awareness/      # CLAUDE.md injection
 │
-├── lib/examples/                         # Centralized examples library
-│   ├── introspection/                    # HEAVY - state checking patterns
+├── lib/
+│   ├── patterns/                         # HOW to do things (executable guides)
 │   │   ├── config-parsing.md
 │   │   ├── workspace-detection.md
 │   │   ├── authentication.md
 │   │   ├── tool-detection.md
 │   │   ├── id-resolution.md
 │   │   ├── graphql-execution.md
-│   │   └── error-handling.md
+│   │   ├── error-handling.md
+│   │   └── corpus-lookup.md
 │   │
-│   └── operations/                       # LIGHT - routing + corpus lookup
+│   └── references/                       # WHAT exists (static lookup data)
 │       ├── api-routing.md                # GraphQL vs REST decisions
-│       └── corpus-lookup.md              # External corpus invocation
+│       ├── token-permissions.md          # Token permission requirements
+│       └── domains/                      # Per-domain API syntax (25 files)
 │
 ├── docs/
 │   ├── decisions/                        # Historical architecture decisions
@@ -302,13 +304,13 @@ hiivmind-pulse-gh/
 1. ROUTE   →   2. CORPUS   →   3. EXECUTE
    (API)         (syntax)        (temp file)
      │              │               │
-lib/examples/  External         gh api graphql
-operations/    corpus skill     or gh api REST
-api-routing.md    ↓
+lib/references/ External         gh api graphql
+api-routing.md  corpus skill     or gh api REST
+                   ↓
                hiivmind-corpus-github-docs
 ```
 
-1. **Route** — Consult `lib/examples/operations/api-routing.md` for GraphQL vs REST decision
+1. **Route** — Consult `lib/references/api-routing.md` for GraphQL vs REST decision
 2. **Corpus** — If uncertain about syntax, query the external GitHub API corpus
 3. **Execute** — Run the operation via `gh api` with temp file for complex queries
 
@@ -355,8 +357,8 @@ cd hiivmind-pulse-gh-tests
 ```
 commands/*.md                              → Gateway and slash commands
 skills/*/SKILL.md                          → Skill documentation
-lib/examples/introspection/*.md            → Introspection patterns (state checking)
-lib/examples/operations/*.md               → Operations patterns (routing, corpus)
+lib/patterns/*.md                          → Executable patterns (HOW to do things)
+lib/references/*.md                        → Static lookup data (WHAT exists)
 docs/                                      → Architecture docs, schemas, templates
 ```
 

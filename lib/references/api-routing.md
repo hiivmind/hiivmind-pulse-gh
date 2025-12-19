@@ -2,7 +2,7 @@
 
 > **Purpose:** Quick reference for which API (GraphQL vs REST) to use for each domain.
 > **Standalone:** This guide is useful on its own - you do not need corpus lookup for every operation.
-> **When uncertain:** If you need exact syntax, use `lib/examples/operations/corpus-lookup.md`
+> **When uncertain:** If you need exact syntax, use `lib/patterns/corpus-lookup.md`
 
 ---
 

@@ -41,7 +41,7 @@ One-time setup for a GitHub workspace. Creates configuration files that enable a
 
 **Goal:** Detect the GitHub workspace (organization or user) from context.
 
-**See:** `lib/examples/introspection/workspace-detection.md`
+**See:** `lib/patterns/workspace-detection.md`
 
 ### What to Do
 
@@ -68,8 +68,8 @@ Please specify the GitHub organization or username to initialize:
 
 **Goal:** Verify required tools and authentication.
 
-**See:** `lib/examples/introspection/tool-detection.md`
-**See:** `lib/examples/introspection/authentication.md`
+**See:** `lib/patterns/tool-detection.md`
+**See:** `lib/patterns/authentication.md`
 
 ### What to Do
 
@@ -138,14 +138,14 @@ Wait for user confirmation before proceeding. If user says no, ask them to speci
 ### Discovery Approach
 
 1. **Read Routing Guide**
-   - Read `lib/examples/operations/api-routing.md`
+   - Read `lib/references/api-routing.md`
    - Projects v2 → List projects → GraphQL
    - Keywords: `projectsV2`, `organization`, `user`
 
 2. **Execute Query**
    - If syntax is clear: Execute directly
-   - If uncertain: Use corpus lookup (`lib/examples/operations/corpus-lookup.md`)
-   - Use temp file pattern from `lib/examples/introspection/graphql-execution.md`
+   - If uncertain: Use corpus lookup (`lib/patterns/corpus-lookup.md`)
+   - Use temp file pattern from `lib/patterns/graphql-execution.md`
 
 ### Corpus Lookup (When Needed)
 
@@ -189,7 +189,7 @@ Set default project for operations?
 
 **Goal:** Write configuration files.
 
-**See:** `lib/examples/introspection/config-parsing.md`
+**See:** `lib/patterns/config-parsing.md`
 
 ### What to Do
 
@@ -278,18 +278,18 @@ All implementation details are in the examples library:
 
 | Example | Purpose |
 |---------|---------|
-| `lib/examples/introspection/tool-detection.md` | Check for gh, jq, yq |
-| `lib/examples/introspection/authentication.md` | Verify auth and scopes |
-| `lib/examples/introspection/workspace-detection.md` | Detect org/user from context |
-| `lib/examples/introspection/graphql-execution.md` | Execute queries via temp file |
-| `lib/examples/introspection/config-parsing.md` | Read/write YAML config |
+| `lib/patterns/tool-detection.md` | Check for gh, jq, yq |
+| `lib/patterns/authentication.md` | Verify auth and scopes |
+| `lib/patterns/workspace-detection.md` | Detect org/user from context |
+| `lib/patterns/graphql-execution.md` | Execute queries via temp file |
+| `lib/patterns/config-parsing.md` | Read/write YAML config |
 
 **Operations Examples (LIGHT):**
 
 | Example | Purpose |
 |---------|---------|
-| `lib/examples/operations/api-routing.md` | API routing decisions (canonical source) |
-| `lib/examples/operations/corpus-lookup.md` | Look up API syntax when uncertain |
+| `lib/references/api-routing.md` | API routing decisions (canonical source) |
+| `lib/patterns/corpus-lookup.md` | Look up API syntax when uncertain |
 
 **External Resources:**
 

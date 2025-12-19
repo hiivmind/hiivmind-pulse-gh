@@ -8,17 +8,17 @@ These are the primary examples used by the refresh skill:
 
 | Example | Location | Refresh Usage |
 |---------|----------|---------------|
-| Config Parsing | `lib/examples/introspection/config-parsing.md` | Read existing config, update sections |
-| GraphQL Execution | `lib/examples/introspection/graphql-execution.md` | Re-query changed sections |
-| Error Handling | `lib/examples/introspection/error-handling.md` | Handle stale ID errors |
-| ID Resolution | `lib/examples/introspection/id-resolution.md` | Verify cached IDs still valid |
+| Config Parsing | `lib/patterns/config-parsing.md` | Read existing config, update sections |
+| GraphQL Execution | `lib/patterns/graphql-execution.md` | Re-query changed sections |
+| Error Handling | `lib/patterns/error-handling.md` | Handle stale ID errors |
+| ID Resolution | `lib/patterns/id-resolution.md` | Verify cached IDs still valid |
 
 ## Operations Examples
 
 | Example | Location | Refresh Usage |
 |---------|----------|---------------|
-| API Routing | `lib/examples/operations/api-routing.md` | Determine GraphQL vs REST for re-queries |
-| Corpus Lookup | `lib/examples/operations/corpus-lookup.md` | Look up query syntax for sections |
+| API Routing | `lib/references/api-routing.md` | Determine GraphQL vs REST for re-queries |
+| Corpus Lookup | `lib/patterns/corpus-lookup.md` | Look up query syntax for sections |
 
 ## Refresh-Specific Notes
 

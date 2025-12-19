@@ -8,7 +8,7 @@
 
 ## Context
 
-Currently, `lib/examples/operations/api-routing.md` recommends a **single best method** per operation (e.g., "Use GraphQL for this" or "Use REST for that"). This prescriptive approach has limitations:
+Currently, `lib/references/api-routing.md` recommends a **single best method** per operation (e.g., "Use GraphQL for this" or "Use REST for that"). This prescriptive approach has limitations:
 
 1. **Limited User Agency**: Users cannot see that multiple methods often work for the same operation
 2. **No Alternative Options**: When the recommended method fails, users don't know what to try
@@ -31,7 +31,7 @@ Currently, `lib/examples/operations/api-routing.md` recommends a **single best m
 
 ## Decision
 
-Transform `lib/examples/operations/api-routing.md` to show **support across all 4 methods** (gh CLI, REST, GraphQL, Web UI) for each operation, using a clear ✓/✗/⊗ notation:
+Transform `lib/references/api-routing.md` to show **support across all 4 methods** (gh CLI, REST, GraphQL, Web UI) for each operation, using a clear ✓/✗/⊗ notation:
 
 ### New Table Format
 
@@ -143,4 +143,4 @@ Document **all GitHub domains**, organized by category:
 
 ## Notes
 
-This ADR expands the scope of `lib/examples/operations/api-routing.md` to be more descriptive and comprehensive, while maintaining its role as the single source of truth per ADR-004. No existing patterns or decisions are violated.
+This ADR expands the scope of `lib/references/api-routing.md` to be more descriptive and comprehensive, while maintaining its role as the single source of truth per ADR-004. No existing patterns or decisions are violated.

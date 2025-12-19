@@ -11,11 +11,11 @@ Users need to know which token permissions are required for each API domain. Thi
 - **Classic OAuth scopes** (e.g., `repo`, `project`, `admin:repo_hook`)
 - **Fine-grained PAT permissions** (e.g., `Issues: Read`, `Projects: Read and write`)
 
-The existing `lib/examples/introspection/authentication.md` documents required scopes for this plugin, but doesn't provide per-domain permission details.
+The existing `lib/patterns/authentication.md` documents required scopes for this plugin, but doesn't provide per-domain permission details.
 
 ## Decision
 
-Create a single centralized reference file at `lib/examples/introspection/token-permissions.md` documenting permissions for all 25 domains in one place.
+Create a single centralized reference file at `lib/patterns/token-permissions.md` documenting permissions for all 25 domains in one place.
 
 This consolidates information rather than adding a section to each domain file, which would be harder to maintain and cross-reference.
 

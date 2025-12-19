@@ -116,7 +116,7 @@ These domains either handle their own context checks internally or don't require
 
 ### 3a: Check Initialization
 
-**See:** `lib/examples/introspection/config-parsing.md`
+**See:** `lib/patterns/config-parsing.md`
 
 Check for `.hiivmind/github/config.yaml`:
 
@@ -128,7 +128,7 @@ Check for `.hiivmind/github/config.yaml`:
 
 ### 3b: Check Freshness
 
-**See:** `lib/examples/introspection/config-parsing.md` (freshness section)
+**See:** `lib/patterns/config-parsing.md` (freshness section)
 
 Check `.hiivmind/github/freshness.yaml`:
 
@@ -299,7 +299,7 @@ options:
 
 ## Error Handling
 
-**See:** `lib/examples/introspection/error-handling.md`
+**See:** `lib/patterns/error-handling.md`
 
 | Error | Cause | Action |
 |-------|-------|--------|

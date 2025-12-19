@@ -22,22 +22,21 @@ Operations follow this approach:
 1. ROUTE       →   2. RESOLVE   →   3. EXECUTE
    (API choice)      (IDs)           (run)
      │                 │                │
-lib/examples/      config.yaml      gh api graphql
-operations/        cache            or gh api REST
-api-routing.md
+lib/references/    config.yaml      gh api graphql
+api-routing.md     cache            or gh api REST
 ```
 
 ### How It Works
 
-1. **Route** - Read `lib/examples/operations/api-routing.md` for API choice (GraphQL vs REST)
+1. **Route** - Read `lib/references/api-routing.md` for API choice (GraphQL vs REST)
    - This guide is useful on its own - not every operation needs corpus lookup
 
-2. **Resolve** - Get IDs from cached config (`lib/examples/introspection/id-resolution.md`)
+2. **Resolve** - Get IDs from cached config (`lib/patterns/id-resolution.md`)
    - Cache-first strategy avoids unnecessary API calls
 
 3. **Execute** - Run the operation:
    - If syntax is clear: Execute directly
-   - If uncertain: Use corpus lookup (`lib/examples/operations/corpus-lookup.md`)
+   - If uncertain: Use corpus lookup (`lib/patterns/corpus-lookup.md`)
 
 ### Corpus Lookup (When Needed)
 
@@ -59,42 +58,43 @@ Use corpus lookup when you have a knowledge gap about exact syntax:
 
 ---
 
-## Examples Library
+## Library Structure
 
-Skills reference examples instead of embedding code. The library is organized by purpose:
+Skills reference patterns and references instead of embedding code:
 
-### Introspection Examples (HEAVY)
+### Patterns (HOW to do things)
 
-Detailed, repeatable examples for state-checking operations:
+Executable guides with step-by-step instructions:
 
-| Example | Purpose |
+| Pattern | Purpose |
 |---------|---------|
-| `lib/examples/introspection/config-parsing.md` | Read/write YAML config files |
-| `lib/examples/introspection/id-resolution.md` | Resolve names to IDs (cache-first) |
-| `lib/examples/introspection/graphql-execution.md` | Execute queries via temp file |
-| `lib/examples/introspection/error-handling.md` | Handle API errors |
-| `lib/examples/introspection/authentication.md` | Verify gh auth and scopes |
-| `lib/examples/introspection/tool-detection.md` | Check gh/jq/yq availability |
-| `lib/examples/introspection/workspace-detection.md` | Git remote → owner/repo |
+| `lib/patterns/config-parsing.md` | Read/write YAML config files |
+| `lib/patterns/id-resolution.md` | Resolve names to IDs (cache-first) |
+| `lib/patterns/graphql-execution.md` | Execute queries via temp file |
+| `lib/patterns/error-handling.md` | Handle API errors |
+| `lib/patterns/authentication.md` | Verify gh auth and scopes |
+| `lib/patterns/tool-detection.md` | Check gh/jq/yq availability |
+| `lib/patterns/workspace-detection.md` | Git remote → owner/repo |
+| `lib/patterns/corpus-lookup.md` | Look up API syntax when uncertain |
 
-### Operations Examples (LIGHT)
+### References (WHAT exists)
 
-Lightweight routing guidance (corpus provides JIT syntax):
+Static lookup data for routing and domain info:
 
-| Example | Purpose |
-|---------|---------|
-| `lib/examples/operations/api-routing.md` | Quick reference + method selection guide |
-| `lib/examples/operations/domains/*.md` | Per-domain detailed syntax (25 files) |
-| `lib/examples/operations/corpus-lookup.md` | Look up API syntax when uncertain |
+| Reference | Purpose |
+|-----------|---------|
+| `lib/references/api-routing.md` | Quick reference + method selection guide |
+| `lib/references/domains/*.md` | Per-domain detailed syntax (25 files) |
+| `lib/references/token-permissions.md` | Token permission requirements |
 
-### Using Examples
+### Using Patterns
 
 Skills use `See:` references:
 
 ```markdown
 ## Phase 1: CONTEXT
 
-**See:** `lib/examples/introspection/config-parsing.md`
+**See:** `lib/patterns/config-parsing.md`
 
 1. Load config.yaml
 2. Verify initialization
@@ -212,7 +212,7 @@ sections:
 | **Variables** | set, update, delete, list | REST |
 | **Releases** | create, update, delete, upload | REST |
 
-> **Note:** This table shows commonly used domains. For complete routing decisions, see `lib/examples/operations/api-routing.md`. The plugin supports **any GitHub domain** via corpus lookup. For unlisted domains, the operations skill uses corpus lookup and defaults to REST API. Some dangerous operations are blocked — see `docs/operation-blocklist.md`.
+> **Note:** This table shows commonly used domains. For complete routing decisions, see `lib/references/api-routing.md`. The plugin supports **any GitHub domain** via corpus lookup. For unlisted domains, the operations skill uses corpus lookup and defaults to REST API. Some dangerous operations are blocked — see `docs/operation-blocklist.md`.
 
 ---
 
@@ -222,9 +222,9 @@ This plugin uses an external GitHub API corpus (declared as dependency in plugin
 
 ### Using the Corpus
 
-Use the corpus when you need exact API syntax. See `lib/examples/operations/corpus-lookup.md`.
+Use the corpus when you need exact API syntax. See `lib/patterns/corpus-lookup.md`.
 
-1. Read `lib/examples/operations/api-routing.md` for API choice (useful on its own)
+1. Read `lib/references/api-routing.md` for API choice (useful on its own)
 2. If uncertain about syntax, invoke: `hiivmind-corpus-github-docs:hiivmind-corpus-navigate-github-docs`
 3. Search with keywords from routing guide
 4. Get exact syntax from schema/docs
@@ -246,21 +246,21 @@ hiivmind-pulse-gh/
 │   └── hiivmind-pulse-gh-awareness/      # CLAUDE.md capability injection
 │       └── examples/                     # Skill-local awareness patterns
 ├── lib/
-│   └── examples/                         # Centralized examples library
-│       ├── introspection/                # HEAVY - detailed state-checking
-│       │   ├── config-parsing.md
-│       │   ├── id-resolution.md
-│       │   ├── graphql-execution.md
-│       │   └── ...
-│       └── operations/                   # LIGHT - routing (corpus has syntax)
-│           ├── api-routing.md            # Quick reference + method selection
-│           ├── corpus-lookup.md
-│           └── domains/                  # Per-domain detailed syntax (25 files)
-│               ├── issues.md
-│               ├── pull-requests.md
-│               └── ...
+│   ├── patterns/                         # HOW to do things (executable guides)
+│   │   ├── config-parsing.md
+│   │   ├── id-resolution.md
+│   │   ├── graphql-execution.md
+│   │   ├── corpus-lookup.md
+│   │   └── ...
+│   └── references/                       # WHAT exists (static lookup data)
+│       ├── api-routing.md                # Quick reference + method selection
+│       ├── token-permissions.md          # Token permission requirements
+│       └── domains/                      # Per-domain detailed syntax (25 files)
+│           ├── issues.md
+│           ├── pull-requests.md
+│           └── ...
 ├── docs/
-│   ├── decisions/                        # Historical architecture decisions
+│   ├── adrs/                             # Architecture decision records
 │   ├── config-schema.md                  # Config.yaml schema
 │   └── operation-blocklist.md            # Dangerous operations blocked
 └── templates/

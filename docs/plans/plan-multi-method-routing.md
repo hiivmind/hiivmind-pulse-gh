@@ -51,7 +51,7 @@ API Routing Guide Enhancement Plan
 
  Primary Changes
 
- lib/examples/operations/api-routing.md (~260 lines)
+ lib/references/api-routing.md (~260 lines)
  - Update Quick Reference table (lines 11-23)
  - Update each domain's detailed table (8 domains × ~10 lines each)
  - Add legend section explaining symbols
@@ -75,7 +75,7 @@ API Routing Guide Enhancement Plan
 
  - skills/hiivmind-pulse-gh-operations/SKILL.md - Reads full routing guide in Phase 3
  - commands/hiivmind-pulse-gh.md - References routing guide
- - All skills use See: lib/examples/operations/api-routing.md pattern
+ - All skills use See: lib/references/api-routing.md pattern
 
  Project Management Approach
 
@@ -124,7 +124,7 @@ API Routing Guide Enhancement Plan
  4. Check operation-blocklist.md for safety blocks
 
  ## Deliverable
- Updated section in `lib/examples/operations/api-routing.md` with comprehensive method support table
+ Updated section in `lib/references/api-routing.md` with comprehensive method support table
 
  ## Related
  - ADR: (link to ADR)
@@ -209,7 +209,7 @@ API Routing Guide Enhancement Plan
 
  Step 2: Update Quick Reference Table
 
- File: lib/examples/operations/api-routing.md (lines 9-23)
+ File: lib/references/api-routing.md (lines 9-23)
 
  Current format:
  | Domain | Read | Create | Update | Delete | Notes |

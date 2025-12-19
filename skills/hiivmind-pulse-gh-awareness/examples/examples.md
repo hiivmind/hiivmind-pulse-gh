@@ -6,7 +6,7 @@ Local references to centralized examples plus awareness-specific patterns.
 
 | Example | Location | Awareness Usage |
 |---------|----------|-----------------|
-| Config Parsing | `lib/examples/introspection/config-parsing.md` | Check workspace initialization |
+| Config Parsing | `lib/patterns/config-parsing.md` | Check workspace initialization |
 
 ## Awareness-Specific Files
 
