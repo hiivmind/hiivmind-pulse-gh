@@ -14,14 +14,15 @@ Define what skills hiivmind-pulse-gh provides, when to use each skill, and how t
 
 ## WHAT - Plugin Skills
 
-hiivmind-pulse-gh provides 4 skills:
+hiivmind-pulse-gh provides 5 skills:
 
 | Skill | Name | Purpose |
 |-------|------|---------|
 | `hiivmind-pulse-gh-init` | Init | Discover GitHub workspace, cache project/field IDs for fast operations |
 | `hiivmind-pulse-gh-refresh` | Refresh | Sync stale config sections, fix "ID not found" errors |
 | `hiivmind-pulse-gh-operations` | Operations | Execute GitHub operations (issues, PRs, milestones, projects, labels, etc.) |
-| `hiivmind-corpus-github-docs-navigate` | Corpus | Look up GitHub API syntax (GraphQL schema, REST endpoints, gh CLI) |
+| `hiivmind-pulse-gh-discover` | Discover | Explore available operations, browse domains, find the right operation |
+| `hiivmind-corpus-github` | Corpus | Look up GitHub API syntax (GraphQL schema, REST endpoints, gh CLI) |
 
 ### Skill Descriptions
 
@@ -40,6 +41,11 @@ hiivmind-pulse-gh provides 4 skills:
 - **What:** Execute GitHub operations
 - **Does:** Issues, PRs, milestones, labels, projects, branch protection, actions, secrets, variables, releases
 - **Run when:** User wants to create/update/delete/list any GitHub entity
+
+#### Discover
+- **What:** Explore available operations
+- **Does:** Shows quick reference of 25 domains, drill-down into specific operations, hands off to operations
+- **Run when:** User asks "what can I do", wants to browse capabilities, or needs help finding an operation
 
 #### Corpus
 - **What:** API documentation lookup
@@ -77,6 +83,16 @@ Maps operational needs to skills:
 | "gh command for..." | corpus | Medium |
 | API syntax uncertainty during operations | corpus | Medium |
 
+### Discover Triggers
+
+| User Says / Needs | Skill | Confidence |
+|-------------------|-------|------------|
+| "what can I do", "list operations" | discover | High |
+| "show capabilities", "explore domains" | discover | High |
+| "help with GitHub", "what's possible" | discover | High |
+| "how do I use this plugin" | discover | Medium |
+| "browse operations", "feature list" | discover | Medium |
+
 ### Init/Refresh Triggers
 
 | User Says / Needs | Skill | Confidence |
@@ -112,7 +128,8 @@ When you know exactly which skill is needed:
 
 ```
 Invoke skill: hiivmind-pulse-gh:hiivmind-pulse-gh-operations
-Invoke skill: hiivmind-corpus-github-docs-navigate
+Invoke skill: hiivmind-pulse-gh:hiivmind-pulse-gh-discover
+Invoke skill: hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs
 ```
 
 ### Interactive Menu
@@ -140,6 +157,7 @@ This project uses [hiivmind-pulse-gh](https://github.com/hiivmind/hiivmind-pulse
 |-------|--------------|
 | **Init** | Discover workspace, cache project/field IDs for fast operations |
 | **Operations** | Execute GitHub operations (issues, PRs, milestones, projects, etc.) |
+| **Discover** | Explore available operations, browse 25 domains, find the right operation |
 | **Corpus** | Look up GitHub API syntax (GraphQL schema, REST endpoints) |
 | **Refresh** | Sync config when stale or IDs not found |
 
@@ -149,6 +167,7 @@ This project uses [hiivmind-pulse-gh](https://github.com/hiivmind/hiivmind-pulse
 |----------------|----------|
 | Create, update, close issues or PRs | `/hiivmind-pulse-gh [action]` |
 | Set milestones, labels, project status | `/hiivmind-pulse-gh [action]` |
+| Explore what operations are available | `/hiivmind-pulse-gh discover` or Discover skill |
 | Look up GraphQL/REST syntax | Corpus skill |
 | Fix "ID not found" errors | Refresh skill |
 | First-time workspace setup | Init skill |
@@ -158,6 +177,7 @@ This project uses [hiivmind-pulse-gh](https://github.com/hiivmind/hiivmind-pulse
 Suggest using this plugin when:
 - User mentions GitHub operations (issues, PRs, milestones, projects)
 - User asks about GitHub API syntax or mutations
+- User asks "what can I do" or wants to explore capabilities
 - "ID not found" or stale config errors occur
 
 ### How to Invoke
@@ -165,11 +185,13 @@ Suggest using this plugin when:
 **Gateway (recommended):**
 ```
 /hiivmind-pulse-gh create issue for [description]
+/hiivmind-pulse-gh discover
 ```
 
 **Direct skill invocation** when you know which skill:
 ```
 Skill: hiivmind-pulse-gh-operations
+Skill: hiivmind-pulse-gh-discover
 Skill: hiivmind-corpus-github
 ```
 ```
