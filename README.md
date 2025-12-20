@@ -70,11 +70,18 @@ The primary entry point for all GitHub operations:
 ### Examples
 
 ```
+# Execute operations
 /hiivmind-pulse-gh create issue for login timeout bug
 /hiivmind-pulse-gh set milestone v2.0 on issue #42
 /hiivmind-pulse-gh add PR to project
 /hiivmind-pulse-gh protect main branch with required reviews
 /hiivmind-pulse-gh trigger workflow ci.yml
+
+# Discover capabilities
+/hiivmind-pulse-gh discover
+/hiivmind-pulse-gh what can I do with projects
+/hiivmind-pulse-gh explore milestones
+/hiivmind-pulse-gh help
 ```
 
 ### How It Works
@@ -92,9 +99,64 @@ Run without arguments for a guided menu:
 /hiivmind-pulse-gh
 ```
 
+### Discovery Mode
+
+Explore available operations across all 25 GitHub domains:
+
+```
+/hiivmind-pulse-gh discover
+```
+
+**What you get:**
+
+1. **Quick Reference Table** — All domains with their API support (CLI, REST, GraphQL)
+2. **Domain Drill-Down** — Select a domain to see its full operation matrix
+3. **CLI Commands** — Ready-to-use `gh` commands for each operation
+4. **Handoff to Execute** — When ready, seamlessly transition to the operations skill
+
+**Example session:**
+
+```
+You: /hiivmind-pulse-gh discover
+
+Claude: === GitHub Operations Quick Reference ===
+
+        | Domain          | gh CLI | REST | GraphQL | Notes                    |
+        |-----------------|--------|------|---------|--------------------------|
+        | Issues          | ✓      | ✓    | ✓       | Full CRUD via all methods|
+        | Pull Requests   | ✓      | ✓    | ✓       | Full CRUD via all methods|
+        | Projects v2     | ✓      | Read | ✓       | Views UI-only            |
+        | Milestones      | ✗      | ✓    | Read    | CRUD via REST            |
+        ... [25 domains total]
+
+        Which domain would you like to explore?
+
+You: Projects v2
+
+Claude: === Projects v2 Domain ===
+
+        | Operation        | gh CLI | REST | GraphQL | Notes                   |
+        |------------------|--------|------|---------|-------------------------|
+        | Add item         | ✓      | ✗    | ✓       | addProjectV2ItemById    |
+        | Update field     | ✓      | ✗    | ✓       | updateProjectV2ItemField|
+        | Archive item     | ✓      | ✗    | ✓       |                         |
+        ...
+
+        CLI Commands:
+        | Operation   | Command                                              |
+        |-------------|------------------------------------------------------|
+        | Add item    | gh project item-add {number} --owner {o} --url {url} |
+        | Edit field  | gh project item-edit --id {id} --field-id {f} ...    |
+
+        What would you like to do?
+        1. Execute an operation now
+        2. Explore another domain
+        3. Done
+```
+
 ## Skills
 
-The plugin provides **five skills** with a clear dependency structure:
+The plugin provides **six skills** with a clear dependency structure:
 
 ### Skill Overview
 
@@ -103,6 +165,7 @@ The plugin provides **five skills** with a clear dependency structure:
 | `hiivmind-pulse-gh-init` | Validate environment, discover org structure, create config.yaml | First-time setup (once per workspace) |
 | `hiivmind-pulse-gh-refresh` | Sync cached config with GitHub | Periodically, or when "ID not found" errors occur |
 | `hiivmind-pulse-gh-operations` | Execute GitHub operations (all domains) | Via gateway command |
+| `hiivmind-pulse-gh-discover` | Explore available operations across all 25 domains | Find the right operation, learn what's possible |
 | `hiivmind-corpus-github-docs-navigate` | Look up GitHub API syntax (GraphQL/REST) | When uncertain about exact API syntax (external corpus) |
 | `hiivmind-pulse-gh-awareness` | Inject skill awareness into CLAUDE.md | Help Claude suggest this plugin proactively |
 
@@ -117,6 +180,7 @@ hiivmind-pulse-gh-refresh         ← Requires init completed
        │
        ├── hiivmind-corpus-github-docs-navigate ← External corpus (syntax lookup)
        │
+hiivmind-pulse-gh-discover        ← Independent (explore capabilities)
 hiivmind-pulse-gh-awareness       ← Independent (edits CLAUDE.md)
 ```
 
@@ -258,6 +322,7 @@ hiivmind-pulse-gh/
 │   ├── hiivmind-pulse-gh-init/           # Workspace initialization
 │   ├── hiivmind-pulse-gh-refresh/        # Config sync
 │   ├── hiivmind-pulse-gh-operations/     # Execute operations
+│   ├── hiivmind-pulse-gh-discover/       # Explore capabilities
 │   └── hiivmind-pulse-gh-awareness/      # CLAUDE.md injection
 │
 ├── lib/
