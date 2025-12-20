@@ -132,6 +132,18 @@ These commands are well-known - execute directly with enrichment:
 
 **Note:** CLI commands handle authentication, pagination, and formatting automatically.
 
+### Domains WITHOUT CLI Support
+
+These domains require REST API - there is NO `gh` CLI command:
+
+| Domain | Correct Approach |
+|--------|------------------|
+| **Milestones** | `gh api repos/{owner}/{repo}/milestones --method POST -f title="..."` |
+| Collaborators | `gh api repos/{owner}/{repo}/collaborators/{username} --method PUT` |
+| Teams | `gh api orgs/{org}/teams --method POST` |
+
+> **Common mistake:** `gh milestone create` does not exist. Always use REST API for milestone CRUD.
+
 ---
 
 ## When to Consult Resources

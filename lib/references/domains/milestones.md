@@ -2,6 +2,9 @@
 
 **Hybrid: Read via GraphQL, CRUD via REST. Set on issue via GraphQL.**
 
+> **IMPORTANT:** There is NO `gh milestone` CLI command. `gh milestone create` does not exist.
+> Use REST API: `gh api repos/{owner}/{repo}/milestones --method POST -f title="..." -f description="..."`
+
 | Operation | gh CLI | REST | GraphQL | Web UI | Notes |
 |-----------|--------|------|---------|--------|-------|
 | List | ✗ | ✓ | ✓ | ✓ | No CLI direct support |
