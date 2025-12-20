@@ -112,6 +112,18 @@
 
 **Config prereqs:** Project ID, Field ID, Option ID from `.hiivmind/github/config.yaml`
 
+## Field Types
+
+| Field Type | Value Format | Notes |
+|------------|--------------|-------|
+| Text | String | Plain text value |
+| Number | Float | Numeric value |
+| Date | ISO 8601 | `"2024-01-15"` |
+| Single Select | Option ID | Must use `{PLUGIN_ROOT}/lib/patterns/id-resolution.md` to get option ID |
+| Iteration | Iteration ID | Use iteration ID from config |
+
+**Status field:** Always single-select. Needs option ID for values like "Backlog", "In Progress", "Done".
+
 ## Limitations
 
 - Views: UI-only, no API support for create/delete

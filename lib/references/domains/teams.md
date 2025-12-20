@@ -54,4 +54,8 @@
 | Update discussion | Mutation | `updateTeamDiscussion` | |
 | Delete discussion | Mutation | `deleteTeamDiscussion` | |
 
+## Prerequisites
+
+**Token scope:** Most team operations require `admin:org` scope. Read-only operations work with `read:org`.
+
 **Note:** Team CRUD and membership mutations are REST-only. GraphQL supports discussions and repository assignments.

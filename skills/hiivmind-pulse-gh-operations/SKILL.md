@@ -60,35 +60,13 @@ When invoked by the gateway command, expect:
 - **Target**: Specific entity (issue #42, milestone "v2.0", etc.)
 - **Config**: `.hiivmind/github/config.yaml`
 
-**Note:** For unlisted domains, the gateway passes the detected resource name. Use corpus lookup for API syntax.
-
-## Phase Overview
-
-```
-1. CONTEXT → 2. RESOLVE → 3. ROUTE → 4. EXECUTE → 5. REPORT
-   (load)      (IDs)       (API)      (run)        (result)
-      │           │           │           │           │
-   STOP if    From cache   Read full   Direct or   Display
-   not init   via pattern  routing     corpus      result
-```
-
 ---
 
-## Phase 1: CONTEXT
+## Execution Flow
 
-**Goal:** Load workspace configuration.
+### 1. Verify Workspace
 
-**See:** `{PLUGIN_ROOT}/lib/patterns/config-parsing.md`
-
-### What to Do
-
-1. Check for `.hiivmind/github/config.yaml`
-2. Load workspace info (owner, type, repositories)
-3. Load default project if set
-
-### STOP Point
-
-**If not initialized:**
+Check `.hiivmind/github/config.yaml` exists. If not:
 
 ```
 Workspace not initialized.
@@ -98,166 +76,29 @@ Config file not found: .hiivmind/github/config.yaml
 Run: /hiivmind-pulse-gh init
 ```
 
----
+### 2. Determine Approach
 
-## Phase 2: RESOLVE IDs
+| Situation | Action |
+|-----------|--------|
+| Known CLI command (`gh issue`, `gh pr`, etc.) | Execute directly with enrichment |
+| Known API pattern | Execute via `gh api` |
+| Uncertain about syntax | Consult resources, then execute |
+| Unknown domain | Corpus lookup required |
 
-**Goal:** Resolve any IDs needed for the operation from cached config.
+**Fast path:** For common operations listed below, proceed directly to execution.
 
-**See:** `{PLUGIN_ROOT}/lib/patterns/id-resolution.md`
+### 3. Execute with Enrichment
 
-### What to Do
+1. **Resolve IDs** from cached config (project ID, field IDs, milestone ID)
+2. **Apply enrichment** (link to project, set status field, etc.)
+3. **Execute:**
+   - CLI: `gh issue create`, `gh pr merge`, etc.
+   - GraphQL: temp file pattern via `gh api graphql`
+   - REST: `gh api /repos/{owner}/{repo}/endpoint -X METHOD`
 
-Based on domain and operation, resolve:
+### 4. Report Result
 
-| Domain | IDs Needed |
-|--------|------------|
-| Issues | Repository ID |
-| PRs | Repository ID |
-| Milestones | Repository name (REST uses name, not ID) |
-| Labels | Repository name |
-| Projects v2 | Project ID, Field ID, Option ID |
-| Branch Protection | Repository name, branch name |
-| Rulesets | Repository name |
-| Actions | Repository name, workflow ID |
-| Secrets | Repository name |
-| Variables | Repository name |
-| Releases | Repository name |
-| Repositories | Repository name (or owner for org-level) |
-| Collaborators | Repository name |
-| Teams | Organization name |
-| Checks | Repository name |
-| Deployments | Repository name |
-| Security | Repository name |
-| Dependabot | Repository name |
-| Search | Query string (no IDs needed) |
-| Gists | Gist ID (if updating existing) |
-
-### Unknown Domains
-
-For domains not listed above:
-1. Default to repository name from config
-2. Corpus lookup will determine exact endpoint requirements
-
-### Cache-First Strategy
-
-1. Check config.yaml for cached ID
-2. If not found, use corpus lookup to query and cache
-
----
-
-## Phase 3: ROUTE
-
-**Goal:** Determine the correct API (GraphQL vs REST) and get search keywords.
-
-### Step 1: Read Quick Reference
-
-Read `{PLUGIN_ROOT}/lib/references/api-routing.md` (~170 lines) to:
-- Identify which API method to use (gh CLI, REST, GraphQL, Web UI)
-- Check the Quick Reference table for high-level support
-
-```
-Read: {PLUGIN_ROOT}/lib/references/api-routing.md
-```
-
-### Step 2: Read Domain Details
-
-Based on the domain identified, read the domain-specific file for:
-- Detailed operation support matrix
-- Exact CLI commands
-- Corpus lookup keywords for syntax
-
-```
-Read: {PLUGIN_ROOT}/lib/references/domains/{domain}.md
-```
-
-**Domain file mapping:**
-
-| Domain | File |
-|--------|------|
-| Issues | `{PLUGIN_ROOT}/lib/references/domains/issues.md` |
-| Pull Requests | `{PLUGIN_ROOT}/lib/references/domains/pull-requests.md` |
-| Milestones | `{PLUGIN_ROOT}/lib/references/domains/milestones.md` |
-| Labels | `{PLUGIN_ROOT}/lib/references/domains/labels.md` |
-| Projects v2 | `{PLUGIN_ROOT}/lib/references/domains/projects-v2.md` |
-| Branch Protection | `{PLUGIN_ROOT}/lib/references/domains/branch-protection.md` |
-| Rulesets | `{PLUGIN_ROOT}/lib/references/domains/rulesets.md` |
-| Actions | `{PLUGIN_ROOT}/lib/references/domains/actions.md` |
-| Secrets | `{PLUGIN_ROOT}/lib/references/domains/secrets.md` |
-| Variables | `{PLUGIN_ROOT}/lib/references/domains/variables.md` |
-| Releases | `{PLUGIN_ROOT}/lib/references/domains/releases.md` |
-| Repository | `{PLUGIN_ROOT}/lib/references/domains/repository.md` |
-| Gists | `{PLUGIN_ROOT}/lib/references/domains/gists.md` |
-| Search | `{PLUGIN_ROOT}/lib/references/domains/search.md` |
-| Collaborators | `{PLUGIN_ROOT}/lib/references/domains/collaborators.md` |
-| Teams | `{PLUGIN_ROOT}/lib/references/domains/teams.md` |
-| Webhooks | `{PLUGIN_ROOT}/lib/references/domains/webhooks.md` |
-| Checks | `{PLUGIN_ROOT}/lib/references/domains/checks.md` |
-| Deployments | `{PLUGIN_ROOT}/lib/references/domains/deployments.md` |
-| Environments | `{PLUGIN_ROOT}/lib/references/domains/environments.md` |
-| Dependabot | `{PLUGIN_ROOT}/lib/references/domains/dependabot.md` |
-| Code Scanning | `{PLUGIN_ROOT}/lib/references/domains/code-scanning.md` |
-| Secret Scanning | `{PLUGIN_ROOT}/lib/references/domains/secret-scanning.md` |
-| Notifications | `{PLUGIN_ROOT}/lib/references/domains/notifications.md` |
-| Reactions | `{PLUGIN_ROOT}/lib/references/domains/reactions.md` |
-
-### Unknown Domains (Fallback)
-
-**If domain is not in routing guide:**
-
-1. **Default to REST API** - Most GitHub features use REST for mutations
-2. **Invoke corpus skill** for endpoint syntax:
-   - `hiivmind-corpus-github-docs-navigate`
-   - Search: `{domain} REST API endpoint`
-3. **Confirm with user** before executing unknown patterns
-4. **Endpoint pattern:** `gh api /repos/{owner}/{repo}/{resource}` or `gh api /{resource}`
-
----
-
-## Phase 4: EXECUTE
-
-**Goal:** Execute the operation using the appropriate API.
-
-**See:** `{PLUGIN_ROOT}/lib/patterns/graphql-execution.md`
-**See:** `{PLUGIN_ROOT}/lib/patterns/error-handling.md`
-
-### Execution Approach
-
-1. **Check routing guide** - `{PLUGIN_ROOT}/lib/references/api-routing.md` tells you GraphQL vs REST
-2. **If syntax is clear** - Execute directly using `gh api` or `gh` CLI
-3. **If uncertain** - Use corpus lookup for exact syntax
-
-### Corpus Lookup (When Needed)
-
-**See:** `{PLUGIN_ROOT}/lib/patterns/corpus-lookup.md`
-
-Use corpus lookup when you need exact syntax:
-
-- **Invoke:** `hiivmind-corpus-github-docs-navigate`
-- **Query:** With keywords from routing guide
-- **Get:** Exact mutation/endpoint syntax
-
-### Execute Operation
-
-- **GraphQL:** Write query to temp file, execute with `gh api graphql -f query="$(cat /tmp/query.graphql)"`
-- **REST:** Use `gh api /repos/{owner}/{repo}/endpoint -X METHOD`
-- **CLI shortcut:** Some operations have `gh` CLI equivalents
-
-### Parse Response
-
-- GraphQL: Check `.errors`, extract from `.data`
-- REST: Check HTTP status, parse JSON response
-
----
-
-## Phase 5: REPORT
-
-**Goal:** Report operation result to user.
-
-**See:** `{PLUGIN_ROOT}/lib/patterns/error-handling.md`
-
-### Success Report
-
+**Success:**
 ```
 Operation successful!
 
@@ -265,132 +106,114 @@ Operation successful!
 Target: {entity}
 Result: {summary}
 
-{Link to GitHub if applicable}
+{Link to GitHub}
 ```
 
-### Error Report
-
-```
-Operation failed.
-
-Error: {error message}
-Domain: {domain}
-Operation: {operation}
-
-Suggested fix: {based on error-handling.md}
-```
+**Error:** Include suggested fix based on error type.
 
 ---
 
-## Domain-Specific Notes
+## Common Operations (No Lookup Needed)
 
-### Projects v2
-
-**Required IDs:** Project ID, Field ID (for updates), Option ID (for single-select)
-
-**See:** `{PLUGIN_ROOT}/lib/patterns/id-resolution.md` for resolving from config
-
-**Special cases:**
-- Status field: Single-select, needs Option ID
-- Date fields: ISO 8601 format
-- Iteration fields: Use iteration ID from config
-
-### Milestones
-
-**REST only** - No GraphQL mutations available.
-
-**Assign to issue:** Use GraphQL `updateIssue` with `milestoneId`
-
-### Secrets
-
-**Requires encryption** - Must encrypt value with repository public key before setting.
-
-**CLI shortcut:** `gh secret set NAME` handles encryption automatically.
-
-### Actions
-
-**Trigger workflow:** Requires `workflow_dispatch` event configured in workflow file.
-
-**CLI shortcut:** `gh workflow run WORKFLOW` is simpler than REST API.
-
-### Repositories
-
-**Create:** `POST /user/repos` (personal) or `POST /orgs/{org}/repos` (organization)
-
-**BLOCKED operations:** Delete, transfer, archive - see `{PLUGIN_ROOT}/docs/operation-blocklist.md`
-
-### Collaborators
-
-**Add:** `PUT /repos/{owner}/{repo}/collaborators/{username}` with permission level
-
-**Remove:** `DELETE /repos/{owner}/{repo}/collaborators/{username}`
-
-### Teams
-
-**Requires org admin permissions** - Most team operations need `admin:org` scope.
-
-### Search
-
-**Read-only domain** - No mutations available.
-
-**Endpoint:** `GET /search/issues`, `GET /search/code`, `GET /search/repositories`
-
-### Unknown Domains
-
-**Default approach for unlisted domains:**
-
-1. Use corpus lookup for exact endpoint syntax
-2. Default to REST API with repository scope
-3. Confirm with user before execution
-4. Report any errors with suggested fixes
-
----
-
-## Quick Reference
-
-### CLI Shortcuts (When Available)
+These commands are well-known - execute directly with enrichment:
 
 | Operation | CLI Command |
 |-----------|-------------|
 | Create issue | `gh issue create` |
 | Close issue | `gh issue close NUMBER` |
+| Comment on issue | `gh issue comment NUMBER --body TEXT` |
 | Create PR | `gh pr create` |
 | Merge PR | `gh pr merge NUMBER` |
+| Review PR | `gh pr review NUMBER` |
 | Set secret | `gh secret set NAME` |
 | Trigger workflow | `gh workflow run WORKFLOW` |
 | Create release | `gh release create TAG` |
+| List issues/PRs | `gh issue list`, `gh pr list` |
 
 **Note:** CLI commands handle authentication, pagination, and formatting automatically.
 
-### Related Skills
+---
 
-- **init** - First-time workspace setup
-- **refresh** - Update stale config sections
-- **gateway** - Intent detection and routing
+## When to Consult Resources
+
+Only read files when you have a **knowledge gap**:
+
+| Knowledge Gap | Resource |
+|---------------|----------|
+| Which API (GraphQL vs REST)? | `{PLUGIN_ROOT}/lib/references/api-routing.md` |
+| Domain-specific syntax/gotchas | `{PLUGIN_ROOT}/lib/references/domains/{domain}.md` |
+| Exact mutation/endpoint syntax | Corpus: `hiivmind-corpus-github-docs-navigate` |
+| ID resolution from cache | `{PLUGIN_ROOT}/lib/patterns/id-resolution.md` |
+| GraphQL execution pattern | `{PLUGIN_ROOT}/lib/patterns/graphql-execution.md` |
+| Error recovery | `{PLUGIN_ROOT}/lib/patterns/error-handling.md` |
+
+**Context-aware:** If you already read a resource earlier in the conversation, don't re-read it.
 
 ---
 
-## Examples Library
+## Enrichment Details
 
-All implementation details are in the examples library:
+### What Gets Applied
 
-### Introspection Examples (HEAVY)
+From `.hiivmind/github/config.yaml`:
 
-| Example | Purpose |
+| Config Section | Enrichment |
+|----------------|------------|
+| `projects.default` | Auto-link new issues/PRs to default project |
+| `projects.catalog[].fields.Status` | Set Status field on project items |
+| `milestones` | Resolve milestone names to IDs |
+| `labels` | Apply team-standard labels |
+
+### Cache-First ID Resolution
+
+1. Check config.yaml for cached ID
+2. If found → use directly
+3. If not found → corpus lookup to query, then cache result
+
+---
+
+## Unknown Domains
+
+For domains not in the routing guide:
+
+1. **Default to REST API** - Most GitHub features use REST for mutations
+2. **Invoke corpus** for endpoint syntax: `hiivmind-corpus-github-docs-navigate`
+3. **Confirm with user** before executing unknown patterns
+4. **Endpoint pattern:** `gh api /repos/{owner}/{repo}/{resource}`
+
+---
+
+## Related Skills
+
+| Skill | Use For |
+|-------|---------|
+| **init** | First-time workspace setup |
+| **refresh** | Update stale config sections |
+| **discover** | Explore available operations |
+| **gateway** | Intent detection and routing |
+
+---
+
+## Resources
+
+### Patterns (HOW to do things)
+
+| Pattern | Purpose |
 |---------|---------|
 | `{PLUGIN_ROOT}/lib/patterns/config-parsing.md` | Read/write YAML config files |
 | `{PLUGIN_ROOT}/lib/patterns/id-resolution.md` | Resolve names to IDs (cache-first) |
 | `{PLUGIN_ROOT}/lib/patterns/graphql-execution.md` | Execute queries via temp file |
 | `{PLUGIN_ROOT}/lib/patterns/error-handling.md` | Handle API errors |
-
-### Operations Examples (LIGHT)
-
-| Example | Purpose |
-|---------|---------|
-| `{PLUGIN_ROOT}/lib/references/api-routing.md` | API routing decisions (THE canonical source) |
 | `{PLUGIN_ROOT}/lib/patterns/corpus-lookup.md` | Look up API syntax when uncertain |
 
-### External Resources
+### References (WHAT exists)
+
+| Reference | Purpose |
+|-----------|---------|
+| `{PLUGIN_ROOT}/lib/references/api-routing.md` | API routing decisions (GraphQL vs REST) |
+| `{PLUGIN_ROOT}/lib/references/domains/*.md` | Domain-specific operation matrices |
+
+### External
 
 | Resource | Purpose |
 |----------|---------|
