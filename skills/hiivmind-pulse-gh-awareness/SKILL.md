@@ -341,7 +341,7 @@ Next steps:
 
 - **hiivmind-pulse-gh-init** - Initialize workspace after adding awareness
 - **hiivmind-pulse-gh-operations** - Execute GitHub operations
-- **hiivmind-corpus-github** - API documentation lookup
+- **hiivmind-corpus-github-docs-navigate** - API documentation lookup
 
 ## Pattern Library
 

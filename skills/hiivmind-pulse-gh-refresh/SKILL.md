@@ -165,7 +165,7 @@ For each selected section:
 ### Corpus Lookup (When Needed)
 
 If uncertain about query syntax:
-- **Invoke:** `hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs`
+- **Invoke:** `hiivmind-corpus-github-docs-navigate`
 - **Query:** With keywords from routing guide
 - **Get:** Exact query syntax from schema/docs
 
@@ -319,4 +319,4 @@ All implementation details are in the examples library:
 
 | Resource | Purpose |
 |----------|---------|
-| `hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs` | GitHub corpus skill for syntax lookup |
+| `hiivmind-corpus-github-docs-navigate` | GitHub corpus skill for syntax lookup |

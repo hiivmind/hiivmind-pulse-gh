@@ -293,7 +293,7 @@ Cache Miss
                          ↓
 ┌─────────────────────────────────────────────────────────┐
 │ 2. Search corpus                                        │
-│    → Invoke: hiivmind-corpus-github skill               │
+│    → Invoke: hiivmind-corpus-github-docs-navigate       │
 │    → Query with keywords from step 1                    │
 │    → Get exact syntax (query/mutation/endpoint)         │
 └────────────────────────┬────────────────────────────────┘

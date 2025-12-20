@@ -278,7 +278,7 @@ This pattern is Step 3 of the v3 architecture flow:
 
 For corpus discovery, see:
 - `graphql-queries.md` - Query syntax reference
-- `.claude-plugin/skills/hiivmind-corpus-github/` - Full schema
+- External corpus: `hiivmind-corpus-github-docs-navigate` - Full schema and API docs
 
 ---
 

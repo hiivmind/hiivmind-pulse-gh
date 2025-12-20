@@ -46,7 +46,7 @@ The embedded corpus was created for self-contained distribution, but maintaining
    ```
    To:
    ```
-   hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs
+   hiivmind-corpus-github-docs-navigate
    ```
 
 3. Delete embedded corpus:
@@ -99,5 +99,5 @@ grep -r "hiivmind-pulse-gh:hiivmind-corpus-github" .
 ls skills/hiivmind-corpus-github/  # Should not exist
 
 # Test new invocation works
-# Invoke: hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs
+# Invoke: hiivmind-corpus-github-docs-navigate
 ```

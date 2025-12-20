@@ -41,7 +41,7 @@ Your Request
      ↓
 ┌────────────────────────────────────────────────────────────┐
 │  Step 2: CORPUS DISCOVERY                                  │
-│  Invoke: hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs          │
+│  Invoke: hiivmind-corpus-github-docs-navigate          │
 │  Query: Keywords from Step 1                               │
 │  Output: Exact syntax (query/endpoint/command)             │
 └────────────────────────────────────────────────────────────┘
@@ -81,7 +81,7 @@ The routing guide provides:
 
 ## Step 2: Corpus Discovery
 
-**Invoke:** `hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs`
+**Invoke:** `hiivmind-corpus-github-docs-navigate`
 
 The corpus skill searches:
 - **Index:** `data/index.md` - Keyword-tagged entries
@@ -335,4 +335,4 @@ No corpus lookup needed for well-known CLI commands.
 
 - **lib/references/api-routing.md** - Routing decisions and keywords (useful standalone)
 - **docs/config-schema.md** - Config.yaml structure for cached IDs
-- **hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs** - GitHub API corpus skill
+- **hiivmind-corpus-github-docs-navigate** - GitHub API corpus skill

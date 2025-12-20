@@ -21,7 +21,7 @@ hiivmind-pulse-gh provides 4 skills:
 | `hiivmind-pulse-gh-init` | Init | Discover GitHub workspace, cache project/field IDs for fast operations |
 | `hiivmind-pulse-gh-refresh` | Refresh | Sync stale config sections, fix "ID not found" errors |
 | `hiivmind-pulse-gh-operations` | Operations | Execute GitHub operations (issues, PRs, milestones, projects, labels, etc.) |
-| `hiivmind-corpus-github` | Corpus | Look up GitHub API syntax (GraphQL schema, REST endpoints, gh CLI) |
+| `hiivmind-corpus-github-docs-navigate` | Corpus | Look up GitHub API syntax (GraphQL schema, REST endpoints, gh CLI) |
 
 ### Skill Descriptions
 
@@ -112,7 +112,7 @@ When you know exactly which skill is needed:
 
 ```
 Invoke skill: hiivmind-pulse-gh:hiivmind-pulse-gh-operations
-Invoke skill: hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs
+Invoke skill: hiivmind-corpus-github-docs-navigate
 ```
 
 ### Interactive Menu

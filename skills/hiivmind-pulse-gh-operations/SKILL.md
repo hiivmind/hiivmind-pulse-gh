@@ -184,7 +184,7 @@ Read: lib/references/domains/{domain}.md
 
 1. **Default to REST API** - Most GitHub features use REST for mutations
 2. **Invoke corpus skill** for endpoint syntax:
-   - `hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs`
+   - `hiivmind-corpus-github-docs-navigate`
    - Search: `{domain} REST API endpoint`
 3. **Confirm with user** before executing unknown patterns
 4. **Endpoint pattern:** `gh api /repos/{owner}/{repo}/{resource}` or `gh api /{resource}`
@@ -210,7 +210,7 @@ Read: lib/references/domains/{domain}.md
 
 Use corpus lookup when you need exact syntax:
 
-- **Invoke:** `hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs`
+- **Invoke:** `hiivmind-corpus-github-docs-navigate`
 - **Query:** With keywords from routing guide
 - **Get:** Exact mutation/endpoint syntax
 
@@ -371,4 +371,4 @@ All implementation details are in the examples library:
 
 | Resource | Purpose |
 |----------|---------|
-| `hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs` | GitHub corpus skill for syntax lookup |
+| `hiivmind-corpus-github-docs-navigate` | GitHub corpus skill for syntax lookup |

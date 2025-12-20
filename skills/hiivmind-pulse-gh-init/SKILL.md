@@ -150,7 +150,7 @@ Wait for user confirmation before proceeding. If user says no, ask them to speci
 ### Corpus Lookup (When Needed)
 
 If uncertain about projectsV2 query syntax:
-- **Invoke:** `hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs`
+- **Invoke:** `hiivmind-corpus-github-docs-navigate`
 - **Query:** "projectsV2 organization list projects GraphQL"
 - **Get:** Query syntax for listing projects
 
@@ -295,4 +295,4 @@ All implementation details are in the examples library:
 
 | Resource | Purpose |
 |----------|---------|
-| `hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs` | GitHub corpus skill for syntax lookup |
+| `hiivmind-corpus-github-docs-navigate` | GitHub corpus skill for syntax lookup |
