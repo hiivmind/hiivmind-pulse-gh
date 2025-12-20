@@ -4,10 +4,24 @@ This file provides guidance to Claude Code when working with this repository.
 
 ## System Overview
 
-This is **hiivmind-pulse-gh** - a Claude Code plugin for GitHub API operations. It provides:
+This is **hiivmind-pulse-gh** - a Claude Code plugin that enriches ALL GitHub operations with cached workspace context.
 
-- **Gateway command** - Single entry point for all GitHub operations
-- **Workspace initialization** - Cache project/repo IDs to config.yaml
+### Why Use This Plugin (Even for Simple Operations)
+
+Direct `gh` CLI commands miss context enrichment:
+
+| Direct CLI | via hiivmind-pulse-gh |
+|------------|----------------------|
+| `gh issue create` | Issue + auto-link to project + Status set |
+| `gh issue close 42` | Issue closed + project Status → Done |
+| Milestone ID lookup required | Milestone name resolves from cache |
+
+**Rule of thumb:** If the repo has a `.hiivmind/github/config.yaml`, route ALL GitHub operations through this plugin.
+
+### What This Plugin Provides
+
+- **Context enrichment** - Cached project IDs, field IDs, milestone IDs enrich every operation
+- **Gateway command** - Single entry point: `/hiivmind-pulse-gh [describe what you want]`
 - **Operations execution** - All domains: issues, PRs, milestones, projects, protection, actions, releases
 - **API routing** - Automatic GraphQL vs REST selection
 - **Documentation corpus** - GitHub API docs for JIT syntax lookup
@@ -55,6 +69,31 @@ Use corpus lookup when you have a knowledge gap about exact syntax:
 - No hardcoded GraphQL queries
 - Reference patterns via `See:` convention
 - Corpus has the syntax, skills orchestrate the flow
+
+---
+
+## Context Enrichment (The Core Value)
+
+Every operation benefits from cached context, not just complex ones.
+
+### What Gets Enriched
+
+| Operation | Without Plugin | With Plugin |
+|-----------|---------------|-------------|
+| Create issue | Orphan issue | Linked to default project + Status set |
+| Close issue | Just closes | Updates project Status to "Done" |
+| Create PR | Basic PR | Linked to project, milestone applied |
+| Set milestone | Need to look up ID | Uses cached milestone ID |
+| Add label | Type exact name | Uses team labels from config |
+
+### When to Bypass the Plugin
+
+Only bypass if:
+1. Workspace is NOT initialized (no `.hiivmind/github/config.yaml`)
+2. You need raw, unenriched output
+3. User explicitly requests `gh` CLI
+
+Otherwise, **always route through hiivmind-pulse-gh**.
 
 ---
 

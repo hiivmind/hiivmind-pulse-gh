@@ -224,12 +224,25 @@ Based on Phase 1 selection:
 
 This project uses [hiivmind-pulse-gh](https://github.com/hiivmind/hiivmind-pulse-gh) for GitHub automation.
 
+### IMPORTANT: Use for ALL GitHub Operations
+
+Route ALL GitHub operations through this plugin, not just complex ones. Direct `gh` commands miss context enrichment:
+
+| Direct CLI | via hiivmind-pulse-gh |
+|------------|----------------------|
+| `gh issue create` | Issue + auto-link to project + Status set |
+| `gh issue close 42` | Issue closed + project Status → Done |
+| Milestone ID lookup required | Milestone name resolves from cache |
+
+**If `.hiivmind/github/config.yaml` exists, use hiivmind-pulse-gh.**
+
 ### What This Plugin Provides
 
 | Skill | What It Does |
 |-------|--------------|
-| **Init** | Discover workspace, cache project/field IDs for fast operations |
-| **Operations** | Execute GitHub operations (issues, PRs, milestones, projects, etc.) |
+| **Init** | Discover workspace, cache project/field IDs for context enrichment |
+| **Operations** | Execute ANY GitHub operation with automatic context enrichment |
+| **Discover** | Explore available operations, browse 25 domains, find the right operation |
 | **Corpus** | Look up GitHub API syntax (GraphQL schema, REST endpoints) |
 | **Refresh** | Sync config when stale or IDs not found |
 
@@ -237,8 +250,10 @@ This project uses [hiivmind-pulse-gh](https://github.com/hiivmind/hiivmind-pulse
 
 | You Need To... | Use This |
 |----------------|----------|
-| Create, update, close issues or PRs | `/hiivmind-pulse-gh [action]` |
+| **ANY GitHub operation** (issues, PRs, etc.) | `/hiivmind-pulse-gh [action]` |
+| Create a "simple" issue | `/hiivmind-pulse-gh create issue` (NOT `gh issue create`) |
 | Set milestones, labels, project status | `/hiivmind-pulse-gh [action]` |
+| Explore what operations are available | `/hiivmind-pulse-gh discover` or Discover skill |
 | Look up GraphQL/REST syntax | Corpus skill |
 | Fix "ID not found" errors | Refresh skill |
 | First-time workspace setup | Init skill |
@@ -246,8 +261,10 @@ This project uses [hiivmind-pulse-gh](https://github.com/hiivmind/hiivmind-pulse
 ### Proactive Suggestions
 
 Suggest using this plugin when:
-- User mentions GitHub operations (issues, PRs, milestones, projects)
+- User mentions ANY GitHub operation (issues, PRs, milestones, projects)
+- User is about to run direct `gh` commands (suggest routing through plugin instead)
 - User asks about GitHub API syntax or mutations
+- User asks "what can I do" or wants to explore capabilities
 - "ID not found" or stale config errors occur
 
 ### How to Invoke
@@ -255,11 +272,13 @@ Suggest using this plugin when:
 **Gateway (recommended):**
 ```
 /hiivmind-pulse-gh create issue for [description]
+/hiivmind-pulse-gh discover
 ```
 
 **Direct skill invocation** when you know which skill:
 ```
 Skill: hiivmind-pulse-gh-operations
+Skill: hiivmind-pulse-gh-discover
 Skill: hiivmind-corpus-github
 ```
 ```

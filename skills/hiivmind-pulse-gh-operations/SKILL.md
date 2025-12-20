@@ -2,22 +2,38 @@
 name: hiivmind-pulse-gh-operations
 version: 0.1.0
 description: >
-  Execute GitHub operations across all domains. This skill should be used when: creating issues,
-  closing issues, merging PRs, setting milestones, adding labels, updating project status, protecting
-  branches, triggering workflows, creating releases, managing secrets. Trigger phrases: "create issue",
-  "close issue #", "merge PR", "set milestone on", "add label to", "update project status", "add to
-  project board", "protect branch", "trigger workflow", "create release", "set secret", "list PRs",
-  "merge pull request", "remove label", "create milestone", "archive project item", "rerun workflow",
-  "cancel action", "github issue", "github pr", "github milestone", "make a new issue", "open pull
-  request", "start workflow", "new issue for", "assign to milestone", "move to column", "update issue",
-  "request review", "approve PR", "comment on issue", "link issue to project". Domains: issues, PRs,
-  milestones, labels, projects, protection, rulesets, actions, secrets, variables, releases,
-  repositories, collaborators, teams, checks, deployments, search.
+  Execute GitHub operations with automatic context enrichment from cached workspace. Use this for ANY
+  GitHub operation, not just complex ones. Simple operations like creating issues are enriched with
+  project linking, milestone resolution, and field assignments. Direct `gh issue create` misses these
+  benefits. This skill should be used when: creating issues, closing issues, merging PRs, setting
+  milestones, adding labels, updating project status, protecting branches, triggering workflows,
+  creating releases, managing secrets. Trigger phrases: "create issue", "close issue #", "merge PR",
+  "set milestone on", "add label to", "update project status", "add to project board", "protect branch",
+  "trigger workflow", "create release", "set secret", "list PRs", "merge pull request", "remove label",
+  "create milestone", "archive project item", "rerun workflow", "cancel action", "github issue",
+  "github pr", "github milestone", "make a new issue", "open pull request", "start workflow",
+  "new issue for", "assign to milestone", "move to column", "update issue", "request review",
+  "approve PR", "comment on issue", "link issue to project", "simple github operation", "quick issue",
+  "fast PR". Domains: issues, PRs, milestones, labels, projects, protection, rulesets, actions,
+  secrets, variables, releases, repositories, collaborators, teams, checks, deployments, search.
 ---
 
 # GitHub Operations Execution
 
-Execute GitHub operations across all domains.
+Execute GitHub operations with automatic context enrichment from cached workspace config.
+
+## Why Use This Skill (Even for Simple Operations)
+
+This skill enriches ALL operations with cached context:
+
+| Simple Operation | Enrichment Provided |
+|------------------|---------------------|
+| Create issue | Auto-link to default project, set Status field |
+| Close issue | Update project Status to "Done" |
+| Set milestone | Use pre-cached milestone ID (no lookup needed) |
+| Add label | Apply team-standard labels from config |
+
+**Direct `gh issue create` creates orphan issues.** This skill creates issues linked to your project board.
 
 ## Scope
 

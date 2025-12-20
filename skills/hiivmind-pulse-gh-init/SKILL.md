@@ -2,18 +2,20 @@
 name: hiivmind-pulse-gh-init
 version: 0.1.0
 description: >
-  Initialize GitHub workspace for hiivmind-pulse-gh operations. This skill should be used when:
-  setting up a new workspace, first-time configuration, config.yaml is missing, or "workspace not
-  initialized" errors occur. Trigger phrases: "initialize workspace", "setup GitHub", "first time
-  setup", "init pulse-gh", "configure workspace", "cache project IDs", "workspace not initialized",
-  "start github plugin", "get github working", "new workspace setup", "bootstrap github",
-  "prepare github workspace", "github init". Verifies gh CLI, jq, yq tools and authentication.
-  Discovers projects and caches field IDs for fast operations. Run once per repository.
+  Initialize GitHub workspace to enable context enrichment for all GitHub operations. This skill
+  should be used when: setting up a new workspace, first-time configuration, config.yaml is missing,
+  or "workspace not initialized" errors occur. Trigger phrases: "initialize workspace", "setup GitHub",
+  "first time setup", "init pulse-gh", "configure workspace", "cache project IDs", "workspace not
+  initialized", "start github plugin", "get github working", "new workspace setup", "bootstrap github",
+  "prepare github workspace", "github init", "enable project linking", "setup issue enrichment".
+  Verifies gh CLI, jq, yq tools and authentication. Discovers projects and caches field IDs so
+  issues/PRs can be automatically linked to projects. Run once per repository.
 ---
 
 # GitHub Workspace Initialization
 
-One-time setup for a GitHub workspace. Creates configuration files that enable all other operations.
+One-time setup that enables context enrichment for all GitHub operations. Without this initialization,
+issues and PRs created are orphans with no project linking.
 
 ## Scope
 
