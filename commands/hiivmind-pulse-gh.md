@@ -52,7 +52,8 @@ Analyze the user's request to determine:
 | dependabot, dependency | `dependabot` |
 | search, find, query | `search` |
 | gist | `gists` |
-| awareness, configure claude, setup claude, enable features, what can, capabilities, tour | `awareness` |
+| awareness, configure claude, setup claude, enable features | `awareness` |
+| discover, explore, capabilities, what can, help, list operations, browse, how do I, what's possible | `discover` |
 
 ### Operation Detection
 
@@ -108,7 +109,7 @@ If intent is still unclear after domain/operation detection, use AskUserQuestion
 
 ## Step 3: Context Detection (Conditional)
 
-**Skip this step if domain is:** `awareness`, `search`, `gists`
+**Skip this step if domain is:** `awareness`, `discover`, `search`, `gists`
 
 These domains either handle their own context checks internally or don't require workspace initialization.
 
@@ -169,6 +170,14 @@ After detecting intent, route based on domain:
 **Invoke:** `hiivmind-pulse-gh:hiivmind-pulse-gh-awareness`
 
 The awareness skill auto-detects capabilities from project context and guides through CLAUDE.md configuration.
+
+### Discover Domain
+
+**If domain is `discover`:**
+
+**Invoke:** `hiivmind-pulse-gh:hiivmind-pulse-gh-discover`
+
+The discover skill presents a quick reference of all domains and allows interactive exploration of available operations, with handoff to operations skill when ready.
 
 ### All Other Domains
 
