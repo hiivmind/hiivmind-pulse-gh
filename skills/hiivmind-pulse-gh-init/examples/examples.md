@@ -8,19 +8,19 @@ These are the primary examples used by the init skill:
 
 | Example | Location | Init Usage |
 |---------|----------|------------|
-| Tool Detection | `lib/patterns/tool-detection.md` | Check gh, jq, yq availability |
-| Authentication | `lib/patterns/authentication.md` | Verify gh auth and required scopes |
-| Workspace Detection | `lib/patterns/workspace-detection.md` | Git remote → owner/repo extraction |
-| Config Parsing | `lib/patterns/config-parsing.md` | Write discovered config to YAML |
-| GraphQL Execution | `lib/patterns/graphql-execution.md` | Query organization/user structure |
-| Error Handling | `lib/patterns/error-handling.md` | Handle API errors during discovery |
+| Tool Detection | `{PLUGIN_ROOT}/lib/patterns/tool-detection.md` | Check gh, jq, yq availability |
+| Authentication | `{PLUGIN_ROOT}/lib/patterns/authentication.md` | Verify gh auth and required scopes |
+| Workspace Detection | `{PLUGIN_ROOT}/lib/patterns/workspace-detection.md` | Git remote → owner/repo extraction |
+| Config Parsing | `{PLUGIN_ROOT}/lib/patterns/config-parsing.md` | Write discovered config to YAML |
+| GraphQL Execution | `{PLUGIN_ROOT}/lib/patterns/graphql-execution.md` | Query organization/user structure |
+| Error Handling | `{PLUGIN_ROOT}/lib/patterns/error-handling.md` | Handle API errors during discovery |
 
 ## Operations Examples
 
 | Example | Location | Init Usage |
 |---------|----------|------------|
-| API Routing | `lib/references/api-routing.md` | Determine GraphQL vs REST for discovery |
-| Corpus Lookup | `lib/patterns/corpus-lookup.md` | Look up projectsV2 query syntax |
+| API Routing | `{PLUGIN_ROOT}/lib/references/api-routing.md` | Determine GraphQL vs REST for discovery |
+| Corpus Lookup | `{PLUGIN_ROOT}/lib/patterns/corpus-lookup.md` | Look up projectsV2 query syntax |
 
 ## Init-Specific Notes
 
@@ -59,4 +59,4 @@ Always write to `.hiivmind/github/config.yaml` relative to git root.
 ## Related
 
 - [Init SKILL.md](../SKILL.md) - Full skill documentation
-- [Config Schema](../../../docs/config-schema.md) - Config.yaml structure
+- [Config Schema]({PLUGIN_ROOT}/docs/config-schema.md) - Config.yaml structure

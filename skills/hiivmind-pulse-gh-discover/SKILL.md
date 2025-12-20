@@ -16,6 +16,13 @@ description: >
 
 Explore what GitHub operations are available and find the right one for your task.
 
+## Path Convention
+
+`{PLUGIN_ROOT}` = Plugin root directory (where plugin.json lives)
+
+When this skill references files like `{PLUGIN_ROOT}/lib/references/api-routing.md`,
+read from the plugin root, not relative to this skill folder.
+
 ## Scope
 
 | Does | Does NOT |
@@ -43,7 +50,7 @@ Explore what GitHub operations are available and find the right one for your tas
 
 ### What to Do
 
-1. Read `lib/references/api-routing.md` (full file)
+1. Read `{PLUGIN_ROOT}/lib/references/api-routing.md` (full file)
 2. Extract and display the Quick Reference table
 3. Present the legend (symbols)
 4. Offer navigation options
@@ -91,37 +98,37 @@ Wait for user selection:
 
 | User Input | Domain File |
 |------------|-------------|
-| 1, "issues", "bug", "ticket" | `domains/issues.md` |
-| 2, "pr", "pull request", "merge" | `domains/pull-requests.md` |
-| 3, "milestone", "version" | `domains/milestones.md` |
-| 4, "label", "tag" | `domains/labels.md` |
-| 5, "project", "board", "kanban" | `domains/projects-v2.md` |
-| 6, "protect", "branch protection" | `domains/branch-protection.md` |
-| 7, "ruleset", "rules" | `domains/rulesets.md` |
-| 8, "action", "workflow", "ci" | `domains/actions.md` |
-| 9, "secret", "credential" | `domains/secrets.md` |
-| 10, "variable", "env" | `domains/variables.md` |
-| 11, "release", "publish" | `domains/releases.md` |
-| 12, "repo", "repository" | `domains/repository.md` |
-| 13, "gist" | `domains/gists.md` |
-| 14, "search", "find", "query" | `domains/search.md` |
-| 15, "collaborator", "contributor" | `domains/collaborators.md` |
-| 16, "team", "membership" | `domains/teams.md` |
-| 17, "webhook", "hook" | `domains/webhooks.md` |
-| 18, "check", "status check" | `domains/checks.md` |
-| 19, "deploy", "deployment" | `domains/deployments.md` |
-| 20, "environment" | `domains/environments.md` |
-| 21, "dependabot", "dependency" | `domains/dependabot.md` |
-| 22, "code scan", "security scan" | `domains/code-scanning.md` |
-| 23, "secret scan" | `domains/secret-scanning.md` |
-| 24, "notification" | `domains/notifications.md` |
-| 25, "reaction", "emoji" | `domains/reactions.md` |
+| 1, "issues", "bug", "ticket" | `{PLUGIN_ROOT}/lib/references/domains/issues.md` |
+| 2, "pr", "pull request", "merge" | `{PLUGIN_ROOT}/lib/references/domains/pull-requests.md` |
+| 3, "milestone", "version" | `{PLUGIN_ROOT}/lib/references/domains/milestones.md` |
+| 4, "label", "tag" | `{PLUGIN_ROOT}/lib/references/domains/labels.md` |
+| 5, "project", "board", "kanban" | `{PLUGIN_ROOT}/lib/references/domains/projects-v2.md` |
+| 6, "protect", "branch protection" | `{PLUGIN_ROOT}/lib/references/domains/branch-protection.md` |
+| 7, "ruleset", "rules" | `{PLUGIN_ROOT}/lib/references/domains/rulesets.md` |
+| 8, "action", "workflow", "ci" | `{PLUGIN_ROOT}/lib/references/domains/actions.md` |
+| 9, "secret", "credential" | `{PLUGIN_ROOT}/lib/references/domains/secrets.md` |
+| 10, "variable", "env" | `{PLUGIN_ROOT}/lib/references/domains/variables.md` |
+| 11, "release", "publish" | `{PLUGIN_ROOT}/lib/references/domains/releases.md` |
+| 12, "repo", "repository" | `{PLUGIN_ROOT}/lib/references/domains/repository.md` |
+| 13, "gist" | `{PLUGIN_ROOT}/lib/references/domains/gists.md` |
+| 14, "search", "find", "query" | `{PLUGIN_ROOT}/lib/references/domains/search.md` |
+| 15, "collaborator", "contributor" | `{PLUGIN_ROOT}/lib/references/domains/collaborators.md` |
+| 16, "team", "membership" | `{PLUGIN_ROOT}/lib/references/domains/teams.md` |
+| 17, "webhook", "hook" | `{PLUGIN_ROOT}/lib/references/domains/webhooks.md` |
+| 18, "check", "status check" | `{PLUGIN_ROOT}/lib/references/domains/checks.md` |
+| 19, "deploy", "deployment" | `{PLUGIN_ROOT}/lib/references/domains/deployments.md` |
+| 20, "environment" | `{PLUGIN_ROOT}/lib/references/domains/environments.md` |
+| 21, "dependabot", "dependency" | `{PLUGIN_ROOT}/lib/references/domains/dependabot.md` |
+| 22, "code scan", "security scan" | `{PLUGIN_ROOT}/lib/references/domains/code-scanning.md` |
+| 23, "secret scan" | `{PLUGIN_ROOT}/lib/references/domains/secret-scanning.md` |
+| 24, "notification" | `{PLUGIN_ROOT}/lib/references/domains/notifications.md` |
+| 25, "reaction", "emoji" | `{PLUGIN_ROOT}/lib/references/domains/reactions.md` |
 
 ### What to Do
 
 1. Parse user input (number or keywords)
 2. Match to domain using table above
-3. Load the corresponding domain file from `lib/references/domains/`
+3. Load the corresponding domain file from `{PLUGIN_ROOT}/lib/references/domains/`
 
 ### STOP Point (Ambiguous)
 
@@ -144,7 +151,7 @@ I'm not sure which domain you mean. Did you mean:
 
 ### What to Do
 
-1. Read the domain file (e.g., `lib/references/domains/issues.md`)
+1. Read the domain file (e.g., `{PLUGIN_ROOT}/lib/references/domains/issues.md`)
 2. Present:
    - Support matrix table (Operations × 4 methods)
    - CLI command reference (most useful for users)
@@ -297,6 +304,6 @@ Skill: hiivmind-pulse-gh:hiivmind-pulse-gh-discover
 
 | File | Purpose |
 |------|---------|
-| `lib/references/api-routing.md` | Quick reference table (Phase 1) |
-| `lib/references/domains/*.md` | Domain operation matrices (Phase 3) |
+| `{PLUGIN_ROOT}/lib/references/api-routing.md` | Quick reference table (Phase 1) |
+| `{PLUGIN_ROOT}/lib/references/domains/*.md` | Domain operation matrices (Phase 3) |
 | `skills/hiivmind-pulse-gh-discover/examples/examples.md` | Domain mapping table |

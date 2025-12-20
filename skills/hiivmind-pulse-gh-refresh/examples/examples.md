@@ -8,17 +8,17 @@ These are the primary examples used by the refresh skill:
 
 | Example | Location | Refresh Usage |
 |---------|----------|---------------|
-| Config Parsing | `lib/patterns/config-parsing.md` | Read existing config, update sections |
-| GraphQL Execution | `lib/patterns/graphql-execution.md` | Re-query changed sections |
-| Error Handling | `lib/patterns/error-handling.md` | Handle stale ID errors |
-| ID Resolution | `lib/patterns/id-resolution.md` | Verify cached IDs still valid |
+| Config Parsing | `{PLUGIN_ROOT}/lib/patterns/config-parsing.md` | Read existing config, update sections |
+| GraphQL Execution | `{PLUGIN_ROOT}/lib/patterns/graphql-execution.md` | Re-query changed sections |
+| Error Handling | `{PLUGIN_ROOT}/lib/patterns/error-handling.md` | Handle stale ID errors |
+| ID Resolution | `{PLUGIN_ROOT}/lib/patterns/id-resolution.md` | Verify cached IDs still valid |
 
 ## Operations Examples
 
 | Example | Location | Refresh Usage |
 |---------|----------|---------------|
-| API Routing | `lib/references/api-routing.md` | Determine GraphQL vs REST for re-queries |
-| Corpus Lookup | `lib/patterns/corpus-lookup.md` | Look up query syntax for sections |
+| API Routing | `{PLUGIN_ROOT}/lib/references/api-routing.md` | Determine GraphQL vs REST for re-queries |
+| Corpus Lookup | `{PLUGIN_ROOT}/lib/patterns/corpus-lookup.md` | Look up query syntax for sections |
 
 ## Refresh-Specific Notes
 
@@ -72,4 +72,4 @@ Never lose data from un-refreshed sections.
 ## Related
 
 - [Refresh SKILL.md](../SKILL.md) - Full skill documentation
-- [Freshness Template](../../../templates/freshness.yaml.template) - Freshness tracking schema
+- [Freshness Template]({PLUGIN_ROOT}/templates/freshness.yaml.template) - Freshness tracking schema

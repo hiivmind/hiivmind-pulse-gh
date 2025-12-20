@@ -22,6 +22,13 @@ description: >
 
 Execute GitHub operations with automatic context enrichment from cached workspace config.
 
+## Path Convention
+
+`{PLUGIN_ROOT}` = Plugin root directory (where plugin.json lives)
+
+When this skill references files like `{PLUGIN_ROOT}/lib/patterns/config-parsing.md`,
+read from the plugin root, not relative to this skill folder.
+
 ## Why Use This Skill (Even for Simple Operations)
 
 This skill enriches ALL operations with cached context:
@@ -71,7 +78,7 @@ When invoked by the gateway command, expect:
 
 **Goal:** Load workspace configuration.
 
-**See:** `lib/patterns/config-parsing.md`
+**See:** `{PLUGIN_ROOT}/lib/patterns/config-parsing.md`
 
 ### What to Do
 
@@ -97,7 +104,7 @@ Run: /hiivmind-pulse-gh init
 
 **Goal:** Resolve any IDs needed for the operation from cached config.
 
-**See:** `lib/patterns/id-resolution.md`
+**See:** `{PLUGIN_ROOT}/lib/patterns/id-resolution.md`
 
 ### What to Do
 
@@ -145,12 +152,12 @@ For domains not listed above:
 
 ### Step 1: Read Quick Reference
 
-Read `lib/references/api-routing.md` (~170 lines) to:
+Read `{PLUGIN_ROOT}/lib/references/api-routing.md` (~170 lines) to:
 - Identify which API method to use (gh CLI, REST, GraphQL, Web UI)
 - Check the Quick Reference table for high-level support
 
 ```
-Read: lib/references/api-routing.md
+Read: {PLUGIN_ROOT}/lib/references/api-routing.md
 ```
 
 ### Step 2: Read Domain Details
@@ -161,38 +168,38 @@ Based on the domain identified, read the domain-specific file for:
 - Corpus lookup keywords for syntax
 
 ```
-Read: lib/references/domains/{domain}.md
+Read: {PLUGIN_ROOT}/lib/references/domains/{domain}.md
 ```
 
 **Domain file mapping:**
 
 | Domain | File |
 |--------|------|
-| Issues | `domains/issues.md` |
-| Pull Requests | `domains/pull-requests.md` |
-| Milestones | `domains/milestones.md` |
-| Labels | `domains/labels.md` |
-| Projects v2 | `domains/projects-v2.md` |
-| Branch Protection | `domains/branch-protection.md` |
-| Rulesets | `domains/rulesets.md` |
-| Actions | `domains/actions.md` |
-| Secrets | `domains/secrets.md` |
-| Variables | `domains/variables.md` |
-| Releases | `domains/releases.md` |
-| Repository | `domains/repository.md` |
-| Gists | `domains/gists.md` |
-| Search | `domains/search.md` |
-| Collaborators | `domains/collaborators.md` |
-| Teams | `domains/teams.md` |
-| Webhooks | `domains/webhooks.md` |
-| Checks | `domains/checks.md` |
-| Deployments | `domains/deployments.md` |
-| Environments | `domains/environments.md` |
-| Dependabot | `domains/dependabot.md` |
-| Code Scanning | `domains/code-scanning.md` |
-| Secret Scanning | `domains/secret-scanning.md` |
-| Notifications | `domains/notifications.md` |
-| Reactions | `domains/reactions.md` |
+| Issues | `{PLUGIN_ROOT}/lib/references/domains/issues.md` |
+| Pull Requests | `{PLUGIN_ROOT}/lib/references/domains/pull-requests.md` |
+| Milestones | `{PLUGIN_ROOT}/lib/references/domains/milestones.md` |
+| Labels | `{PLUGIN_ROOT}/lib/references/domains/labels.md` |
+| Projects v2 | `{PLUGIN_ROOT}/lib/references/domains/projects-v2.md` |
+| Branch Protection | `{PLUGIN_ROOT}/lib/references/domains/branch-protection.md` |
+| Rulesets | `{PLUGIN_ROOT}/lib/references/domains/rulesets.md` |
+| Actions | `{PLUGIN_ROOT}/lib/references/domains/actions.md` |
+| Secrets | `{PLUGIN_ROOT}/lib/references/domains/secrets.md` |
+| Variables | `{PLUGIN_ROOT}/lib/references/domains/variables.md` |
+| Releases | `{PLUGIN_ROOT}/lib/references/domains/releases.md` |
+| Repository | `{PLUGIN_ROOT}/lib/references/domains/repository.md` |
+| Gists | `{PLUGIN_ROOT}/lib/references/domains/gists.md` |
+| Search | `{PLUGIN_ROOT}/lib/references/domains/search.md` |
+| Collaborators | `{PLUGIN_ROOT}/lib/references/domains/collaborators.md` |
+| Teams | `{PLUGIN_ROOT}/lib/references/domains/teams.md` |
+| Webhooks | `{PLUGIN_ROOT}/lib/references/domains/webhooks.md` |
+| Checks | `{PLUGIN_ROOT}/lib/references/domains/checks.md` |
+| Deployments | `{PLUGIN_ROOT}/lib/references/domains/deployments.md` |
+| Environments | `{PLUGIN_ROOT}/lib/references/domains/environments.md` |
+| Dependabot | `{PLUGIN_ROOT}/lib/references/domains/dependabot.md` |
+| Code Scanning | `{PLUGIN_ROOT}/lib/references/domains/code-scanning.md` |
+| Secret Scanning | `{PLUGIN_ROOT}/lib/references/domains/secret-scanning.md` |
+| Notifications | `{PLUGIN_ROOT}/lib/references/domains/notifications.md` |
+| Reactions | `{PLUGIN_ROOT}/lib/references/domains/reactions.md` |
 
 ### Unknown Domains (Fallback)
 
@@ -211,18 +218,18 @@ Read: lib/references/domains/{domain}.md
 
 **Goal:** Execute the operation using the appropriate API.
 
-**See:** `lib/patterns/graphql-execution.md`
-**See:** `lib/patterns/error-handling.md`
+**See:** `{PLUGIN_ROOT}/lib/patterns/graphql-execution.md`
+**See:** `{PLUGIN_ROOT}/lib/patterns/error-handling.md`
 
 ### Execution Approach
 
-1. **Check routing guide** - `lib/references/api-routing.md` tells you GraphQL vs REST
+1. **Check routing guide** - `{PLUGIN_ROOT}/lib/references/api-routing.md` tells you GraphQL vs REST
 2. **If syntax is clear** - Execute directly using `gh api` or `gh` CLI
 3. **If uncertain** - Use corpus lookup for exact syntax
 
 ### Corpus Lookup (When Needed)
 
-**See:** `lib/patterns/corpus-lookup.md`
+**See:** `{PLUGIN_ROOT}/lib/patterns/corpus-lookup.md`
 
 Use corpus lookup when you need exact syntax:
 
@@ -247,7 +254,7 @@ Use corpus lookup when you need exact syntax:
 
 **Goal:** Report operation result to user.
 
-**See:** `lib/patterns/error-handling.md`
+**See:** `{PLUGIN_ROOT}/lib/patterns/error-handling.md`
 
 ### Success Report
 
@@ -281,7 +288,7 @@ Suggested fix: {based on error-handling.md}
 
 **Required IDs:** Project ID, Field ID (for updates), Option ID (for single-select)
 
-**See:** `lib/patterns/id-resolution.md` for resolving from config
+**See:** `{PLUGIN_ROOT}/lib/patterns/id-resolution.md` for resolving from config
 
 **Special cases:**
 - Status field: Single-select, needs Option ID
@@ -310,7 +317,7 @@ Suggested fix: {based on error-handling.md}
 
 **Create:** `POST /user/repos` (personal) or `POST /orgs/{org}/repos` (organization)
 
-**BLOCKED operations:** Delete, transfer, archive - see `docs/operation-blocklist.md`
+**BLOCKED operations:** Delete, transfer, archive - see `{PLUGIN_ROOT}/docs/operation-blocklist.md`
 
 ### Collaborators
 
@@ -371,17 +378,17 @@ All implementation details are in the examples library:
 
 | Example | Purpose |
 |---------|---------|
-| `lib/patterns/config-parsing.md` | Read/write YAML config files |
-| `lib/patterns/id-resolution.md` | Resolve names to IDs (cache-first) |
-| `lib/patterns/graphql-execution.md` | Execute queries via temp file |
-| `lib/patterns/error-handling.md` | Handle API errors |
+| `{PLUGIN_ROOT}/lib/patterns/config-parsing.md` | Read/write YAML config files |
+| `{PLUGIN_ROOT}/lib/patterns/id-resolution.md` | Resolve names to IDs (cache-first) |
+| `{PLUGIN_ROOT}/lib/patterns/graphql-execution.md` | Execute queries via temp file |
+| `{PLUGIN_ROOT}/lib/patterns/error-handling.md` | Handle API errors |
 
 ### Operations Examples (LIGHT)
 
 | Example | Purpose |
 |---------|---------|
-| `lib/references/api-routing.md` | API routing decisions (THE canonical source) |
-| `lib/patterns/corpus-lookup.md` | Look up API syntax when uncertain |
+| `{PLUGIN_ROOT}/lib/references/api-routing.md` | API routing decisions (THE canonical source) |
+| `{PLUGIN_ROOT}/lib/patterns/corpus-lookup.md` | Look up API syntax when uncertain |
 
 ### External Resources
 

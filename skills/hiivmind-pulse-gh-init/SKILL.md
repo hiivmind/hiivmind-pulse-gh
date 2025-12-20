@@ -17,6 +17,13 @@ description: >
 One-time setup that enables context enrichment for all GitHub operations. Without this initialization,
 issues and PRs created are orphans with no project linking.
 
+## Path Convention
+
+`{PLUGIN_ROOT}` = Plugin root directory (where plugin.json lives)
+
+When this skill references files like `{PLUGIN_ROOT}/lib/patterns/config-parsing.md`,
+read from the plugin root, not relative to this skill folder.
+
 ## Scope
 
 | Does | Does NOT |
@@ -43,7 +50,7 @@ issues and PRs created are orphans with no project linking.
 
 **Goal:** Detect the GitHub workspace (organization or user) from context.
 
-**See:** `lib/patterns/workspace-detection.md`
+**See:** `{PLUGIN_ROOT}/lib/patterns/workspace-detection.md`
 
 ### What to Do
 
@@ -70,8 +77,8 @@ Please specify the GitHub organization or username to initialize:
 
 **Goal:** Verify required tools and authentication.
 
-**See:** `lib/patterns/tool-detection.md`
-**See:** `lib/patterns/authentication.md`
+**See:** `{PLUGIN_ROOT}/lib/patterns/tool-detection.md`
+**See:** `{PLUGIN_ROOT}/lib/patterns/authentication.md`
 
 ### What to Do
 
@@ -140,14 +147,14 @@ Wait for user confirmation before proceeding. If user says no, ask them to speci
 ### Discovery Approach
 
 1. **Read Routing Guide**
-   - Read `lib/references/api-routing.md`
+   - Read `{PLUGIN_ROOT}/lib/references/api-routing.md`
    - Projects v2 → List projects → GraphQL
    - Keywords: `projectsV2`, `organization`, `user`
 
 2. **Execute Query**
    - If syntax is clear: Execute directly
-   - If uncertain: Use corpus lookup (`lib/patterns/corpus-lookup.md`)
-   - Use temp file pattern from `lib/patterns/graphql-execution.md`
+   - If uncertain: Use corpus lookup (`{PLUGIN_ROOT}/lib/patterns/corpus-lookup.md`)
+   - Use temp file pattern from `{PLUGIN_ROOT}/lib/patterns/graphql-execution.md`
 
 ### Corpus Lookup (When Needed)
 
@@ -191,7 +198,7 @@ Set default project for operations?
 
 **Goal:** Write configuration files.
 
-**See:** `lib/patterns/config-parsing.md`
+**See:** `{PLUGIN_ROOT}/lib/patterns/config-parsing.md`
 
 ### What to Do
 
@@ -280,18 +287,18 @@ All implementation details are in the examples library:
 
 | Example | Purpose |
 |---------|---------|
-| `lib/patterns/tool-detection.md` | Check for gh, jq, yq |
-| `lib/patterns/authentication.md` | Verify auth and scopes |
-| `lib/patterns/workspace-detection.md` | Detect org/user from context |
-| `lib/patterns/graphql-execution.md` | Execute queries via temp file |
-| `lib/patterns/config-parsing.md` | Read/write YAML config |
+| `{PLUGIN_ROOT}/lib/patterns/tool-detection.md` | Check for gh, jq, yq |
+| `{PLUGIN_ROOT}/lib/patterns/authentication.md` | Verify auth and scopes |
+| `{PLUGIN_ROOT}/lib/patterns/workspace-detection.md` | Detect org/user from context |
+| `{PLUGIN_ROOT}/lib/patterns/graphql-execution.md` | Execute queries via temp file |
+| `{PLUGIN_ROOT}/lib/patterns/config-parsing.md` | Read/write YAML config |
 
 **Operations Examples (LIGHT):**
 
 | Example | Purpose |
 |---------|---------|
-| `lib/references/api-routing.md` | API routing decisions (canonical source) |
-| `lib/patterns/corpus-lookup.md` | Look up API syntax when uncertain |
+| `{PLUGIN_ROOT}/lib/references/api-routing.md` | API routing decisions (canonical source) |
+| `{PLUGIN_ROOT}/lib/patterns/corpus-lookup.md` | Look up API syntax when uncertain |
 
 **External Resources:**
 

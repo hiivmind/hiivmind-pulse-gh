@@ -8,10 +8,10 @@ Used before executing operations:
 
 | Example | Location | Operations Usage |
 |---------|----------|------------------|
-| Config Parsing | `lib/patterns/config-parsing.md` | Load workspace context |
-| ID Resolution | `lib/patterns/id-resolution.md` | Resolve names to IDs (cache-first) |
-| GraphQL Execution | `lib/patterns/graphql-execution.md` | Execute GraphQL mutations |
-| Error Handling | `lib/patterns/error-handling.md` | Handle API errors |
+| Config Parsing | `{PLUGIN_ROOT}/lib/patterns/config-parsing.md` | Load workspace context |
+| ID Resolution | `{PLUGIN_ROOT}/lib/patterns/id-resolution.md` | Resolve names to IDs (cache-first) |
+| GraphQL Execution | `{PLUGIN_ROOT}/lib/patterns/graphql-execution.md` | Execute GraphQL mutations |
+| Error Handling | `{PLUGIN_ROOT}/lib/patterns/error-handling.md` | Handle API errors |
 
 ## Operations Examples
 
@@ -19,8 +19,8 @@ Used for routing and syntax lookup:
 
 | Example | Location | Operations Usage |
 |---------|----------|------------------|
-| API Routing | `lib/references/api-routing.md` | Determine GraphQL vs REST (THE source) |
-| Corpus Lookup | `lib/patterns/corpus-lookup.md` | Look up exact syntax when uncertain |
+| API Routing | `{PLUGIN_ROOT}/lib/references/api-routing.md` | Determine GraphQL vs REST (THE source) |
+| Corpus Lookup | `{PLUGIN_ROOT}/lib/patterns/corpus-lookup.md` | Look up exact syntax when uncertain |
 
 ## Architecture: Corpus-First
 
@@ -62,7 +62,7 @@ Always try cache first:
 
 ### Blocked Operations
 
-Some dangerous operations are blocked. Check `docs/operation-blocklist.md` before executing:
+Some dangerous operations are blocked. Check `{PLUGIN_ROOT}/docs/operation-blocklist.md` before executing:
 - Repository deletion
 - Organization deletion
 - Transfer ownership
@@ -72,5 +72,5 @@ Some dangerous operations are blocked. Check `docs/operation-blocklist.md` befor
 ## Related
 
 - [Operations SKILL.md](../SKILL.md) - Full skill documentation
-- [API Routing](../../../lib/references/api-routing.md) - Domain → API decisions
+- [API Routing]({PLUGIN_ROOT}/lib/references/api-routing.md) - Domain → API decisions
 - [External Corpus](https://github.com/hiivmind/hiivmind-corpus-github) - GitHub API documentation
