@@ -103,7 +103,7 @@ The plugin provides **five skills** with a clear dependency structure:
 | `hiivmind-pulse-gh-init` | Validate environment, discover org structure, create config.yaml | First-time setup (once per workspace) |
 | `hiivmind-pulse-gh-refresh` | Sync cached config with GitHub | Periodically, or when "ID not found" errors occur |
 | `hiivmind-pulse-gh-operations` | Execute GitHub operations (all domains) | Via gateway command |
-| `hiivmind-corpus-github-docs` | Look up GitHub API syntax (GraphQL/REST) | When uncertain about exact API syntax (external corpus) |
+| `hiivmind-corpus-github` | Look up GitHub API syntax (GraphQL/REST) | When uncertain about exact API syntax (external corpus) |
 | `hiivmind-pulse-gh-awareness` | Inject skill awareness into CLAUDE.md | Help Claude suggest this plugin proactively |
 
 ### Skill Hierarchy
@@ -115,7 +115,7 @@ hiivmind-pulse-gh-init            ← Run FIRST (creates config.yaml)
 hiivmind-pulse-gh-operations      ← Requires init completed
 hiivmind-pulse-gh-refresh         ← Requires init completed
        │
-       ├── hiivmind-corpus-github-docs ← External corpus (syntax lookup)
+       ├── hiivmind-corpus-github ← External corpus (syntax lookup)
        │
 hiivmind-pulse-gh-awareness       ← Independent (edits CLAUDE.md)
 ```
@@ -286,7 +286,7 @@ hiivmind-pulse-gh/
 │   ├── user.yaml.template
 │   └── freshness.yaml.template
 │
-└── # External dependency: hiivmind-corpus-github-docs
+└── # External dependency: hiivmind-corpus-github
 ```
 
 ### Design Principles
@@ -307,7 +307,7 @@ hiivmind-pulse-gh/
 lib/references/ External         gh api graphql
 api-routing.md  corpus skill     or gh api REST
                    ↓
-               hiivmind-corpus-github-docs
+               hiivmind-corpus-github
 ```
 
 1. **Route** — Consult `lib/references/api-routing.md` for GraphQL vs REST decision

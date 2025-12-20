@@ -163,5 +163,5 @@ This guide covers common domains. For domains not listed:
 3. **Check permissions** - Ensure `gh auth status` shows required scopes
 
 To search corpus for unlisted domain:
-- Invoke: `hiivmind-corpus-github-docs:hiivmind-corpus-navigate-github-docs`
+- Invoke: `hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs`
 - Search: "[domain name] REST endpoint" or "[domain name] API"

@@ -53,7 +53,7 @@ Instead of:
 > **DO NOT** use the global `hiivmind-corpus:hiivmind-corpus-navigate` skill
 
 Simply state what to use:
-> **Invoke:** `hiivmind-corpus-github-docs:hiivmind-corpus-navigate-github-docs`
+> **Invoke:** `hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs`
 
 ### 5. Keep corpus navigation as a Skill (not Agent)
 

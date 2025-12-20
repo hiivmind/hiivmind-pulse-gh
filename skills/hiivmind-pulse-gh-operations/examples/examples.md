@@ -73,4 +73,4 @@ Some dangerous operations are blocked. Check `docs/operation-blocklist.md` befor
 
 - [Operations SKILL.md](../SKILL.md) - Full skill documentation
 - [API Routing](../../../lib/references/api-routing.md) - Domain → API decisions
-- [External Corpus](https://github.com/hiivmind/hiivmind-corpus-github-docs) - GitHub API documentation
+- [External Corpus](https://github.com/hiivmind/hiivmind-corpus-github) - GitHub API documentation

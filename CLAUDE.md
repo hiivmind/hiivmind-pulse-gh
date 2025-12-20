@@ -42,7 +42,7 @@ api-routing.md     cache            or gh api REST
 
 Use corpus lookup when you have a knowledge gap about exact syntax:
 
-- **Invoke:** `hiivmind-corpus-github-docs:hiivmind-corpus-navigate-github-docs`
+- **Invoke:** `hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs`
 - **Query:** With keywords from routing guide
 - **Get:** Exact mutation/endpoint definitions from schema
 
@@ -225,7 +225,7 @@ This plugin uses an external GitHub API corpus (declared as dependency in plugin
 Use the corpus when you need exact API syntax. See `lib/patterns/corpus-lookup.md`.
 
 1. Read `lib/references/api-routing.md` for API choice (useful on its own)
-2. If uncertain about syntax, invoke: `hiivmind-corpus-github-docs:hiivmind-corpus-navigate-github-docs`
+2. If uncertain about syntax, invoke: `hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs`
 3. Search with keywords from routing guide
 4. Get exact syntax from schema/docs
 

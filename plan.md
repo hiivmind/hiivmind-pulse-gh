@@ -138,19 +138,19 @@ Plan saved to: ~/.claude/plans/serialized-bubbling-hippo.md · /plan to edit
        - Run gh {domain} --help to see available operations
        - Check gh {domain} {operation} --help for exact syntax
        - If CLI help insufficient: Use GitHub API corpus to fetch CLI docs
-           - Invoke: Skill: hiivmind-corpus-github-docs:hiivmind-corpus-navigate-github-docs
+           - Invoke: Skill: hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs
          - Query: "gh CLI {domain} commands reference"
          - The corpus includes links to cli.github.com documentation
          - Use WebFetch on those links if needed for full command syntax
        - Document which operations have CLI shortcuts
      2. REST endpoints (use GitHub API corpus):
-       - Invoke: Skill: hiivmind-corpus-github-docs:hiivmind-corpus-navigate-github-docs
+       - Invoke: Skill: hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs
        - Query: "GitHub REST API {domain} endpoints {operation}"
        - Extract: Full endpoint paths (e.g., /repos/{owner}/{repo}/milestones)
        - Extract: HTTP methods (GET/POST/PATCH/DELETE)
        - Note which CRUD operations are available
      3. GraphQL support (use GitHub API corpus):
-       - Invoke: Skill: hiivmind-corpus-github-docs:hiivmind-corpus-navigate-github-docs
+       - Invoke: Skill: hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs
        - Query: "GitHub GraphQL {domain} schema mutations queries"
        - Extract: Query types for reads (e.g., issue, pullRequest)
        - Extract: Mutation names for writes (e.g., createIssue, updateIssue)
@@ -535,19 +535,19 @@ API Routing Guide Enhancement Plan
    - Run gh {domain} --help to see available operations
    - Check gh {domain} {operation} --help for exact syntax
    - If CLI help insufficient: Use GitHub API corpus to fetch CLI docs
-       - Invoke: Skill: hiivmind-corpus-github-docs:hiivmind-corpus-navigate-github-docs
+       - Invoke: Skill: hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs
      - Query: "gh CLI {domain} commands reference"
      - The corpus includes links to cli.github.com documentation
      - Use WebFetch on those links if needed for full command syntax
    - Document which operations have CLI shortcuts
  2. REST endpoints (use GitHub API corpus):
-   - Invoke: Skill: hiivmind-corpus-github-docs:hiivmind-corpus-navigate-github-docs
+   - Invoke: Skill: hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs
    - Query: "GitHub REST API {domain} endpoints {operation}"
    - Extract: Full endpoint paths (e.g., /repos/{owner}/{repo}/milestones)
    - Extract: HTTP methods (GET/POST/PATCH/DELETE)
    - Note which CRUD operations are available
  3. GraphQL support (use GitHub API corpus):
-   - Invoke: Skill: hiivmind-corpus-github-docs:hiivmind-corpus-navigate-github-docs
+   - Invoke: Skill: hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs
    - Query: "GitHub GraphQL {domain} schema mutations queries"
    - Extract: Query types for reads (e.g., issue, pullRequest)
    - Extract: Mutation names for writes (e.g., createIssue, updateIssue)

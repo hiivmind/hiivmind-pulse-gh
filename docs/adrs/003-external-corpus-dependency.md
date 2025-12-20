@@ -14,7 +14,7 @@ The hiivmind-pulse-gh plugin currently embeds a local GitHub documentation corpu
 - Includes a 70k-line GraphQL schema
 - Is a subset of the full GitHub documentation
 
-Meanwhile, an external corpus exists at `hiivmind-corpus-github-docs` which provides:
+Meanwhile, an external corpus exists at `hiivmind-corpus-github` which provides:
 
 - **36 sections** (including Copilot, Code Security, Admin, Billing, etc.)
 - **3,346 documents** total coverage
@@ -29,14 +29,14 @@ The embedded corpus was created for self-contained distribution, but maintaining
 
 ## Decision
 
-**Declare a dependency on the external `hiivmind-corpus-github-docs` plugin. Remove the embedded corpus entirely.**
+**Declare a dependency on the external `hiivmind-corpus-github` plugin. Remove the embedded corpus entirely.**
 
 ### Implementation
 
 1. Update `.claude-plugin/plugin.json` to declare dependency:
    ```json
    "dependencies": {
-     "plugins": ["hiivmind-corpus-github-docs@hiivmind-corpus-github"]
+     "plugins": ["hiivmind-corpus-github@hiivmind-corpus-github"]
    }
    ```
 
@@ -46,7 +46,7 @@ The embedded corpus was created for self-contained distribution, but maintaining
    ```
    To:
    ```
-   hiivmind-corpus-github-docs:hiivmind-corpus-navigate-github-docs
+   hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs
    ```
 
 3. Delete embedded corpus:
@@ -99,5 +99,5 @@ grep -r "hiivmind-pulse-gh:hiivmind-corpus-github" .
 ls skills/hiivmind-corpus-github/  # Should not exist
 
 # Test new invocation works
-# Invoke: hiivmind-corpus-github-docs:hiivmind-corpus-navigate-github-docs
+# Invoke: hiivmind-corpus-github:hiivmind-corpus-navigate-github-docs
 ```
