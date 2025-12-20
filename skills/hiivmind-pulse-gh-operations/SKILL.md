@@ -134,15 +134,27 @@ These commands are well-known - execute directly with enrichment:
 
 ### Domains WITHOUT CLI Support
 
-These domains require REST API - there is NO `gh` CLI command:
+These domains have NO `gh` CLI commands - use REST API via `gh api`:
 
-| Domain | Correct Approach |
-|--------|------------------|
-| **Milestones** | `gh api repos/{owner}/{repo}/milestones --method POST -f title="..."` |
-| Collaborators | `gh api repos/{owner}/{repo}/collaborators/{username} --method PUT` |
-| Teams | `gh api orgs/{org}/teams --method POST` |
+| Domain | REST Endpoint Pattern |
+|--------|----------------------|
+| **Milestones** | `/repos/{owner}/{repo}/milestones` |
+| Branch Protection | `/repos/{owner}/{repo}/branches/{branch}/protection` |
+| Collaborators | `/repos/{owner}/{repo}/collaborators/{username}` |
+| Teams | `/orgs/{org}/teams` |
+| Webhooks | `/repos/{owner}/{repo}/hooks` |
+| Checks | `/repos/{owner}/{repo}/check-runs` |
+| Deployments | `/repos/{owner}/{repo}/deployments` |
+| Environments | `/repos/{owner}/{repo}/environments/{name}` |
+| Dependabot | `/repos/{owner}/{repo}/dependabot/alerts` |
+| Code Scanning | `/repos/{owner}/{repo}/code-scanning/alerts` |
+| Secret Scanning | `/repos/{owner}/{repo}/secret-scanning/alerts` |
+| Notifications | `/notifications` |
+| Reactions | `/repos/{owner}/{repo}/issues/{number}/reactions` |
+| Rulesets | `/repos/{owner}/{repo}/rulesets` (read via `gh ruleset list`) |
 
-> **Common mistake:** `gh milestone create` does not exist. Always use REST API for milestone CRUD.
+> **Common mistake:** `gh milestone create`, `gh webhook create`, etc. do not exist.
+> Always check `{PLUGIN_ROOT}/lib/references/api-routing.md` for CLI availability.
 
 ---
 
