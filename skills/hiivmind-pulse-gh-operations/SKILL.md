@@ -66,15 +66,35 @@ When invoked by the gateway command, expect:
 
 ### 1. Verify Workspace
 
-Check `.hiivmind/github/config.yaml` exists. If not:
+Check for `.hiivmind/github/config.yaml` in current directory OR parent directories:
+
+```bash
+# Check current and parent directory (covers workspace setups)
+if [[ -f ".hiivmind/github/config.yaml" ]]; then
+    CONFIG_PATH=".hiivmind/github/config.yaml"
+elif [[ -f "../.hiivmind/github/config.yaml" ]]; then
+    CONFIG_PATH="../.hiivmind/github/config.yaml"
+else
+    CONFIG_PATH=""
+fi
+```
+
+**If config found in parent:** Use that config path for all operations. This is common in:
+- Monorepo setups where config lives at root
+- Workspace directories containing multiple repositories
+- Child projects within an initialized workspace
+
+**If not found in current or parent:**
 
 ```
 Workspace not initialized.
 
-Config file not found: .hiivmind/github/config.yaml
+Config file not found in current or parent directory.
 
 Run: /hiivmind-pulse-gh init
 ```
+
+**See:** `{PLUGIN_ROOT}/lib/patterns/config-parsing.md` for full search algorithm
 
 ### 2. Determine Approach
 

@@ -6,6 +6,7 @@ This file provides guidance to Claude Code when working with this repository.
 
 This is **hiivmind-pulse-gh** - a Claude Code plugin that enriches ALL GitHub operations with cached workspace context.
 
+
 ### Why Use This Plugin (Even for Simple Operations)
 
 Direct `gh` CLI commands miss context enrichment:

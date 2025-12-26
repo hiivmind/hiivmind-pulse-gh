@@ -52,12 +52,41 @@ read from the plugin root, not relative to this skill folder.
 
 **See:** `{PLUGIN_ROOT}/lib/patterns/workspace-detection.md`
 
+### Check for Existing Config
+
+**IMPORTANT:** Before initializing, check if config already exists in current or parent directory:
+
+```bash
+if [[ -f ".hiivmind/github/config.yaml" ]]; then
+    echo "Config found in current directory"
+    EXISTING_CONFIG=".hiivmind/github/config.yaml"
+elif [[ -f "../.hiivmind/github/config.yaml" ]]; then
+    echo "Config found in parent directory"
+    EXISTING_CONFIG="../.hiivmind/github/config.yaml"
+fi
+```
+
+**If config exists in parent:**
+```
+Found existing workspace config in parent directory: ../.hiivmind/github/config.yaml
+
+This is common for workspace setups where multiple repos share one config.
+
+Options:
+1. Use parent config (recommended for workspace setup)
+2. Create local config for this repo only
+3. Re-initialize parent config
+
+Which would you like? [1/2/3]
+```
+
 ### What to Do
 
-1. Check if we're in a git repository
-2. If yes: extract owner from git remote URL
-3. If no: prompt user to specify the workspace
-4. Determine if workspace is organization or user type
+1. **Check for existing config** (current and parent directories)
+2. Check if we're in a git repository
+3. If yes: extract owner from git remote URL
+4. If no: prompt user to specify the workspace
+5. Determine if workspace is organization or user type
 
 ### STOP Point
 

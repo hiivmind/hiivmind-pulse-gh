@@ -119,9 +119,27 @@ These domains either handle their own context checks internally or don't require
 
 **See:** `lib/patterns/config-parsing.md`
 
-Check for `.hiivmind/github/config.yaml`:
+Check for `.hiivmind/github/config.yaml` in **current directory and parent directories**:
 
-**If not found:**
+```bash
+# Check current and parent directory (covers workspace setups)
+if [[ -f ".hiivmind/github/config.yaml" ]]; then
+    CONFIG_PATH=".hiivmind/github/config.yaml"
+    initialized="yes"
+elif [[ -f "../.hiivmind/github/config.yaml" ]]; then
+    CONFIG_PATH="../.hiivmind/github/config.yaml"
+    initialized="yes"
+else
+    initialized="no"
+fi
+```
+
+**Why check parent:** Common in workspace setups where:
+- Parent directory contains multiple repos with shared config
+- User runs init from workspace root, operates from child repos
+- Monorepo with config at root
+
+**If not found (in current or parent):**
 1. Inform user: "This workspace hasn't been initialized for GitHub operations."
 2. Ask: "Would you like to initialize now?"
 3. If yes → Invoke skill: `hiivmind-pulse-gh:hiivmind-pulse-gh-init`
@@ -225,8 +243,16 @@ Select a quick action below, or choose "Other" to describe what you need.
 Gather context to suggest relevant actions:
 
 ```bash
-# 1. Check workspace initialization
-initialized=$(test -f .hiivmind/github/config.yaml && echo "yes" || echo "no")
+# 1. Check workspace initialization (current and parent directory)
+if [[ -f ".hiivmind/github/config.yaml" ]]; then
+    initialized="yes"
+    CONFIG_PATH=".hiivmind/github/config.yaml"
+elif [[ -f "../.hiivmind/github/config.yaml" ]]; then
+    initialized="yes"
+    CONFIG_PATH="../.hiivmind/github/config.yaml"
+else
+    initialized="no"
+fi
 
 # 2. Check git state
 current_branch=$(git branch --show-current 2>/dev/null)

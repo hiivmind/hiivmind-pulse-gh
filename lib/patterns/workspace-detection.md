@@ -10,6 +10,53 @@ Detect the GitHub workspace (organization or user) from git context or user inpu
 - When workspace context is needed but not yet cached in config.yaml
 - When re-initializing or switching workspace targets
 
+## Config Location Strategy
+
+**IMPORTANT:** The `.hiivmind/github/config.yaml` may exist in the current directory OR a parent directory.
+
+This is common in monorepo setups or workspace directories where:
+- Parent directory contains multiple related repositories
+- Single workspace config serves all child projects
+- User runs init from a parent "workspace" directory
+
+### Search Order
+
+1. Current working directory: `.hiivmind/github/config.yaml`
+2. Parent directory: `../.hiivmind/github/config.yaml`
+3. Git root (if different): `$(git rev-parse --show-toplevel)/.hiivmind/github/config.yaml`
+
+**Using bash:**
+```bash
+# Find config in current or parent directories
+find_config() {
+    local dir="$PWD"
+    while [[ "$dir" != "/" ]]; do
+        if [[ -f "$dir/.hiivmind/github/config.yaml" ]]; then
+            echo "$dir/.hiivmind/github/config.yaml"
+            return 0
+        fi
+        dir="$(dirname "$dir")"
+    done
+    return 1
+}
+
+CONFIG_PATH=$(find_config)
+```
+
+**Quick check (2 levels):**
+```bash
+CONFIG_PATH=""
+if [[ -f ".hiivmind/github/config.yaml" ]]; then
+    CONFIG_PATH=".hiivmind/github/config.yaml"
+elif [[ -f "../.hiivmind/github/config.yaml" ]]; then
+    CONFIG_PATH="../.hiivmind/github/config.yaml"
+fi
+```
+
+**Result interpretation:**
+- If found → Use that config path for all operations
+- If not found → Prompt for initialization
+
 ## Prerequisites
 
 - **tool-detection.md** - git must be available for git-based detection
@@ -358,6 +405,57 @@ User
 ```
 
 **Result:** `{ login: "discreteds", type: "user", detected_from: "git_remote" }`
+
+---
+
+## Git Remote URL Best Practices
+
+### Default to SSH Remotes
+
+**IMPORTANT:** When adding git remotes, always prefer SSH format over HTTPS.
+
+| Format | URL Pattern | Recommendation |
+|--------|-------------|----------------|
+| SSH | `git@github.com:owner/repo.git` | ✅ **Preferred** |
+| HTTPS | `https://github.com/owner/repo.git` | ⚠️ Avoid for CLI |
+
+**Why SSH is preferred:**
+1. **Authentication:** SSH keys work silently; HTTPS prompts for credentials
+2. **Reliability:** SSH doesn't expire or require credential manager
+3. **Automation:** Scripts and CI work without interactive auth
+4. **Modern standard:** GitHub recommends SSH for CLI/terminal use
+
+**When creating remotes:**
+```bash
+# ✅ CORRECT - SSH format
+git remote add origin git@github.com:owner/repo.git
+
+# ❌ AVOID - HTTPS format (will fail without credential manager)
+git remote add origin https://github.com/owner/repo.git
+```
+
+**When fixing HTTPS remotes:**
+```bash
+# Convert HTTPS to SSH
+git remote set-url origin git@github.com:owner/repo.git
+```
+
+**Detecting and fixing:**
+```bash
+URL=$(git remote get-url origin 2>/dev/null)
+if [[ "$URL" == https://* ]]; then
+    # Convert HTTPS to SSH
+    SSH_URL=$(echo "$URL" | sed -E 's#https://github\.com/([^/]+)/(.*)#git@github.com:\1/\2#')
+    echo "Consider switching to SSH: git remote set-url origin $SSH_URL"
+fi
+```
+
+### HTTPS Exceptions
+
+HTTPS is acceptable only when:
+- SSH is blocked by firewall
+- User explicitly prefers HTTPS with credential manager
+- Running in CI environment with token auth
 
 ---
 

@@ -14,7 +14,57 @@ Extract fields from workspace `.hiivmind/github/config.yaml` files using availab
 ## Prerequisites
 
 - **tool-detection.md** - Know which YAML parser is available
-- Config file exists at `.hiivmind/github/config.yaml`
+- Config file exists at `.hiivmind/github/config.yaml` (or parent directory)
+
+## Config File Location
+
+**IMPORTANT:** The config may exist in a parent directory (workspace/monorepo setups).
+
+### Find Config Path
+
+Before any config operation, locate the config file:
+
+```bash
+# Find config in current or parent directories
+find_config_path() {
+    local dir="$PWD"
+    while [[ "$dir" != "/" ]]; do
+        if [[ -f "$dir/.hiivmind/github/config.yaml" ]]; then
+            echo "$dir/.hiivmind/github/config.yaml"
+            return 0
+        fi
+        dir="$(dirname "$dir")"
+    done
+    return 1
+}
+
+CONFIG_PATH=$(find_config_path) || { echo "Config not found"; exit 1; }
+```
+
+**Quick check (2 levels - covers most cases):**
+```bash
+if [[ -f ".hiivmind/github/config.yaml" ]]; then
+    CONFIG_PATH=".hiivmind/github/config.yaml"
+elif [[ -f "../.hiivmind/github/config.yaml" ]]; then
+    CONFIG_PATH="../.hiivmind/github/config.yaml"
+else
+    CONFIG_PATH=""  # Not initialized
+fi
+```
+
+### Usage in Commands
+
+All config-reading commands should use `$CONFIG_PATH` instead of hardcoded path:
+
+```bash
+# ✅ CORRECT - Use variable
+yq '.workspace.type' "$CONFIG_PATH"
+
+# ❌ AVOID - Hardcoded path misses parent configs
+yq '.workspace.type' .hiivmind/github/config.yaml
+```
+
+**See:** `workspace-detection.md` for full search algorithm
 
 ## Config Schema Reference
 

@@ -63,3 +63,37 @@
 | Update topics | Mutation | `updateTopics` | |
 
 **Note:** No GraphQL mutation for delete, fork, or transfer. See `docs/operation-blocklist.md` for blocked operations.
+
+## Post-Create Operations
+
+### Adding Git Remote (SSH Default)
+
+**CRITICAL:** When adding a git remote after creating a repository, always use SSH format:
+
+```bash
+# ✅ CORRECT - SSH format (recommended)
+git remote add origin git@github.com:owner/repo.git
+
+# ❌ AVOID - HTTPS format (requires credential manager)
+git remote add origin https://github.com/owner/repo.git
+```
+
+**Why SSH is preferred:**
+- Works silently with SSH keys (no interactive prompts)
+- Doesn't require credential manager configuration
+- Standard for CLI/terminal workflows
+- GitHub's recommended approach for developers
+
+**Converting HTTPS to SSH:**
+```bash
+git remote set-url origin git@github.com:owner/repo.git
+```
+
+**Complete post-create workflow:**
+```bash
+# After: gh repo create owner/repo --public
+git remote add origin git@github.com:owner/repo.git
+git push -u origin main
+```
+
+**See:** `lib/patterns/workspace-detection.md` for full SSH best practices
