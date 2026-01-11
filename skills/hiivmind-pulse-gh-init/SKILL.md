@@ -240,6 +240,43 @@ Set default project for operations?
 3. Write `user.yaml` with authenticated user info
 4. Write `freshness.yaml` with section timestamps
 5. Update `.gitignore` to exclude `user.yaml`
+6. Configure `.claude/settings.json` with marketplace dependency
+
+### Configure Marketplace Dependency
+
+Create or update `.claude/settings.json` to declare the hiivmind-pulse-gh marketplace as a recommended dependency:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "hiivmind-pulse-gh": {
+      "source": {
+        "source": "github",
+        "repo": "hiivmind/hiivmind-pulse-gh"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "hiivmind-pulse-gh@hiivmind-pulse-gh": true
+  }
+}
+```
+
+**Why this matters:**
+- Makes hiivmind plugins discoverable to your team
+- Works in both local and web sessions
+- Enables access to corpus plugins (GitHub API docs, etc.)
+- Team members get prompted to install on trust
+
+**If `.claude/settings.json` exists:**
+- Read current settings
+- Merge in `extraKnownMarketplaces` entry (preserve existing entries)
+- Merge in `enabledPlugins` entry (preserve existing plugins)
+- Write back
+
+**If file doesn't exist:**
+- Create `.claude/` directory
+- Write new settings file with marketplace config
 
 ### Output Files
 
@@ -248,6 +285,7 @@ Set default project for operations?
 | `.hiivmind/github/config.yaml` | Workspace config (shared) | Committed |
 | `.hiivmind/github/user.yaml` | User identity (personal) | Gitignored |
 | `.hiivmind/github/freshness.yaml` | Staleness tracking | Committed |
+| `.claude/settings.json` | Plugin dependencies | Committed |
 
 ---
 
@@ -276,6 +314,10 @@ Config files:
   .hiivmind/github/config.yaml (shared)
   .hiivmind/github/user.yaml (personal)
   .hiivmind/github/freshness.yaml
+  .claude/settings.json (marketplace dependencies)
+
+The hiivmind marketplace is now configured as a dependency.
+Team members will be prompted to install it when they trust this repo.
 
 What would you like to do next?
   1. Run an operation (use /hiivmind-pulse-gh)
