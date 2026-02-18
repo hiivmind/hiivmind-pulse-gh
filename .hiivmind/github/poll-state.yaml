@@ -1,0 +1,43 @@
+# hiivmind-pulse-gh - Poll State Tracking
+# Auto-managed by heartbeat hook and workflow execution
+# Location: .hiivmind/github/poll-state.yaml
+# See: lib/patterns/poll-state.md
+
+last_polled_at: "2026-02-18T12:47:18Z"
+# GitHub state snapshot for change detection
+state:
+  pull_requests:
+    open_count: 0
+    latest_id: null
+    latest_updated_at: null
+  issues:
+    open_count: 1
+    latest_id: null
+    latest_updated_at: null
+  actions:
+    latest_run_id: "22139538705"
+    latest_run_status: null
+    latest_run_conclusion: success
+  projects:
+    item_count: 50
+  deployments:
+    latest_id: "3867497542"
+    latest_environment: github-pages
+# Per-workflow execution tracking
+workflows:
+  auto-refresh:
+    last_run_at: "2026-02-18T10:00:00Z"
+    last_result: success
+    run_count: 1
+  ci-monitor:
+    last_run_at: "2026-02-18T10:03:00Z"
+    last_result: success
+    run_count: 1
+  dependabot-alerts:
+    last_run_at: "2026-02-18T10:04:00Z"
+    last_result: success
+    run_count: 1
+  pr-lifecycle:
+    last_run_at: "2026-02-18T10:05:00Z"
+    last_result: success
+    run_count: 1

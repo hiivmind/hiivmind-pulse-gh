@@ -1,0 +1,9 @@
+project:
+  number: 7
+  title: "Job Tracker"
+
+views:
+  - number: 1
+    name: "View 1"
+    layout: TABLE_LAYOUT
+    filter: null

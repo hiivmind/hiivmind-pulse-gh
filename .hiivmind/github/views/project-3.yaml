@@ -1,0 +1,9 @@
+project:
+  number: 3
+  title: "Hiivmind Pulse Test Fixtures"
+
+views:
+  - number: 1
+    name: "View 1"
+    layout: TABLE_LAYOUT
+    filter: null
