@@ -139,7 +139,15 @@ done
 yq -i ".last_polled_at = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$POLL_STATE"
 
 # Output JSON summary
-TRIGGERED_JSON=$(printf '%s\n' "${TRIGGERED[@]:-}" | jq -R . | jq -s .)
-AUTO_JSON=$(printf '%s\n' "${AUTO_WORKFLOWS[@]:-}" | jq -R . | jq -s .)
+if (( ${#TRIGGERED[@]} == 0 )); then
+    TRIGGERED_JSON="[]"
+else
+    TRIGGERED_JSON=$(printf '%s\n' "${TRIGGERED[@]}" | jq -R . | jq -s .)
+fi
+if (( ${#AUTO_WORKFLOWS[@]} == 0 )); then
+    AUTO_JSON="[]"
+else
+    AUTO_JSON=$(printf '%s\n' "${AUTO_WORKFLOWS[@]}" | jq -R . | jq -s .)
+fi
 
 echo "{\"stale_sections\": ${STALE_SECTIONS}, \"triggered_workflows\": ${TRIGGERED_JSON}, \"auto_workflows\": ${AUTO_JSON}}"
