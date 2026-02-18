@@ -1,0 +1,23 @@
+# hiivmind-pulse-gh - Workflow Definition
+# Copy this template to .hiivmind/github/workflows/{{workflow_name}}.yaml
+# See: lib/references/workflow-triggers.md for trigger types
+# See: lib/patterns/workflow-execution.md for action types
+
+name: "{{workflow_name}}"
+description: "{{workflow_description}}"
+enabled: true
+auto: false  # true = execute without asking, false = present and ask
+
+trigger:
+  type: {{trigger_type}}  # session_poll | post_operation | freshness | on_demand
+  source: {{trigger_source}}  # pull_requests | issues | actions | projects | config
+  condition: {{trigger_condition}}  # state_changed | threshold_exceeded | pattern_match
+  filter: {}  # Optional: narrow trigger scope (e.g., label filter, branch filter)
+
+actions:
+  - name: "{{action_name}}"
+    type: {{action_type}}  # operation | skill_invoke
+    operation: "{{operation_description}}"  # Natural language for operations skill
+    # skill: "{{skill_name}}"  # For skill_invoke type
+
+cooldown_minutes: {{cooldown_minutes}}  # Minimum minutes between runs (default: 5)

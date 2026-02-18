@@ -1,0 +1,24 @@
+# hiivmind-pulse-gh - Issue Triage Workflow
+# Detects new issues and offers triage assistance
+# Copy to: .hiivmind/github/workflows/issue-triage.yaml
+
+name: "issue-triage"
+description: "Detect new issues, suggest labels, and flag potential duplicates"
+enabled: true
+auto: false
+
+trigger:
+  type: session_poll
+  source: issues
+  condition: state_changed
+  filter: {}
+
+actions:
+  - name: "List untriaged issues"
+    type: operation
+    operation: "list open issues without labels or milestones"
+  - name: "Suggest labels"
+    type: operation
+    operation: "suggest labels for unlabeled issues based on title and body"
+
+cooldown_minutes: 30

@@ -1,7 +1,7 @@
 ---
 description: Unified entry point for GitHub operations - describe what you need in natural language
 argument-hint: Describe your goal (e.g., "create issue for login bug", "set milestone v2.0 on #42", "add PR to project")
-allowed-tools: ["Read", "Write", "Bash", "Glob", "Grep", "TodoWrite", "AskUserQuestion", "Skill", "Task"]
+allowed-tools: ["Read", "Write", "Bash", "Glob", "Grep", "AskUserQuestion", "Skill", "Task"]
 ---
 
 # GitHub Operations Gateway
@@ -10,110 +10,105 @@ Unified entry point for all GitHub operations via hiivmind-pulse-gh.
 
 **User request:** $ARGUMENTS
 
+**Intent mapping:** `commands/intent-mapping.yaml`
+
 ---
 
 ## Step 1: Check for Arguments
 
 **If `$ARGUMENTS` is empty** → Go to **Mode: Interactive Menu**
 
+> **Workflow/Heartbeat routing:** If arguments match workflow management (list/enable/disable/run/create workflows)
+> or heartbeat (what changed, session summary), route to the workflows or heartbeat skill respectively.
+> See intent-mapping.yaml for keyword definitions.
+
 **If `$ARGUMENTS` is provided** → Continue to Step 2
 
 ---
 
-## Step 2: Intent Detection
+## Step 2: Intent Detection (3VL)
 
-Analyze the user's request to determine:
+Load `commands/intent-mapping.yaml` and evaluate `$ARGUMENTS` using three-valued logic.
 
-1. **Domain** - Which GitHub entity
-2. **Operation** - What action to perform
-3. **Target** - Specific entity (if any)
+### 2a: Load Intent Mapping
 
-### Domain Detection
+Read the intent mapping file from the plugin directory:
 
-| Keywords | Domain |
-|----------|--------|
-| issue, bug, feature, task, ticket | `issues` |
-| pr, pull request, merge, review | `pull_requests` |
-| milestone, version, due date | `milestones` |
-| label, tag, categorize | `labels` |
-| project, board, kanban, status, field | `projects` |
-| protect, protection, branch rule | `branch_protection` |
-| ruleset, rules, enforcement | `rulesets` |
-| workflow, action, run, trigger, ci | `actions` |
-| secret, credential, encrypted | `secrets` |
-| variable, env, config | `variables` |
-| release, publish, asset, changelog | `releases` |
-| repo, repository, fork, clone | `repositories` |
-| collaborator, contributor, invite | `collaborators` |
-| team, membership | `teams` |
-| check, check run, status check | `checks` |
-| deploy, deployment | `deployments` |
-| scan, alert, security, vulnerability | `security` |
-| dependabot, dependency | `dependabot` |
-| search, find, query | `search` |
-| gist | `gists` |
-| awareness, configure claude, setup claude, enable features | `awareness` |
-| discover, explore, capabilities, what can, help, list operations, browse, how do I, what's possible | `discover` |
+```
+Read: {PLUGIN_ROOT}/commands/intent-mapping.yaml
+```
 
-### Operation Detection
+This file defines `intent_flags`, `intent_rules`, and `actions`.
 
-| Keywords | Operation |
-|----------|-----------|
-| create, add, new, open, make | `create` |
-| update, edit, change, modify, set | `update` |
-| list, show, get, view, check | `read` |
-| delete, remove, close, archive | `delete` |
-| link, connect, attach, add to | `link` |
-| trigger, run, start, dispatch | `trigger` |
-| merge, squash, rebase | `merge` |
+### 2b: Evaluate Flags
 
-### Target Extraction
+For each flag in `intent_flags`, scan `$ARGUMENTS` for keyword matches:
 
-Look for:
+| Match Result | Flag Value | Meaning |
+|-------------|------------|---------|
+| Keyword found in input | **T** (True) | Positive match |
+| Negative keyword found | **F** (False) | Explicit exclusion |
+| Neither found | **U** (Unknown) | No signal |
+
+```pseudocode
+FOR flag IN intent_flags:
+  IF any(keyword IN arguments.lower() FOR keyword IN flag.keywords):
+    computed.intent_flags[flag.name] = T
+  ELIF flag.negative_keywords AND any(nkw IN arguments.lower() FOR nkw IN flag.negative_keywords):
+    computed.intent_flags[flag.name] = F
+  ELSE:
+    computed.intent_flags[flag.name] = U
+```
+
+### 2c: Match Rules
+
+Evaluate rules in order (first match wins). A rule matches when ALL its conditions are satisfied:
+
+```pseudocode
+FOR rule IN intent_rules:
+  match = true
+  FOR flag_name, required_value IN rule.conditions:
+    actual = computed.intent_flags[flag_name]
+    IF required_value == T AND actual != T: match = false
+    IF required_value == F AND actual != F: match = false
+    # U conditions: actual must be U (no signal either way)
+  IF match:
+    computed.matched_rule = rule
+    computed.matched_action = rule.action
+    BREAK
+```
+
+**If no rule matches:** The fallback rule (empty conditions) always matches last.
+
+### 2d: Extract Target
+
+Regardless of intent matching, extract target entities from `$ARGUMENTS`:
+
 - Issue/PR numbers: `#42`, `issue 42`, `PR #15`
 - Milestone names: `"v2.0"`, `milestone v2.0`
 - Project numbers: `project 2`, `project #1`
 - Branch names: `main`, `develop`
 - Workflow names: `ci.yml`, `deploy.yml`
 
-### Blocked Operations
+Store in `computed.target` for passing to skills.
 
-Before proceeding, check if the request matches a blocked operation:
+### 2e: Ambiguity Resolution
 
-| Domain | Operation | Blocked |
-|--------|-----------|---------|
-| repositories | delete, transfer, archive | ✅ BLOCKED |
-| organizations | delete, remove all members | ✅ BLOCKED |
-| branches | delete default | ✅ BLOCKED |
+If the matched action is `show_main_menu` but arguments were provided (intent was unclear):
 
-**If blocked:**
-1. Explain: "This operation is blocked for safety: [reason]"
-2. Offer alternative if available (e.g., "Use archive instead of delete")
-3. Suggest: "For this operation, please use the GitHub web UI"
-4. **Do not proceed** to Step 3
-
-**Reference:** `docs/operation-blocklist.md`
-
-### Unlisted Domains
-
-If the domain is not in the table above:
-1. Set domain to the detected resource name (e.g., `codespaces`, `pages`)
-2. Continue to operations skill
-3. Operations skill will use corpus lookup for syntax
-
-### Ambiguity Resolution
-
-If intent is still unclear after domain/operation detection, use AskUserQuestion to clarify.
+1. Use AskUserQuestion to disambiguate
+2. Present the top 2-3 candidate rules based on partial flag matches
+3. User selection determines the action
 
 ---
 
 ## Step 3: Context Detection (Conditional)
 
-**Skip this step if domain is:** `awareness`, `discover`, `search`, `gists`
+**Skip this step if matched action is:** `delegate_awareness`, `delegate_discover`, `show_full_help`, `show_skill_help_*`, `block_operation`, `show_main_menu`
 
-These domains either handle their own context checks internally or don't require workspace initialization.
+These actions either handle their own context checks internally or don't require workspace initialization.
 
-**For all other domains, continue below:**
+**For all other actions, continue below:**
 
 ### 3a: Check Initialization
 
@@ -169,7 +164,7 @@ Check `.hiivmind/github/freshness.yaml`:
 
 ## Step 4: Confirm Mutations
 
-For create/update/delete operations:
+For create/update/delete operations (when `has_create`, `has_update`, or `has_delete` is T):
 
 1. Summarize the intended action
 2. Ask: "Proceed with this operation?"
@@ -177,37 +172,50 @@ For create/update/delete operations:
 
 ---
 
-## Step 5: Route to Appropriate Skill
+## Step 5: Execute Matched Action
 
-After detecting intent, route based on domain:
+Look up `computed.matched_action` in the `actions` section of the intent mapping and execute:
 
-### Awareness Domain
+### Skill Dispatch Protocol
 
-**If domain is `awareness`:**
+**CRITICAL:** This gateway is a ROUTER, not an executor. When a skill is matched:
 
-**Invoke:** `hiivmind-pulse-gh:hiivmind-pulse-gh-awareness`
+1. **DO NOT answer the user's request yourself** - Your job is routing, not answering
+2. **DO NOT pre-validate or gather information** - Let the skill handle its own context
+3. **IMMEDIATELY invoke the skill** using the Skill tool
+4. **Let the skill take over** - It will load its own SKILL.md and execute
 
-The awareness skill auto-detects capabilities from project context and guides through CLAUDE.md configuration.
+### Action Types
 
-### Discover Domain
+| Action Type | Behavior |
+|-------------|----------|
+| `invoke_skill` | Invoke the named skill via Skill tool, passing `$ARGUMENTS` |
+| `display` | Display the content block to the user |
+| `user_prompt` | Present options via AskUserQuestion, then route selection |
+| `block_operation` | Display safety block message, do not proceed |
 
-**If domain is `discover`:**
+### Invoke Skill Actions
 
-**Invoke:** `hiivmind-pulse-gh:hiivmind-pulse-gh-discover`
+For actions where `type: invoke_skill`:
 
-The discover skill presents a quick reference of all domains and allows interactive exploration of available operations, with handoff to operations skill when ready.
+```
+Skill(
+  skill: action.skill,
+  args: "$ARGUMENTS"
+)
+```
 
-### All Other Domains
+**Pass context** to operations skill:
+- The full `$ARGUMENTS` text (skill parses its own domain/operation/target)
+- Workspace config path if detected in Step 3
 
-**Invoke:** `hiivmind-pulse-gh:hiivmind-pulse-gh-operations`
+### Display Actions
 
-**Pass context:**
-- Domain: {detected domain}
-- Operation: {detected operation}
-- Target: {extracted target}
-- Workspace: owner/type from config
+For actions where `type: display`, output the `content` block directly to the user.
 
-The operations skill consults the routing guide and corpus (when needed) to perform the operation.
+### User Prompt Actions
+
+For actions where `type: user_prompt`, present the prompt's options via AskUserQuestion. Map the user's selection back through intent detection (treat selection as new `$ARGUMENTS`).
 
 ---
 
@@ -327,8 +335,8 @@ options:
 
 | Selection | Action |
 |-----------|--------|
-| Quick action selected | Map to domain + operation, continue to **Step 3: Context Detection** |
-| "Other" selected | User provides text → treat as `$ARGUMENTS`, continue to **Step 2: Intent Detection** |
+| Quick action selected | Treat label as `$ARGUMENTS`, run through **Step 2: Intent Detection** |
+| "Other" selected | User provides text → treat as `$ARGUMENTS`, run through **Step 2: Intent Detection** |
 
 ---
 
@@ -338,11 +346,12 @@ options:
 
 | Error | Cause | Action |
 |-------|-------|--------|
+| Intent mapping not found | File missing | Fall back to interactive menu |
 | Config not found | Not initialized | Offer to run init |
 | Config stale | Threshold exceeded | Offer to refresh |
 | Permission denied | Insufficient access | Check `gh auth status` |
-| Ambiguous intent | Multiple interpretations | Use AskUserQuestion |
-| Unknown domain | Request not recognized | Show interactive menu |
+| Ambiguous intent | Multiple flag matches | Use AskUserQuestion to disambiguate |
+| Blocked operation | Safety rule matched | Display block message |
 
 ---
 
@@ -354,10 +363,10 @@ options:
 
 **Flow:**
 1. Arguments provided
-2. Intent: domain=issues, operation=create, target="login timeout bug"
+2. Intent flags: `has_create: T`, `has_issues: T` → Rule `issues_operation` matches → Action `delegate_operations`
 3. Context: Initialized ✓, Fresh ✓
 4. Confirm: "Create issue titled 'login timeout bug'?"
-5. Route to operations skill
+5. Invoke skill: `hiivmind-pulse-gh:hiivmind-pulse-gh-operations`
 
 ### Not Initialized
 
@@ -365,7 +374,7 @@ options:
 
 **Flow:**
 1. Arguments provided
-2. Intent: domain=issues, operation=create
+2. Intent flags: `has_create: T`, `has_issues: T` → Rule `issues_operation` → Action `delegate_operations`
 3. Context: NOT initialized → Ask "Initialize workspace first?"
 4. If yes → Invoke `hiivmind-pulse-gh:hiivmind-pulse-gh-init`
 5. After init → Resume with original request
@@ -376,10 +385,20 @@ options:
 
 **Flow:**
 1. Arguments provided
-2. Intent: domain=projects, operation=link
+2. Intent flags: `has_link: T`, `has_pull_requests: T`, `has_projects: T` → Rule `pull_requests_operation` → Action `delegate_operations`
 3. Context: Initialized ✓, Hard Stale → Block mutation, offer refresh
 4. If yes → Invoke `hiivmind-pulse-gh:hiivmind-pulse-gh-refresh`
 5. After refresh → Continue
+
+### Blocked Operation
+
+**User:** `/hiivmind-pulse-gh delete repository`
+
+**Flow:**
+1. Arguments provided
+2. Intent flags: `has_blocked: T` → Rule `blocked_operation` (highest priority)
+3. Display safety block message
+4. **Do not proceed**
 
 ### Capability Awareness
 
@@ -387,10 +406,18 @@ options:
 
 **Flow:**
 1. Arguments provided
-2. Intent: domain=awareness
+2. Intent flags: `has_awareness: T` → Rule `awareness_only` → Action `delegate_awareness`
 3. Context: SKIPPED (awareness doesn't require workspace config)
-4. Route to awareness skill
-5. Skill scans project and edits CLAUDE.md
+4. Invoke skill: `hiivmind-pulse-gh:hiivmind-pulse-gh-awareness`
+
+### Help Request
+
+**User:** `/hiivmind-pulse-gh --help`
+
+**Flow:**
+1. Arguments provided
+2. Intent flags: `has_help_flag: T` → Rule `explicit_help_flag` (highest priority)
+3. Display full help content from intent mapping actions
 
 ### Unlisted Domain (Fallback)
 
@@ -398,7 +425,6 @@ options:
 
 **Flow:**
 1. Arguments provided
-2. Intent: domain=codespaces (not in table), operation=read
-3. Context: Initialized ✓
-4. Route to operations skill with corpus fallback
-5. Operations skill looks up codespaces API in corpus
+2. Intent flags: `has_read: T` (no domain flag matches "codespaces")
+3. Rule: `create_something` action-only fallback → Action `delegate_operations`
+4. Operations skill handles unknown domain via corpus lookup

@@ -1,5 +1,5 @@
 {
-  "description": "Safety hooks for GitHub operations - blocks dangerous commands at execution time",
+  "description": "Safety hooks and event-driven workflow triggers for GitHub operations",
   "hooks": {
     "PreToolUse": [
       {
@@ -8,6 +8,29 @@
           {
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/validate-gh-operation.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/heartbeat.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/post-operation-check.sh",
             "timeout": 5
           }
         ]
