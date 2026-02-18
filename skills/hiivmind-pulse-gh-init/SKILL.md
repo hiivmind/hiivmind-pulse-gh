@@ -1,6 +1,6 @@
 ---
 name: hiivmind-pulse-gh-init
-version: 0.1.0
+version: 4.0.0
 description: >
   Initialize GitHub workspace to enable context enrichment for all GitHub operations. This skill
   should be used when: setting up a new workspace, first-time configuration, config.yaml is missing,
@@ -277,6 +277,27 @@ Create or update `.claude/settings.json` to declare the hiivmind-pulse-gh market
 **If file doesn't exist:**
 - Create `.claude/` directory
 - Write new settings file with marketplace config
+
+### Create Freshness Tracking
+
+Copy the freshness template and stamp initial timestamps:
+
+```bash
+cp "{PLUGIN_ROOT}/templates/freshness.yaml.template" ".hiivmind/github/freshness.yaml"
+```
+
+Then update with current timestamp:
+- Replace `{{initialized_at}}` in the header comment with the current ISO 8601 timestamp
+- Set `cache.created_at` to current timestamp
+- Set `cache.last_updated_at` to current timestamp
+- Set `sections.workspace.last_checked` to current timestamp (just discovered)
+- Set `sections.workspace.stale` to `false`
+- Set `sections.projects.last_checked` to current timestamp (just discovered)
+- Set `sections.projects.stale` to `false`
+- Set `sections.repositories.last_checked` to current timestamp (just discovered)
+- Set `sections.repositories.stale` to `false`
+
+All other sections remain `stale: true` with `last_checked: null` until explicitly refreshed.
 
 ### Output Files
 

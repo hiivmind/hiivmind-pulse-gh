@@ -21,6 +21,7 @@ CONFIG_DIR=$(dirname "$CONFIG_PATH")
 WORKFLOWS_DIR="${CONFIG_DIR}/workflows"
 POLL_STATE="${CONFIG_DIR}/poll-state.yaml"
 FRESHNESS="${CONFIG_DIR}/freshness.yaml"
+LOG_FILE="${CONFIG_DIR}/heartbeat.log"
 
 # Exit early if no workflows directory
 if [[ ! -d "$WORKFLOWS_DIR" ]]; then
@@ -148,6 +149,15 @@ if (( ${#AUTO_WORKFLOWS[@]} == 0 )); then
     AUTO_JSON="[]"
 else
     AUTO_JSON=$(printf '%s\n' "${AUTO_WORKFLOWS[@]}" | jq -R . | jq -s .)
+fi
+
+# Log the run
+LOG_ENTRY="[$(date -u +%Y-%m-%dT%H:%M:%SZ)] {\"stale_sections\": ${STALE_SECTIONS}, \"triggered_workflows\": ${TRIGGERED_JSON}, \"auto_workflows\": ${AUTO_JSON}}"
+echo "$LOG_ENTRY" >> "$LOG_FILE"
+
+# Trim log if over 500 lines
+if [[ $(wc -l < "$LOG_FILE") -gt 500 ]]; then
+    tail -n 250 "$LOG_FILE" > "${LOG_FILE}.tmp" && mv "${LOG_FILE}.tmp" "$LOG_FILE"
 fi
 
 echo "{\"stale_sections\": ${STALE_SECTIONS}, \"triggered_workflows\": ${TRIGGERED_JSON}, \"auto_workflows\": ${AUTO_JSON}}"
