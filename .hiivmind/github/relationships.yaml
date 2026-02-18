@@ -1,0 +1,32 @@
+relationships:
+  - project_number: 1
+    project_title: "Hiivmind Pulse Bug Tracker"
+    repositories:
+      - name: hiivmind-pulse-gh
+        id: R_kgDOPWbGbQ
+  - project_number: 2
+    project_title: "Hiivmind Pulse Feature Planner"
+    repositories:
+      - name: hiivmind-pulse-gh
+        id: R_kgDOPWbGbQ
+  - project_number: 3
+    project_title: "Hiivmind Pulse Test Fixtures"
+    repositories:
+      - name: hiivmind-pulse-test-fixtures
+        id: R_kgDOQm1-hg
+  - project_number: 4
+    project_title: "Hiivmind Corpus - Feature Planning"
+    repositories:
+      - name: hiivmind-corpus
+        id: R_kgDOQkJ61A
+  - project_number: 5
+    project_title: "Hiivmind Chronicle Feature Planning"
+    repositories:
+      - name: hiivmind-chronicle
+        id: R_kgDOQqUIBg
+  - project_number: 6
+    project_title: "Corpus Refresh Automation"
+    repositories: []
+  - project_number: 7
+    project_title: "Job Tracker"
+    repositories: []

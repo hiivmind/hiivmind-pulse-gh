@@ -1,0 +1,29 @@
+project:
+  number: 2
+  title: "Hiivmind Pulse Feature Planner"
+
+views:
+  - number: 1
+    name: "Prioritized backlog"
+    layout: TABLE_LAYOUT
+    filter: ""
+  - number: 2
+    name: "Status board"
+    layout: BOARD_LAYOUT
+    filter: null
+  - number: 3
+    name: "Roadmap"
+    layout: ROADMAP_LAYOUT
+    filter: ""
+  - number: 4
+    name: "Bugs"
+    layout: TABLE_LAYOUT
+    filter: null
+  - number: 5
+    name: "In review"
+    layout: TABLE_LAYOUT
+    filter: "status:\"In review\""
+  - number: 6
+    name: "My items"
+    layout: TABLE_LAYOUT
+    filter: "assignee:@me"
