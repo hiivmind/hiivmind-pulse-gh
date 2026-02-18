@@ -198,7 +198,7 @@ gh-discover        ← Independent (explore capabilities)
 | **Variables** | set, update, delete, list | REST |
 | **Releases** | create, update, delete, upload | REST |
 
-> **Note:** This table shows commonly used domains for quick reference. The plugin supports **any GitHub domain** via corpus lookup — if you have permissions, it can help. Some dangerous operations (delete repository, transfer ownership) are blocked for safety. See `docs/operation-blocklist.md`.
+> **Note:** This table shows commonly used domains for quick reference. The plugin supports **any GitHub domain** via corpus lookup — if you have permissions, it can help. Some dangerous operations (delete repository, transfer ownership) are blocked for safety. See `lib/references/operation-blocklist.md`.
 
 ## Quick Start
 
@@ -340,8 +340,7 @@ hiivmind-pulse-gh/
 │
 ├── docs/
 │   ├── decisions/                        # Historical architecture decisions
-│   ├── config-schema.md                  # Config.yaml schema
-│   └── operation-blocklist.md            # Blocked dangerous operations
+│   └── (empty - files moved to lib/references/)
 │
 ├── templates/
 │   ├── config.yaml.template

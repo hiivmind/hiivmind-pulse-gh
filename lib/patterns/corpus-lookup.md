@@ -334,5 +334,5 @@ No corpus lookup needed for well-known CLI commands.
 ## Related References
 
 - **lib/references/api-routing.md** - Routing decisions and keywords (useful standalone)
-- **docs/config-schema.md** - Config.yaml structure for cached IDs
+- **lib/references/config-schema.md** - Config.yaml structure for cached IDs
 - **hiivmind-corpus-github-docs-navigate** - GitHub API corpus skill

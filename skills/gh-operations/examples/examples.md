@@ -62,7 +62,7 @@ Always try cache first:
 
 ### Blocked Operations
 
-Some dangerous operations are blocked. Check `{PLUGIN_ROOT}/docs/operation-blocklist.md` before executing:
+Some dangerous operations are blocked. Check `{PLUGIN_ROOT}/lib/references/operation-blocklist.md` before executing:
 - Repository deletion
 - Organization deletion
 - Transfer ownership

@@ -59,4 +59,4 @@ Always write to `.hiivmind/github/config.yaml` relative to git root.
 ## Related
 
 - [Init SKILL.md](../SKILL.md) - Full skill documentation
-- [Config Schema]({PLUGIN_ROOT}/docs/config-schema.md) - Config.yaml structure
+- [Config Schema]({PLUGIN_ROOT}/lib/references/config-schema.md) - Config.yaml structure

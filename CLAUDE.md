@@ -251,7 +251,7 @@ sections:
 | **Variables** | set, update, delete, list | REST |
 | **Releases** | create, update, delete, upload | REST |
 
-> **Note:** This table shows commonly used domains. For complete routing decisions, see `lib/references/api-routing.md`. The plugin supports **any GitHub domain** via corpus lookup. For unlisted domains, the operations skill uses corpus lookup and defaults to REST API. Some dangerous operations are blocked — see `docs/operation-blocklist.md`.
+> **Note:** This table shows commonly used domains. For complete routing decisions, see `lib/references/api-routing.md`. The plugin supports **any GitHub domain** via corpus lookup. For unlisted domains, the operations skill uses corpus lookup and defaults to REST API. Some dangerous operations are blocked — see `lib/references/operation-blocklist.md`.
 
 ---
 
@@ -298,8 +298,7 @@ hiivmind-pulse-gh/
 │           └── ...
 ├── docs/
 │   ├── adrs/                             # Architecture decision records
-│   ├── config-schema.md                  # Config.yaml schema
-│   └── operation-blocklist.md            # Dangerous operations blocked
+│   └── (empty - files moved to lib/references/)
 └── templates/
     ├── config.yaml.template
     └── user.yaml.template

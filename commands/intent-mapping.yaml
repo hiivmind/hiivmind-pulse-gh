@@ -750,7 +750,7 @@ actions:
       - Use the GitHub web UI for these operations
       - Archive instead of delete where possible
 
-      See: `docs/operation-blocklist.md`
+      See: `lib/references/operation-blocklist.md`
 
   # Interactive menu
   show_main_menu:
