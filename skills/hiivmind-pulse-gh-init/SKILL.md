@@ -33,15 +33,17 @@ read from the plugin root, not relative to this skill folder.
 | Detect workspace from git or user input | Fetch views/automations/teams |
 | Discover and cache project IDs | Build extended configs |
 | Create config.yaml + user.yaml | Modify GitHub resources |
+| Create workflows directory and install templates | Run workflows |
+| Set up heartbeat logging directory | Configure advanced workflow options |
 
 ## Phase Overview
 
 ```
-1. CONTEXT    → 2. PREREQS   → 3. INPUT    → 4. DISCOVER → 5. CACHE    → 6. VERIFY
-   (detect)       (tools)        (confirm)     (projects)    (write)       (done)
-      │              │               │              │            │            │
-   STOP if       STOP if         STOP for       STOP for       -         STOP: offer
-   ambiguous     missing         user OK        selection              refresh/ops
+1. CONTEXT    → 2. PREREQS   → 3. INPUT    → 4. DISCOVER → 5. CACHE    → 5.5 HEARTBEAT → 6. VERIFY
+   (detect)       (tools)        (confirm)     (projects)    (write)       (workflows)     (done)
+      │              │               │              │            │              │              │
+   STOP if       STOP if         STOP for       STOP for       -          STOP for       STOP: offer
+   ambiguous     missing         user OK        selection              template select  refresh/ops
 ```
 
 ---
@@ -307,6 +309,43 @@ All other sections remain `stale: true` with `last_checked: null` until explicit
 | `.hiivmind/github/user.yaml` | User identity (personal) | Gitignored |
 | `.hiivmind/github/freshness.yaml` | Staleness tracking | Committed |
 | `.claude/settings.json` | Plugin dependencies | Committed |
+| `.hiivmind/github/workflows/*.yaml` | Heartbeat workflow configs | Committed |
+| `.hiivmind/github/log/` | Heartbeat run logs | Gitignored |
+
+---
+
+## Phase 5.5: HEARTBEAT
+
+**Goal:** Set up the heartbeat workflow system so event-driven automation is active from first session.
+
+### What to Do
+
+1. Create `.hiivmind/github/workflows/` directory
+2. Create `.hiivmind/github/log/` directory
+3. Add `.hiivmind/github/log/` to `.gitignore`
+4. Present bundled workflow templates to user for selection
+
+### STOP Point
+
+**Present workflow templates:**
+
+```
+The heartbeat runs on every session start and can detect changes.
+Install workflow templates? These control what the heartbeat monitors.
+
+  1. auto-refresh — Refresh config when sections go stale (recommended)
+  2. pr-lifecycle — Summarize open PRs on session start
+  3. issue-triage — Flag untriaged issues
+  4. ci-monitor — Check CI/CD run status
+  5. stale-check — Flag stale PRs/issues
+
+Which templates to install? [1 / 1,2,3 / all / none]
+```
+
+### After Selection
+
+1. Copy selected templates from `{PLUGIN_ROOT}/templates/workflows/` to `.hiivmind/github/workflows/`
+2. Note: `poll-state.yaml` is self-bootstrapped by heartbeat on first run — no action needed
 
 ---
 
@@ -337,13 +376,18 @@ Config files:
   .hiivmind/github/freshness.yaml
   .claude/settings.json (marketplace dependencies)
 
+Heartbeat:
+  Workflows installed: 3 (auto-refresh, pr-lifecycle, ci-monitor)
+  Log directory: .hiivmind/github/log/
+
 The hiivmind marketplace is now configured as a dependency.
 Team members will be prompted to install it when they trust this repo.
 
 What would you like to do next?
   1. Run an operation (use /hiivmind-pulse-gh)
   2. Fetch extended config (views, teams, automations)
-  3. Done for now
+  3. Configure workflows (use /hiivmind-pulse-gh workflows)
+  4. Done for now
 ```
 
 ---
