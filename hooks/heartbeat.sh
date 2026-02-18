@@ -154,18 +154,100 @@ for WF_FILE in "$WORKFLOWS_DIR"/*.yaml; do
                     fi
                     ;;
                 projects)
-                    DEFAULT_PROJECT=$(yq -r '.projects.default // ""' "$CONFIG_PATH")
-                    if [[ -n "$DEFAULT_PROJECT" && "$DEFAULT_PROJECT" != "null" ]]; then
-                        PROJECT_ID=$(yq -r ".projects.catalog[] | select(.number == $DEFAULT_PROJECT) | .id // \"\"" "$CONFIG_PATH" 2>/dev/null || echo "")
-                        if [[ -n "$PROJECT_ID" ]]; then
-                            CURR_COUNT=$(gh api graphql -f query="query { node(id: \"$PROJECT_ID\") { ... on ProjectV2 { items { totalCount } } } }" 2>/dev/null | jq -r '.data.node.items.totalCount // empty' 2>/dev/null || echo "")
-                            PREV_COUNT=$(yq -r '.state.projects.item_count // 0' "$POLL_STATE")
-                            if [[ -n "$CURR_COUNT" && "$CURR_COUNT" != "$PREV_COUNT" ]]; then
-                                SHOULD_TRIGGER=true
-                                yq -i ".state.projects.item_count = $CURR_COUNT" "$POLL_STATE"
-                            fi
-                        fi
+                    # Get current user login
+                    GH_USER=$(gh api /user --jq '.login' 2>/dev/null || echo "")
+                    if [[ -z "$GH_USER" ]]; then
+                        break
                     fi
+
+                    # Build batched GraphQL query with aliases for all catalog projects
+                    PROJECT_IDS=$(yq -r '.projects.catalog[].id' "$CONFIG_PATH" 2>/dev/null)
+                    if [[ -z "$PROJECT_IDS" ]]; then
+                        break
+                    fi
+
+                    QUERY="query {"
+                    ALIAS_IDX=0
+                    declare -A ALIAS_MAP  # alias -> project number + title
+                    while IFS= read -r PID; do
+                        [[ -z "$PID" ]] && continue
+                        P_NUM=$(yq -r ".projects.catalog[] | select(.id == \"$PID\") | .number" "$CONFIG_PATH")
+                        P_TITLE=$(yq -r ".projects.catalog[] | select(.id == \"$PID\") | .title" "$CONFIG_PATH")
+                        ALIAS="p${ALIAS_IDX}"
+                        ALIAS_MAP["$ALIAS"]="${P_NUM}|${P_TITLE}"
+                        QUERY+=" ${ALIAS}: node(id: \"${PID}\") { ... on ProjectV2 { items(first: 100) { nodes { id content { __typename ... on Issue { number title } ... on PullRequest { number title } ... on DraftIssue { title } } fieldValues(first: 20) { nodes { ... on ProjectV2ItemFieldUserValue { users(first: 10) { nodes { login } } } } } } } } }"
+                        ALIAS_IDX=$((ALIAS_IDX + 1))
+                    done <<< "$PROJECT_IDS"
+                    QUERY+=" }"
+
+                    # Execute single batched query
+                    RESULT=$(gh api graphql -f query="$QUERY" 2>/dev/null || echo "")
+                    if [[ -z "$RESULT" ]]; then
+                        break
+                    fi
+
+                    # Extract assignments for current user across all projects
+                    CURR_ASSIGNMENTS="[]"
+                    for ALIAS in "${!ALIAS_MAP[@]}"; do
+                        IFS='|' read -r P_NUM P_TITLE <<< "${ALIAS_MAP[$ALIAS]}"
+                        # Filter items where current user is in fieldValues users
+                        ITEMS=$(echo "$RESULT" | jq -r --arg alias "$ALIAS" --arg user "$GH_USER" --arg pnum "$P_NUM" --arg ptitle "$P_TITLE" '
+                            [.data[$alias].items.nodes[] |
+                             select(.fieldValues.nodes | any(.users?.nodes? // [] | any(.login == $user))) |
+                             {
+                               id: .id,
+                               number: (.content.number // null),
+                               title: (.content.title // "Draft"),
+                               type: (if .content.__typename == "Issue" then "issue" elif .content.__typename == "PullRequest" then "pull_request" else "draft" end)
+                             }] |
+                            if length > 0 then
+                              {project: $ptitle, project_number: ($pnum | tonumber), items: .}
+                            else empty end
+                        ' 2>/dev/null || echo "")
+                        if [[ -n "$ITEMS" && "$ITEMS" != "null" ]]; then
+                            CURR_ASSIGNMENTS=$(echo "$CURR_ASSIGNMENTS" | jq --argjson item "$ITEMS" '. + [$item]')
+                        fi
+                    done
+
+                    # Also track total item count on default project for backward compat
+                    DEFAULT_PROJECT=$(yq -r '.projects.default // ""' "$CONFIG_PATH")
+                    CURR_COUNT=""
+                    if [[ -n "$DEFAULT_PROJECT" && "$DEFAULT_PROJECT" != "null" ]]; then
+                        for ALIAS in "${!ALIAS_MAP[@]}"; do
+                            IFS='|' read -r P_NUM _ <<< "${ALIAS_MAP[$ALIAS]}"
+                            if [[ "$P_NUM" == "$DEFAULT_PROJECT" ]]; then
+                                CURR_COUNT=$(echo "$RESULT" | jq -r --arg alias "$ALIAS" '.data[$alias].items.nodes | length' 2>/dev/null || echo "")
+                                break
+                            fi
+                        done
+                    fi
+
+                    # Compare assignments
+                    PREV_ASSIGNMENTS=$(yq -o=json -r '.state.projects.my_assignments // "[]"' "$POLL_STATE" 2>/dev/null || echo "[]")
+                    CURR_ASSIGNMENTS_SORTED=$(echo "$CURR_ASSIGNMENTS" | jq -S '.' 2>/dev/null || echo "[]")
+                    PREV_ASSIGNMENTS_SORTED=$(echo "$PREV_ASSIGNMENTS" | jq -S '.' 2>/dev/null || echo "[]")
+
+                    if [[ "$CURR_ASSIGNMENTS_SORTED" != "$PREV_ASSIGNMENTS_SORTED" ]]; then
+                        SHOULD_TRIGGER=true
+                    fi
+
+                    # Compare item count (backward compat)
+                    PREV_COUNT=$(yq -r '.state.projects.item_count // 0' "$POLL_STATE")
+                    if [[ -n "$CURR_COUNT" && "$CURR_COUNT" != "$PREV_COUNT" ]]; then
+                        SHOULD_TRIGGER=true
+                    fi
+
+                    # Update state
+                    if [[ -n "$CURR_COUNT" ]]; then
+                        yq -i ".state.projects.item_count = $CURR_COUNT" "$POLL_STATE"
+                    fi
+                    # Write assignments to poll-state via temp file in config dir
+                    ASSIGNMENTS_FILE="${CONFIG_DIR}/.assignments-tmp.json"
+                    echo "$CURR_ASSIGNMENTS" > "$ASSIGNMENTS_FILE"
+                    yq -i ".state.projects.my_assignments = load(\"$ASSIGNMENTS_FILE\")" "$POLL_STATE"
+                    rm -f "$ASSIGNMENTS_FILE"
+
+                    unset ALIAS_MAP
                     ;;
             esac
             ;;

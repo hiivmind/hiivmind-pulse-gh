@@ -38,7 +38,7 @@ Each `session_poll` workflow source maps to ONE lightweight API call:
 | `pull_requests` | `gh api /repos/{owner}/{repo}/pulls?state=open&per_page=1&sort=updated` | count, latest ID, updated_at |
 | `issues` | `gh api /repos/{owner}/{repo}/issues?state=open&per_page=1&sort=updated` | count, latest ID, updated_at |
 | `actions` | `gh api /repos/{owner}/{repo}/actions/runs?per_page=1` | latest run ID, status, conclusion |
-| `projects` | Cached from config — no API call needed | item count from config |
+| `projects` | Batched GraphQL query across all catalog projects | item count, user assignments per project |
 
 ### Deduplicate Sources
 
@@ -77,7 +77,7 @@ fi
 | `pull_requests` | Open count differs OR latest updated_at is newer |
 | `issues` | Open count differs OR latest updated_at is newer |
 | `actions` | Latest run ID differs OR conclusion changed |
-| `projects` | Item count differs |
+| `projects` | Item count differs OR user's assignment list changed |
 
 ---
 
