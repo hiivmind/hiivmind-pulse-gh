@@ -11,7 +11,7 @@ End-to-end walkthrough from initialization to your first enriched operation.
 ## Step 1: Initialize Workspace
 
 ```
-/hiivmind-pulse-gh init
+/gh init
 ```
 
 This will:
@@ -35,7 +35,7 @@ You should see your workspace ID, project IDs, and Status field option IDs.
 ## Step 3: Create an Enriched Issue
 
 ```
-/hiivmind-pulse-gh create issue "Fix login timeout" with label bug and milestone v2.0
+/gh create issue "Fix login timeout" with label bug and milestone v2.0
 ```
 
 Without the plugin, `gh issue create` would create an orphan issue. With it, the issue is:
@@ -47,7 +47,7 @@ Without the plugin, `gh issue create` would create an orphan issue. With it, the
 ## Step 4: Update Project Status
 
 ```
-/hiivmind-pulse-gh set status "In progress" on issue #42
+/gh set status "In progress" on issue #42
 ```
 
 The plugin resolves "In progress" to the cached option ID and updates the project field via GraphQL.
@@ -55,13 +55,13 @@ The plugin resolves "In progress" to the cached option ID and updates the projec
 ## Step 5: Close with Enrichment
 
 ```
-/hiivmind-pulse-gh close issue #42
+/gh close issue #42
 ```
 
 This closes the issue AND updates the project Status to "Done" automatically.
 
 ## What's Next
 
-- `/hiivmind-pulse-gh discover` — Browse all available operations
-- `/hiivmind-pulse-gh refresh` — Sync config after GitHub changes
+- `/gh discover` — Browse all available operations
+- `/gh refresh` — Sync config after GitHub changes
 - See `CLAUDE.md` for full skill reference

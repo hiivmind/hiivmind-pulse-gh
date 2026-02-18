@@ -22,7 +22,7 @@ Direct `gh` CLI commands miss context enrichment:
 ### What This Plugin Provides
 
 - **Context enrichment** - Cached project IDs, field IDs, milestone IDs enrich every operation
-- **Gateway command** - Single entry point: `/hiivmind-pulse-gh [describe what you want]`
+- **Gateway command** - Single entry point: `/gh [describe what you want]`
 - **Operations execution** - All domains: issues, PRs, milestones, projects, protection, actions, releases
 - **API routing** - Automatic GraphQL vs REST selection
 - **Documentation corpus** - GitHub API docs for JIT syntax lookup
@@ -150,19 +150,19 @@ Use natural language to describe any GitHub operation:
 
 ```bash
 # Examples
-/hiivmind-pulse-gh create issue for login bug
-/hiivmind-pulse-gh set milestone v2.0 on issue #42
-/hiivmind-pulse-gh add PR to project
-/hiivmind-pulse-gh trigger workflow ci.yml
+/gh create issue for login bug
+/gh set milestone v2.0 on issue #42
+/gh add PR to project
+/gh trigger workflow ci.yml
 ```
 
 ### What the Gateway Does
 
 1. **Intent Detection** - Parses natural language → domain + operation + target
-2. **Context Check** - Verifies workspace is initialized (skipped for awareness)
+2. **Context Check** - Verifies workspace is initialized
 3. **Freshness Check** - Offers refresh if config is stale
 4. **Confirmation** - Asks before mutations
-5. **Execution** - Routes to appropriate skill (operations or awareness)
+5. **Execution** - Routes to appropriate skill
 
 ---
 
@@ -170,10 +170,9 @@ Use natural language to describe any GitHub operation:
 
 | Skill | Purpose | Structure |
 |-------|---------|-----------|
-| `hiivmind-pulse-gh-init` | First-time workspace setup | 6 phases (~150 lines) |
-| `hiivmind-pulse-gh-refresh` | Sync config with GitHub | 6 phases (~200 lines) |
-| `hiivmind-pulse-gh-operations` | Execute GitHub operations | 5 phases (~270 lines) |
-| `hiivmind-pulse-gh-awareness` | CLAUDE.md capability injection | 5 phases (What/When/How) |
+| `gh-init` | First-time workspace setup | 6 phases (~150 lines) |
+| `gh-refresh` | Sync config with GitHub | 6 phases (~200 lines) |
+| `gh-operations` | Execute GitHub operations | 5 phases (~270 lines) |
 
 ### Skill Architecture
 
@@ -280,11 +279,9 @@ hiivmind-pulse-gh/
 ├── commands/
 │   └── hiivmind-pulse-gh.md              # Gateway command
 ├── skills/
-│   ├── hiivmind-pulse-gh-init/           # Workspace initialization
-│   ├── hiivmind-pulse-gh-refresh/        # Config sync
-│   ├── hiivmind-pulse-gh-operations/     # Execute operations
-│   └── hiivmind-pulse-gh-awareness/      # CLAUDE.md capability injection
-│       └── examples/                     # Skill-local awareness patterns
+│   ├── gh-init/           # Workspace initialization
+│   ├── gh-refresh/        # Config sync
+│   └── gh-operations/     # Execute operations
 ├── lib/
 │   ├── patterns/                         # HOW to do things (executable guides)
 │   │   ├── config-parsing.md
@@ -316,7 +313,7 @@ hiivmind-pulse-gh/
 - **jq** (1.6+) - JSON processing
 - **yq** (4.0+) - YAML processing
 
-Run `hiivmind-pulse-gh-init` to verify all dependencies.
+Run `gh-init` to verify all dependencies.
 
 ---
 

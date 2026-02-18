@@ -341,7 +341,7 @@ Repository labels.
 repository:
   name: hiivmind-pulse-gh
   id: R_kgDONxxxxxx
-  full_name: hiivmind/hiivmind-pulse-gh
+  full_name: hiivmind/gh
   default_branch: main
   visibility: public
   archived: false
@@ -959,7 +959,7 @@ fi
 
 ### Pattern 5: Protection-Aware PR Merge (Phase 3)
 
-**See:** `hiivmind-pulse-gh-operations` skill → Step 3: Load Repository Settings
+**See:** `gh-operations` skill → Step 3: Load Repository Settings
 
 Use repository settings to determine correct merge method:
 - Query `merge_settings.allow_squash_merge`, `allow_merge_commit`, `allow_rebase_merge`
@@ -968,7 +968,7 @@ Use repository settings to determine correct merge method:
 
 ### Pattern 6: Automation-Aware Operations (Phase 4)
 
-**See:** `hiivmind-pulse-gh-operations` skill → Step 4: Load Automation Configuration
+**See:** `gh-operations` skill → Step 4: Load Automation Configuration
 
 Check automation settings before manual operations:
 - Query `.hiivmind/github/automations/project-{number}.yaml`

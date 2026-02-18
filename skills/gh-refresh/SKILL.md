@@ -1,5 +1,5 @@
 ---
-name: hiivmind-pulse-gh-refresh
+name: gh-refresh
 version: 4.0.0
 description: >
   Sync cached workspace config with current GitHub state. This skill should be used when: config is
@@ -64,7 +64,7 @@ Workspace not initialized.
 
 Config file not found: .hiivmind/github/config.yaml
 
-Run: /hiivmind-pulse-gh init
+Run: /gh init
 ```
 
 ---
@@ -284,7 +284,7 @@ What would you like to do next?
 ### Force Refresh Specific Section
 
 ```
-/hiivmind-pulse-gh refresh [section]
+/gh refresh [section]
 ```
 
 Sections: `workspace`, `projects`, `views`, `repo_settings`, `automations`, `relationships`, `teams`
@@ -292,7 +292,7 @@ Sections: `workspace`, `projects`, `views`, `repo_settings`, `automations`, `rel
 ### Force Refresh All
 
 ```
-/hiivmind-pulse-gh refresh all
+/gh refresh all
 ```
 
 ### Related Skills

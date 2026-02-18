@@ -1,5 +1,5 @@
 ---
-name: hiivmind-pulse-gh-heartbeat
+name: gh-heartbeat
 version: 4.0.0
 description: >
   Handle session wake-up when the heartbeat hook detects pending work. Processes triggered workflows,

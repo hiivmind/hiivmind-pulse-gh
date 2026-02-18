@@ -98,7 +98,7 @@ The heartbeat hook checks freshness.yaml and fires this trigger when any section
 No hook involvement — the user explicitly runs the workflow:
 
 ```
-/hiivmind-pulse-gh workflows run pr-lifecycle
+/gh workflows run pr-lifecycle
 ```
 
 On-demand workflows ignore cooldown when explicitly invoked by the user.

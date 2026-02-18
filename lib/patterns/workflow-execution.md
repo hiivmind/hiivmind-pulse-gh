@@ -30,7 +30,7 @@ actions:
     operation: "list open PRs with their diff stats"
 ```
 
-**Execution:** Invoke `hiivmind-pulse-gh-operations` with the `operation` string as arguments.
+**Execution:** Invoke `gh-operations` with the `operation` string as arguments.
 
 ### `skill_invoke`
 
@@ -40,7 +40,7 @@ Invoke a specific skill directly:
 actions:
   - name: "Refresh stale config"
     type: skill_invoke
-    skill: "hiivmind-pulse-gh:hiivmind-pulse-gh-refresh"
+    skill: "hiivmind-pulse-gh:gh-refresh"
 ```
 
 **Execution:** Invoke the named skill via the Skill tool.
@@ -58,7 +58,7 @@ actions:
    └── auto: false → present to user, ask permission
 4. EXECUTE actions sequentially
    ├── For each action:
-   │   ├── operation → Skill(hiivmind-pulse-gh-operations, args=action.operation)
+   │   ├── operation → Skill(gh-operations, args=action.operation)
    │   └── skill_invoke → Skill(action.skill)
    └── Record per-action result
 5. UPDATE poll-state.yaml with execution result

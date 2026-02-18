@@ -1,5 +1,5 @@
 ---
-name: hiivmind-pulse-gh-operations
+name: gh-operations
 version: 4.0.0
 description: >
   Execute GitHub operations with automatic context enrichment from cached workspace. Use this for ANY
@@ -91,7 +91,7 @@ Workspace not initialized.
 
 Config file not found in current or parent directory.
 
-Run: /hiivmind-pulse-gh init
+Run: /gh init
 ```
 
 **See:** `{PLUGIN_ROOT}/lib/patterns/config-parsing.md` for full search algorithm

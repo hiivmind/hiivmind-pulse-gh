@@ -400,7 +400,7 @@ with open('.hiivmind/github/config.yaml', 'w') as f:
 Configuration file not found at .hiivmind/github/config.yaml
 
 This workspace may not be initialized. Run:
-  /hiivmind-pulse-gh init
+  /gh init
 
 Or check that you're in a directory with .hiivmind/github/ config.
 ```

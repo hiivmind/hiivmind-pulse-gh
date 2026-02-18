@@ -14,6 +14,6 @@ trigger:
 actions:
   - name: "Refresh stale sections"
     type: skill_invoke
-    skill: "hiivmind-pulse-gh:hiivmind-pulse-gh-refresh"
+    skill: "hiivmind-pulse-gh:gh-refresh"
 
 cooldown_minutes: 60

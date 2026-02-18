@@ -73,7 +73,7 @@ Plan saved to: ~/.claude/plans/serialized-bubbling-hippo.md · /plan to edit
 
      Skills already read the FULL file, so enhanced tables will be automatically consumed:
 
-     - skills/hiivmind-pulse-gh-operations/SKILL.md - Reads full routing guide in Phase 3
+     - skills/gh-operations/SKILL.md - Reads full routing guide in Phase 3
      - commands/hiivmind-pulse-gh.md - References routing guide
      - All skills use See: lib/examples/operations/api-routing.md pattern
 
@@ -96,7 +96,7 @@ Plan saved to: ~/.claude/plans/serialized-bubbling-hippo.md · /plan to edit
      Step 0: Project Setup (Do This First!)
 
      1. Create ADR documenting the architectural decision:
-       - Use /hiivmind-pulse-gh adr for multi-method API routing visibility
+       - Use /gh adr for multi-method API routing visibility
        - Link to the planned milestone
        - Document rationale: user empowerment, debugging aid, learning resource
        - Note backwards compatibility (no skill changes needed)
@@ -467,7 +467,7 @@ API Routing Guide Enhancement Plan
 
  Skills already read the FULL file, so enhanced tables will be automatically consumed:
 
- - skills/hiivmind-pulse-gh-operations/SKILL.md - Reads full routing guide in Phase 3
+ - skills/gh-operations/SKILL.md - Reads full routing guide in Phase 3
  - commands/hiivmind-pulse-gh.md - References routing guide
  - All skills use See: lib/examples/operations/api-routing.md pattern
 
@@ -493,7 +493,7 @@ API Routing Guide Enhancement Plan
  Step 0: Project Setup (Do This First!)
 
  1. Create ADR documenting the architectural decision:
-   - Use /hiivmind-pulse-gh adr for multi-method API routing visibility
+   - Use /gh adr for multi-method API routing visibility
    - Link to the planned milestone
    - Document rationale: user empowerment, debugging aid, learning resource
    - Note backwards compatibility (no skill changes needed)

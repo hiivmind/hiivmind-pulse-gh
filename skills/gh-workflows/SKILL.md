@@ -1,5 +1,5 @@
 ---
-name: hiivmind-pulse-gh-workflows
+name: gh-workflows
 version: 4.0.0
 description: >
   Manage event-driven workflows for GitHub automation. List, enable, disable, run, create, and check
@@ -66,7 +66,7 @@ fi
 ```
 Workspace not initialized.
 
-Run: /hiivmind-pulse-gh init
+Run: /gh init
 ```
 
 **STOP** — Cannot manage workflows without initialized workspace.

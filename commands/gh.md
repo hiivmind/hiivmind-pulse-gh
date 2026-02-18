@@ -104,7 +104,7 @@ If the matched action is `show_main_menu` but arguments were provided (intent wa
 
 ## Step 3: Context Detection (Conditional)
 
-**Skip this step if matched action is:** `delegate_awareness`, `delegate_discover`, `show_full_help`, `show_skill_help_*`, `block_operation`, `show_main_menu`
+**Skip this step if matched action is:** `delegate_discover`, `show_full_help`, `show_skill_help_*`, `block_operation`, `show_main_menu`
 
 These actions either handle their own context checks internally or don't require workspace initialization.
 
@@ -137,7 +137,7 @@ fi
 **If not found (in current or parent):**
 1. Inform user: "This workspace hasn't been initialized for GitHub operations."
 2. Ask: "Would you like to initialize now?"
-3. If yes → Invoke skill: `hiivmind-pulse-gh:hiivmind-pulse-gh-init`
+3. If yes → Invoke skill: `hiivmind-pulse-gh:gh-init`
 4. After init completes → Return and continue
 
 ### 3b: Check Freshness
@@ -157,7 +157,7 @@ Check `.hiivmind/github/freshness.yaml`:
 **If hard stale and mutation requested:**
 1. Block: "Config is critically stale. Cannot perform mutation."
 2. Offer: "Would you like to refresh first?"
-3. If yes → Invoke skill: `hiivmind-pulse-gh:hiivmind-pulse-gh-refresh`
+3. If yes → Invoke skill: `hiivmind-pulse-gh:gh-refresh`
 4. After refresh → Continue
 
 ---
@@ -241,7 +241,7 @@ Output this table to show users what's available:
 | **Labels** | create, add/remove from issue, update color |
 | **Branch Protection** | set rules, require reviews, status checks |
 | **Secrets & Variables** | set, update, delete, list |
-| **Setup** | initialize workspace, refresh config, awareness |
+| **Setup** | initialize workspace, refresh config |
 
 Select a quick action below, or choose "Other" to describe what you need.
 ```
@@ -284,8 +284,6 @@ options:
     description: "Set up GitHub integration for this repo"
   - label: "Create an issue"
     description: "Will initialize first, then create issue"
-  - label: "Configure CLAUDE.md"
-    description: "Add GitHub plugin awareness to your config"
 # "Other" auto-added - user can type any request
 ```
 
@@ -359,40 +357,40 @@ options:
 
 ### Simple Issue Creation
 
-**User:** `/hiivmind-pulse-gh create issue for login timeout bug`
+**User:** `/gh create issue for login timeout bug`
 
 **Flow:**
 1. Arguments provided
 2. Intent flags: `has_create: T`, `has_issues: T` → Rule `issues_operation` matches → Action `delegate_operations`
 3. Context: Initialized ✓, Fresh ✓
 4. Confirm: "Create issue titled 'login timeout bug'?"
-5. Invoke skill: `hiivmind-pulse-gh:hiivmind-pulse-gh-operations`
+5. Invoke skill: `hiivmind-pulse-gh:gh-operations`
 
 ### Not Initialized
 
-**User:** `/hiivmind-pulse-gh create issue for bug`
+**User:** `/gh create issue for bug`
 
 **Flow:**
 1. Arguments provided
 2. Intent flags: `has_create: T`, `has_issues: T` → Rule `issues_operation` → Action `delegate_operations`
 3. Context: NOT initialized → Ask "Initialize workspace first?"
-4. If yes → Invoke `hiivmind-pulse-gh:hiivmind-pulse-gh-init`
+4. If yes → Invoke `hiivmind-pulse-gh:gh-init`
 5. After init → Resume with original request
 
 ### Stale Config
 
-**User:** `/hiivmind-pulse-gh add PR to project`
+**User:** `/gh add PR to project`
 
 **Flow:**
 1. Arguments provided
 2. Intent flags: `has_link: T`, `has_pull_requests: T`, `has_projects: T` → Rule `pull_requests_operation` → Action `delegate_operations`
 3. Context: Initialized ✓, Hard Stale → Block mutation, offer refresh
-4. If yes → Invoke `hiivmind-pulse-gh:hiivmind-pulse-gh-refresh`
+4. If yes → Invoke `hiivmind-pulse-gh:gh-refresh`
 5. After refresh → Continue
 
 ### Blocked Operation
 
-**User:** `/hiivmind-pulse-gh delete repository`
+**User:** `/gh delete repository`
 
 **Flow:**
 1. Arguments provided
@@ -400,19 +398,9 @@ options:
 3. Display safety block message
 4. **Do not proceed**
 
-### Capability Awareness
-
-**User:** `/hiivmind-pulse-gh configure Claude for GitHub`
-
-**Flow:**
-1. Arguments provided
-2. Intent flags: `has_awareness: T` → Rule `awareness_only` → Action `delegate_awareness`
-3. Context: SKIPPED (awareness doesn't require workspace config)
-4. Invoke skill: `hiivmind-pulse-gh:hiivmind-pulse-gh-awareness`
-
 ### Help Request
 
-**User:** `/hiivmind-pulse-gh --help`
+**User:** `/gh --help`
 
 **Flow:**
 1. Arguments provided
@@ -421,7 +409,7 @@ options:
 
 ### Unlisted Domain (Fallback)
 
-**User:** `/hiivmind-pulse-gh list codespaces`
+**User:** `/gh list codespaces`
 
 **Flow:**
 1. Arguments provided

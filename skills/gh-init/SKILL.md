@@ -1,5 +1,5 @@
 ---
-name: hiivmind-pulse-gh-init
+name: gh-init
 version: 4.0.0
 description: >
   Initialize GitHub workspace to enable context enrichment for all GitHub operations. This skill
@@ -254,7 +254,7 @@ Create or update `.claude/settings.json` to declare the hiivmind-pulse-gh market
     "hiivmind-pulse-gh": {
       "source": {
         "source": "github",
-        "repo": "hiivmind/hiivmind-pulse-gh"
+        "repo": "hiivmind/gh"
       }
     }
   },
@@ -390,7 +390,7 @@ Team members will be prompted to install it when they trust this repo.
 What would you like to do next?
   1. Run an operation (use /hiivmind-pulse-gh)
   2. Fetch extended config (views, teams, automations)
-  3. Configure workflows (use /hiivmind-pulse-gh workflows)
+  3. Configure workflows (use /gh workflows)
   4. Done for now
 ```
 
@@ -411,7 +411,7 @@ If `config.yaml` exists and is recent, workspace is already initialized.
 To re-initialize (updates existing config):
 
 ```
-/hiivmind-pulse-gh reinitialize workspace [owner]
+/gh reinitialize workspace [owner]
 ```
 
 ### Related Skills

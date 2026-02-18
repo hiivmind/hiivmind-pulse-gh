@@ -1,5 +1,5 @@
 ---
-name: hiivmind-pulse-gh-discover
+name: gh-discover
 version: 4.0.0
 description: >
   Explore available GitHub operations before executing them. This skill should be used when:
@@ -94,7 +94,7 @@ Wait for user selection:
 
 ### Domain File Mapping
 
-**See:** `skills/hiivmind-pulse-gh-discover/examples/examples.md`
+**See:** `skills/gh-discover/examples/examples.md`
 
 | User Input | Domain File |
 |------------|-------------|
@@ -220,7 +220,7 @@ You want to: Create an issue
 
 I'll hand off to the operations skill now.
 
-Invoke: hiivmind-pulse-gh:hiivmind-pulse-gh-operations
+Invoke: hiivmind-pulse-gh:gh-operations
 
 Context:
   - Domain: issues
@@ -234,7 +234,7 @@ Proceed? [Yes / Go back / Cancel]
 
 If user confirms:
 
-**Invoke:** `hiivmind-pulse-gh:hiivmind-pulse-gh-operations`
+**Invoke:** `hiivmind-pulse-gh:gh-operations`
 
 The operations skill will:
 1. Check workspace initialization
@@ -280,7 +280,6 @@ Shall I hand off to the operations skill to execute this?
 |-------|---------|
 | **discover** (this) | Explore what's available |
 | **operations** | Execute an operation |
-| **awareness** | Add plugin info to CLAUDE.md |
 | **init** | First-time workspace setup |
 | **refresh** | Sync stale config |
 
@@ -288,14 +287,14 @@ Shall I hand off to the operations skill to execute this?
 
 Via gateway:
 ```
-/hiivmind-pulse-gh what can I do
-/hiivmind-pulse-gh explore operations
-/hiivmind-pulse-gh help with GitHub
+/gh what can I do
+/gh explore operations
+/gh help with GitHub
 ```
 
 Direct:
 ```
-Skill: hiivmind-pulse-gh:hiivmind-pulse-gh-discover
+Skill: hiivmind-pulse-gh:gh-discover
 ```
 
 ---
@@ -306,4 +305,4 @@ Skill: hiivmind-pulse-gh:hiivmind-pulse-gh-discover
 |------|---------|
 | `{PLUGIN_ROOT}/lib/references/api-routing.md` | Quick reference table (Phase 1) |
 | `{PLUGIN_ROOT}/lib/references/domains/*.md` | Domain operation matrices (Phase 3) |
-| `skills/hiivmind-pulse-gh-discover/examples/examples.md` | Domain mapping table |
+| `skills/gh-discover/examples/examples.md` | Domain mapping table |

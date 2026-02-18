@@ -30,7 +30,7 @@ fi
 
 **Recovery:**
 ```
-Run: /hiivmind-pulse-gh init
+Run: /gh init
 ```
 
 ---

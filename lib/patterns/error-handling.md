@@ -72,7 +72,7 @@ fi
 
 ```bash
 if [[ ! -f ".hiivmind/github/config.yaml" ]]; then
-  echo "Config not found - run: /hiivmind-pulse-gh init"
+  echo "Config not found - run: /gh init"
   exit 1
 fi
 ```
