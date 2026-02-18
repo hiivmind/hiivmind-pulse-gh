@@ -1,0 +1,24 @@
+# hiivmind-pulse-gh - PR Lifecycle Workflow
+# Detects new/changed PRs and offers assistance
+# Copy to: .hiivmind/github/workflows/pr-lifecycle.yaml
+
+name: "pr-lifecycle"
+description: "Summarize PR diffs, suggest reviewers, and highlight risks when PRs change"
+enabled: true
+auto: false
+
+trigger:
+  type: session_poll
+  source: pull_requests
+  condition: state_changed
+  filter: {}
+
+actions:
+  - name: "Summarize open PRs"
+    type: operation
+    operation: "list open PRs with diff stats and review status"
+  - name: "Highlight review needs"
+    type: operation
+    operation: "show PRs that need review or have requested changes"
+
+cooldown_minutes: 15

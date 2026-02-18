@@ -62,7 +62,7 @@
 | Unarchive | Mutation | `unarchiveRepository` | |
 | Update topics | Mutation | `updateTopics` | |
 
-**Note:** No GraphQL mutation for delete, fork, or transfer. See `docs/operation-blocklist.md` for blocked operations.
+**Note:** No GraphQL mutation for delete, fork, or transfer. See `lib/references/operation-blocklist.md` for blocked operations.
 
 ## Post-Create Operations
 

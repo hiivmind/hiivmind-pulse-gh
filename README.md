@@ -51,7 +51,7 @@ gh auth refresh -s read:project -s project -s repo
 
 ```bash
 # Add the marketplace
-/plugin marketplace add hiivmind/hiivmind-pulse-gh
+/plugin marketplace add hiivmind/gh
 
 # Install the plugin
 /plugin install hiivmind-pulse-gh@hiivmind-pulse-gh
@@ -64,24 +64,24 @@ Run these commands in Claude Code (not in a terminal).
 The primary entry point for all GitHub operations:
 
 ```
-/hiivmind-pulse-gh [describe what you want]
+/gh [describe what you want]
 ```
 
 ### Examples
 
 ```
 # Execute operations
-/hiivmind-pulse-gh create issue for login timeout bug
-/hiivmind-pulse-gh set milestone v2.0 on issue #42
-/hiivmind-pulse-gh add PR to project
-/hiivmind-pulse-gh protect main branch with required reviews
-/hiivmind-pulse-gh trigger workflow ci.yml
+/gh create issue for login timeout bug
+/gh set milestone v2.0 on issue #42
+/gh add PR to project
+/gh protect main branch with required reviews
+/gh trigger workflow ci.yml
 
 # Discover capabilities
-/hiivmind-pulse-gh discover
-/hiivmind-pulse-gh what can I do with projects
-/hiivmind-pulse-gh explore milestones
-/hiivmind-pulse-gh help
+/gh discover
+/gh what can I do with projects
+/gh explore milestones
+/gh help
 ```
 
 ### How It Works
@@ -96,7 +96,7 @@ The primary entry point for all GitHub operations:
 Run without arguments for a guided menu:
 
 ```
-/hiivmind-pulse-gh
+/gh
 ```
 
 ### Discovery Mode
@@ -104,7 +104,7 @@ Run without arguments for a guided menu:
 Explore available operations across all 25 GitHub domains:
 
 ```
-/hiivmind-pulse-gh discover
+/gh discover
 ```
 
 **What you get:**
@@ -117,7 +117,7 @@ Explore available operations across all 25 GitHub domains:
 **Example session:**
 
 ```
-You: /hiivmind-pulse-gh discover
+You: /gh discover
 
 Claude: === GitHub Operations Quick Reference ===
 
@@ -156,32 +156,30 @@ Claude: === Projects v2 Domain ===
 
 ## Skills
 
-The plugin provides **six skills** with a clear dependency structure:
+The plugin provides **five skills** with a clear dependency structure:
 
 ### Skill Overview
 
 | Skill | Purpose | When to Use |
 |-------|---------|-------------|
-| `hiivmind-pulse-gh-init` | Validate environment, discover org structure, create config.yaml | First-time setup (once per workspace) |
-| `hiivmind-pulse-gh-refresh` | Sync cached config with GitHub | Periodically, or when "ID not found" errors occur |
-| `hiivmind-pulse-gh-operations` | Execute GitHub operations (all domains) | Via gateway command |
-| `hiivmind-pulse-gh-discover` | Explore available operations across all 25 domains | Find the right operation, learn what's possible |
+| `gh-init` | Validate environment, discover org structure, create config.yaml | First-time setup (once per workspace) |
+| `gh-refresh` | Sync cached config with GitHub | Periodically, or when "ID not found" errors occur |
+| `gh-operations` | Execute GitHub operations (all domains) | Via gateway command |
+| `gh-discover` | Explore available operations across all 25 domains | Find the right operation, learn what's possible |
 | `hiivmind-corpus-github-docs-navigate` | Look up GitHub API syntax (GraphQL/REST) | When uncertain about exact API syntax (external corpus) |
-| `hiivmind-pulse-gh-awareness` | Inject skill awareness into CLAUDE.md | Help Claude suggest this plugin proactively |
 
 ### Skill Hierarchy
 
 ```
-hiivmind-pulse-gh-init            ← Run FIRST (creates config.yaml)
+gh-init            ← Run FIRST (creates config.yaml)
        │
        ▼
-hiivmind-pulse-gh-operations      ← Requires init completed
-hiivmind-pulse-gh-refresh         ← Requires init completed
+gh-operations      ← Requires init completed
+gh-refresh         ← Requires init completed
        │
        ├── hiivmind-corpus-github-docs-navigate ← External corpus (syntax lookup)
        │
-hiivmind-pulse-gh-discover        ← Independent (explore capabilities)
-hiivmind-pulse-gh-awareness       ← Independent (edits CLAUDE.md)
+gh-discover        ← Independent (explore capabilities)
 ```
 
 ## Supported Domains
@@ -200,21 +198,21 @@ hiivmind-pulse-gh-awareness       ← Independent (edits CLAUDE.md)
 | **Variables** | set, update, delete, list | REST |
 | **Releases** | create, update, delete, upload | REST |
 
-> **Note:** This table shows commonly used domains for quick reference. The plugin supports **any GitHub domain** via corpus lookup — if you have permissions, it can help. Some dangerous operations (delete repository, transfer ownership) are blocked for safety. See `docs/operation-blocklist.md`.
+> **Note:** This table shows commonly used domains for quick reference. The plugin supports **any GitHub domain** via corpus lookup — if you have permissions, it can help. Some dangerous operations (delete repository, transfer ownership) are blocked for safety. See `lib/references/operation-blocklist.md`.
 
 ## Quick Start
 
 ### First-Time Setup
 
 ```
-You: /hiivmind-pulse-gh create issue for new feature
+You: /gh create issue for new feature
 
 Claude: This workspace hasn't been initialized for GitHub operations.
         Would you like to initialize now?
 
 You: Yes
 
-Claude: [Runs hiivmind-pulse-gh-init]
+Claude: [Runs gh-init]
 
         GitHub workspace initialized!
         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -233,7 +231,7 @@ Claude: [Runs hiivmind-pulse-gh-init]
 ### Daily Usage
 
 ```
-You: /hiivmind-pulse-gh create issue for authentication timeout
+You: /gh create issue for authentication timeout
 
 Claude: Create issue in acme-corp/api?
         Title: "Authentication timeout"
@@ -298,7 +296,7 @@ For organizations with multiple repos, use symlinks to share config:
 # Create centralized config
 mkdir -p ~/github-workspaces/acme-corp
 cd ~/github-workspaces/acme-corp
-# Run /hiivmind-pulse-gh init here
+# Run /gh init here
 
 # Symlink from each repository
 cd ~/projects/api
@@ -319,11 +317,10 @@ hiivmind-pulse-gh/
 │   └── hiivmind-pulse-gh.md              # Gateway command
 │
 ├── skills/
-│   ├── hiivmind-pulse-gh-init/           # Workspace initialization
-│   ├── hiivmind-pulse-gh-refresh/        # Config sync
-│   ├── hiivmind-pulse-gh-operations/     # Execute operations
-│   ├── hiivmind-pulse-gh-discover/       # Explore capabilities
-│   └── hiivmind-pulse-gh-awareness/      # CLAUDE.md injection
+│   ├── gh-init/           # Workspace initialization
+│   ├── gh-refresh/        # Config sync
+│   ├── gh-operations/     # Execute operations
+│   └── gh-discover/       # Explore capabilities
 │
 ├── lib/
 │   ├── patterns/                         # HOW to do things (executable guides)
@@ -343,8 +340,7 @@ hiivmind-pulse-gh/
 │
 ├── docs/
 │   ├── decisions/                        # Historical architecture decisions
-│   ├── config-schema.md                  # Config.yaml schema
-│   └── operation-blocklist.md            # Blocked dangerous operations
+│   └── (empty - files moved to lib/references/)
 │
 ├── templates/
 │   ├── config.yaml.template
@@ -384,8 +380,8 @@ api-routing.md  corpus skill     or gh api REST
 | Problem | Solution |
 |---------|----------|
 | "No workspace configuration found" | Run `/hiivmind-pulse-gh` and accept init prompt |
-| "Field ID not found" | Run `/hiivmind-pulse-gh refresh` to sync with GitHub |
-| "Config is stale" | Run `/hiivmind-pulse-gh refresh` |
+| "Field ID not found" | Run `/gh refresh` to sync with GitHub |
+| "Config is stale" | Run `/gh refresh` |
 | `gh: command not found` | Install GitHub CLI: [cli.github.com](https://cli.github.com/) |
 | `yq: command not found` | Install yq v4+: [github.com/mikefarah/yq](https://github.com/mikefarah/yq) |
 | Permission errors | `gh auth refresh -s read:project -s project -s repo` |

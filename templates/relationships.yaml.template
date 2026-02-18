@@ -2,7 +2,7 @@
 # This file documents relationships between projects and repositories,
 # as well as repository dependencies.
 #
-# Generated/Updated by hiivmind-pulse-gh-refresh on {{synced_at}}
+# Generated/Updated by gh-refresh on {{synced_at}}
 
 # Workspace identification
 workspace:

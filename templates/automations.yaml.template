@@ -6,7 +6,7 @@
 # exposed via API. This file is primarily for documentation and awareness.
 # You can manually update this file to reflect your project's automation rules.
 #
-# Generated/Updated by hiivmind-pulse-gh-refresh on {{synced_at}}
+# Generated/Updated by gh-refresh on {{synced_at}}
 
 # Project identification
 project:

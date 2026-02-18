@@ -1,0 +1,19 @@
+# hiivmind-pulse-gh - Auto-Refresh Workflow
+# Triggers config refresh when sections become stale
+# Copy to: .hiivmind/github/workflows/auto-refresh.yaml
+
+name: "auto-refresh"
+description: "Automatically refresh stale config sections on session start"
+enabled: true
+auto: true # Set to true to refresh without asking
+
+trigger:
+  type: freshness
+  condition: threshold_exceeded
+
+actions:
+  - name: "Refresh stale sections"
+    type: skill_invoke
+    skill: "hiivmind-pulse-gh:gh-refresh"
+
+cooldown_minutes: 60

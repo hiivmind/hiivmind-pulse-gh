@@ -60,12 +60,12 @@ gh api graphql -f query='{ viewer { login id } }' --jq '.data.viewer'
 
 | GraphQL Type | gh Flag | Example |
 |--------------|---------|---------|
-| `String!` | `-F` | `-F login="hiivmind"` |
+| `String!` | `-f` | `-f login="hiivmind"` |
 | `Int!` | `-F` | `-F number=2` |
 | `Boolean` | `-F` | `-F includeArchived=true` |
-| `ID!` | `-F` | `-F projectId="PVT_xxx"` |
+| `ID!` | `-f` | `-f projectId="PVT_xxx"` |
 
-**Important:** Use `-F` for ALL variable types for maximum reliability. The `-f` flag can cause escaping issues in some contexts.
+**Rule:** Use `-f` for strings and IDs (values passed as-is), `-F` for numbers and booleans (values parsed by gh).
 
 ---
 

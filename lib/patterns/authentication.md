@@ -25,6 +25,21 @@ Verify GitHub authentication status and required OAuth scopes before performing 
 
 **Minimum required scopes:** `repo`, `read:org`, `project`, `read:project`
 
+## Scope Mapping: Classic OAuth ↔ Fine-grained PAT
+
+This plugin documents scopes using classic OAuth names. If using fine-grained personal access tokens, map as follows:
+
+| Classic OAuth Scope | Fine-grained Permission | Access Level |
+|--------------------|-----------------------|-------------|
+| `repo` | **Issues**, **Pull requests**, **Contents**, **Actions**, **Administration** | Read and write |
+| `read:org` | **Organization: Members** | Read-only |
+| `project` | **Projects** | Read and write |
+| `read:project` | **Projects** | Read-only |
+
+**See also:** `lib/references/token-permissions.md` for per-domain permission requirements.
+
+---
+
 ## Algorithm
 
 ### Step 1: Check Authentication Status

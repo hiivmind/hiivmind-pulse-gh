@@ -82,7 +82,7 @@ Use this guide to select the right method for your operation:
 |--------|---------|
 | ✓ | Method is supported and available |
 | ✗ | Method not available for this operation |
-| ⊗ | Method exists but blocked for safety (see `docs/operation-blocklist.md`) |
+| ⊗ | Method exists but blocked for safety (see `lib/references/operation-blocklist.md`) |
 | Read only | Can query but not mutate |
 
 ---

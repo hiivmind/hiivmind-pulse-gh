@@ -17,3 +17,4 @@ Thumbs.db
 # Corpus skills - cloned sources and caches
 .claude-plugin/skills/*/.source/
 .claude-plugin/skills/*/.cache/
+.hiivmind/github/log/

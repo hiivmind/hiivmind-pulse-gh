@@ -1,0 +1,24 @@
+# hiivmind-pulse-gh - Stale Check Workflow
+# Flags stale PRs and issues on session start
+# Copy to: .hiivmind/github/workflows/stale-check.yaml
+
+name: "stale-check"
+description: "Flag stale PRs and issues that need attention, suggest actions"
+enabled: true
+auto: false
+
+trigger:
+  type: session_poll
+  source: pull_requests
+  condition: state_changed
+  filter: {}
+
+actions:
+  - name: "Check for stale PRs"
+    type: operation
+    operation: "list open PRs not updated in the last 7 days"
+  - name: "Check for stale issues"
+    type: operation
+    operation: "list open issues not updated in the last 14 days"
+
+cooldown_minutes: 60

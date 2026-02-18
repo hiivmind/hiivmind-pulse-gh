@@ -1,0 +1,24 @@
+# hiivmind-pulse-gh - CI Monitor Workflow
+# Detects failed CI runs and offers analysis
+# Copy to: .hiivmind/github/workflows/ci-monitor.yaml
+
+name: "ci-monitor"
+description: "Detect failed CI runs, analyze logs, and suggest fixes"
+enabled: true
+auto: false
+
+trigger:
+  type: session_poll
+  source: actions
+  condition: new_failure
+  filter: {}
+
+actions:
+  - name: "Show failed runs"
+    type: operation
+    operation: "list recent failed workflow runs with their conclusions"
+  - name: "Analyze failure"
+    type: operation
+    operation: "show logs for the latest failed workflow run"
+
+cooldown_minutes: 10

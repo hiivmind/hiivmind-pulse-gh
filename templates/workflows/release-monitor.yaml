@@ -1,0 +1,21 @@
+# hiivmind-pulse-gh - Release Monitor Workflow
+# Detects new releases and shows details
+# Copy to: .hiivmind/github/workflows/release-monitor.yaml
+
+name: "release-monitor"
+description: "Notify when new releases are published"
+enabled: true
+auto: false
+
+trigger:
+  type: session_poll
+  source: releases
+  condition: state_changed
+  filter: {}
+
+actions:
+  - name: "Show latest release"
+    type: operation
+    operation: "show details of the latest release including tag, author, and notes"
+
+cooldown_minutes: 60

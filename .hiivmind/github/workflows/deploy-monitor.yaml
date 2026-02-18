@@ -1,0 +1,21 @@
+# hiivmind-pulse-gh - Deploy Monitor Workflow
+# Detects new deployments and shows status
+# Copy to: .hiivmind/github/workflows/deploy-monitor.yaml
+
+name: "deploy-monitor"
+description: "Track deployment status changes"
+enabled: true
+auto: false
+
+trigger:
+  type: session_poll
+  source: deployments
+  condition: state_changed
+  filter: {}
+
+actions:
+  - name: "Show latest deployment"
+    type: operation
+    operation: "show the latest deployment status including environment and creator"
+
+cooldown_minutes: 10
