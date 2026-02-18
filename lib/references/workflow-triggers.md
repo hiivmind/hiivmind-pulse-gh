@@ -22,7 +22,10 @@ Trigger type lookup table for workflow definitions.
 | `pull_requests` | Open PR count, latest updated PR | `GET /repos/{owner}/{repo}/pulls?state=open&per_page=1&sort=updated` |
 | `issues` | Open issue count, latest updated issue | `GET /repos/{owner}/{repo}/issues?state=open&per_page=1&sort=updated` |
 | `actions` | Latest workflow run ID, status, conclusion | `GET /repos/{owner}/{repo}/actions/runs?per_page=1` |
-| `projects` | Project item count | Cached from config (no API call) |
+| `releases` | Latest release ID, tag name | `GET /repos/{owner}/{repo}/releases?per_page=1` |
+| `dependabot` | Open alert count | `GET /repos/{owner}/{repo}/dependabot/alerts?state=open&per_page=1&sort=updated` |
+| `deployments` | Latest deployment ID, environment | `GET /repos/{owner}/{repo}/deployments?per_page=1` |
+| `projects` | Project item count | GraphQL `ProjectV2.items.totalCount` (uses default project from config) |
 
 ### Conditions
 

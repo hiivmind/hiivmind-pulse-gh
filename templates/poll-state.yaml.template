@@ -19,6 +19,14 @@ state:
     latest_run_id: null
     latest_run_status: null
     latest_run_conclusion: null
+  releases:
+    latest_id: null
+    latest_tag: null
+  dependabot:
+    open_count: 0
+  deployments:
+    latest_id: null
+    latest_environment: null
   projects:
     item_count: 0
 

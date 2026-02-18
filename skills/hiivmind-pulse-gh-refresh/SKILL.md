@@ -1,6 +1,6 @@
 ---
 name: hiivmind-pulse-gh-refresh
-version: 0.1.0
+version: 4.0.0
 description: >
   Sync cached workspace config with current GitHub state. This skill should be used when: config is
   stale, "ID not found" errors occur, project fields changed, new projects created, options renamed,

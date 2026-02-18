@@ -1,0 +1,22 @@
+# hiivmind-pulse-gh - Project Sync Workflow
+# Detects changes in project board item count
+# Copy to: .hiivmind/github/workflows/project-sync.yaml
+# Note: Requires default project set in config.yaml — skipped if unset
+
+name: "project-sync"
+description: "Detect project board changes and summarize updates"
+enabled: true
+auto: false
+
+trigger:
+  type: session_poll
+  source: projects
+  condition: state_changed
+  filter: {}
+
+actions:
+  - name: "Summarize project changes"
+    type: operation
+    operation: "summarize the default project board showing item counts by status"
+
+cooldown_minutes: 30

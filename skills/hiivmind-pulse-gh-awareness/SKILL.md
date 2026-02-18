@@ -1,6 +1,6 @@
 ---
 name: hiivmind-pulse-gh-awareness
-version: 0.1.0
+version: 4.0.0
 description: >
   Configure CLAUDE.md with hiivmind-pulse-gh skill awareness using What/When/How structure. This skill
   should be used when: adding GitHub capabilities to CLAUDE.md, teaching Claude about this plugin,

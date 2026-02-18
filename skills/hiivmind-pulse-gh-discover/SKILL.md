@@ -1,6 +1,6 @@
 ---
 name: hiivmind-pulse-gh-discover
-version: 0.1.0
+version: 4.0.0
 description: >
   Explore available GitHub operations before executing them. This skill should be used when:
   users want to know what operations are available, need help choosing an operation, or want

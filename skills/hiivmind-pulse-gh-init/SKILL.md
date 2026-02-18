@@ -338,6 +338,10 @@ Install workflow templates? These control what the heartbeat monitors.
   3. issue-triage — Flag untriaged issues
   4. ci-monitor — Check CI/CD run status
   5. stale-check — Flag stale PRs/issues
+  6. release-monitor — Notify on new releases
+  7. dependabot-alerts — Flag open security vulnerabilities
+  8. deploy-monitor — Track deployment status changes
+  9. project-sync — Detect project board changes
 
 Which templates to install? [1 / 1,2,3 / all / none]
 ```

@@ -7,7 +7,8 @@ description: >
   session starts with pending workflows, heartbeat detected changes, stale config needs attention,
   GitHub state changed since last session. Trigger phrases: "heartbeat", "wake up", "session start",
   "what changed", "pending workflows", "check for changes", "session summary", "what happened",
-  "github changes since last session", "morning briefing", "status update".
+  "github changes since last session", "morning briefing", "status update",
+  "run heartbeat", "check heartbeat", "poll github".
 ---
 
 # Heartbeat Wake-Up
@@ -26,10 +27,11 @@ read from the plugin root, not relative to this skill folder.
 
 | Does | Does NOT |
 |------|----------|
-| Process heartbeat hook JSON output | Poll GitHub directly |
-| Run auto workflows immediately | Manage workflow definitions |
-| Present non-auto workflows for approval | Modify workflow YAML files |
-| Update poll-state after execution | Initialize workspaces |
+| Run heartbeat poll when invoked manually | Manage workflow definitions |
+| Process heartbeat hook JSON output | Poll GitHub directly (delegates to hook) |
+| Run auto workflows immediately | Modify workflow YAML files |
+| Present non-auto workflows for approval | Initialize workspaces |
+| Update poll-state after execution | |
 
 ## Expected Context
 
@@ -47,13 +49,22 @@ This skill receives JSON output from the SessionStart heartbeat hook:
 
 ## Execution Flow
 
-### 1. Read Hook Output
+### Phase 0: Run Heartbeat
 
-Parse the heartbeat JSON summary. If invoked manually (no hook output), run the heartbeat check:
+Ensure heartbeat JSON is available regardless of how this skill was invoked.
+
+1. **Check** if heartbeat JSON was passed as context (from SessionStart hook)
+2. **If no hook output is present** (manual invocation): run the heartbeat script directly:
 
 ```bash
 HEARTBEAT_OUTPUT=$(bash "${CLAUDE_PLUGIN_ROOT}/hooks/heartbeat.sh" 2>/dev/null)
 ```
+
+3. **If hook output is already available:** use it directly as `HEARTBEAT_OUTPUT`
+
+### 1. Parse Heartbeat Output
+
+Parse the heartbeat JSON from Phase 0.
 
 **If `first_run: true`:** This is the first session with workflows. Report initialization only.
 

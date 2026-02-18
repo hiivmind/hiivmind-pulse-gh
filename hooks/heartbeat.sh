@@ -21,7 +21,8 @@ CONFIG_DIR=$(dirname "$CONFIG_PATH")
 WORKFLOWS_DIR="${CONFIG_DIR}/workflows"
 POLL_STATE="${CONFIG_DIR}/poll-state.yaml"
 FRESHNESS="${CONFIG_DIR}/freshness.yaml"
-LOG_FILE="${CONFIG_DIR}/heartbeat.log"
+LOG_DIR="${CONFIG_DIR}/log"
+LOG_FILE="${LOG_DIR}/heartbeat.log"
 
 # Exit early if no workflows directory
 if [[ ! -d "$WORKFLOWS_DIR" ]]; then
@@ -119,6 +120,53 @@ for WF_FILE in "$WORKFLOWS_DIR"/*.yaml; do
                         yq -i ".state.actions.latest_run_conclusion = \"$CONCLUSION\"" "$POLL_STATE"
                     fi
                     ;;
+                releases)
+                    CURR=$(gh api "/repos/${OWNER_REPO}/releases?per_page=1" 2>/dev/null || echo "[]")
+                    CURR_ID=$(echo "$CURR" | jq -r '.[0].id // empty')
+                    PREV_ID=$(yq -r '.state.releases.latest_id // "null"' "$POLL_STATE")
+                    if [[ -n "$CURR_ID" && "$CURR_ID" != "$PREV_ID" ]]; then
+                        SHOULD_TRIGGER=true
+                        CURR_TAG=$(echo "$CURR" | jq -r '.[0].tag_name // "null"')
+                        yq -i ".state.releases.latest_id = \"$CURR_ID\"" "$POLL_STATE"
+                        yq -i ".state.releases.latest_tag = \"$CURR_TAG\"" "$POLL_STATE"
+                    fi
+                    ;;
+                dependabot)
+                    CURR=$(gh api "/repos/${OWNER_REPO}/dependabot/alerts?state=open&per_page=1&sort=updated" 2>/dev/null || echo "SKIP")
+                    if [[ "$CURR" != "SKIP" ]]; then
+                        CURR_COUNT=$(echo "$CURR" | jq 'length' 2>/dev/null || echo "0")
+                        PREV_COUNT=$(yq -r '.state.dependabot.open_count // 0' "$POLL_STATE")
+                        if [[ "$CURR_COUNT" != "$PREV_COUNT" ]]; then
+                            SHOULD_TRIGGER=true
+                            yq -i ".state.dependabot.open_count = $CURR_COUNT" "$POLL_STATE"
+                        fi
+                    fi
+                    ;;
+                deployments)
+                    CURR=$(gh api "/repos/${OWNER_REPO}/deployments?per_page=1" 2>/dev/null || echo "[]")
+                    CURR_ID=$(echo "$CURR" | jq -r '.[0].id // empty')
+                    PREV_ID=$(yq -r '.state.deployments.latest_id // "null"' "$POLL_STATE")
+                    if [[ -n "$CURR_ID" && "$CURR_ID" != "$PREV_ID" ]]; then
+                        SHOULD_TRIGGER=true
+                        CURR_ENV=$(echo "$CURR" | jq -r '.[0].environment // "null"')
+                        yq -i ".state.deployments.latest_id = \"$CURR_ID\"" "$POLL_STATE"
+                        yq -i ".state.deployments.latest_environment = \"$CURR_ENV\"" "$POLL_STATE"
+                    fi
+                    ;;
+                projects)
+                    DEFAULT_PROJECT=$(yq -r '.projects.default // ""' "$CONFIG_PATH")
+                    if [[ -n "$DEFAULT_PROJECT" && "$DEFAULT_PROJECT" != "null" ]]; then
+                        PROJECT_ID=$(yq -r ".projects.catalog[] | select(.number == $DEFAULT_PROJECT) | .id // \"\"" "$CONFIG_PATH" 2>/dev/null || echo "")
+                        if [[ -n "$PROJECT_ID" ]]; then
+                            CURR_COUNT=$(gh api graphql -f query="query { node(id: \"$PROJECT_ID\") { ... on ProjectV2 { items { totalCount } } } }" 2>/dev/null | jq -r '.data.node.items.totalCount // empty' 2>/dev/null || echo "")
+                            PREV_COUNT=$(yq -r '.state.projects.item_count // 0' "$POLL_STATE")
+                            if [[ -n "$CURR_COUNT" && "$CURR_COUNT" != "$PREV_COUNT" ]]; then
+                                SHOULD_TRIGGER=true
+                                yq -i ".state.projects.item_count = $CURR_COUNT" "$POLL_STATE"
+                            fi
+                        fi
+                    fi
+                    ;;
             esac
             ;;
         freshness)
@@ -152,6 +200,7 @@ else
 fi
 
 # Log the run
+mkdir -p "$LOG_DIR"
 LOG_ENTRY="[$(date -u +%Y-%m-%dT%H:%M:%SZ)] {\"stale_sections\": ${STALE_SECTIONS}, \"triggered_workflows\": ${TRIGGERED_JSON}, \"auto_workflows\": ${AUTO_JSON}}"
 echo "$LOG_ENTRY" >> "$LOG_FILE"
 

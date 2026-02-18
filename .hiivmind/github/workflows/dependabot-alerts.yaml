@@ -1,0 +1,25 @@
+# hiivmind-pulse-gh - Dependabot Alerts Workflow
+# Detects changes in open dependabot alerts
+# Copy to: .hiivmind/github/workflows/dependabot-alerts.yaml
+# Note: Requires security_events scope — skipped gracefully if 403
+
+name: "dependabot-alerts"
+description: "Flag open security vulnerabilities from Dependabot"
+enabled: true
+auto: false
+
+trigger:
+  type: session_poll
+  source: dependabot
+  condition: state_changed
+  filter: {}
+
+actions:
+  - name: "List open alerts"
+    type: operation
+    operation: "list open dependabot alerts sorted by severity"
+  - name: "Suggest priority"
+    type: operation
+    operation: "summarize critical and high severity dependabot alerts with suggested remediation priority"
+
+cooldown_minutes: 60
