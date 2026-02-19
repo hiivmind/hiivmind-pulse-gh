@@ -58,8 +58,8 @@ actions:
    └── auto: false → present to user, ask permission
 4. EXECUTE actions sequentially
    ├── For each action:
-   │   ├── operation → Skill(gh-operations, args=action.operation)
-   │   └── skill_invoke → Skill(action.skill)
+   │   ├── operation → invoke skill: gh-operations, args=action.operation
+   │   └── skill_invoke → invoke skill: action.skill
    └── Record per-action result
 5. UPDATE poll-state.yaml with execution result
 6. REPORT summary
