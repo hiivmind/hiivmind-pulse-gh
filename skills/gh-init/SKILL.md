@@ -10,6 +10,9 @@ description: >
   "prepare github workspace", "github init", "enable project linking", "setup issue enrichment".
   Verifies gh CLI, jq, yq tools and authentication. Discovers projects and caches field IDs so
   issues/PRs can be automatically linked to projects. Run once per repository.
+trigger: "initialize workspace|setup GitHub|first time setup|init pulse-gh|configure workspace|cache project IDs|workspace not initialized|github init|bootstrap github"
+tools: [shell, filesystem]
+author: hiivmind
 ---
 
 # GitHub Workspace Initialization

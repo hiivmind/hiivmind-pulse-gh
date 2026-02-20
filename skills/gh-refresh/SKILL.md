@@ -9,6 +9,9 @@ description: >
   "resync GitHub", "fix stale config", "revalidate github IDs", "config refresh", "github settings
   changed", "reload github config", "update github cache", "sync github state". Supports selective
   refresh of sections: workspace, projects, views, repo_settings, automations, relationships, teams.
+trigger: "refresh config|sync workspace|update cache|ID not found|stale config|refresh projects|config out of date|resync GitHub"
+tools: [shell, filesystem]
+author: hiivmind
 ---
 
 # GitHub Workspace Refresh

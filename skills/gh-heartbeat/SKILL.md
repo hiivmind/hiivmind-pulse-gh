@@ -9,6 +9,9 @@ description: >
   "what changed", "pending workflows", "check for changes", "session summary", "what happened",
   "github changes since last session", "morning briefing", "status update",
   "run heartbeat", "check heartbeat", "poll github".
+trigger: "heartbeat|wake up|session start|what changed|pending workflows|check for changes|session summary|morning briefing"
+tools: [shell, filesystem]
+author: hiivmind
 ---
 
 # Heartbeat Wake-Up
@@ -138,17 +141,13 @@ For workflows in `triggered_workflows` but NOT in `auto_workflows`:
 The following workflows were triggered but need your approval:
 ```
 
-Present via AskUserQuestion:
+Ask the user which workflows to run:
 
-```yaml
-question: "Which workflows would you like to run?"
-header: "Workflows"
-multiSelect: true
-options:
-  - label: "pr-lifecycle"
-    description: "Summarize PR diffs, suggest reviewers (PR state changed)"
-  - label: "Skip all"
-    description: "Don't run any workflows this session"
+```
+Which workflows would you like to run?
+
+  1. pr-lifecycle — Summarize PR diffs, suggest reviewers (PR state changed)
+  2. Skip all — Don't run any workflows this session
 ```
 
 For each selected workflow, execute using the workflow execution pattern.

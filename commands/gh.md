@@ -1,7 +1,8 @@
 ---
 description: Unified entry point for GitHub operations - describe what you need in natural language
 argument-hint: Describe your goal (e.g., "create issue for login bug", "set milestone v2.0 on #42", "add PR to project")
-allowed-tools: ["Read", "Write", "Bash", "Glob", "Grep", "AskUserQuestion", "Skill", "Task"]
+trigger: "gh|github|create issue|close issue|merge PR|set milestone|add label|trigger workflow"
+tools: [shell, filesystem]
 ---
 
 # GitHub Operations Gateway
@@ -96,7 +97,7 @@ Store in `computed.target` for passing to skills.
 
 If the matched action is `show_main_menu` but arguments were provided (intent was unclear):
 
-1. Use AskUserQuestion to disambiguate
+1. Prompt the user to choose between the top candidates
 2. Present the top 2-3 candidate rules based on partial flag matches
 3. User selection determines the action
 
@@ -191,7 +192,7 @@ Look up `computed.matched_action` in the `actions` section of the intent mapping
 |-------------|----------|
 | `invoke_skill` | Invoke the named skill via Skill tool, passing `$ARGUMENTS` |
 | `display` | Display the content block to the user |
-| `user_prompt` | Present options via AskUserQuestion, then route selection |
+| `user_prompt` | Present options to the user for selection, then route |
 | `block_operation` | Display safety block message, do not proceed |
 
 ### Invoke Skill Actions
@@ -199,10 +200,8 @@ Look up `computed.matched_action` in the `actions` section of the intent mapping
 For actions where `type: invoke_skill`:
 
 ```
-Skill(
-  skill: action.skill,
+Invoke skill: action.skill
   args: "$ARGUMENTS"
-)
 ```
 
 **Pass context** to operations skill:
@@ -215,7 +214,7 @@ For actions where `type: display`, output the `content` block directly to the us
 
 ### User Prompt Actions
 
-For actions where `type: user_prompt`, present the prompt's options via AskUserQuestion. Map the user's selection back through intent detection (treat selection as new `$ARGUMENTS`).
+For actions where `type: user_prompt`, present the prompt's options to the user for selection. Map the user's selection back through intent detection (treat selection as new `$ARGUMENTS`).
 
 ---
 
@@ -348,7 +347,7 @@ options:
 | Config not found | Not initialized | Offer to run init |
 | Config stale | Threshold exceeded | Offer to refresh |
 | Permission denied | Insufficient access | Check `gh auth status` |
-| Ambiguous intent | Multiple flag matches | Use AskUserQuestion to disambiguate |
+| Ambiguous intent | Multiple flag matches | Ask the user to disambiguate |
 | Blocked operation | Safety rule matched | Display block message |
 
 ---

@@ -16,6 +16,9 @@ description: >
   "approve PR", "comment on issue", "link issue to project", "simple github operation", "quick issue",
   "fast PR". Domains: issues, PRs, milestones, labels, projects, protection, rulesets, actions,
   secrets, variables, releases, repositories, collaborators, teams, checks, deployments, search.
+trigger: "create issue|close issue|merge PR|set milestone|add label|update project status|protect branch|trigger workflow|create release|set secret|list PRs"
+tools: [shell, filesystem]
+author: hiivmind
 ---
 
 # GitHub Operations Execution
