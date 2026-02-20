@@ -1,5 +1,5 @@
 {
-  "name": "hiivmind-pulse-gh",
+  "name": "gh",
   "description": "GitHub workspace initialization and API documentation corpus. Run init once, then use gh CLI directly with routing guide and corpus for GraphQL/REST operations.",
   "version": "4.0.0",
   "author": {

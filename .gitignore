@@ -18,3 +18,5 @@ Thumbs.db
 .claude-plugin/skills/*/.source/
 .claude-plugin/skills/*/.cache/
 .hiivmind/github/log/
+
+.claude/**
