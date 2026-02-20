@@ -1,5 +1,5 @@
 {
-  "name": "hiivmind-pulse-gh-mp",
+  "name": "hiivmind-pulse-gh",
   "owner": {
     "name": "Discrete Data Systems"
   },
@@ -10,7 +10,7 @@
   },
   "plugins": [
     {
-      "name": "hiivmind-pulse-gh",
+      "name": "gh",
       "source": "./",
       "description": "GitHub workspace initialization and embedded API documentation corpus. Initialize once to cache project/repo IDs, then use gh CLI directly with routing guide for API decisions and corpus for exact syntax. Covers Projects v2, milestones, issues, PRs, branch protection, rulesets, actions, secrets, variables, and releases.",
       "version": "4.0.0",
