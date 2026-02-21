@@ -42,11 +42,11 @@ read from the plugin root, not relative to this skill folder.
 ## Phase Overview
 
 ```
-1. CONTEXT    → 2. PREREQS   → 3. INPUT    → 4. DISCOVER → 5. CACHE    → 5.5 HEARTBEAT → 6. VERIFY
-   (detect)       (tools)        (confirm)     (projects)    (write)       (workflows)     (done)
-      │              │               │              │            │              │              │
-   STOP if       STOP if         STOP for       STOP for       -          STOP for       STOP: offer
-   ambiguous     missing         user OK        selection              template select  refresh/ops
+1. CONTEXT    → 2. PREREQS   → 3. INPUT    → 4. DISCOVER → 5. CACHE    → 5.5 HEARTBEAT → 5.7 HEALTHCHECK → 6. VERIFY
+   (detect)       (tools)        (confirm)     (projects)    (write)       (workflows)      (optional)       (done)
+      │              │               │              │            │              │                │               │
+   STOP if       STOP if         STOP for       STOP for       -          STOP for        STOP for         STOP: offer
+   ambiguous     missing         user OK        selection              template select   user choice     refresh/ops
 ```
 
 ---
@@ -353,6 +353,38 @@ Which templates to install? [1 / 1,2,3 / all / none]
 
 1. Copy selected templates from `{PLUGIN_ROOT}/templates/workflows/` to `.hiivmind/github/workflows/`
 2. Note: `poll-state.yaml` is self-bootstrapped by heartbeat on first run — no action needed
+
+---
+
+## Phase 5.7: HEALTHCHECK (Optional)
+
+**Goal:** Offer a governance healthcheck for newly initialized workspaces. Non-blocking.
+
+### What to Do
+
+After heartbeat setup, offer to run the healthcheck:
+
+```
+Would you like to run a governance healthcheck?
+
+This assesses repository maturity across:
+  - Security (branch protection, security policy, dependabot, secrets scanning)
+  - Governance (project linkage, triage labels, CODEOWNERS)
+  - Automation (CI/CD, releases)
+  - Documentation (README, LICENSE)
+
+Run healthcheck now? [Y/n]
+```
+
+### If Yes
+
+Invoke skill: `hiivmind-pulse-gh:gh-healthcheck`
+
+After healthcheck completes, return to Phase 6 (VERIFY).
+
+### If No
+
+Skip — the user can run `/gh healthcheck` at any time.
 
 ---
 

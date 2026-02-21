@@ -116,6 +116,7 @@ Executable guides with step-by-step instructions:
 | `lib/patterns/tool-detection.md` | Check gh/jq/yq availability |
 | `lib/patterns/workspace-detection.md` | Git remote → owner/repo |
 | `lib/patterns/corpus-lookup.md` | Look up API syntax when uncertain |
+| `lib/patterns/healthcheck-evaluation.md` | Healthcheck evaluation logic per check |
 
 ### References (WHAT exists)
 
@@ -126,6 +127,7 @@ Static lookup data for routing and domain info:
 | `lib/references/api-routing.md` | Quick reference + method selection guide |
 | `lib/references/domains/*.md` | Per-domain detailed syntax (25 files) |
 | `lib/references/token-permissions.md` | Token permission requirements |
+| `lib/references/healthcheck-checks.md` | Healthcheck check catalog (11 checks) |
 
 ### Using Patterns
 
@@ -173,6 +175,7 @@ Use natural language to describe any GitHub operation:
 | `gh-init` | First-time workspace setup | 6 phases (~150 lines) |
 | `gh-refresh` | Sync config with GitHub | 6 phases (~200 lines) |
 | `gh-operations` | Execute GitHub operations | 5 phases (~270 lines) |
+| `gh-healthcheck` | Repository governance audit | 5 phases (~270 lines) |
 
 ### Skill Architecture
 
@@ -281,7 +284,8 @@ hiivmind-pulse-gh/
 ├── skills/
 │   ├── gh-init/           # Workspace initialization
 │   ├── gh-refresh/        # Config sync
-│   └── gh-operations/     # Execute operations
+│   ├── gh-operations/     # Execute operations
+│   └── gh-healthcheck/    # Repository governance audit
 ├── lib/
 │   ├── patterns/                         # HOW to do things (executable guides)
 │   │   ├── config-parsing.md

@@ -1,0 +1,19 @@
+# hiivmind-pulse-gh - Repository Healthcheck Workflow
+# On-demand governance audit for repository maturity
+# Copy to: .hiivmind/github/workflows/repo-healthcheck.yaml
+
+name: "repo-healthcheck"
+description: "Run governance healthcheck to assess repository maturity"
+enabled: true
+auto: false  # Must be explicitly requested — never runs automatically
+
+trigger:
+  type: on_demand
+  condition: user_requested
+
+actions:
+  - name: "Run healthcheck"
+    type: skill_invoke
+    skill: "hiivmind-pulse-gh:gh-healthcheck"
+
+cooldown_minutes: 10080  # 7 days

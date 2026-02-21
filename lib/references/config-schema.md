@@ -808,6 +808,102 @@ cache:
 
 ---
 
+## Schema: healthcheck.yaml (Team-Shared)
+
+**File:** `.hiivmind/github/healthcheck.yaml` (committed to git)
+**Purpose:** Persist governance audit results and team dismissal decisions
+**Template:** `templates/healthcheck.yaml.template`
+
+### version
+
+| Path | Type | Description |
+|------|------|-------------|
+| `.version` | string | Schema version (`"1.0"`) |
+
+### last_run
+
+Metadata about the most recent healthcheck execution.
+
+| Path | Type | Description |
+|------|------|-------------|
+| `.last_run.timestamp` | string | ISO 8601 timestamp of last run |
+| `.last_run.scope` | string | `"all"` or specific repo name |
+| `.last_run.aggregate_score` | number | Sum of passing checks across all evaluated repos |
+| `.last_run.aggregate_total` | number | Total checks evaluated (excludes dismissed/unknown) |
+| `.last_run.aggregate_grade` | string | Letter grade: A, B, C, D, or F |
+
+### repos
+
+Per-repo results keyed by repository name.
+
+| Path | Type | Description |
+|------|------|-------------|
+| `.repos.{name}.score` | number | Passing checks count for this repo |
+| `.repos.{name}.total` | number | Total checks evaluated (excludes dismissed/unknown) |
+| `.repos.{name}.grade` | string | Letter grade: A, B, C, D, or F |
+| `.repos.{name}.checks.{check_id}.status` | string | `pass`, `warn`, `fail`, `unknown`, or `dismissed` |
+| `.repos.{name}.checks.{check_id}.last_evaluated` | string | ISO 8601 timestamp |
+| `.repos.{name}.checks.{check_id}.detail` | string | Human-readable detail about the result |
+| `.repos.{name}.checks.{check_id}.data` | object | Optional structured data for reference |
+
+### dismissals
+
+Per-repo dismissals keyed by repository name and check ID. These represent team governance decisions.
+
+| Path | Type | Description |
+|------|------|-------------|
+| `.dismissals.{name}.{check_id}.dismissed_at` | string | ISO 8601 timestamp |
+| `.dismissals.{name}.{check_id}.dismissed_by` | string | GitHub login of person who dismissed |
+| `.dismissals.{name}.{check_id}.reason` | string | Team decision rationale (required) |
+| `.dismissals.{name}.{check_id}.review_after` | string | ISO date to re-evaluate, or null for permanent |
+
+**Example:**
+```yaml
+version: "1.0"
+last_run:
+  timestamp: "2026-02-21T14:30:00Z"
+  scope: all
+  aggregate_score: 16
+  aggregate_total: 22
+  aggregate_grade: B
+
+repos:
+  hiivmind-pulse-gh:
+    score: 8
+    total: 11
+    grade: B
+    checks:
+      branch_protection:
+        status: pass
+        last_evaluated: "2026-02-21T14:30:00Z"
+        detail: "main: 1 required review"
+      releases:
+        status: fail
+        last_evaluated: "2026-02-21T14:30:00Z"
+        detail: "No releases or tags"
+
+dismissals:
+  hiivmind-pulse-gh:
+    releases:
+      dismissed_at: "2026-02-21T15:00:00Z"
+      dismissed_by: alice
+      reason: "Pre-release project"
+      review_after: "2026-05-21"
+```
+
+### Common Healthcheck Lookups
+
+| Need | yq Command |
+|------|------------|
+| Get repo grade | `yq '.repos["repo-name"].grade' healthcheck.yaml` |
+| Get failing checks | `yq '.repos["repo-name"].checks | to_entries | .[] | select(.value.status == "fail") | .key' healthcheck.yaml` |
+| Check if dismissed | `yq '.dismissals["repo-name"]["check-id"].dismissed_at // ""' healthcheck.yaml` |
+| Get dismissal reason | `yq '.dismissals["repo-name"]["check-id"].reason' healthcheck.yaml` |
+| Get last run time | `yq '.last_run.timestamp' healthcheck.yaml` |
+| Get aggregate grade | `yq '.last_run.aggregate_grade' healthcheck.yaml` |
+
+---
+
 ## Schema: user.yaml (Personal, Git-Ignored)
 
 ### user

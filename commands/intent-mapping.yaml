@@ -390,6 +390,25 @@ intent_flags:
       - "what happened"
     description: "Heartbeat/session wake-up"
 
+  has_healthcheck:
+    keywords:
+      - "healthcheck"
+      - "health check"
+      - "governance"
+      - "audit"
+      - "best practices"
+      - "repo health"
+      - "readiness"
+      - "maturity"
+      - "governance audit"
+      - "repo readiness"
+      - "compliance check"
+      - "security audit"
+    negative_keywords:
+      - "heartbeat"
+      - "what changed"
+    description: "Repository governance healthcheck"
+
   # ═══════════════════════════════════════════════════════════
   # SAFETY FLAG
   # ═══════════════════════════════════════════════════════════
@@ -494,6 +513,12 @@ intent_rules:
       has_heartbeat: T
     action: delegate_heartbeat
     description: "Route to heartbeat wake-up"
+
+  - name: "healthcheck_operation"
+    conditions:
+      has_healthcheck: T
+    action: delegate_healthcheck
+    description: "Route to repository healthcheck"
 
   # ═══════════════════════════════════════════════════════════
   # DOMAIN RULES (route to operations - ordered by frequency)
@@ -735,6 +760,11 @@ actions:
     skill: "hiivmind-pulse-gh:gh-heartbeat"
     pass_arguments: true
 
+  delegate_healthcheck:
+    type: invoke_skill
+    skill: "hiivmind-pulse-gh:gh-healthcheck"
+    pass_arguments: true
+
   # Safety
   block_operation:
     type: display
@@ -804,6 +834,7 @@ actions:
         /gh init                 Initialize workspace
         /gh refresh              Sync stale config
         /gh discover             Explore all operations
+        /gh healthcheck          Assess repository governance maturity
 
 
       DOMAINS (25)
