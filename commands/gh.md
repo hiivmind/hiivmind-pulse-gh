@@ -2,7 +2,7 @@
 description: Unified entry point for GitHub operations - describe what you need in natural language
 argument-hint: Describe your goal (e.g., "create issue for login bug", "set milestone v2.0 on #42", "add PR to project")
 trigger: "gh|github|create issue|close issue|merge PR|set milestone|add label|trigger workflow"
-tools: [shell, filesystem]
+allowed-tools: ["Read", "Write", "Bash", "Glob", "Grep", "AskUserQuestion", "Skill", "Task"]
 ---
 
 # GitHub Operations Gateway
