@@ -1,5 +1,5 @@
 # hiivmind-pulse-gh - Project Sync Workflow
-# Detects changes in project board item count
+# Detects changes in project board items and user assignments
 # Copy to: .hiivmind/github/workflows/project-sync.yaml
 # Note: Requires default project set in config.yaml — skipped if unset
 
@@ -15,8 +15,8 @@ trigger:
   filter: {}
 
 actions:
-  - name: "Summarize project changes"
+  - name: "Summarize assignment changes"
     type: operation
-    operation: "summarize the default project board showing item counts by status"
+    operation: "show my current project assignments across all projects, highlighting any changes since last session"
 
 cooldown_minutes: 30

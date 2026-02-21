@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "hiivmind-pulse-gh": {
+      "source": {
+        "source": "github",
+        "repo": "hiivmind/hiivmind-pulse-gh"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "hiivmind-pulse-gh@hiivmind-pulse-gh": true
+  }
+}

@@ -10,6 +10,9 @@ description: >
   list", "operation guide", "what's possible", "capabilities tour", "explore GitHub features",
   "what commands are available", "help me find an operation". Presents quick reference table
   and interactive domain exploration with handoff to operations skill.
+trigger: "what can I do|list operations|show capabilities|explore domains|discover features|browse operations|what domains are supported"
+tools: [shell, filesystem]
+author: hiivmind
 ---
 
 # GitHub Operations Discovery

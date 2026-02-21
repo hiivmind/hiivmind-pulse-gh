@@ -1,0 +1,8 @@
+{
+  "name": "hiivmind-pulse-gh",
+  "version": "4.0.0",
+  "description": "GitHub workspace automation with context enrichment across 25 github domains",
+  "author": "hiivmind",
+  "skills_dir": "skills",
+  "commands_dir": "commands"
+}

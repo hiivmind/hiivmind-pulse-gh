@@ -29,6 +29,7 @@ state:
     latest_environment: null
   projects:
     item_count: 0
+    my_assignments: []
 
 # Per-workflow execution tracking
 workflows:

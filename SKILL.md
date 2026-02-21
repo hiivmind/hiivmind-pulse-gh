@@ -10,6 +10,8 @@ description: >
   "close issue", "merge PR", "set milestone", "add to project", "trigger workflow",
   "GitHub", "gh".
 compatibility: Requires gh CLI (authenticated), jq 1.6+, yq 4.0+. Token scopes: repo, read:org, read:project, project.
+trigger: "create issue|close issue|merge PR|set milestone|add label|trigger workflow|GitHub|gh|project board|branch protection|create release|manage secrets"
+tools: [shell, filesystem]
 metadata:
   author: hiivmind
   version: "4.0.0"

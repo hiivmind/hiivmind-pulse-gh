@@ -10,6 +10,9 @@ description: >
   "workflow status", "show automations", "manage automations", "configure automation",
   "what workflows are active", "turn on workflow", "turn off workflow", "automation settings",
   "heartbeat config", "event triggers", "workflow list", "my workflows".
+trigger: "list workflows|enable workflow|disable workflow|run workflow|create workflow|workflow status|manage automations"
+tools: [shell, filesystem]
+author: hiivmind
 ---
 
 # Workflow Management
@@ -91,7 +94,7 @@ Parse `$ARGUMENTS` to determine the requested operation:
 | `create`, `new`, `add` | **create** |
 | `status`, `history`, `info` | **status** |
 
-**If ambiguous:** Present options via AskUserQuestion.
+**If ambiguous:** Ask the user to choose from the available options.
 
 ---
 
@@ -138,7 +141,7 @@ No workflows configured yet.
 Would you like to install a built-in workflow template?
 ```
 
-Present available templates from `{PLUGIN_ROOT}/templates/workflows/` via AskUserQuestion.
+Present available templates from `{PLUGIN_ROOT}/templates/workflows/` and ask the user to choose.
 
 ### Enable/Disable Workflow
 
@@ -190,7 +193,7 @@ Available workflow templates:
 **For custom workflows:**
 
 1. Copy `{PLUGIN_ROOT}/templates/workflow.yaml.template` to `$WORKFLOWS_DIR/`
-2. Walk through fields with AskUserQuestion
+2. Walk through fields by prompting the user for each value
 3. **See:** `{PLUGIN_ROOT}/lib/references/workflow-triggers.md` for trigger options
 
 ### Status
