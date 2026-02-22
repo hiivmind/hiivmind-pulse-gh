@@ -37,11 +37,11 @@ read from the plugin root, not relative to this skill folder.
 ## Phase Overview
 
 ```
-1. CONTEXT → 2. STALENESS → 3. SELECT → 4. REFRESH → 5. UPDATE → 6. REPORT
-   (load)       (check)       (user)      (query)      (write)      (done)
-      │             │            │            │            │            │
-   STOP if      Show all      STOP for    Query API      -         STOP: offer
-   not init     sections      selection   per section             next steps
+1. CONTEXT → 1.5 TOOLS → 2. STALENESS → 3. SELECT → 4. REFRESH → 5. UPDATE → 6. REPORT
+   (load)      (check)      (check)       (user)      (query)      (write)      (done)
+      │           │             │            │            │            │            │
+   STOP if     STOP if      Show all      STOP for    Query API      -         STOP: offer
+   not init    missing      sections      selection   per section             next steps
 ```
 
 ---
@@ -68,6 +68,42 @@ Workspace not initialized.
 Config file not found: .hiivmind/github/config.yaml
 
 Run: /gh init
+```
+
+---
+
+## Phase 1.5: CHECK TOOLS
+
+**See:** `{PLUGIN_ROOT}/lib/patterns/tool-detection.md`
+
+Verify required tools are available before refreshing:
+
+1. Check for `gh` CLI, `jq`, `yq` availability
+2. **STOP if `gh` is missing** — Cannot proceed without it:
+
+```
+GitHub CLI (gh) is required but wasn't found.
+
+Install gh:
+- macOS: brew install gh
+- Linux (Debian/Ubuntu): sudo apt install gh
+- Windows: winget install GitHub.cli
+
+After installation, authenticate with: gh auth login
+
+Cannot proceed without gh CLI.
+```
+
+3. **WARN if `jq` or `yq` is missing** (do not block):
+
+```
+⚠ Missing recommended tool: [jq/yq]
+
+Install for best results:
+- jq: brew install jq / apt install jq
+- yq: https://github.com/mikefarah/yq#install
+
+Proceeding with fallback methods...
 ```
 
 ---

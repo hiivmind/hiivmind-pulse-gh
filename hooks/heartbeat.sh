@@ -17,6 +17,14 @@ if [[ -z "$CONFIG_PATH" ]]; then
     exit 0
 fi
 
+# Check required tools (exit 0 with error JSON so hook doesn't crash the session)
+for tool in gh jq yq; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "{\"error\": \"missing_tool\", \"tool\": \"$tool\"}"
+        exit 0
+    fi
+done
+
 CONFIG_DIR=$(dirname "$CONFIG_PATH")
 WORKFLOWS_DIR="${CONFIG_DIR}/workflows"
 POLL_STATE="${CONFIG_DIR}/poll-state.yaml"
@@ -76,7 +84,7 @@ for WF_FILE in "$WORKFLOWS_DIR"/*.yaml; do
     # Check cooldown
     LAST_RUN=$(yq -r ".workflows.\"${WF_NAME}\".last_run_at // \"null\"" "$POLL_STATE" 2>/dev/null || echo "null")
     if [[ "$LAST_RUN" != "null" ]]; then
-        LAST_EPOCH=$(date -d "$LAST_RUN" +%s 2>/dev/null || echo 0)
+        LAST_EPOCH=$(date -jf "%Y-%m-%dT%H:%M:%SZ" "$LAST_RUN" +%s 2>/dev/null || date -d "$LAST_RUN" +%s 2>/dev/null || echo 0)
         ELAPSED=$(( (NOW - LAST_EPOCH) / 60 ))
         if (( ELAPSED < COOLDOWN )); then
             continue
@@ -168,13 +176,15 @@ for WF_FILE in "$WORKFLOWS_DIR"/*.yaml; do
 
                     QUERY="query {"
                     ALIAS_IDX=0
-                    declare -A ALIAS_MAP  # alias -> project number + title
+                    ALIAS_KEYS=""
+                    ALIAS_VALS=""
                     while IFS= read -r PID; do
                         [[ -z "$PID" ]] && continue
                         P_NUM=$(yq -r ".projects.catalog[] | select(.id == \"$PID\") | .number" "$CONFIG_PATH")
                         P_TITLE=$(yq -r ".projects.catalog[] | select(.id == \"$PID\") | .title" "$CONFIG_PATH")
                         ALIAS="p${ALIAS_IDX}"
-                        ALIAS_MAP["$ALIAS"]="${P_NUM}|${P_TITLE}"
+                        ALIAS_KEYS="${ALIAS_KEYS}${ALIAS_KEYS:+ }${ALIAS}"
+                        ALIAS_VALS="${ALIAS_VALS}${ALIAS_VALS:+ }${P_NUM}|${P_TITLE}"
                         QUERY+=" ${ALIAS}: node(id: \"${PID}\") { ... on ProjectV2 { items(first: 100) { nodes { id content { __typename ... on Issue { number title } ... on PullRequest { number title } ... on DraftIssue { title } } fieldValues(first: 20) { nodes { ... on ProjectV2ItemFieldUserValue { users(first: 10) { nodes { login } } } } } } } } }"
                         ALIAS_IDX=$((ALIAS_IDX + 1))
                     done <<< "$PROJECT_IDS"
@@ -188,8 +198,11 @@ for WF_FILE in "$WORKFLOWS_DIR"/*.yaml; do
 
                     # Extract assignments for current user across all projects
                     CURR_ASSIGNMENTS="[]"
-                    for ALIAS in "${!ALIAS_MAP[@]}"; do
-                        IFS='|' read -r P_NUM P_TITLE <<< "${ALIAS_MAP[$ALIAS]}"
+                    IDX=0
+                    for ALIAS in $ALIAS_KEYS; do
+                        VAL=$(echo "$ALIAS_VALS" | tr ' ' '\n' | sed -n "$((IDX + 1))p")
+                        IFS='|' read -r P_NUM P_TITLE <<< "$VAL"
+                        IDX=$((IDX + 1))
                         # Filter items where current user is in fieldValues users
                         ITEMS=$(echo "$RESULT" | jq -r --arg alias "$ALIAS" --arg user "$GH_USER" --arg pnum "$P_NUM" --arg ptitle "$P_TITLE" '
                             [.data[$alias].items.nodes[] |
@@ -213,8 +226,11 @@ for WF_FILE in "$WORKFLOWS_DIR"/*.yaml; do
                     DEFAULT_PROJECT=$(yq -r '.projects.default // ""' "$CONFIG_PATH")
                     CURR_COUNT=""
                     if [[ -n "$DEFAULT_PROJECT" && "$DEFAULT_PROJECT" != "null" ]]; then
-                        for ALIAS in "${!ALIAS_MAP[@]}"; do
-                            IFS='|' read -r P_NUM _ <<< "${ALIAS_MAP[$ALIAS]}"
+                        IDX=0
+                        for ALIAS in $ALIAS_KEYS; do
+                            VAL=$(echo "$ALIAS_VALS" | tr ' ' '\n' | sed -n "$((IDX + 1))p")
+                            IFS='|' read -r P_NUM _ <<< "$VAL"
+                            IDX=$((IDX + 1))
                             if [[ "$P_NUM" == "$DEFAULT_PROJECT" ]]; then
                                 CURR_COUNT=$(echo "$RESULT" | jq -r --arg alias "$ALIAS" '.data[$alias].items.nodes | length' 2>/dev/null || echo "")
                                 break
@@ -247,7 +263,7 @@ for WF_FILE in "$WORKFLOWS_DIR"/*.yaml; do
                     yq -i ".state.projects.my_assignments = load(\"$ASSIGNMENTS_FILE\")" "$POLL_STATE"
                     rm -f "$ASSIGNMENTS_FILE"
 
-                    unset ALIAS_MAP
+                    unset ALIAS_KEYS ALIAS_VALS
                     ;;
             esac
             ;;

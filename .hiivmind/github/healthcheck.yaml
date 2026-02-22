@@ -1,0 +1,88 @@
+# hiivmind-pulse-gh healthcheck state
+# Created: 2026-02-21T00:00:00Z
+# Tracks governance audit results and team dismissal decisions
+# Committed to git — dismissals are team-shared governance decisions
+
+version: "1.0"
+
+last_run:
+  timestamp: "2026-02-21T00:00:00Z"
+  scope: hiivmind-pulse-gh
+  aggregate_score: 8
+  aggregate_total: 9
+  aggregate_grade: B
+
+repos:
+  hiivmind-pulse-gh:
+    score: 8
+    total: 9
+    grade: A
+    checks:
+      branch_protection:
+        status: warn
+        last_evaluated: "2026-02-21T00:00:00Z"
+        detail: "main: 1 required review, enforce_admins: no"
+        data: {}
+      project_linkage:
+        status: pass
+        last_evaluated: "2026-02-21T00:00:00Z"
+        detail: "Linked to 2 project(s)"
+        data: {}
+      issue_triage:
+        status: pass
+        last_evaluated: "2026-02-21T00:00:00Z"
+        detail: "Bug: bug, Priority: P0, P1, P2"
+        data: {}
+      ci_cd:
+        status: pass
+        last_evaluated: "2026-02-21T00:00:00Z"
+        detail: "2 workflow(s) configured"
+        data: {}
+      releases:
+        status: fail
+        last_evaluated: "2026-02-21T00:00:00Z"
+        detail: "No releases or tags"
+        data: {}
+      documentation:
+        status: pass
+        last_evaluated: "2026-02-21T00:00:00Z"
+        detail: "README ✓, docs/ ✓"
+        data: {}
+      codeowners:
+        status: pass
+        last_evaluated: "2026-02-21T00:00:00Z"
+        detail: "Found at .github/CODEOWNERS (just created)"
+        data: {}
+      security_policy:
+        status: pass
+        last_evaluated: "2026-02-21T00:00:00Z"
+        detail: "Found at SECURITY.md (just created)"
+        data: {}
+      license:
+        status: pass
+        last_evaluated: "2026-02-21T00:00:00Z"
+        detail: "MIT"
+        data: {}
+      dependabot_config:
+        status: dismissed
+        last_evaluated: "2026-02-21T00:00:00Z"
+        detail: "Dismissed: No package dependencies"
+        data: {}
+      secrets_scanning:
+        status: dismissed
+        last_evaluated: "2026-02-21T00:00:00Z"
+        detail: "Dismissed: Do later"
+        data: {}
+
+dismissals:
+  hiivmind-pulse-gh:
+    dependabot_config:
+      dismissed_at: "2026-02-21T00:00:00Z"
+      dismissed_by: discreteds
+      reason: "No package dependencies"
+      review_after: "2026-02-28"
+    secrets_scanning:
+      dismissed_at: "2026-02-21T00:00:00Z"
+      dismissed_by: discreteds
+      reason: "Do later"
+      review_after: "2026-02-28"
