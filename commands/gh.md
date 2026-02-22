@@ -103,6 +103,45 @@ If the matched action is `show_main_menu` but arguments were provided (intent wa
 
 ---
 
+## Step 2.5: Check Tool Availability
+
+**See:** `lib/patterns/tool-detection.md`
+
+Before proceeding, verify required tools are available:
+
+1. **Check `gh` CLI** — `command -v gh >/dev/null 2>&1`
+2. **Check `jq`** — `command -v jq >/dev/null 2>&1`
+3. **Check `yq`** — `command -v yq >/dev/null 2>&1`
+
+**STOP if `gh` is missing:**
+
+```
+GitHub CLI (gh) is required but wasn't found.
+
+Install gh:
+- macOS: brew install gh
+- Linux (Debian/Ubuntu): sudo apt install gh
+- Windows: winget install GitHub.cli
+
+After installation, authenticate with: gh auth login
+
+Cannot proceed without gh CLI.
+```
+
+**WARN if `jq` or `yq` is missing** (do not block):
+
+```
+⚠ Missing recommended tool: [jq/yq]
+
+Install for best results:
+- jq: brew install jq / apt install jq
+- yq: https://github.com/mikefarah/yq#install
+
+Proceeding with fallback methods...
+```
+
+---
+
 ## Step 3: Context Detection (Conditional)
 
 **Skip this step if matched action is:** `delegate_discover`, `show_full_help`, `show_skill_help_*`, `block_operation`, `show_main_menu`
@@ -309,8 +348,8 @@ options:
     description: "Open a new issue"
   - label: "View project board"
     description: "See project items and status"
-  - label: "Trigger a workflow"
-    description: "Dispatch a GitHub Actions workflow"
+  - label: "Run healthcheck"
+    description: "Assess repository governance maturity"
 # "Other" auto-added
 ```
 

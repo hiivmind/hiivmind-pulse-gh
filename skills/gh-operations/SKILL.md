@@ -99,6 +99,40 @@ Run: /gh init
 
 **See:** `{PLUGIN_ROOT}/lib/patterns/config-parsing.md` for full search algorithm
 
+### 1.5. Check Tools
+
+**See:** `{PLUGIN_ROOT}/lib/patterns/tool-detection.md`
+
+Verify required tools are available before executing any operation:
+
+1. Check for `gh` CLI, `jq`, `yq` availability
+2. **STOP if `gh` is missing** — Cannot proceed without it:
+
+```
+GitHub CLI (gh) is required but wasn't found.
+
+Install gh:
+- macOS: brew install gh
+- Linux (Debian/Ubuntu): sudo apt install gh
+- Windows: winget install GitHub.cli
+
+After installation, authenticate with: gh auth login
+
+Cannot proceed without gh CLI.
+```
+
+3. **WARN if `jq` or `yq` is missing** (do not block):
+
+```
+⚠ Missing recommended tool: [jq/yq]
+
+Install for best results:
+- jq: brew install jq / apt install jq
+- yq: https://github.com/mikefarah/yq#install
+
+Proceeding with fallback methods...
+```
+
 ### 2. Determine Approach
 
 | Situation | Action |
@@ -116,8 +150,14 @@ Run: /gh init
 2. **Apply enrichment** (link to project, set status field, etc.)
 3. **Execute:**
    - CLI: `gh issue create`, `gh pr merge`, etc.
-   - GraphQL: temp file pattern via `gh api graphql`
+   - GraphQL: **ALWAYS use the temp file method** (`{PLUGIN_ROOT}/lib/patterns/graphql-execution.md`)
    - REST: `gh api /repos/{owner}/{repo}/endpoint -X METHOD`
+
+> **CRITICAL — GraphQL with variables:** Never pass queries containing `$variable` parameters
+> directly in shell strings. The shell expands `$variable` before `gh` receives the query,
+> causing `Expected VAR_SIGN, actual: UNKNOWN_CHAR` errors. Always write the query to a temp
+> file first, then execute with `gh api graphql -f query="$(cat /tmp/query.graphql)"`.
+> See `{PLUGIN_ROOT}/lib/patterns/graphql-execution.md` for the full pattern.
 
 ### 4. Report Result
 

@@ -1,0 +1,96 @@
+# hiivmind-pulse-gh healthcheck state
+# Created: {{initialized_at}}
+# Tracks governance audit results and team dismissal decisions
+# Committed to git — dismissals are team-shared governance decisions
+
+version: "1.0"
+
+last_run:
+  timestamp: null
+  scope: all           # "all" or specific repo name
+  aggregate_score: 0
+  aggregate_total: 11
+  aggregate_grade: null
+
+repos:
+  # Per-repo results keyed by repo name
+  # Populated on first healthcheck run
+  #
+  # Example:
+  # hiivmind-pulse-gh:
+  #   score: 8
+  #   total: 11
+  #   grade: B
+  #   checks:
+  #     branch_protection:
+  #       status: pass
+  #       last_evaluated: "2026-02-21T14:30:00Z"
+  #       detail: "main: 1 required review"
+  #       data: {}
+  #     project_linkage:
+  #       status: pass
+  #       last_evaluated: "2026-02-21T14:30:00Z"
+  #       detail: "Linked to 2 project(s)"
+  #       data: {}
+  #     issue_triage:
+  #       status: warn
+  #       last_evaluated: "2026-02-21T14:30:00Z"
+  #       detail: "Bug labels present, no priority labels"
+  #       data: {}
+  #     ci_cd:
+  #       status: pass
+  #       last_evaluated: "2026-02-21T14:30:00Z"
+  #       detail: "3 workflow(s) configured"
+  #       data: {}
+  #     releases:
+  #       status: fail
+  #       last_evaluated: "2026-02-21T14:30:00Z"
+  #       detail: "No releases or tags"
+  #       data: {}
+  #     documentation:
+  #       status: warn
+  #       last_evaluated: "2026-02-21T14:30:00Z"
+  #       detail: "README present, no CONTRIBUTING.md"
+  #       data: {}
+  #     codeowners:
+  #       status: fail
+  #       last_evaluated: "2026-02-21T14:30:00Z"
+  #       detail: "No CODEOWNERS file"
+  #       data: {}
+  #     security_policy:
+  #       status: fail
+  #       last_evaluated: "2026-02-21T14:30:00Z"
+  #       detail: "No security policy"
+  #       data: {}
+  #     license:
+  #       status: pass
+  #       last_evaluated: "2026-02-21T14:30:00Z"
+  #       detail: "MIT"
+  #       data: {}
+  #     dependabot_config:
+  #       status: pass
+  #       last_evaluated: "2026-02-21T14:30:00Z"
+  #       detail: "Configured"
+  #       data: {}
+  #     secrets_scanning:
+  #       status: pass
+  #       last_evaluated: "2026-02-21T14:30:00Z"
+  #       detail: "Scanning: enabled, Push protection: enabled"
+  #       data: {}
+
+dismissals:
+  # Per-repo dismissals keyed by repo name
+  # Team governance decisions — committed to git
+  #
+  # Example:
+  # hiivmind-pulse-gh:
+  #   releases:
+  #     dismissed_at: "2026-02-21T10:00:00Z"
+  #     dismissed_by: alice
+  #     reason: "Pre-release project, no formal releases yet"
+  #     review_after: "2026-05-21"    # null for permanent dismissal
+  #   codeowners:
+  #     dismissed_at: "2026-02-21T10:00:00Z"
+  #     dismissed_by: alice
+  #     reason: "Small team, all members are owners"
+  #     review_after: null

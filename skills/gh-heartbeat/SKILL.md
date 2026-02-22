@@ -56,6 +56,40 @@ This skill receives JSON output from the SessionStart heartbeat hook:
 
 Ensure heartbeat JSON is available regardless of how this skill was invoked.
 
+**See:** `{PLUGIN_ROOT}/lib/patterns/tool-detection.md`
+
+**0a. Check tool availability** before running the heartbeat script:
+
+1. Check for `gh` CLI, `jq`, `yq` availability
+2. **STOP if `gh` is missing** — Cannot proceed without it:
+
+```
+GitHub CLI (gh) is required but wasn't found.
+
+Install gh:
+- macOS: brew install gh
+- Linux (Debian/Ubuntu): sudo apt install gh
+- Windows: winget install GitHub.cli
+
+After installation, authenticate with: gh auth login
+
+Cannot proceed without gh CLI.
+```
+
+3. **WARN if `jq` or `yq` is missing** (do not block):
+
+```
+⚠ Missing recommended tool: [jq/yq]
+
+Install for best results:
+- jq: brew install jq / apt install jq
+- yq: https://github.com/mikefarah/yq#install
+
+Proceeding with fallback methods...
+```
+
+**0b. Run heartbeat:**
+
 1. **Check** if heartbeat JSON was passed as context (from SessionStart hook)
 2. **If no hook output is present** (manual invocation): run the heartbeat script directly:
 
