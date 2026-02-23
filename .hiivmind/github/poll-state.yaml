@@ -7,7 +7,7 @@ last_polled_at: "2026-02-21T03:49:53Z"
 # GitHub state snapshot for change detection
 state:
   pull_requests:
-    open_count: 0
+    open_count: 1
     latest_id: null
     latest_updated_at: null
   issues:
