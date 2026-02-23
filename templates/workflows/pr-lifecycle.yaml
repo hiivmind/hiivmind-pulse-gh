@@ -20,5 +20,11 @@ actions:
   - name: "Highlight review needs"
     type: operation
     operation: "show PRs that need review or have requested changes"
+  - name: "Summarize PR diffs"
+    type: operation
+    operation: "for each open PR needing review, summarize the diff: what changed, why, and potential risks"
+  - name: "Offer review actions"
+    type: operation
+    operation: "for PRs needing review, offer to request specific reviewers or perform a self-review of the changes"
 
 cooldown_minutes: 15
