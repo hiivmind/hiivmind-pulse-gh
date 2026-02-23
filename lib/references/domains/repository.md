@@ -17,6 +17,14 @@
 | Transfer | ✗ | ✓ | ✗ | ✓ | ⊗ Blocked for safety |
 | Sync (fork) | ✓ | ✓ | ✗ | ✓ | Sync fork with upstream |
 | Update topics | ✗ | ✓ | ✓ | ✓ | Via updateTopics mutation |
+| Set default | ✓ | ✗ | ✗ | ✗ | CLI only — set default repo |
+| Autolink list | ✓ | ✓ | ✗ | ✓ | |
+| Autolink create | ✓ | ✓ | ✗ | ✓ | |
+| Autolink delete | ✓ | ✓ | ✗ | ✓ | |
+| Autolink view | ✓ | ✓ | ✗ | ✓ | |
+| Deploy key list | ✓ | ✓ | ✗ | ✓ | |
+| Deploy key add | ✓ | ✓ | ✗ | ✓ | |
+| Deploy key delete | ✓ | ✓ | ✗ | ✓ | |
 
 ## CLI Command Reference
 
@@ -33,6 +41,14 @@
 | Clone | `gh repo clone [repo]` | |
 | Rename | `gh repo rename [new-name]` | |
 | Sync | `gh repo sync [repo]` | Sync fork with upstream |
+| Set default | `gh repo set-default [repo]` | Set default repo for commands |
+| Autolink list | `gh repo autolink list` | List autolink references |
+| Autolink create | `gh repo autolink create {prefix} {url}` | Create autolink reference |
+| Autolink delete | `gh repo autolink delete {id}` | Delete autolink reference |
+| Autolink view | `gh repo autolink view {id}` | View autolink reference |
+| Deploy key list | `gh repo deploy-key list` | List deploy keys |
+| Deploy key add | `gh repo deploy-key add {key-file}` | Add deploy key |
+| Deploy key delete | `gh repo deploy-key delete {id}` | Delete deploy key |
 
 ## REST API Reference
 
@@ -49,6 +65,14 @@
 | Transfer | POST | `/repos/{owner}/{repo}/transfer` | ⊗ Blocked |
 | Sync fork | POST | `/repos/{owner}/{repo}/merge-upstream` | |
 | Update topics | PUT | `/repos/{owner}/{repo}/topics` | |
+| Autolink list | GET | `/repos/{owner}/{repo}/autolinks` | |
+| Autolink create | POST | `/repos/{owner}/{repo}/autolinks` | |
+| Autolink get | GET | `/repos/{owner}/{repo}/autolinks/{id}` | |
+| Autolink delete | DELETE | `/repos/{owner}/{repo}/autolinks/{id}` | |
+| Deploy key list | GET | `/repos/{owner}/{repo}/keys` | |
+| Deploy key add | POST | `/repos/{owner}/{repo}/keys` | |
+| Deploy key get | GET | `/repos/{owner}/{repo}/keys/{key_id}` | |
+| Deploy key delete | DELETE | `/repos/{owner}/{repo}/keys/{key_id}` | |
 
 ## GraphQL Reference
 

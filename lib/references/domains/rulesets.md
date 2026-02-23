@@ -4,8 +4,9 @@
 
 | Operation | gh CLI | REST | GraphQL | Web UI | Notes |
 |-----------|--------|------|---------|--------|-------|
-| List | ✗ | ✓ | ✓ | ✓ | Both support reading |
-| Get | ✗ | ✓ | ✓ | ✓ | Both support reading |
+| List | ✓ | ✓ | ✓ | ✓ | All support reading |
+| Get | ✓ | ✓ | ✓ | ✓ | All support reading |
+| Check | ✓ | ✗ | ✗ | ✗ | CLI only — check rules for branch |
 | Create | ✗ | ✓ | ✗ | ✓ | REST only |
 | Update | ✗ | ✓ | ✗ | ✓ | REST only |
 | Delete | ✗ | ✓ | ✗ | ✓ | REST only |
@@ -15,7 +16,9 @@
 
 | Operation | Command | Notes |
 |-----------|---------|-------|
-| All | (Not available) | Use REST API or Web UI |
+| List | `gh ruleset list` | List rulesets for repo |
+| Get | `gh ruleset view {id}` | View ruleset details |
+| Check | `gh ruleset check` | Check rules for a branch |
 
 ## REST API Reference
 

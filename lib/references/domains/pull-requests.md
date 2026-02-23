@@ -10,11 +10,17 @@
 | Update | ✓ | ✓ | ✓ | ✓ | |
 | Merge | ✓ | ✓ | ✓ | ✓ | |
 | Close | ✓ | ✓ | ✓ | ✓ | |
+| Revert | ✓ | ✓ | ✓ | ✓ | Creates revert PR |
+| Ready | ✓ | ✓ | ✓ | ✓ | Mark draft as ready |
+| Update branch | ✓ | ✓ | ✗ | ✓ | Sync with base branch |
 | Request review | ✓ | ✓ | ✓ | ✓ | |
 | Add comment | ✓ | ✓ | ✓ | ✓ | |
 | Dismiss review | ✗ | ✓ | ✓ | ✓ | CLI not available |
-| Lock | ✗ | ✓ | ✗ | ✓ | REST-only |
-| Unlock | ✗ | ✓ | ✗ | ✓ | REST-only |
+| Lock | ✓ | ✓ | ✓ | ✓ | |
+| Unlock | ✓ | ✓ | ✓ | ✓ | |
+| Checkout | ✓ | ✗ | ✗ | ✗ | CLI only (git operation) |
+| Checks | ✓ | ✗ | ✗ | ✓ | View CI status |
+| Diff | ✓ | ✗ | ✗ | ✓ | View changes |
 
 ## CLI Command Reference
 
@@ -26,11 +32,17 @@
 | Update | `gh pr edit {number}` |
 | Merge | `gh pr merge {number}` |
 | Close | `gh pr close {number}` |
+| Revert | `gh pr revert {number}` |
+| Ready | `gh pr ready {number}` |
+| Update branch | `gh pr update-branch {number}` |
 | Request review | `gh pr review --request-review {reviewer}` |
 | Add comment | `gh pr comment {number} --body {body}` |
 | Dismiss review | (Web UI only) |
-| Lock | (Web UI only) |
-| Unlock | (Web UI only) |
+| Lock | `gh pr lock {number}` |
+| Unlock | `gh pr unlock {number}` |
+| Checkout | `gh pr checkout {number}` |
+| Checks | `gh pr checks {number}` |
+| Diff | `gh pr diff {number}` |
 
 ## REST API Reference
 
@@ -46,6 +58,9 @@
 | Remove reviewer | DELETE | `/repos/{owner}/{repo}/pulls/{number}/requested_reviewers` | |
 | Add comment | POST | `/repos/{owner}/{repo}/pulls/{number}/comments` | |
 | Dismiss review | PUT | `/repos/{owner}/{repo}/pulls/{number}/reviews/{review_id}/dismissals` | |
+| Revert | POST | `/repos/{owner}/{repo}/pulls/{number}/revert` | Creates revert PR |
+| Mark ready | PATCH | `/repos/{owner}/{repo}/pulls/{number}` | Set `draft: false` |
+| Update branch | PUT | `/repos/{owner}/{repo}/pulls/{number}/update-branch` | Sync with base |
 | Lock | PUT | `/repos/{owner}/{repo}/issues/{number}/lock` | Uses issues endpoint |
 | Unlock | DELETE | `/repos/{owner}/{repo}/issues/{number}/lock` | Uses issues endpoint |
 
@@ -59,6 +74,10 @@
 | Update | Mutation | `updatePullRequest` | |
 | Merge | Mutation | `mergePullRequest` | |
 | Close | Mutation | `closePullRequest` | |
+| Revert | Mutation | `revertPullRequest` | Creates revert PR |
+| Mark ready | Mutation | `markPullRequestReadyForReview` | |
 | Request review | Mutation | `requestReviews` | |
 | Add comment | Mutation | `addComment` | |
 | Dismiss review | Mutation | `dismissPullRequestReview` | |
+| Lock | Mutation | `lockLockable` | |
+| Unlock | Mutation | `unlockLockable` | |

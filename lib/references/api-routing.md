@@ -37,6 +37,7 @@
 | **Secret Scanning** | ✗ | ✓ | ✗ | ✓ | REST only |
 | **Notifications** | ✗ | ✓ | ✗ | ✓ | REST only |
 | **Reactions** | ✗ | ✓ | ✓ | ✓ | Full GraphQL support |
+| **Attestation** | ✓ | ✗ | ✗ | ✓ | CLI only — supply chain security |
 
 ---
 
@@ -118,6 +119,7 @@ For detailed operation tables, CLI commands, and corpus lookup keywords, see the
 | Secret Scanning | `domains/secret-scanning.md` |
 | Notifications | `domains/notifications.md` |
 | Reactions | `domains/reactions.md` |
+| Attestation | `domains/attestation.md` |
 
 Each domain file contains:
 - **Support matrix table** - Operations × 4 methods (✓/✗/⊗)
