@@ -101,7 +101,7 @@ Run without arguments for a guided menu:
 
 ### Discovery Mode
 
-Explore available operations across all 25 GitHub domains:
+Explore available operations across all 26 GitHub domains:
 
 ```
 /gh discover
@@ -127,7 +127,7 @@ Claude: === GitHub Operations Quick Reference ===
         | Pull Requests   | ✓      | ✓    | ✓       | Full CRUD via all methods|
         | Projects v2     | ✓      | Read | ✓       | Views UI-only            |
         | Milestones      | ✗      | ✓    | Read    | CRUD via REST            |
-        ... [25 domains total]
+        ... [26 domains total]
 
         Which domain would you like to explore?
 
@@ -156,7 +156,7 @@ Claude: === Projects v2 Domain ===
 
 ## Skills
 
-The plugin provides **five skills** with a clear dependency structure:
+The plugin provides **seven skills** with a clear dependency structure:
 
 ### Skill Overview
 
@@ -165,7 +165,10 @@ The plugin provides **five skills** with a clear dependency structure:
 | `gh-init` | Validate environment, discover org structure, create config.yaml | First-time setup (once per workspace) |
 | `gh-refresh` | Sync cached config with GitHub | Periodically, or when "ID not found" errors occur |
 | `gh-operations` | Execute GitHub operations (all domains) | Via gateway command |
-| `gh-discover` | Explore available operations across all 25 domains | Find the right operation, learn what's possible |
+| `gh-discover` | Explore available operations across all 26 domains | Find the right operation, learn what's possible |
+| `gh-healthcheck` | On-demand governance audit for repository maturity | Evaluate branch protection, CI/CD, docs, security policy, etc. |
+| `gh-heartbeat` | Process triggered workflows on session wake-up | Automatically on session start when pending work is detected |
+| `gh-workflows` | Manage event-driven workflows for GitHub automation | List, enable, disable, run, or create workflows |
 | `hiivmind-corpus-github-docs-navigate` | Look up GitHub API syntax (GraphQL/REST) | When uncertain about exact API syntax (external corpus) |
 
 ### Skill Hierarchy
@@ -176,10 +179,13 @@ gh-init            ← Run FIRST (creates config.yaml)
        ▼
 gh-operations      ← Requires init completed
 gh-refresh         ← Requires init completed
+gh-healthcheck     ← Requires init completed (read-only audit)
        │
        ├── hiivmind-corpus-github-docs-navigate ← External corpus (syntax lookup)
        │
 gh-discover        ← Independent (explore capabilities)
+gh-workflows       ← Independent (manage automation)
+gh-heartbeat       ← Triggered by SessionStart hook
 ```
 
 ## Supported Domains
@@ -198,7 +204,7 @@ gh-discover        ← Independent (explore capabilities)
 | **Variables** | set, update, delete, list | REST |
 | **Releases** | create, update, delete, upload | REST |
 
-> **Note:** This table shows commonly used domains for quick reference. The plugin supports **any GitHub domain** via corpus lookup — if you have permissions, it can help. Some dangerous operations (delete repository, transfer ownership) are blocked for safety. See `lib/references/operation-blocklist.md`.
+> **Note:** This table shows commonly used domains for quick reference. The plugin supports **26 domains** via corpus lookup — if you have permissions, it can help. Some dangerous operations (delete repository, transfer ownership) are blocked for safety. See `lib/references/operation-blocklist.md`.
 
 ## Quick Start
 
@@ -314,38 +320,74 @@ hiivmind-pulse-gh/
 │   └── plugin.json                       # Plugin manifest
 │
 ├── commands/
-│   └── hiivmind-pulse-gh.md              # Gateway command
+│   ├── gh.md                             # Gateway command
+│   └── intent-mapping.yaml               # Intent detection rules
 │
 ├── skills/
 │   ├── gh-init/           # Workspace initialization
 │   ├── gh-refresh/        # Config sync
 │   ├── gh-operations/     # Execute operations
-│   └── gh-discover/       # Explore capabilities
+│   ├── gh-discover/       # Explore capabilities
+│   ├── gh-healthcheck/    # Repository governance audit
+│   ├── gh-heartbeat/      # Session wake-up handler
+│   └── gh-workflows/      # Workflow management
+│
+├── hooks/
+│   ├── hooks.json                        # Hook configuration
+│   ├── heartbeat.sh                      # Heartbeat polling logic
+│   ├── post-operation-check.sh           # Post-operation validation
+│   └── validate-gh-operation.sh          # Operation validation
 │
 ├── lib/
 │   ├── patterns/                         # HOW to do things (executable guides)
-│   │   ├── config-parsing.md
-│   │   ├── workspace-detection.md
 │   │   ├── authentication.md
-│   │   ├── tool-detection.md
-│   │   ├── id-resolution.md
+│   │   ├── config-parsing.md
+│   │   ├── corpus-lookup.md
+│   │   ├── error-handling.md             # Error handling overview
+│   │   ├── error-auth.md                 # Auth-specific errors
+│   │   ├── error-graphql.md              # GraphQL-specific errors
+│   │   ├── error-rest.md                 # REST-specific errors
+│   │   ├── error-local.md                # Local/tool errors
 │   │   ├── graphql-execution.md
-│   │   ├── error-handling.md
-│   │   └── corpus-lookup.md
+│   │   ├── graphql-queries.md
+│   │   ├── healthcheck-evaluation.md
+│   │   ├── id-resolution.md
+│   │   ├── poll-state.md
+│   │   ├── tool-detection.md
+│   │   ├── workflow-execution.md
+│   │   └── workspace-detection.md
 │   │
 │   └── references/                       # WHAT exists (static lookup data)
 │       ├── api-routing.md                # GraphQL vs REST decisions
+│       ├── config-schema.md              # Config file schema
+│       ├── healthcheck-checks.md         # Healthcheck check catalog
+│       ├── operation-blocklist.md        # Blocked dangerous operations
 │       ├── token-permissions.md          # Token permission requirements
-│       └── domains/                      # Per-domain API syntax (25 files)
+│       ├── workflow-triggers.md          # Workflow trigger events
+│       └── domains/                      # Per-domain API syntax (26 files)
 │
 ├── docs/
-│   ├── decisions/                        # Historical architecture decisions
-│   └── (empty - files moved to lib/references/)
+│   └── quickstart.md                     # Quick start guide
 │
 ├── templates/
 │   ├── config.yaml.template
+│   ├── freshness.yaml.template
+│   ├── healthcheck.yaml.template
 │   ├── user.yaml.template
-│   └── freshness.yaml.template
+│   ├── repo.yaml.template
+│   ├── teams.yaml.template
+│   ├── views.yaml.template
+│   ├── relationships.yaml.template
+│   ├── automations.yaml.template
+│   ├── poll-state.yaml.template
+│   ├── workflow.yaml.template
+│   ├── gitignore.template
+│   └── workflows/                        # 10 pre-built workflow templates
+│       ├── auto-refresh.yaml
+│       ├── ci-monitor.yaml
+│       ├── issue-triage.yaml
+│       ├── pr-lifecycle.yaml
+│       └── ...
 │
 └── # External dependency: hiivmind-corpus-github
 ```
@@ -362,17 +404,17 @@ hiivmind-pulse-gh/
 ### How Operations Work
 
 ```
-1. ROUTE   →   2. CORPUS   →   3. EXECUTE
-   (API)         (syntax)        (temp file)
-     │              │               │
-lib/references/ External         gh api graphql
-api-routing.md  corpus skill     or gh api REST
-                   ↓
-               hiivmind-corpus-github
+1. ROUTE       →   2. RESOLVE   →   3. EXECUTE
+   (API choice)      (IDs)           (run)
+     │                 │                │
+lib/references/    config.yaml      gh api graphql
+api-routing.md     cache            or gh api REST
+                     │
+                  corpus (if uncertain about syntax)
 ```
 
 1. **Route** — Consult `lib/references/api-routing.md` for GraphQL vs REST decision
-2. **Corpus** — If uncertain about syntax, query the external GitHub API corpus
+2. **Resolve** — Get IDs from cached config; if uncertain about syntax, query the external GitHub API corpus
 3. **Execute** — Run the operation via `gh api` with temp file for complex queries
 
 ## Troubleshooting
@@ -418,9 +460,11 @@ cd hiivmind-pulse-gh-tests
 ```
 commands/*.md                              → Gateway and slash commands
 skills/*/SKILL.md                          → Skill documentation
+hooks/                                     → Event-driven hook scripts
 lib/patterns/*.md                          → Executable patterns (HOW to do things)
 lib/references/*.md                        → Static lookup data (WHAT exists)
-docs/                                      → Architecture docs, schemas, templates
+templates/                                 → Config and workflow templates
+docs/                                      → Quick start and documentation
 ```
 
 ## License
