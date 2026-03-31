@@ -141,7 +141,10 @@ for WF_FILE in "$WORKFLOWS_DIR"/*.yaml; do
                     ;;
                 dependabot)
                     CURR=$(gh api "/repos/${OWNER_REPO}/dependabot/alerts?state=open&per_page=1&sort=updated" 2>/dev/null || echo "SKIP")
-                    if [[ "$CURR" != "SKIP" ]]; then
+                    # gh api returns 0 even on 403/404 — detect error responses
+                    if [[ "$CURR" == "SKIP" ]]; then
+                        :
+                    elif echo "$CURR" | jq -e 'type == "array"' >/dev/null 2>&1; then
                         CURR_COUNT=$(echo "$CURR" | jq 'length' 2>/dev/null || echo "0")
                         PREV_COUNT=$(yq -r '.state.dependabot.open_count // 0' "$POLL_STATE")
                         if [[ "$CURR_COUNT" != "$PREV_COUNT" ]]; then
