@@ -53,7 +53,8 @@ actions:
 1. LOAD workflow YAML
 2. CHECK cooldown (poll-state.md)
    └── If cooldown active → skip, report "cooldown"
-3. CHECK auto flag
+3. CHECK approval context
+   ├── pre-approved (heartbeat selection, on-demand run) → execute immediately
    ├── auto: true  → execute immediately
    └── auto: false → present to user, ask permission
 4. EXECUTE actions sequentially
@@ -64,6 +65,28 @@ actions:
 5. UPDATE poll-state.yaml with execution result
 6. REPORT summary
 ```
+
+---
+
+## Pre-Approved Execution
+
+When a caller has already obtained user approval to run a workflow (e.g., the heartbeat skill
+presented workflows and the user selected which to run), downstream execution MUST NOT re-confirm.
+
+**How to recognize pre-approved context:**
+- The heartbeat skill explicitly states workflows are pre-approved after user selection
+- On-demand workflow runs (via workflows skill "run" command) are pre-approved by the user's request
+
+**When pre-approved:**
+1. Skip the `auto: false` permission check in step 3 of the execution flow — the user already approved
+2. Execute actions directly without confirmation prompts
+3. If stale config is detected during execution, auto-refresh and continue — do not stop to ask
+4. Read-only operations (list, show, summarize, get) never need confirmation regardless of context
+
+**The `auto` flag meaning is unchanged:**
+- `auto: true` — Heartbeat runs this workflow without presenting it for selection (Phase 4)
+- `auto: false` — Heartbeat presents this workflow for user selection (Phase 5)
+- After selection, both are pre-approved for execution
 
 ---
 
