@@ -153,6 +153,12 @@ Display what was detected:
 
 ### 4. Execute Auto Workflows
 
+**Execution context:** Auto workflows are pre-approved by definition. Execute without confirmation.
+When invoking downstream skills (operations, refresh), all execution is pre-approved — do NOT
+re-confirm with the user.
+
+**See:** `{PLUGIN_ROOT}/lib/patterns/workflow-execution.md` (Pre-Approved Execution section)
+
 For each workflow in `auto_workflows`:
 
 **See:** `{PLUGIN_ROOT}/lib/patterns/workflow-execution.md`
@@ -167,41 +173,125 @@ Running auto workflow: auto-refresh
   Result: success
 ```
 
-### 5. Present Non-Auto Workflows
+### 5. Execute Non-Auto Workflows
 
 For workflows in `triggered_workflows` but NOT in `auto_workflows`:
 
-```
-The following workflows were triggered but need your approval:
-```
-
-Ask the user which workflows to run:
+Present a single selection prompt:
 
 ```
 Which workflows would you like to run?
 
   1. pr-lifecycle — Summarize PR diffs, suggest reviewers (PR state changed)
-  2. Skip all — Don't run any workflows this session
+  2. project-sync — Detect project board changes (board updated)
+  3. All — Run all triggered workflows
+  4. Skip — Don't run any workflows
+
+Select one or more (e.g., "1, 2" or "all"):
 ```
 
-For each selected workflow, execute using the workflow execution pattern.
+**After user selects:** All selected workflows are **pre-approved**. Execute them immediately
+without any further confirmation. This means:
 
-### 6. Update State
+- Do NOT re-confirm individual workflow execution
+- Do NOT re-confirm operations invoked by workflow actions
+- If stale config is detected during execution, auto-refresh and continue
+- Read-only operations never need mutation confirmation
 
-After all executions:
+**See:** `{PLUGIN_ROOT}/lib/patterns/workflow-execution.md` (Pre-Approved Execution section)
 
-1. Update poll-state.yaml with results for each executed workflow
-2. Report final summary:
+For each selected workflow, execute using the workflow execution pattern with pre-approved context.
+
+### 6. Collect Results
+
+After all executions, update poll-state.yaml with results for each executed workflow.
+
+Build a results summary for Phase 7:
 
 ```
-## Heartbeat Complete
+EXECUTED_RESULTS = {
+  workflow_name: {
+    result: "success" | "failure" | "skipped",
+    findings: <output from workflow actions>
+  }
+}
+
+SKIPPED_WORKFLOWS = workflows in triggered but not selected by user
+```
+
+Display execution summary:
+
+```
+## Heartbeat Results
 
 | Workflow | Result |
 |----------|--------|
 | auto-refresh | success |
-| pr-lifecycle | success |
+| project-sync | success |
+```
 
-Next heartbeat will run on next session start.
+### 7. What's Next
+
+Present actionable next steps derived from workflow results. This phase ensures the heartbeat
+never ends at a dead end.
+
+**Structure (always in this order):**
+
+**7a. Actions from findings**
+
+Analyze the output of each executed workflow and suggest concrete next actions.
+Map workflow types to suggestion patterns:
+
+| Workflow | What to Look For | Suggestion |
+|----------|-----------------|------------|
+| project-sync | Items in actionable states (Approved, In Review) | "Issue #N is [Status] — [action]?" |
+| project-sync | Items assigned to user | "You have N items assigned across projects" |
+| pr-lifecycle | PRs needing review | "PR #N needs your review" |
+| pr-lifecycle | PRs with requested changes | "PR #N has requested changes to address" |
+| ci-monitor | Failed CI runs | "CI run failed on [branch] — investigate?" |
+| ci-monitor | Successful runs | "[branch] CI is green" (informational) |
+| issue-triage | Untriaged issues | "N new issues need labels" |
+| stale-check | Stale PRs/issues | "PR #N has had no activity for N days" |
+| auto-refresh | Sections refreshed | "Refreshed: [sections]" (informational) |
+| deploy-monitor | Recent deployments | "Deployment to [env] [succeeded/failed]" |
+| release-monitor | New releases | "Release [tag] published — review notes?" |
+| dependabot-alerts | New or critical alerts | "N new dependabot alerts — review?" |
+
+**Example:**
+```
+## What's Next
+
+Based on what we found:
+  - #9 Plan: Dev Ops Clarity is Approved — start implementing?
+  - Board has 4 items in Implementing
+  - PR #15 needs your review
+```
+
+**7b. Remaining workflows** (only if some triggered workflows were not selected)
+
+```
+Workflows not run this session:
+  - pr-lifecycle, ci-monitor
+
+Run remaining?
+```
+
+**7c. Fallback**
+
+Always end with an escape to broader options:
+
+```
+Pick an action, or /gh for more options.
+```
+
+**If no workflows produced actionable findings** (e.g., only auto-refresh ran):
+
+```
+## What's Next
+
+All clear — no items need attention right now.
+
+/gh for GitHub operations.
 ```
 
 ---
