@@ -12,6 +12,15 @@ Detect the GitHub workspace (organization or user) from git context or user inpu
 
 ## Config Location Strategy
 
+### CRITICAL: `.hiivmind/` Is a Multi-Plugin Namespace
+
+The `.hiivmind/` directory is shared across multiple hiivmind plugins:
+- `.hiivmind/github/` — hiivmind-pulse-gh (this plugin)
+- `.hiivmind/corpus/` — hiivmind-corpus
+- Other plugins may add their own subdirectories
+
+**NEVER delete, move, or replace a `.hiivmind/` directory.** Only operate on `.hiivmind/github/` which is this plugin's subdirectory.
+
 **IMPORTANT:** The `.hiivmind/github/config.yaml` may exist in the current directory OR a parent directory.
 
 This is common in monorepo setups or workspace directories where:
