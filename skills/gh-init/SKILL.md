@@ -444,6 +444,14 @@ Heartbeat:
 The hiivmind marketplace is now configured as a dependency.
 Team members will be prompted to install it when they trust this repo.
 
+Tip: To reduce approval prompts during heartbeat and operations,
+add this to your .claude/settings.local.json allowlist:
+
+  "Edit(.hiivmind/github/**)"
+
+This allows config, freshness, and workflow file edits without
+manual approval each time.
+
 What would you like to do next?
   1. Run an operation (use /hiivmind-pulse-gh)
   2. Fetch extended config (views, teams, automations)
