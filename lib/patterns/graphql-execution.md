@@ -35,10 +35,12 @@ The most reliable method for queries with `$variable` parameters.
 
 ### Step 1: Write Query to Temp File
 
-Use a HEREDOC with **single-quoted delimiter** to prevent shell expansion:
+Use the **Write tool** to create the query file. This avoids shell expansion issues entirely
+and keeps the file creation separate from the `gh api` call.
 
-```bash
-cat > /tmp/query.graphql << 'QUERY'
+**Write tool** → `/tmp/query.graphql`:
+
+```graphql
 query($login: String!) {
   organization(login: $login) {
     id
@@ -53,12 +55,16 @@ query($login: String!) {
     }
   }
 }
-QUERY
 ```
 
-**Key:** The `'QUERY'` (single quotes) prevents shell expansion inside the HEREDOC.
+**Key:** Using the Write tool instead of a Bash heredoc means:
+- No shell expansion issues (`$variable` stays literal)
+- File creation is handled cleanly without shell involvement
+- The query file is ready for the next step
 
 ### Step 2: Execute with File Read
+
+Use a **separate Bash call** to execute the query:
 
 ```bash
 gh api graphql \
@@ -66,10 +72,10 @@ gh api graphql \
   -f login="hiivmind"
 ```
 
-**Why this works:**
-1. The query is stored in a file, not interpreted by the shell
-2. `$(cat /tmp/query.graphql)` reads the file content as a literal string
-3. Variables are passed separately via `-f` flags
+**Why two separate tool calls:**
+1. Write tool handles file creation without shell expansion issues
+2. `gh api` call cleanly matches `Bash(gh:*)` allowlist
+3. A compound `cat > file && gh api` command matches neither rule
 
 ### Step 3: Cleanup (Optional)
 
@@ -77,15 +83,8 @@ gh api graphql \
 rm -f /tmp/query.graphql
 ```
 
-For scripts, use a unique temp file:
-```bash
-QUERY_FILE=$(mktemp)
-cat > "$QUERY_FILE" << 'QUERY'
-...
-QUERY
-gh api graphql -f query="$(cat "$QUERY_FILE")" ...
-rm -f "$QUERY_FILE"
-```
+For scripts, use a unique temp file name (e.g. `/tmp/query-{unique-id}.graphql`) and write it
+with the Write tool before executing with a separate Bash call.
 
 ---
 
@@ -170,9 +169,9 @@ echo "$RESPONSE" | jq '.data'
 
 **Goal:** Get all projects for an organization.
 
-**Query file:**
-```bash
-cat > /tmp/query.graphql << 'QUERY'
+**Write tool** → `/tmp/query.graphql`:
+
+```graphql
 query($login: String!) {
   organization(login: $login) {
     id
@@ -186,7 +185,6 @@ query($login: String!) {
     }
   }
 }
-QUERY
 ```
 
 **Execute:**
@@ -211,9 +209,9 @@ gh api graphql \
 
 **Goal:** Add an existing issue to a project.
 
-**Query file:**
-```bash
-cat > /tmp/query.graphql << 'QUERY'
+**Write tool** → `/tmp/query.graphql`:
+
+```graphql
 mutation($projectId: ID!, $contentId: ID!) {
   addProjectV2ItemById(input: {
     projectId: $projectId
@@ -224,7 +222,6 @@ mutation($projectId: ID!, $contentId: ID!) {
     }
   }
 }
-QUERY
 ```
 
 **Execute:**
@@ -284,11 +281,11 @@ For corpus discovery, see:
 
 ## Cross-Platform Notes
 
-| Aspect | Unix | Windows (PowerShell) |
-|--------|------|---------------------|
-| Temp file | `/tmp/query.graphql` | `$env:TEMP\query.graphql` |
-| HEREDOC | `cat > file << 'QUERY'` | Use `Set-Content` with literal string |
-| Command substitution | `$(cat file)` | `$(Get-Content file -Raw)` |
+| Aspect | Notes |
+|--------|-------|
+| Write query file | Use the **Write tool** — platform-agnostic, no shell involvement |
+| Execute query | Bash: `gh api graphql -f query="$(cat /tmp/query.graphql)"` |
+| Windows (PowerShell) | Write tool still works; Bash step becomes `$(Get-Content file -Raw)` |
 
 ---
 
