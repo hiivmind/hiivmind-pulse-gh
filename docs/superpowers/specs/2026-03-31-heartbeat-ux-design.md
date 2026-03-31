@@ -101,7 +101,7 @@ The Write tool doesn't require explicit permission. The `gh api` call is already
 Add one rule to cover config file edits:
 
 ```json
-"Edit(.hiivmind/**)"
+"Edit(.hiivmind/github/**)"
 ```
 
 This covers config.yaml, freshness.yaml, poll-state.yaml, and workflow file edits.
