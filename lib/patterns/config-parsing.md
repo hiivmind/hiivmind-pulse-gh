@@ -20,6 +20,8 @@ Extract fields from workspace `.hiivmind/github/config.yaml` files using availab
 
 **IMPORTANT:** The config may exist in a parent directory (workspace/monorepo setups).
 
+**CRITICAL:** This plugin only manages `.hiivmind/github/`. The parent `.hiivmind/` directory is a shared namespace across plugins — NEVER delete or replace it.
+
 ### Find Config Path
 
 Before any config operation, locate the config file:
