@@ -1,6 +1,6 @@
 ---
 name: gh-init
-version: 4.0.0
+version: 4.1.0
 description: >
   Initialize GitHub workspace to enable context enrichment for all GitHub operations. This skill
   should be used when: setting up a new workspace, first-time configuration, config.yaml is missing,
