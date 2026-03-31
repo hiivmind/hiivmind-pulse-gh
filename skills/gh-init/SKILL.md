@@ -71,6 +71,8 @@ elif [[ -f "../.hiivmind/github/config.yaml" ]]; then
 fi
 ```
 
+**CRITICAL — NEVER delete a `.hiivmind/` directory.** It is a shared namespace used by multiple plugins (github, corpus, etc.). Only `.hiivmind/github/` is managed by this plugin. The `.hiivmind/` directory may contain configurations for other plugins besides this one.
+
 **If config exists in parent:**
 ```
 Found existing workspace config in parent directory: ../.hiivmind/github/config.yaml
@@ -78,12 +80,32 @@ Found existing workspace config in parent directory: ../.hiivmind/github/config.
 This is common for workspace setups where multiple repos share one config.
 
 Options:
-1. Use parent config (recommended for workspace setup)
+1. Symlink to parent (recommended for workspace setup)
 2. Create local config for this repo only
 3. Re-initialize parent config
+4. Do nothing (use parent config via relative path resolution)
 
-Which would you like? [1/2/3]
+Which would you like? [1/2/3/4]
 ```
+
+**Option 1 implementation (symlink to parent):**
+
+```bash
+# If .hiivmind/github already exists locally, back it up
+if [[ -d ".hiivmind/github" && ! -L ".hiivmind/github" ]]; then
+    mv .hiivmind/github .hiivmind/github.bak
+fi
+mkdir -p .hiivmind
+ln -sfn ../.hiivmind/github .hiivmind/github
+```
+
+This creates a symlink at `.hiivmind/github` pointing to `../.hiivmind/github`, preserving any other content in the local `.hiivmind/` directory (e.g., corpus configs). After symlinking, verify with `ls -la .hiivmind/github` and confirm it points to the parent. Then skip to Phase 6 (VERIFY).
+
+**Option 2:** Proceed with normal initialization — creates a separate `.hiivmind/github/config.yaml` in this repo.
+
+**Option 3:** Use `$EXISTING_CONFIG` path and re-run discovery against it, overwriting the parent config.
+
+**Option 4:** Do nothing — other skills already resolve config from parent directories via relative path. Skip to Phase 6 (VERIFY).
 
 ### What to Do
 
