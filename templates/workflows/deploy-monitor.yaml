@@ -1,9 +1,9 @@
 # hiivmind-pulse-gh - Deploy Monitor Workflow
-# Detects new deployments and shows status
+# Tracks deployment status and offers remediation for failures
 # Copy to: .hiivmind/github/workflows/deploy-monitor.yaml
 
 name: "deploy-monitor"
-description: "Track deployment status changes"
+description: "Track deployment status, surface failures, and offer rollback discussion"
 enabled: true
 auto: false
 
@@ -13,9 +13,32 @@ trigger:
   condition: state_changed
   filter: {}
 
-actions:
-  - name: "Show latest deployment"
-    type: operation
-    operation: "show the latest deployment status including environment and creator"
+state:
+  deployment: null
+  previous: null
+
+workflow: |
+  GATHER:
+    deployment = show latest deployment status including environment, creator, and sha
+    IF deployment.status == "success":
+      SHOW "Deployment to {deployment.environment} succeeded ({deployment.sha})"
+      STOP "No action needed"
+    previous = show the deployment before the latest one
+
+  PRESENT:
+    IF deployment.status == "failure":
+      SHOW deployment failure details: environment, error, creator, time
+      ASK "Investigate logs, compare with previous deployment, or skip?" (logs | compare | skip)
+      IF logs: show deployment logs and error output
+      IF compare: show diff between deployment.sha and previous.sha
+
+    ELIF deployment.status == "pending" OR deployment.status == "in_progress":
+      SHOW "Deployment to {deployment.environment} is {deployment.status}"
+      ASK "Watch for completion, or skip?" (watch | skip)
+      IF watch: check deployment status again after brief wait
+
+    IF deployment.status == "failure":
+      ASK "Open an issue for this deployment failure?" (yes | no)
+      IF yes: create issue with deployment details labeled "deployment-failure"
 
 cooldown_minutes: 10

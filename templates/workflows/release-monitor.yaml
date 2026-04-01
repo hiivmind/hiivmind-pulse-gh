@@ -1,9 +1,9 @@
 # hiivmind-pulse-gh - Release Monitor Workflow
-# Detects new releases and shows details
+# Detects new releases and offers follow-up actions
 # Copy to: .hiivmind/github/workflows/release-monitor.yaml
 
 name: "release-monitor"
-description: "Notify when new releases are published"
+description: "Detect new releases, show details, and offer follow-up actions"
 enabled: true
 auto: false
 
@@ -13,9 +13,24 @@ trigger:
   condition: state_changed
   filter: {}
 
-actions:
-  - name: "Show latest release"
-    type: operation
-    operation: "show details of the latest release including tag, author, and notes"
+state:
+  release: null
+  previous_tag: null
+
+workflow: |
+  GATHER:
+    release = show latest release including tag, author, notes, and assets
+    IF release is empty: STOP "No releases found"
+    previous_tag = get the release tag before release.tag
+
+  PRESENT:
+    SHOW release summary: tag, author, date, release notes excerpt
+    IF previous_tag exists:
+      ASK "Compare changes since {previous_tag}, view full release notes, or skip?" (compare | notes | skip)
+      IF compare: show commit log between previous_tag and release.tag
+      IF notes: show full release notes body
+    ELSE:
+      ASK "View full release notes?" (yes | skip)
+      IF yes: show full release notes body
 
 cooldown_minutes: 60
