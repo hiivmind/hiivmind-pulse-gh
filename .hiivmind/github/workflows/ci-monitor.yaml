@@ -1,9 +1,9 @@
 # hiivmind-pulse-gh - CI Monitor Workflow
-# Detects failed CI runs and offers analysis
+# Detects failed CI runs, classifies failures, and offers targeted remediation
 # Copy to: .hiivmind/github/workflows/ci-monitor.yaml
 
 name: "ci-monitor"
-description: "Detect failed CI runs, analyze logs, and suggest fixes"
+description: "Detect failed CI runs, classify failures, and offer targeted remediation"
 enabled: true
 auto: false
 
@@ -13,12 +13,73 @@ trigger:
   condition: new_failure
   filter: {}
 
-actions:
-  - name: "Show failed runs"
-    type: operation
-    operation: "list recent failed workflow runs with their conclusions"
-  - name: "Analyze failure"
-    type: operation
-    operation: "show logs for the latest failed workflow run"
+state:
+  failures: []
+  selected: null
+  actions_taken: []
+
+workflow: |
+  GATHER:
+    failures = list recent failed workflow runs with conclusions
+    IF failures is empty: STOP "No failed runs detected"
+    FOR EACH failure IN failures:
+      logs = fetch logs for failure
+      failure.classify = INFER from logs (test | infra | config | flaky | permissions)
+      failure.branch = extract branch name
+      failure.user_touched = CHECK git blame on failing files against current user
+    STORE failures
+
+  PRESENT:
+    SHOW failures as table: [workflow, branch, classify, user_touched, time]
+    IF count(failures) > 1:
+      ASK "Which failure to investigate?" showing each as a choice
+    ELSE:
+      selected = failures[0]
+
+  INVESTIGATE(selected):
+    IF selected.classify == "flaky":
+      SHOW note: "This run failed then passed on a subsequent run, or has a history of intermittent failures"
+      ASK "Rerun this workflow, open a flaky-test issue, or skip?" (rerun | issue | skip)
+      IF rerun: trigger workflow rerun for selected.run_id
+      IF issue: create issue labeled "flaky-test" with failure details
+
+    ELIF selected.classify == "test" AND selected.user_touched:
+      SHOW failing test names and relevant log output
+      ASK "Debug this failure, open an issue, or skip?" (debug | issue | skip)
+      IF debug: analyze test failure against recent changes and suggest fix
+      IF issue: create issue with failure details and suggested assignee
+
+    ELIF selected.classify == "test" AND NOT selected.user_touched:
+      SHOW failing test names and committer info
+      ASK "Open an issue, ping the author, or skip?" (issue | ping | skip)
+      IF issue: create issue with failure details
+      IF ping: comment on the commit with failure summary
+
+    ELIF selected.classify == "infra":
+      SHOW infrastructure error summary (timeout, OOM, network, runner)
+      ASK "Open an issue, rerun, or skip?" (issue | rerun | skip)
+      IF issue: create issue labeled "infrastructure"
+      IF rerun: trigger workflow rerun
+
+    ELIF selected.classify == "config":
+      SHOW config-related error (missing secret, bad YAML, version mismatch)
+      ASK "Investigate config, open an issue, or skip?" (investigate | issue | skip)
+      IF investigate: show relevant config files and suggest fix
+
+    ELIF selected.classify == "permissions":
+      SHOW permission error details
+      ASK "Check token scopes, open an issue, or skip?" (check | issue | skip)
+      IF check: verify gh auth scopes against required permissions
+
+    RECORD action taken for selected in actions_taken
+    REMOVE selected from failures
+    IF failures not empty:
+      GOTO PRESENT
+    ELSE:
+      GOTO SUMMARIZE
+
+  SUMMARIZE:
+    SHOW actions_taken as table: [workflow, action, result]
+    IF any issues created: SHOW links
 
 cooldown_minutes: 10

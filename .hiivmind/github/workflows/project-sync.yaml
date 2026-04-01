@@ -1,10 +1,10 @@
 # hiivmind-pulse-gh - Project Sync Workflow
-# Detects changes in project board items and user assignments
+# Detects project board changes and offers status management
 # Copy to: .hiivmind/github/workflows/project-sync.yaml
 # Note: Requires default project set in config.yaml — skipped if unset
 
 name: "project-sync"
-description: "Detect project board changes and summarize updates"
+description: "Detect project board changes and offer status management"
 enabled: true
 auto: false
 
@@ -14,9 +14,45 @@ trigger:
   condition: state_changed
   filter: {}
 
-actions:
-  - name: "Summarize assignment changes"
-    type: operation
-    operation: "show my current project assignments across all projects, highlighting any changes since last session"
+state:
+  assignments: []
+  selected: null
+  actions_taken: []
+
+workflow: |
+  GATHER:
+    assignments = show my current project assignments across all projects
+    IF assignments is empty: STOP "No project assignments found"
+    FOR EACH item IN assignments:
+      item.changed = CHECK if status or assignee changed since last session
+    STORE assignments
+
+  PRESENT:
+    changed = FILTER assignments WHERE changed == true
+    IF changed is empty:
+      SHOW "No changes to your project assignments since last session"
+      STOP "Nothing to act on"
+    SHOW changed items as table: [project, item, old_status, new_status, assignee]
+    IF count(changed) > 1:
+      ASK "Update any of these items?" showing each as a choice, plus "skip all"
+    ELIF count(changed) == 1:
+      selected = changed[0]
+      ASK "Update status for {selected.title}?" (update | skip)
+
+  ACT(selected):
+    SHOW current status and available status options for selected
+    ASK "Set status to?" showing available statuses as choices, plus "skip"
+    IF not skip: update project item status to chosen value
+    RECORD action in actions_taken
+
+    REMOVE selected from changed
+    IF changed not empty:
+      GOTO PRESENT
+    ELSE:
+      GOTO SUMMARIZE
+
+  SUMMARIZE:
+    IF actions_taken not empty:
+      SHOW actions_taken as table: [item, old_status, new_status]
 
 cooldown_minutes: 30

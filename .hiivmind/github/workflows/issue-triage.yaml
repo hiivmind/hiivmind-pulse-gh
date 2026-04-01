@@ -1,9 +1,9 @@
 # hiivmind-pulse-gh - Issue Triage Workflow
-# Detects new issues and offers triage assistance
+# Detects untriaged issues, suggests labels and milestones, applies with confirmation
 # Copy to: .hiivmind/github/workflows/issue-triage.yaml
 
 name: "issue-triage"
-description: "Detect new issues, suggest labels, and flag potential duplicates"
+description: "Detect untriaged issues, suggest labels and milestones, apply with confirmation"
 enabled: true
 auto: false
 
@@ -13,12 +13,61 @@ trigger:
   condition: state_changed
   filter: {}
 
-actions:
-  - name: "List untriaged issues"
-    type: operation
-    operation: "list open issues without labels or milestones"
-  - name: "Suggest labels"
-    type: operation
-    operation: "suggest labels for unlabeled issues based on title and body"
+state:
+  issues: []
+  selected: null
+  actions_taken: []
+
+workflow: |
+  GATHER:
+    issues = list open issues without labels or milestones
+    IF issues is empty: STOP "All issues are triaged"
+    FOR EACH issue IN issues:
+      issue.suggested_labels = INFER from title and body, matched against repo's existing labels
+      issue.suggested_milestone = INFER from title, body, and open milestones
+      issue.possible_duplicate = CHECK if title/body closely matches another open issue
+    STORE issues
+
+  PRESENT:
+    SHOW issues as table: [title, author, age, suggested_labels, suggested_milestone, duplicate?]
+    IF count(issues) > 1:
+      ASK "Which issue to triage?" showing each as a choice, plus "skip all"
+    ELSE:
+      selected = issues[0]
+
+  TRIAGE(selected):
+    SHOW issue body and suggested triage
+
+    IF selected.possible_duplicate:
+      SHOW the potential duplicate issue
+      ASK "Close as duplicate, keep both, or investigate?" (close_dup | keep | investigate)
+      IF close_dup: close issue with "duplicate of #N" comment
+      IF investigate: show both issues side by side for comparison
+        ASK "Close as duplicate or keep both?" (close_dup | keep)
+
+    IF NOT closed as duplicate:
+      SHOW suggested labels: selected.suggested_labels
+      ASK "Apply these labels, choose different ones, or skip?" (apply | choose | skip)
+      IF apply: add suggested labels to issue
+      IF choose: SHOW all available repo labels as choices, apply selected
+
+      SHOW suggested milestone: selected.suggested_milestone
+      ASK "Apply this milestone, choose different one, or skip?" (apply | choose | skip)
+      IF apply: set milestone on issue
+      IF choose: SHOW open milestones as choices, apply selected
+
+      ASK "Assign this issue?" (assign | skip)
+      IF assign: SHOW team members as choices, assign selected
+
+    RECORD actions in actions_taken
+    REMOVE selected from issues
+    IF issues not empty:
+      GOTO PRESENT
+    ELSE:
+      GOTO SUMMARIZE
+
+  SUMMARIZE:
+    SHOW actions_taken as table: [issue, labels_added, milestone, assignee]
+    SHOW count of issues triaged vs skipped
 
 cooldown_minutes: 30
