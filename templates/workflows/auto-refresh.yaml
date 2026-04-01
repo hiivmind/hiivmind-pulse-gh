@@ -11,9 +11,10 @@ trigger:
   type: freshness
   condition: threshold_exceeded
 
-actions:
-  - name: "Refresh stale sections"
-    type: skill_invoke
-    skill: "hiivmind-pulse-gh:gh-refresh"
+state: {}
+
+workflow: |
+  EXECUTE:
+    INVOKE skill hiivmind-pulse-gh:gh-refresh
 
 cooldown_minutes: 60
