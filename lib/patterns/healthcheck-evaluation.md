@@ -338,30 +338,42 @@ LICENSE_INFO=$(gh api "/repos/${OWNER}/${REPO_NAME}/license" --jq '.license.spdx
 
 ---
 
-### `dependabot_config`
+### `dependency_management`
 
 **Local path (filesystem — current repo only):**
 
 ```bash
 if [[ "$REPO_NAME" == "$CURRENT_REPO" ]]; then
+  # Dependabot
   HAS_DEPENDABOT=$([[ -f ".github/dependabot.yml" || -f ".github/dependabot.yaml" ]] && echo "true" || echo "false")
+  # Renovate
+  HAS_RENOVATE=$([[ -f "renovate.json" || -f ".github/renovate.json" || -f ".renovaterc" || -f ".renovaterc.json" ]] && echo "true" || echo "false")
 fi
 ```
 
 **API fallback:**
 
 ```bash
-gh api "/repos/${OWNER}/${REPO_NAME}/contents/.github/dependabot.yml" --silent 2>/dev/null && HAS_DEPENDABOT="true" || HAS_DEPENDABOT="false"
+HAS_DEPENDABOT="false"
+gh api "/repos/${OWNER}/${REPO_NAME}/contents/.github/dependabot.yml" --silent 2>/dev/null && HAS_DEPENDABOT="true"
+
+HAS_RENOVATE="false"
+for path in "renovate.json" ".github/renovate.json" ".renovaterc" ".renovaterc.json"; do
+  if gh api "/repos/${OWNER}/${REPO_NAME}/contents/${path}" --silent 2>/dev/null; then
+    HAS_RENOVATE="true"
+    break
+  fi
+done
 ```
 
 **Evaluation:**
 
 | Condition | Status |
 |-----------|--------|
-| Dependabot config exists | pass |
-| Not found | fail |
+| Dependabot or Renovate config exists | pass |
+| Neither found | fail |
 
-**Detail string:** `"Configured"` or `"No dependabot.yml"`
+**Detail string:** `"Dependabot configured"`, `"Renovate configured"`, `"Dependabot + Renovate configured"`, or `"No dependency management tool configured"`
 
 ---
 

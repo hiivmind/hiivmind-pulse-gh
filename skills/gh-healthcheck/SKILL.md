@@ -3,8 +3,8 @@ name: gh-healthcheck
 version: 1.0.0
 description: >
   On-demand governance audit for repository maturity. Evaluates branch protection, project linkage,
-  triage labels, CI/CD, releases, documentation, CODEOWNERS, security policy, license, dependabot,
-  and secrets scanning. Multi-repo aware — evaluates all repos in config catalog or a specific repo.
+  triage labels, CI/CD, releases, documentation, CODEOWNERS, security policy, license, dependency
+  management (Dependabot/Renovate), and secrets scanning. Multi-repo aware — evaluates all repos in config catalog or a specific repo.
   Dismissals persist across sessions so resolved decisions are not raised again. Read-only evaluation;
   fix actions route through gh-operations. Trigger phrases: "healthcheck", "health check", "governance",
   "audit", "best practices", "repo health", "readiness", "maturity", "governance audit", "repo readiness",
@@ -217,7 +217,7 @@ Grade: {grade} ({score}/{total})
 | CODEOWNERS | ❌ fail | No CODEOWNERS file |
 | Security Policy | ❌ fail | No security policy |
 | License | ✅ pass | MIT |
-| Dependabot | ✅ pass | Configured |
+| Dependency Mgmt | ✅ pass | Renovate configured |
 | Secrets Scanning | ✅ pass | Scanning: enabled, Push protection: enabled |
 
 {dismissed_count} check(s) dismissed — not counted in score.

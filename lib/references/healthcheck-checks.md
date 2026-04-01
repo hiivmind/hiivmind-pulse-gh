@@ -162,18 +162,18 @@ Each check defines:
 
 ---
 
-### `dependabot_config`
+### `dependency_management`
 
 | Field | Value |
 |-------|-------|
 | Category | security |
 | Severity | high |
-| Pass | `.github/dependabot.yml` or `.github/dependabot.yaml` exists |
+| Pass | Dependabot config (`.github/dependabot.yml` or `.github/dependabot.yaml`) OR Renovate config (`renovate.json`, `.github/renovate.json`, `.renovaterc`, `.renovaterc.json`) exists |
 | Warn | — |
-| Fail | No dependabot config found |
-| Local Data | Filesystem: check `.github/dependabot.yml`, `.github/dependabot.yaml` (current repo only) |
-| API Fallback | `GET /repos/{owner}/{repo}/contents/.github/dependabot.yml` |
-| Fix Action | Suggest creating `.github/dependabot.yml` with ecosystem detection |
+| Fail | No dependency management tool configured |
+| Local Data | Filesystem: check all config file paths (current repo only) |
+| API Fallback | `GET /repos/{owner}/{repo}/contents/.github/dependabot.yml`, then Renovate paths |
+| Fix Action | Suggest creating `.github/dependabot.yml` or `renovate.json` with ecosystem detection |
 
 ---
 

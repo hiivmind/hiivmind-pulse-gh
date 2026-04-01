@@ -63,7 +63,7 @@ repos:
         last_evaluated: "2026-02-21T00:00:00Z"
         detail: "MIT"
         data: {}
-      dependabot_config:
+      dependency_management:
         status: dismissed
         last_evaluated: "2026-02-21T00:00:00Z"
         detail: "Dismissed: No package dependencies"
@@ -76,7 +76,7 @@ repos:
 
 dismissals:
   hiivmind-pulse-gh:
-    dependabot_config:
+    dependency_management:
       dismissed_at: "2026-02-21T00:00:00Z"
       dismissed_by: discreteds
       reason: "No package dependencies"

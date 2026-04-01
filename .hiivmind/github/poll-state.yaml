@@ -3,11 +3,11 @@
 # Location: .hiivmind/github/poll-state.yaml
 # See: lib/patterns/poll-state.md
 
-last_polled_at: "2026-02-21T03:49:53Z"
+last_polled_at: "2026-03-31T23:49:50Z"
 # GitHub state snapshot for change detection
 state:
   pull_requests:
-    open_count: 1
+    open_count: 0
     latest_id: null
     latest_updated_at: null
   issues:
@@ -15,14 +15,14 @@ state:
     latest_id: null
     latest_updated_at: null
   actions:
-    latest_run_id: "22246131638"
+    latest_run_id: "23793675578"
     latest_run_status: null
     latest_run_conclusion: success
   projects:
     item_count: 0
     my_assignments: [{"project": "Hiivmind", "project_number": 1, "items": [{"id": "PVTI_lADODUFJxM4BKJj9zgic3Fg", "number": 29, "title": "Fix Schema Differences Found During Live Fixture Recording", "type": "issue"}]}]
   deployments:
-    latest_id: "3889584308"
+    latest_id: "4228143390"
     latest_environment: github-pages
 # Per-workflow execution tracking
 workflows:

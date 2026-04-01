@@ -67,10 +67,10 @@ repos:
   #       last_evaluated: "2026-02-21T14:30:00Z"
   #       detail: "MIT"
   #       data: {}
-  #     dependabot_config:
+  #     dependency_management:
   #       status: pass
   #       last_evaluated: "2026-02-21T14:30:00Z"
-  #       detail: "Configured"
+  #       detail: "Renovate configured"
   #       data: {}
   #     secrets_scanning:
   #       status: pass
