@@ -1,0 +1,116 @@
+# hiivmind-pulse-gh - Community Activity Workflow
+# On-demand summary of repo-wide activity across issues, PRs, comments, and discussions
+# Copy to: .hiivmind/github/workflows/community-activity.yaml
+
+name: "community-activity"
+description: "Summarize repo-wide activity across issues, PRs, comments, and discussions"
+enabled: true
+auto: false
+
+trigger:
+  type: on_demand
+  condition: user_requested
+
+params:
+  scope:
+    description: "Time range to summarize"
+    type: string
+    default: "last 7 days"
+    examples: ["last 3 days", "last 24 hours", "last month", "since 2026-03-01"]
+  focus:
+    description: "Activity type to focus on, or 'all' for everything"
+    type: string
+    default: "all"
+    examples: ["issues", "prs", "comments", "discussions", "all"]
+
+state:
+  new_issues: []
+  closed_issues: []
+  new_prs: []
+  merged_prs: []
+  issue_comments: []
+  pr_comments: []
+  discussions: []
+  selected: null
+  contributors: []
+
+workflow: |
+  RESOLVE:
+    SHOW "Gathering community activity ({params.scope}, focus: {params.focus})"
+
+  GATHER:
+    IF params.focus == "all" OR params.focus == "issues":
+      new_issues = list issues created within params.scope
+      closed_issues = list issues closed within params.scope
+
+    IF params.focus == "all" OR params.focus == "prs":
+      new_prs = list PRs opened within params.scope
+      merged_prs = list PRs merged within params.scope
+
+    IF params.focus == "all" OR params.focus == "comments":
+      issue_comments = list issue comments within params.scope
+      pr_comments = list PR review comments within params.scope
+
+    IF params.focus == "all" OR params.focus == "discussions":
+      discussions = list discussion activity within params.scope
+
+    IF all empty: STOP "No community activity found in {params.scope}"
+
+    contributors = EXTRACT unique users across all activity
+    FOR EACH contributor IN contributors:
+      contributor.actions = count of their activities across all categories
+
+  PRESENT:
+    SHOW activity summary header: repo, date range
+    SHOW stats bar: [new_issues, closed_issues, new_prs, merged_prs, comments, discussions]
+    SHOW top contributors: [user, action_count] (top 5 by activity)
+
+    IF new_issues not empty:
+      SHOW "New Issues ({count}):" as table: [title, author, labels, date]
+    IF closed_issues not empty:
+      SHOW "Closed Issues ({count}):" as table: [title, closed_by, resolution, date]
+    IF new_prs not empty:
+      SHOW "New PRs ({count}):" as table: [title, author, diff_size, date]
+    IF merged_prs not empty:
+      SHOW "Merged PRs ({count}):" as table: [title, author, reviewers, date]
+    IF issue_comments not empty OR pr_comments not empty:
+      SHOW "Comments ({count}):" as table: [target, author, excerpt, date]
+    IF discussions not empty:
+      SHOW "Discussions ({count}):" as table: [title, author, replies, date]
+
+    ASK "Drill into a section, view a contributor's activity, change filters, or done?" (issues | prs | comments | discussions | contributor | refilter | done)
+
+    IF issues:
+      SHOW all issues (new + closed) with bodies
+      ASK "Investigate an issue or back?" showing issues as choices, plus "back"
+      IF selected: SHOW issue body, comments, timeline
+      GOTO PRESENT
+
+    IF prs:
+      SHOW all PRs (new + merged) with summaries
+      ASK "Investigate a PR or back?" showing PRs as choices, plus "back"
+      IF selected: SHOW PR diff summary, review comments, CI status
+      GOTO PRESENT
+
+    IF comments:
+      SHOW all comments with full context
+      GOTO PRESENT
+
+    IF discussions:
+      SHOW discussion threads with replies
+      ASK "Investigate a discussion or back?" showing discussions as choices, plus "back"
+      IF selected: SHOW full discussion thread
+      GOTO PRESENT
+
+    IF contributor:
+      ASK "Which contributor?" showing contributors as choices
+      SHOW selected contributor's full activity breakdown
+      ASK "Switch to user-activity workflow for deeper analysis?" (yes | no)
+      IF yes: INVOKE workflow user-activity WITH user=selected, scope=params.scope
+      GOTO PRESENT
+
+    IF refilter:
+      ASK "New time range or focus?" then update params
+      GOTO GATHER
+
+cooldown_minutes: 0
