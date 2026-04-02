@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Execute workflow actions after triggers fire, with cooldown enforcement and result recording.
+Execute workflows after triggers fire, with format detection, parameter resolution, cooldown enforcement, and result recording.
 
 ## When to Use
 
@@ -17,9 +17,108 @@ Execute workflow actions after triggers fire, with cooldown enforcement and resu
 
 ---
 
-## Action Types
+## Format Detection
 
-### `operation`
+Workflows exist in two formats. Detect which format before executing:
+
+```
+IF workflow YAML has 'workflow:' field → use pseudocode handoff (v2)
+ELIF workflow YAML has 'actions:' field → use sequential dispatch (v1, legacy)
+ELSE → error: workflow has neither actions nor workflow field
+```
+
+---
+
+## V2 Execution: Pseudocode Handoff
+
+### Execution Flow
+
+```
+1. LOAD workflow YAML
+2. CHECK cooldown (poll-state.md)
+   └── If cooldown active → skip, report "cooldown"
+3. CHECK approval context
+   ├── pre-approved (heartbeat selection, on-demand run) → execute immediately
+   ├── auto: true  → execute immediately
+   └── auto: false → present to user, ask permission
+4. RESOLVE params (if params: field exists)
+   ├── Extract from natural language request context
+   ├── Apply defaults for missing params
+   └── ASK user for remaining required params (default: null)
+5. FOLLOW pseudocode
+   ├── Read workflow: field — this is the instruction script
+   ├── Read state: field — these are the workflow's variables
+   └── Follow the pseudocode phases using the interpretation guidelines below
+6. UPDATE poll-state.yaml with result
+7. REPORT summary (from pseudocode's SUMMARIZE phase output, if present)
+```
+
+### Parameter Resolution
+
+For workflows with a `params:` field, resolve all parameters before the pseudocode starts executing. The pseudocode references them as `params.name` and assumes they are populated.
+
+**Resolution order:**
+
+1. **Extract from context** — if the workflow was invoked via natural language (e.g., `/gh commit summary last 3 days on main`), extract matching parameter values from the request
+2. **Apply defaults** — for params with a `default:` value set, use the default if not extracted from context
+3. **ASK for required** — for params with `default: null` (required), prompt the user before starting the workflow
+
+**Example params block:**
+
+```yaml
+params:
+  scope:
+    description: "Time range or commit range to summarize"
+    type: string
+    default: "since last session"
+    examples: ["last 3 days", "since v4.1.0"]
+  author:
+    description: "Filter to a specific git author"
+    type: string
+    default: null  # required — ASK if not provided
+```
+
+### Pseudocode Interpretation Guidelines
+
+When following a workflow's pseudocode, apply these interpretation rules:
+
+| Pseudocode | Runtime Action |
+|------------|---------------|
+| **Phase labels** (e.g., `GATHER:`, `PRESENT:`) | Execute top to bottom unless `GOTO` redirects |
+| **Natural language operations** (e.g., `failures = list recent failed workflow runs`) | Invoke gh-operations skill or use `gh` CLI directly |
+| **`ASK "question" (options)`** | Use AskUserQuestion to present choices to the user |
+| **`SHOW`** | Display information to the user (tables, summaries, details) |
+| **`INFER`** | Use LLM judgment to classify or categorize |
+| **`GOTO PHASE`** | Jump back to the named phase (loop) |
+| **`STOP "reason"`** | Halt workflow execution, report the reason, record result |
+| **`INVOKE skill plugin:name`** | Invoke the named skill via the Skill tool |
+| **`state:` variables** | Track in working memory throughout execution |
+| **`IF / ELIF / ELSE`** | Branch based on gathered data or user responses |
+| **`FOR EACH item IN list`** | Iterate over collected items |
+| **`STORE / REMOVE / SET / RECORD`** | Manage state variables |
+
+### State Management
+
+The `state:` field in the workflow YAML declares the workflow's variables. Initialize them at execution start:
+
+```yaml
+state:
+  failures: []        # initialized as empty list
+  selected: null      # initialized as null
+  actions_taken: []   # initialized as empty list
+```
+
+The pseudocode reads and writes these variables throughout execution. They exist only for the duration of the workflow run — no persistence across sessions.
+
+---
+
+## V1 Execution: Sequential Dispatch (Legacy)
+
+For backward compatibility with workflows that still use `actions:` instead of `workflow:`.
+
+### Action Types
+
+#### `operation`
 
 Route a natural language operation through the operations skill:
 
@@ -32,7 +131,7 @@ actions:
 
 **Execution:** Invoke `gh-operations` with the `operation` string as arguments.
 
-### `skill_invoke`
+#### `skill_invoke`
 
 Invoke a specific skill directly:
 
@@ -45,9 +144,7 @@ actions:
 
 **Execution:** Invoke the named skill via the Skill tool.
 
----
-
-## Execution Flow
+### Execution Flow
 
 ```
 1. LOAD workflow YAML
@@ -66,9 +163,19 @@ actions:
 6. REPORT summary
 ```
 
+### Multi-Action Workflows
+
+When a workflow has multiple actions:
+
+1. Execute actions **sequentially** (order matters)
+2. If an action fails, **stop** and record `failure`
+3. Report which action failed and why
+
 ---
 
 ## Pre-Approved Execution
+
+Applies to both v1 and v2 workflows.
 
 When a caller has already obtained user approval to run a workflow (e.g., the heartbeat skill
 presented workflows and the user selected which to run), downstream execution MUST NOT re-confirm.
@@ -79,13 +186,14 @@ presented workflows and the user selected which to run), downstream execution MU
 
 **When pre-approved:**
 1. Skip the `auto: false` permission check in step 3 of the execution flow — the user already approved
-2. Execute actions directly without confirmation prompts
+2. Execute directly without confirmation prompts
 3. If stale config is detected during execution, auto-refresh and continue — do not stop to ask
 4. Read-only operations (list, show, summarize, get) never need confirmation regardless of context
+5. For v2 workflows: `ASK` statements in the pseudocode are part of the workflow's designed interaction flow, not permission checks — always execute them
 
 **The `auto` flag meaning is unchanged:**
-- `auto: true` — Heartbeat runs this workflow without presenting it for selection (Phase 4)
-- `auto: false` — Heartbeat presents this workflow for user selection (Phase 5)
+- `auto: true` — Heartbeat runs this workflow without presenting it for selection
+- `auto: false` — Heartbeat presents this workflow for user selection
 - After selection, both are pre-approved for execution
 
 ---
@@ -112,6 +220,8 @@ if [[ "$LAST_RUN" != "null" ]]; then
 fi
 ```
 
+**Note:** On-demand workflow runs (via the workflows skill "run" command) skip cooldown checks entirely.
+
 ---
 
 ## Result Recording
@@ -124,15 +234,7 @@ After execution, update poll-state.yaml:
 | `last_result` | `success`, `failure`, or `skipped` |
 | `run_count` | Increment by 1 |
 
----
-
-## Multi-Action Workflows
-
-When a workflow has multiple actions:
-
-1. Execute actions **sequentially** (order matters)
-2. If an action fails, **stop** and record `failure`
-3. Report which action failed and why
+For v2 workflows, `success` means the pseudocode completed (reached end or `STOP`). `failure` means an unrecoverable error occurred during execution.
 
 ---
 
