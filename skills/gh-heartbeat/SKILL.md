@@ -1,6 +1,6 @@
 ---
 name: gh-heartbeat
-version: 4.0.0
+version: 4.1.0
 description: >
   Handle session wake-up when the heartbeat hook detects pending work. Processes triggered workflows,
   runs auto workflows immediately, and presents non-auto workflows for user approval. Use this when:
@@ -157,19 +157,28 @@ Display what was detected:
 When invoking downstream skills (operations, refresh), all execution is pre-approved — do NOT
 re-confirm with the user.
 
-**See:** `{PLUGIN_ROOT}/lib/patterns/workflow-execution.md` (Pre-Approved Execution section)
+**See:** `{PLUGIN_ROOT}/lib/patterns/workflow-execution.md`
 
 For each workflow in `auto_workflows`:
 
-**See:** `{PLUGIN_ROOT}/lib/patterns/workflow-execution.md`
-
 1. Load workflow YAML from `.hiivmind/github/workflows/`
-2. Execute actions sequentially
+2. Detect format:
+   - **If `workflow:` field exists (v2):** Follow the pseudocode handoff pattern:
+     - Read `state:` field and initialize variables
+     - If `params:` exists, resolve parameters (extract from context → apply defaults → ASK for required)
+     - Follow the `workflow:` pseudocode as executable instructions
+     - Use gh-operations for data operations, AskUserQuestion for `ASK` statements
+     - Track state variables through FSM phases
+   - **If `actions:` field exists (v1):** Fall back to sequential dispatch:
+     - Execute actions in order
+     - `operation` → invoke gh-operations with the operation string
+     - `skill_invoke` → invoke the named skill
 3. Update poll-state.yaml with result
 
 ```
 Running auto workflow: auto-refresh
-  Action: Refresh stale sections → invoking refresh skill...
+  Following workflow pseudocode...
+  EXECUTE: Invoking skill hiivmind-pulse-gh:gh-refresh
   Result: success
 ```
 
@@ -197,10 +206,18 @@ without any further confirmation. This means:
 - Do NOT re-confirm operations invoked by workflow actions
 - If stale config is detected during execution, auto-refresh and continue
 - Read-only operations never need mutation confirmation
+- For v2 workflows: `ASK` statements in the pseudocode are part of the workflow's designed
+  interaction flow — always execute them
 
 **See:** `{PLUGIN_ROOT}/lib/patterns/workflow-execution.md` (Pre-Approved Execution section)
 
-For each selected workflow, execute using the workflow execution pattern with pre-approved context.
+For each selected workflow, execute using the workflow execution pattern:
+
+1. Load workflow YAML
+2. Detect format:
+   - **v2 (`workflow:` field):** Follow pseudocode handoff — resolve params, follow FSM
+   - **v1 (`actions:` field):** Sequential dispatch
+3. Update poll-state.yaml with result
 
 ### 6. Collect Results
 
@@ -212,7 +229,7 @@ Build a results summary for Phase 7:
 EXECUTED_RESULTS = {
   workflow_name: {
     result: "success" | "failure" | "skipped",
-    findings: <output from workflow actions>
+    findings: <output from workflow execution (v2: SUMMARIZE phase output, v1: per-action output)>
   }
 }
 
