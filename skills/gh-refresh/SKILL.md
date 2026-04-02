@@ -1,6 +1,5 @@
 ---
 name: gh-refresh
-version: 4.0.0
 description: >
   Sync cached workspace config with current GitHub state. This skill should be used when: config is
   stale, "ID not found" errors occur, project fields changed, new projects created, options renamed,

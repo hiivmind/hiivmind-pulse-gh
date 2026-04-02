@@ -1,6 +1,5 @@
 ---
 name: gh-operations
-version: 4.0.0
 description: >
   Execute GitHub operations with automatic context enrichment from cached workspace. Use this for ANY
   GitHub operation, not just complex ones. Simple operations like creating issues are enriched with

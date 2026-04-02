@@ -1,6 +1,5 @@
 ---
 name: gh-heartbeat
-version: 4.1.0
 description: >
   Handle session wake-up when the heartbeat hook detects pending work. Processes triggered workflows,
   runs auto workflows immediately, and presents non-auto workflows for user approval. Use this when:

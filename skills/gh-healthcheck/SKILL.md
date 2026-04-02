@@ -1,6 +1,5 @@
 ---
 name: gh-healthcheck
-version: 1.0.0
 description: >
   On-demand governance audit for repository maturity. Evaluates branch protection, project linkage,
   triage labels, CI/CD, releases, documentation, CODEOWNERS, security policy, license, dependency

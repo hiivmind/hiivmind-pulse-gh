@@ -1,6 +1,5 @@
 ---
 name: gh-workflows
-version: 4.1.0
 description: >
   Manage event-driven workflows for GitHub automation. List, enable, disable, run, create, and check
   status of workflows that trigger on session start, after operations, or on demand. Use this when:

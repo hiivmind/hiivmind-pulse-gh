@@ -1,7 +1,7 @@
 {
   "name": "gh",
   "description": "GitHub workspace initialization and API documentation corpus. Run init once, then use gh CLI directly with routing guide and corpus for GraphQL/REST operations.",
-  "version": "4.2.0",
+  "version": "4.3.0",
   "author": {
     "name": "Nathaniel Ramm <nathaniel@hiivmind.ai>"
   },
