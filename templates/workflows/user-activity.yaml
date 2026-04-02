@@ -1,0 +1,102 @@
+# hiivmind-pulse-gh - User Activity Workflow
+# On-demand summary of a user's activity across commits, PRs, issues, and reviews
+# Copy to: .hiivmind/github/workflows/user-activity.yaml
+
+name: "user-activity"
+description: "Summarize a user's activity across commits, PRs, issues, and reviews"
+enabled: true
+auto: false
+
+trigger:
+  type: on_demand
+  condition: user_requested
+
+params:
+  user:
+    description: "GitHub username to report on"
+    type: string
+    default: null
+    examples: ["octocat", "nathanielramm"]
+  scope:
+    description: "Time range to summarize"
+    type: string
+    default: "last 7 days"
+    examples: ["last 3 days", "last 24 hours", "last month", "since 2026-03-01"]
+
+state:
+  commits: []
+  prs: []
+  issues: []
+  reviews: []
+  comments: []
+  selected: null
+
+workflow: |
+  RESOLVE:
+    IF params.user is null:
+      params.user = current authenticated GitHub user
+    SHOW "Gathering activity for @{params.user} ({params.scope})"
+
+  GATHER:
+    commits = git log filtered to params.user for params.scope
+    prs = list PRs authored by params.user within params.scope (open and merged)
+    issues = list issues authored by params.user within params.scope (open and closed)
+    reviews = list PR reviews submitted by params.user within params.scope
+    comments = list issue and PR comments by params.user within params.scope
+
+    IF all empty: STOP "No activity found for @{params.user} in {params.scope}"
+
+    FOR EACH pr IN prs:
+      pr.status = INFER (open | merged | closed)
+      pr.review_state = summarize review status
+    FOR EACH issue IN issues:
+      issue.status = open or closed
+
+  PRESENT:
+    SHOW activity summary header: user, date range, avatar
+    SHOW stats bar: [commits, PRs, issues, reviews, comments]
+
+    IF commits not empty:
+      SHOW "Commits ({count}):" as table: [hash, message, files_changed, date]
+    IF prs not empty:
+      SHOW "Pull Requests ({count}):" as table: [title, status, reviews, date]
+    IF issues not empty:
+      SHOW "Issues ({count}):" as table: [title, status, labels, date]
+    IF reviews not empty:
+      SHOW "Reviews Given ({count}):" as table: [PR title, verdict, date]
+    IF comments not empty:
+      SHOW "Comments ({count}):" as table: [target, excerpt, date]
+
+    ASK "Drill into a section, change time range, or done?" (commits | prs | issues | reviews | comments | refilter | done)
+
+    IF commits:
+      SHOW detailed commit list with diff stats
+      ASK "Investigate a commit or back?" showing commits as choices, plus "back"
+      IF selected: SHOW full commit details and diff summary
+      GOTO PRESENT
+
+    IF prs:
+      SHOW detailed PR list with diffs and review status
+      ASK "Investigate a PR or back?" showing PRs as choices, plus "back"
+      IF selected: SHOW PR diff summary, reviewers, CI status
+      GOTO PRESENT
+
+    IF issues:
+      SHOW detailed issue list with bodies
+      ASK "Investigate an issue or back?" showing issues as choices, plus "back"
+      IF selected: SHOW issue body, comments, labels, milestone
+      GOTO PRESENT
+
+    IF reviews:
+      SHOW detailed review list with comments
+      GOTO PRESENT
+
+    IF comments:
+      SHOW full comment bodies with context
+      GOTO PRESENT
+
+    IF refilter:
+      ASK "New time range?" then update params.scope
+      GOTO GATHER
+
+cooldown_minutes: 0
