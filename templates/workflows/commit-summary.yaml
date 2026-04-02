@@ -1,0 +1,86 @@
+# hiivmind-pulse-gh - Commit Summary Workflow
+# On-demand summary of commit activity with flexible filtering
+# Copy to: .hiivmind/github/workflows/commit-summary.yaml
+
+name: "commit-summary"
+description: "Summarize commit activity by time range, branch, or author"
+enabled: true
+auto: false
+
+trigger:
+  type: on_demand
+  condition: user_requested
+
+params:
+  scope:
+    description: "Time range or commit range to summarize"
+    type: string
+    default: "since last session"
+    examples: ["last 3 days", "last 24 hours", "since v4.1.0", "since abc1234"]
+  branch:
+    description: "Branch to scope to, or 'all' for all branches"
+    type: string
+    default: "current"
+    examples: ["main", "all", "feature/auth"]
+  author:
+    description: "Filter to a specific git author"
+    type: string
+    default: null
+
+state:
+  commits: []
+  selected: null
+  scope_description: null
+
+workflow: |
+  RESOLVE:
+    scope_description = human-readable description of params.scope, params.branch, params.author
+    SHOW "Gathering commits: {scope_description}"
+
+  GATHER:
+    IF params.branch == "all":
+      commits = git log across all branches for params.scope
+    ELIF params.branch == "current":
+      commits = git log on current branch for params.scope
+    ELSE:
+      commits = git log on params.branch for params.scope
+
+    IF params.author:
+      commits = FILTER commits WHERE author matches params.author
+
+    IF commits is empty: STOP "No commits found for {scope_description}"
+
+    FOR EACH commit IN commits:
+      commit.files_changed = count of files changed
+      commit.insertions = lines added
+      commit.deletions = lines removed
+      commit.category = INFER from message and files (feature | fix | refactor | docs | chore | test)
+    STORE commits
+
+  PRESENT:
+    SHOW summary stats: total commits, authors, date range
+    SHOW commits grouped by category as table: [hash, author, message, files_changed, +/-, date]
+    IF multiple authors:
+      SHOW breakdown by author: [author, commit_count, lines_changed]
+    IF params.branch == "all" AND multiple branches:
+      SHOW breakdown by branch: [branch, commit_count]
+
+    ASK "Investigate a specific commit, view diff stats, change filters, or done?" (investigate | diff_stats | refilter | done)
+
+    IF investigate:
+      ASK "Which commit?" showing recent commits as choices
+      SHOW full commit details: message, diff summary, files changed
+      ASK "View full diff, open in browser, or back to summary?" (diff | browser | back)
+      IF diff: show full diff for selected commit
+      IF browser: open commit on GitHub
+      GOTO PRESENT
+
+    IF diff_stats:
+      SHOW aggregated diff stats: files most frequently changed, hotspots, total lines
+      GOTO PRESENT
+
+    IF refilter:
+      ASK "New scope?" then update params.scope
+      GOTO GATHER
+
+cooldown_minutes: 0
