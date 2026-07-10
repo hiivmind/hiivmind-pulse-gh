@@ -33,7 +33,7 @@
 - Produces: `resolve_workspace_root()` — bash function; arg 1 optional start dir (default `$PWD`); prints the workspace root directory (the dir *containing* `.hiivmind/`) on stdout, exit 0; exit 1 if none found. Marker: config file contains a top-level `workspace:` key (`grep -q '^workspace:'`). Every later task copies this function verbatim.
 - Produces: the terms **workspace config (base)** / **repo overlay**, and the D4 headless-inputs convention, referenced by Tasks 2–4.
 
-- [ ] **Step 1: Replace the "Config Location Strategy" section**
+- [x] **Step 1: Replace the "Config Location Strategy" section**
 
 In `lib/patterns/workspace-detection.md`, replace everything from the heading `## Config Location Strategy` through the end of the "Search Order" section (i.e., up to but not including `## Prerequisites`) with:
 
@@ -163,7 +163,7 @@ is M:M across individuals, GitHub profiles, and physical machines. Rules:
   consumed as truth.
 ````
 
-- [ ] **Step 2: Verify the resolution function against fixtures**
+- [x] **Step 2: Verify the resolution function against fixtures**
 
 Run this end-to-end check (copy-paste as one block):
 
@@ -193,7 +193,7 @@ Expected output: the three `PASS ...` lines and nothing else.
 
 The function in the pattern doc must be byte-identical to the one tested above.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add lib/patterns/workspace-detection.md
@@ -213,7 +213,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Consumes: `resolve_workspace_root` logic from Task 1 (inlined — hooks can't source pattern docs).
 - Produces: heartbeat that runs from any depth under a workspace root; `WORKSPACE_ROOT`, `OVERLAY_WORKFLOWS` shell vars; repo-scoped sources skipped when the session is not inside a repo clone.
 
-- [ ] **Step 1: Replace the two-level config check**
+- [x] **Step 1: Replace the two-level config check**
 
 In `hooks/heartbeat.sh`, replace:
 
@@ -249,7 +249,7 @@ if [[ -n "$WORKSPACE_ROOT" ]]; then
 fi
 ```
 
-- [ ] **Step 2: Add overlay workflows and fix the workflows-dir guard**
+- [x] **Step 2: Add overlay workflows and fix the workflows-dir guard**
 
 Replace:
 
@@ -278,7 +278,7 @@ if [[ ! -d "$WORKFLOWS_DIR" && -z "$OVERLAY_WORKFLOWS" ]]; then
 fi
 ```
 
-- [ ] **Step 3: Make repo detection non-fatal (D3 scope)**
+- [x] **Step 3: Make repo detection non-fatal (D3 scope)**
 
 Replace:
 
@@ -304,7 +304,7 @@ if [[ -n "$REMOTE_URL" ]]; then
 fi
 ```
 
-- [ ] **Step 4: Loop over both workflow dirs and guard repo-scoped sources**
+- [x] **Step 4: Loop over both workflow dirs and guard repo-scoped sources**
 
 Replace the loop opener:
 
@@ -333,7 +333,7 @@ Then, inside `session_poll)`, immediately after `SOURCE=$(yq -r '.trigger.source
             esac
 ```
 
-- [ ] **Step 5: Verify against a fixture workspace**
+- [x] **Step 5: Verify against a fixture workspace**
 
 ```bash
 FIX=$(mktemp -d)
@@ -357,7 +357,7 @@ cd "$(mktemp -d)" && bash /Users/nathanielramm/git/hiivmind/hiivmind-pulse-gh/ho
 
 Expected: no output, `exit=0`.
 
-- [ ] **Step 6: Run shellcheck and commit**
+- [x] **Step 6: Run shellcheck and commit**
 
 ```bash
 shellcheck hooks/heartbeat.sh || true   # pre-existing warnings OK; no NEW errors
@@ -379,7 +379,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Consumes: `resolve_workspace_root` (Task 1), the base/overlay terminology.
 - Produces: `templates/workspace-gitignore.template`; gh-init flows `INIT-AT-WORKSPACE-ROOT` (fresh parent) and `PROMOTE` (existing repo-local config → workspace root). Task 5 executes PROMOTE verbatim for the dogfood.
 
-- [ ] **Step 1: Create the workspace-repo gitignore template**
+- [x] **Step 1: Create the workspace-repo gitignore template**
 
 Write `templates/workspace-gitignore.template`:
 
@@ -394,7 +394,7 @@ log/
 .assignments-tmp.json
 ```
 
-- [ ] **Step 2: Replace Phase 1's "Check for Existing Config" section in `skills/gh-init/SKILL.md`**
+- [x] **Step 2: Replace Phase 1's "Check for Existing Config" section in `skills/gh-init/SKILL.md`**
 
 Replace everything from `### Check for Existing Config` up to (not including) `### What to Do` with:
 
@@ -496,7 +496,7 @@ copied (`poll-state.yaml`, `log/`, `user.yaml`) are excluded by the workspace
 repo's `.gitignore` automatically.
 ````
 
-- [ ] **Step 3: Add Phase 5.9 (WORKSPACE REPO) to `skills/gh-init/SKILL.md`**
+- [x] **Step 3: Add Phase 5.9 (WORKSPACE REPO) to `skills/gh-init/SKILL.md`**
 
 Insert between Phase 5.7 and Phase 6:
 
@@ -540,7 +540,7 @@ taken or the user prefers another name, ask for one. Teammates join with:
     git clone git@github.com:{login}/{login}-workspace.git {workspace_root}/.hiivmind/github
 ````
 
-- [ ] **Step 4: Update the Phase 5 output-files table**
+- [x] **Step 4: Update the Phase 5 output-files table**
 
 In the `### Output Files` table of `skills/gh-init/SKILL.md`, replace the table with:
 
@@ -558,7 +558,7 @@ In the `### Output Files` table of `skills/gh-init/SKILL.md`, replace the table 
 
 Also in Phase 5 "What to Do", change step 5 from "Update `.gitignore` to exclude `user.yaml`" to: "Copy `{PLUGIN_ROOT}/templates/workspace-gitignore.template` to `{WORKSPACE_ROOT}/.hiivmind/github/.gitignore` (workspace placement); for repo-local placement, add `.hiivmind/github/user.yaml`, `.hiivmind/github/poll-state.yaml`, and `.hiivmind/github/log/` to the host repo's `.gitignore` instead." And note on the `.claude/settings.json` step: "repo-scoped — apply to each repo where the team should get the marketplace prompt, not to the workspace repo."
 
-- [ ] **Step 5: Verify skill-doc consistency**
+- [x] **Step 5: Verify skill-doc consistency**
 
 ```bash
 grep -n "workspace-gitignore.template" skills/gh-init/SKILL.md templates/workspace-gitignore.template >/dev/null && echo "PASS template referenced"
@@ -568,7 +568,7 @@ grep -n '\.\./\.hiivmind' skills/gh-init/SKILL.md && echo "FAIL two-level remnan
 
 Expected: `PASS template referenced`, a count ≥ 1 for Phase 5.9, `PASS no two-level remnants`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add templates/workspace-gitignore.template skills/gh-init/SKILL.md
@@ -590,7 +590,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 **Interfaces:**
 - Consumes: `resolve_workspace_root` (Task 1) — inlined identically at each site; each block keeps the variable names its surrounding doc already uses (`CONFIG_PATH`, `CONFIG_DIR`, `initialized`).
 
-- [ ] **Step 1: `lib/patterns/config-parsing.md`** — replace the `find_config_path` function AND the "Quick check (2 levels ...)" block with:
+- [x] **Step 1: `lib/patterns/config-parsing.md`** — replace the `find_config_path` function AND the "Quick check (2 levels ...)" block with:
 
 ````markdown
 ```bash
@@ -617,7 +617,7 @@ A config **without** a top-level `workspace:` section is a repo overlay
 keeps walking up.
 ````
 
-- [ ] **Step 2: `skills/gh-operations/SKILL.md:73-81`** — replace the if/elif/else block with:
+- [x] **Step 2: `skills/gh-operations/SKILL.md:73-81`** — replace the if/elif/else block with:
 
 ```bash
 # Resolve workspace root (see lib/patterns/workspace-detection.md)
@@ -635,7 +635,7 @@ done
 
 And change the following line `**If config found in parent:** ...` to `**If config found at a workspace root above cwd:** use that config path for all operations. This is the normal case when repos live under a shared workspace root.`
 
-- [ ] **Step 3: `skills/gh-workflows/SKILL.md:55-61`** — replace with the same walk-up, assigning `CONFIG_DIR`:
+- [x] **Step 3: `skills/gh-workflows/SKILL.md:55-61`** — replace with the same walk-up, assigning `CONFIG_DIR`:
 
 ```bash
 # Resolve workspace root (see lib/patterns/workspace-detection.md)
@@ -651,7 +651,7 @@ while [[ "$DIR" != "/" ]]; do
 done
 ```
 
-- [ ] **Step 4: `commands/gh.md` — both blocks (lines 160-170 and 292-301)** — replace each if/elif/else with:
+- [x] **Step 4: `commands/gh.md` — both blocks (lines 160-170 and 292-301)** — replace each if/elif/else with:
 
 ```bash
 # Resolve workspace root (see lib/patterns/workspace-detection.md)
@@ -669,7 +669,7 @@ while [[ "$DIR" != "/" ]]; do
 done
 ```
 
-- [ ] **Step 5: Verify no stragglers**
+- [x] **Step 5: Verify no stragglers**
 
 ```bash
 grep -rn '\.\./\.hiivmind/github/config.yaml' skills/ commands/ lib/ hooks/ && echo "FAIL" || echo "PASS no two-level checks remain"
@@ -677,7 +677,7 @@ grep -rn '\.\./\.hiivmind/github/config.yaml' skills/ commands/ lib/ hooks/ && e
 
 Expected: `PASS no two-level checks remain`. (`skills/gh-init/SKILL.md` was cleaned in Task 3.)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add lib/patterns/config-parsing.md skills/gh-operations/SKILL.md skills/gh-workflows/SKILL.md commands/gh.md
@@ -697,7 +697,7 @@ This task executes Task 3's PROMOTE flow on the real hiivmind parent folder. It 
 - Modify: `.gitignore` (remove `.hiivmind/github/*` entries), delete tracked `.hiivmind/github/` from this repo
 - Remote: create private `hiivmind/hiivmind-workspace` and push (⚠️ outward-facing — confirm with the user immediately before `gh repo create`)
 
-- [ ] **Step 1: Copy the config to the workspace root and git-init it**
+- [x] **Step 1: Copy the config to the workspace root and git-init it**
 
 ```bash
 cd /Users/nathanielramm/git/hiivmind/hiivmind-pulse-gh
@@ -713,7 +713,7 @@ git commit -m "chore: initialize hiivmind workspace repo (promoted from hiivmind
 
 Expected in `git status --short` before commit: `config.yaml`, `freshness.yaml` (if present), `teams.yaml`, `relationships.yaml`, `healthcheck.yaml`, `workflows/*`, `views/*`, `repos/*`, `automations/*`, `.gitignore` staged; **no** `poll-state.yaml`.
 
-- [ ] **Step 2: Create and push the remote (confirm with user first)**
+- [x] **Step 2: Create and push the remote (confirm with user first)**
 
 ```bash
 gh repo create hiivmind/hiivmind-workspace --private --source=. --push
@@ -721,7 +721,7 @@ gh repo create hiivmind/hiivmind-workspace --private --source=. --push
 
 Expected: repo created, `main` pushed. If the name is taken, stop and ask.
 
-- [ ] **Step 3: Remove the tracked copy from hiivmind-pulse-gh**
+- [x] **Step 3: Remove the tracked copy from hiivmind-pulse-gh**
 
 ```bash
 cd /Users/nathanielramm/git/hiivmind/hiivmind-pulse-gh
@@ -741,7 +741,7 @@ Then edit `.gitignore` — delete these lines (now meaningless here):
 
 and the `.hiivmind/github/log/` line.
 
-- [ ] **Step 4: Validate the P0 exit criteria**
+- [x] **Step 4: Validate the P0 exit criteria**
 
 ```bash
 cd /Users/nathanielramm/git/hiivmind/hiivmind-corpus/skills   # a DIFFERENT repo, 2 levels deep
@@ -758,7 +758,7 @@ bash -c 'DIR="$PWD"; while [[ "$DIR" != "/" ]]; do if [[ -f "$DIR/.hiivmind/gith
 
 Expected output: `/Users/nathanielramm/git/hiivmind`
 
-- [ ] **Step 5: Commit the removal in hiivmind-pulse-gh**
+- [x] **Step 5: Commit the removal in hiivmind-pulse-gh**
 
 ```bash
 cd /Users/nathanielramm/git/hiivmind/hiivmind-pulse-gh
@@ -779,23 +779,23 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Modify: `docs/superpowers/specs/2026-07-10-workspace-root-and-headless-orchestration-design.md` (§3.1 D1 note, §P0 checkboxes, §8.9 table)
 - Modify: `.claude-plugin/plugin.json` (version)
 
-- [ ] **Step 1: Record the D1 resolution in §3.1**
+- [x] **Step 1: Record the D1 resolution in §3.1**
 
 In the spec's D1 paragraph, after "or just its `.hiivmind/` directory) as a small git repository", append: ` **Resolved during P0: the workspace repo is rooted at `.hiivmind/github/` itself (not the whole parent folder — avoids nested-clone hazards and respects the multi-plugin `.hiivmind/` namespace); default remote `{login}-workspace`, private.**`
 
-- [ ] **Step 2: Tick the P0 deliverable checkboxes**
+- [x] **Step 2: Tick the P0 deliverable checkboxes**
 
 Change all five `- [ ] P0.x ...` items in §P0 to `- [x]`.
 
-- [ ] **Step 3: Update the §8.9 progress table**
+- [x] **Step 3: Update the §8.9 progress table**
 
 Set the P0 row's status to `✅ complete` with today's date (2026-07-10); leave every other row unchanged.
 
-- [ ] **Step 4: Bump plugin version**
+- [x] **Step 4: Bump plugin version**
 
 In `.claude-plugin/plugin.json`, change `"version": "4.3.0"` to `"version": "4.4.0"`.
 
-- [ ] **Step 5: Final verification sweep (plan self-check)**
+- [x] **Step 5: Final verification sweep (plan self-check)**
 
 ```bash
 cd /Users/nathanielramm/git/hiivmind/hiivmind-pulse-gh
@@ -803,7 +803,7 @@ grep -rn '\.\./\.hiivmind/github/config.yaml' skills/ commands/ lib/ hooks/ && e
 git status --short   # only the files from this task staged/modified
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-07-10-workspace-root-and-headless-orchestration-design.md .claude-plugin/plugin.json
