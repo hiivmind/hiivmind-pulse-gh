@@ -5,11 +5,23 @@
 
 set -euo pipefail
 
+# Resolve workspace root: walk up to the first .hiivmind/github/config.yaml
+# carrying a `workspace:` section (repo overlays lack it and are skipped).
+# See: lib/patterns/workspace-detection.md § Workspace Root Resolution
+WORKSPACE_ROOT=""
+DIR="$PWD"
+while [[ "$DIR" != "/" ]]; do
+    if [[ -f "$DIR/.hiivmind/github/config.yaml" ]] \
+       && grep -q '^workspace:' "$DIR/.hiivmind/github/config.yaml"; then
+        WORKSPACE_ROOT="$DIR"
+        break
+    fi
+    DIR="$(dirname "$DIR")"
+done
+
 CONFIG_PATH=""
-if [[ -f ".hiivmind/github/config.yaml" ]]; then
-    CONFIG_PATH=".hiivmind/github/config.yaml"
-elif [[ -f "../.hiivmind/github/config.yaml" ]]; then
-    CONFIG_PATH="../.hiivmind/github/config.yaml"
+if [[ -n "$WORKSPACE_ROOT" ]]; then
+    CONFIG_PATH="$WORKSPACE_ROOT/.hiivmind/github/config.yaml"
 fi
 
 # Exit early if not initialized
@@ -32,8 +44,17 @@ FRESHNESS="${CONFIG_DIR}/freshness.yaml"
 LOG_DIR="${CONFIG_DIR}/log"
 LOG_FILE="${LOG_DIR}/heartbeat.log"
 
-# Exit early if no workflows directory
-if [[ ! -d "$WORKFLOWS_DIR" ]]; then
+# Repo overlay workflows (D2): a repo-level .hiivmind/github/workflows/ inside
+# the current clone is scanned in addition to the workspace workflows.
+OVERLAY_WORKFLOWS=""
+REPO_TOPLEVEL=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+if [[ -n "$REPO_TOPLEVEL" && "$REPO_TOPLEVEL" != "$WORKSPACE_ROOT" \
+      && -d "$REPO_TOPLEVEL/.hiivmind/github/workflows" ]]; then
+    OVERLAY_WORKFLOWS="$REPO_TOPLEVEL/.hiivmind/github/workflows"
+fi
+
+# Exit early if no workflows anywhere
+if [[ ! -d "$WORKFLOWS_DIR" && -z "$OVERLAY_WORKFLOWS" ]]; then
     exit 0
 fi
 
@@ -50,12 +71,14 @@ if [[ -f "$FRESHNESS" ]]; then
     STALE_SECTIONS=$(yq -o=json -r '[.sections | to_entries[] | select(.value.stale == true) | .key]' "$FRESHNESS" 2>/dev/null || echo "[]")
 fi
 
-# Detect owner/repo from git remote
+# Detect owner/repo from git remote (D3: repo-filtered slice). Empty when the
+# session is not inside a repo clone (e.g. at the workspace root itself):
+# repo-scoped sources are skipped; projects and freshness still run.
 REMOTE_URL=$(git remote get-url origin 2>/dev/null || echo "")
-if [[ -z "$REMOTE_URL" ]]; then
-    exit 0
+OWNER_REPO=""
+if [[ -n "$REMOTE_URL" ]]; then
+    OWNER_REPO=$(echo "$REMOTE_URL" | sed -E 's#.*[:/]([^/]+/[^/.]+)(\.git)?$#\1#')
 fi
-OWNER_REPO=$(echo "$REMOTE_URL" | sed -E 's#.*[:/]([^/]+/[^/.]+)(\.git)?$#\1#')
 
 # Initialize poll state if missing
 if [[ ! -f "$POLL_STATE" ]]; then
@@ -70,7 +93,7 @@ TRIGGERED=()
 AUTO_WORKFLOWS=()
 
 # Process enabled workflows
-for WF_FILE in "$WORKFLOWS_DIR"/*.yaml; do
+for WF_FILE in "$WORKFLOWS_DIR"/*.yaml ${OVERLAY_WORKFLOWS:+"$OVERLAY_WORKFLOWS"/*.yaml}; do
     [[ -f "$WF_FILE" ]] || continue
 
     ENABLED=$(yq -r '.enabled // true' "$WF_FILE")
@@ -97,6 +120,15 @@ for WF_FILE in "$WORKFLOWS_DIR"/*.yaml; do
         session_poll)
             SOURCE=$(yq -r '.trigger.source' "$WF_FILE")
             CONDITION=$(yq -r '.trigger.condition // "state_changed"' "$WF_FILE")
+
+            # Repo-scoped sources need a repo context (D3)
+            case "$SOURCE" in
+                pull_requests|issues|actions|releases|dependabot|deployments)
+                    if [[ -z "$OWNER_REPO" ]]; then
+                        continue
+                    fi
+                    ;;
+            esac
 
             case "$SOURCE" in
                 pull_requests)
