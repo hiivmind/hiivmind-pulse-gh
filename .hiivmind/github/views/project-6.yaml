@@ -1,9 +1,0 @@
-project:
-  number: 6
-  title: "Corpus Refresh Automation"
-
-views:
-  - number: 1
-    name: "View 1"
-    layout: TABLE_LAYOUT
-    filter: null
