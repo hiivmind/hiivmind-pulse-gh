@@ -10,7 +10,11 @@ Detect the GitHub workspace (organization or user) from git context or user inpu
 - When workspace context is needed but not yet cached in config.yaml
 - When re-initializing or switching workspace targets
 
-## Config Location Strategy
+## Workspace Root Resolution (Normative)
+
+This section is the single source of truth for locating configuration.
+All skills, hooks, and commands MUST use this algorithm. The two-level
+check (`.` then `..`) is retired.
 
 ### CRITICAL: `.hiivmind/` Is a Multi-Plugin Namespace
 
@@ -19,29 +23,39 @@ The `.hiivmind/` directory is shared across multiple hiivmind plugins:
 - `.hiivmind/corpus/` — hiivmind-corpus
 - Other plugins may add their own subdirectories
 
-**NEVER delete, move, or replace a `.hiivmind/` directory.** Only operate on `.hiivmind/github/` which is this plugin's subdirectory.
+**NEVER delete, move, or replace a `.hiivmind/` directory.** Only operate on
+`.hiivmind/github/`, which is this plugin's subdirectory — and, when placed at
+a workspace root, its own git repository (see "The Workspace Repo" below).
 
-**IMPORTANT:** The `.hiivmind/github/config.yaml` may exist in the current directory OR a parent directory.
+### The two config layers (D2)
 
-This is common in monorepo setups or workspace directories where:
-- Parent directory contains multiple related repositories
-- Single workspace config serves all child projects
-- User runs init from a parent "workspace" directory
+| Layer | Location | Marker | Role |
+|-------|----------|--------|------|
+| **Workspace config (base)** | `{workspace_root}/.hiivmind/github/config.yaml` | HAS a top-level `workspace:` section | Workspace identity, project/repo catalogs, teams, relationships, org-wide workflows, poll-state, runs |
+| **Repo overlay (optional)** | `{repo}/.hiivmind/github/config.yaml` | MUST NOT have a `workspace:` section | Repo-scoped workflows and setting overrides only |
 
-### Search Order
+The `workspace_root` is typically the parent folder holding all of an org's
+repo clones (`~/git/{org}/`), but for a standalone single-repo setup it may be
+the repo itself. What makes a directory the workspace root is the marker, not
+its position.
 
-1. Current working directory: `.hiivmind/github/config.yaml`
-2. Parent directory: `../.hiivmind/github/config.yaml`
-3. Git root (if different): `$(git rev-parse --show-toplevel)/.hiivmind/github/config.yaml`
+Precedence: the workspace config is the base; a repo overlay wins for scalar
+conflicts **within its own repo's scope**. An overlay never carries workspace
+identity — resolution skips any config lacking the `workspace:` marker and
+keeps walking up.
 
-**Using bash:**
+### Resolution algorithm
+
 ```bash
-# Find config in current or parent directories
-find_config() {
-    local dir="$PWD"
+# Resolve the workspace root: walk up from a start dir to the first directory
+# whose .hiivmind/github/config.yaml carries a top-level `workspace:` section.
+# Prints the workspace root (the dir CONTAINING .hiivmind/); exit 1 if none.
+resolve_workspace_root() {
+    local dir="${1:-$PWD}"
     while [[ "$dir" != "/" ]]; do
-        if [[ -f "$dir/.hiivmind/github/config.yaml" ]]; then
-            echo "$dir/.hiivmind/github/config.yaml"
+        if [[ -f "$dir/.hiivmind/github/config.yaml" ]] \
+           && grep -q '^workspace:' "$dir/.hiivmind/github/config.yaml"; then
+            echo "$dir"
             return 0
         fi
         dir="$(dirname "$dir")"
@@ -49,22 +63,76 @@ find_config() {
     return 1
 }
 
-CONFIG_PATH=$(find_config)
+WORKSPACE_ROOT=$(resolve_workspace_root) || WORKSPACE_ROOT=""
+CONFIG_PATH="${WORKSPACE_ROOT:+$WORKSPACE_ROOT/.hiivmind/github/config.yaml}"
 ```
 
-**Quick check (2 levels):**
+Overlay discovery (only meaningful when inside a git repo that is not itself
+the workspace root):
+
 ```bash
-CONFIG_PATH=""
-if [[ -f ".hiivmind/github/config.yaml" ]]; then
-    CONFIG_PATH=".hiivmind/github/config.yaml"
-elif [[ -f "../.hiivmind/github/config.yaml" ]]; then
-    CONFIG_PATH="../.hiivmind/github/config.yaml"
+REPO_TOPLEVEL=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+OVERLAY_DIR=""
+if [[ -n "$REPO_TOPLEVEL" && "$REPO_TOPLEVEL" != "$WORKSPACE_ROOT" \
+      && -d "$REPO_TOPLEVEL/.hiivmind/github" ]]; then
+    OVERLAY_DIR="$REPO_TOPLEVEL/.hiivmind/github"
 fi
 ```
 
 **Result interpretation:**
-- If found → Use that config path for all operations
-- If not found → Prompt for initialization
+- `WORKSPACE_ROOT` non-empty → use `$CONFIG_PATH` as the base config; apply
+  `$OVERLAY_DIR` overrides if present.
+- `WORKSPACE_ROOT` empty → workspace not initialized; prompt for `gh-init`.
+
+### D4: Headless skills never discover
+
+Directory discovery is an **interactive-only** convenience. Any headless skill
+(P3+) MUST take explicit `workspace_path` (and, where relevant, `repo`) inputs
+in its frontmatter and MUST NOT call `resolve_workspace_root`. In CI or a
+scheduled runtime a single repo is checked out and no parent workspace exists;
+discovery there is undefined behavior.
+
+### The Workspace Repo (D1)
+
+`{workspace_root}/.hiivmind/github/` is itself a small git repository — the
+"workspace repo" — shared by the team via a private remote (default name
+`{login}-workspace`). It versions the human-authored and shared assets;
+per-machine transients are gitignored:
+
+| Committed (shared) | Gitignored (per-machine) |
+|--------------------|--------------------------|
+| `config.yaml`, `freshness.yaml` | `user.yaml` |
+| `workflows/`, `views/`, `repos/`, `automations/` | `poll-state.yaml` |
+| `teams.yaml`, `relationships.yaml`, `healthcheck.yaml` | `project-snapshot.json`, `*-result.yaml` |
+| `runs/` (run ledger) | `log/` |
+
+Repo clone directories are siblings of `.hiivmind/`, outside the workspace
+repo entirely — no nested-repo or ignore gymnastics.
+
+### Multi-machine, multi-actor topology
+
+Each machine's workspace root holds its own **clone** of the shared workspace
+repo plus its own set of repo clones, possibly at different states. The team
+is M:M across individuals, GitHub profiles, and physical machines. Rules:
+
+- **Shared vs. per-machine split:** committed workspace-repo content is the
+  *only* shared state. `poll-state.yaml`, snapshots, and result files are
+  per-machine advisory caches — two machines legitimately hold different
+  poll-state. Never commit them; never treat them as authority.
+- **Pull before reconcile:** any run that reads or writes shared markers
+  (config catalogs, workflow definitions, dismissals, run ledger, binding
+  state) pulls the workspace repo first. Local caches are never authority.
+- **Cooldowns are advisory:** poll-state cooldown bookkeeping is per-machine
+  and cannot enforce a global rate across machines. It is a politeness
+  optimization only; global correctness comes from idempotent runs plus the
+  supersede pattern, not from cooldowns.
+- **Actor attribution:** every run records the human, the GitHub profile
+  (`gh auth` identity), and the machine — in run records and result files.
+  Identity-sensitive logic ("you touched this", self-assignment) resolves
+  against the recorded actor, not whatever profile the current machine holds.
+- **Local clones are never sync sources:** skills read pushed commits and API
+  state; a dirty or unpushed repo clone is surfaced as a finding, never
+  consumed as truth.
 
 ## Prerequisites
 
