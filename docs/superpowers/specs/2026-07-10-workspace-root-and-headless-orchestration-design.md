@@ -166,7 +166,10 @@ What the placement resolves:
 The current premise "config.yaml committed to git, shared across team" breaks
 when the parent folder isn't a repo. Resolution: initialize the workspace root
 (or just its `.hiivmind/` directory) as a small git repository, with repo clone
-directories ignored. This:
+directories ignored. **Resolved during P0: the workspace repo is rooted at
+`.hiivmind/github/` itself (not the whole parent folder — avoids nested-clone
+hazards and respects the multi-plugin `.hiivmind/` namespace); default remote
+`{login}-workspace`, private.** This:
 
 - restores team sharing and versioning for the human-authored assets
   (workflow definitions, healthcheck dismissals, `repo_dependencies`,
@@ -499,18 +502,18 @@ P2/P3); P5 and P6 are independent of each other.
 
 Deliverables:
 
-- [ ] P0.1 `workspace-detection.md` rewritten: normative `workspace_root`
+- [x] P0.1 `workspace-detection.md` rewritten: normative `workspace_root`
       resolution algorithm (walk-up, `workspace:` section marker), D2 layering
       rule (workspace base, repo overlay), D4 explicit-inputs rule stated as a
       convention for all future headless skills.
-- [ ] P0.2 `heartbeat.sh` config discovery replaced with the full walk-up;
+- [x] P0.2 `heartbeat.sh` config discovery replaced with the full walk-up;
       two-level check removed. Scope behavior per D3 decision.
-- [ ] P0.3 Workspace repo initialized (per D1): gitignore strategy
+- [x] P0.3 Workspace repo initialized (per D1): gitignore strategy
       implemented, `.hiivmind/github/` migrated from this repo's copy,
       derivation split applied (committed vs gitignored per Part 3.2 layout).
-- [ ] P0.4 `gh-init` updated: offers workspace-root placement as the default
+- [x] P0.4 `gh-init` updated: offers workspace-root placement as the default
       for multi-repo parents; repo-local placement demoted to overlay case.
-- [ ] P0.5 Multi-machine topology (Part 3.3) documented in
+- [x] P0.5 Multi-machine topology (Part 3.3) documented in
       `workspace-detection.md`: shared vs per-machine state split,
       pull-before-reconcile rule, cooldowns-are-advisory.
 
@@ -667,7 +670,7 @@ work. Status values: `not-started | in-progress | blocked({on}) | done`.
 
 | Phase | Title | Depends on | Status | Completed |
 |-------|-------|------------|--------|-----------|
-| P0 | Workspace root formalization | — | not-started | |
+| P0 | Workspace root formalization | — | ✅ done | 2026-07-10 |
 | P1 | Result contract + validator | P0 | not-started | |
 | P2 | Python extraction (poll, checks) | P0 | not-started | |
 | P3 | Headless skills (status/healthcheck/refresh) | P1, P2 | not-started | |
