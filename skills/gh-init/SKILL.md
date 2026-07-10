@@ -56,55 +56,101 @@ read from the plugin root, not relative to this skill folder.
 
 **See:** `{PLUGIN_ROOT}/lib/patterns/workspace-detection.md`
 
-### Check for Existing Config
+### Resolve Existing Workspace
 
-**IMPORTANT:** Before initializing, check if config already exists in current or parent directory:
+**See:** `{PLUGIN_ROOT}/lib/patterns/workspace-detection.md` § Workspace Root Resolution
 
 ```bash
-if [[ -f ".hiivmind/github/config.yaml" ]]; then
-    echo "Config found in current directory"
-    EXISTING_CONFIG=".hiivmind/github/config.yaml"
-elif [[ -f "../.hiivmind/github/config.yaml" ]]; then
-    echo "Config found in parent directory"
-    EXISTING_CONFIG="../.hiivmind/github/config.yaml"
-fi
+WORKSPACE_ROOT=""
+DIR="$PWD"
+while [[ "$DIR" != "/" ]]; do
+    if [[ -f "$DIR/.hiivmind/github/config.yaml" ]] \
+       && grep -q '^workspace:' "$DIR/.hiivmind/github/config.yaml"; then
+        WORKSPACE_ROOT="$DIR"
+        break
+    fi
+    DIR="$(dirname "$DIR")"
+done
 ```
 
-**CRITICAL — NEVER delete a `.hiivmind/` directory.** It is a shared namespace used by multiple plugins (github, corpus, etc.). Only `.hiivmind/github/` is managed by this plugin. The `.hiivmind/` directory may contain configurations for other plugins besides this one.
+**CRITICAL — NEVER delete a `.hiivmind/` directory.** It is a shared namespace
+used by multiple plugins (github, corpus, etc.). Only `.hiivmind/github/` is
+managed by this plugin.
 
-**If config exists in parent:**
+**If a workspace root is found:** the workspace is already initialized.
+
 ```
-Found existing workspace config in parent directory: ../.hiivmind/github/config.yaml
-
-This is common for workspace setups where multiple repos share one config.
+Found workspace config at {WORKSPACE_ROOT}/.hiivmind/github/config.yaml
+(workspace: {login}, {type})
 
 Options:
-1. Symlink to parent (recommended for workspace setup)
-2. Create local config for this repo only
-3. Re-initialize parent config
-4. Do nothing (use parent config via relative path resolution)
+1. Refresh it (run gh-refresh)
+2. Add a repo-level overlay for this repo (repo-scoped workflows/overrides only)
+3. Re-initialize the workspace config (overwrites catalogs; workspace repo history preserved)
 
-Which would you like? [1/2/3/4]
+Which would you like? [1/2/3]
 ```
 
-**Option 1 implementation (symlink to parent):**
+An overlay (option 2) is a `.hiivmind/github/` inside the current repo
+**without** a `workspace:` section — it never carries workspace identity.
+
+**If no workspace root is found — choose placement:**
 
 ```bash
-# If .hiivmind/github already exists locally, back it up
-if [[ -d ".hiivmind/github" && ! -L ".hiivmind/github" ]]; then
-    mv .hiivmind/github .hiivmind/github.bak
+GIT_TOP=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+if [[ -n "$GIT_TOP" ]]; then
+    CANDIDATE_ROOT=$(dirname "$GIT_TOP")
+else
+    CANDIDATE_ROOT="$PWD"
 fi
-mkdir -p .hiivmind
-ln -sfn ../.hiivmind/github .hiivmind/github
+# Count sibling repo clones under the candidate root
+SIBLING_CLONES=$(find "$CANDIDATE_ROOT" -mindepth 2 -maxdepth 2 -name .git 2>/dev/null | wc -l | tr -d ' ')
 ```
 
-This creates a symlink at `.hiivmind/github` pointing to `../.hiivmind/github`, preserving any other content in the local `.hiivmind/` directory (e.g., corpus configs). After symlinking, verify with `ls -la .hiivmind/github` and confirm it points to the parent. Then skip to Phase 6 (VERIFY).
+| Situation | Default placement |
+|-----------|-------------------|
+| `SIBLING_CLONES` ≥ 2 (multi-repo parent) | **Workspace root = `$CANDIDATE_ROOT`** (recommended default) |
+| Single repo, no siblings | Workspace root = the repo itself (config committed to the host repo; no separate workspace repo) |
+| Repo-local config with a `workspace:` section exists at `$GIT_TOP` AND siblings exist | Offer **promotion** (below) |
 
-**Option 2:** Proceed with normal initialization — creates a separate `.hiivmind/github/config.yaml` in this repo.
+```
+No workspace found. This looks like a multi-repo parent:
+  {CANDIDATE_ROOT} contains {N} repo clones.
 
-**Option 3:** Use `$EXISTING_CONFIG` path and re-run discovery against it, overwriting the parent config.
+Where should the workspace live?
+1. {CANDIDATE_ROOT}/.hiivmind/github/  — shared workspace repo, serves all clones (recommended)
+2. {GIT_TOP}/.hiivmind/github/          — this repo only
 
-**Option 4:** Do nothing — other skills already resolve config from parent directories via relative path. Skip to Phase 6 (VERIFY).
+Which would you like? [1/2]
+```
+
+**Promotion flow** (existing repo-local workspace config, multi-repo parent):
+
+```
+Found a workspace config inside {repo}, but {CANDIDATE_ROOT} holds {N} sibling
+clones. Promote it to the workspace root? This will:
+  1. Move .hiivmind/github/ content to {CANDIDATE_ROOT}/.hiivmind/github/
+  2. Initialize it as the workspace repo (Phase 5.9)
+  3. Remove the tracked copy from {repo} (git rm) — or keep a slimmed overlay
+     if this repo has repo-scoped workflows/overrides
+
+Proceed? [Y/n]
+```
+
+Implementation (after user confirms; run from `$GIT_TOP`):
+
+```bash
+mkdir -p "$CANDIDATE_ROOT/.hiivmind"
+cp -R .hiivmind/github "$CANDIDATE_ROOT/.hiivmind/github"
+git rm -r -q .hiivmind/github
+rmdir .hiivmind 2>/dev/null || true
+# Clean host-repo .gitignore entries that referenced .hiivmind/github/*
+```
+
+Then continue to Phase 5.9 to git-init the promoted directory, and remind the
+user to commit the removal in the host repo. Per-machine transients that were
+copied (`poll-state.yaml`, `log/`, `user.yaml`) are excluded by the workspace
+repo's `.gitignore` automatically.
 
 ### What to Do
 
@@ -265,8 +311,8 @@ Set default project for operations?
    - Cache timestamps
 3. Write `user.yaml` with authenticated user info
 4. Write `freshness.yaml` with section timestamps
-5. Update `.gitignore` to exclude `user.yaml`
-6. Configure `.claude/settings.json` with marketplace dependency
+5. Copy `{PLUGIN_ROOT}/templates/workspace-gitignore.template` to `{WORKSPACE_ROOT}/.hiivmind/github/.gitignore` (workspace placement); for repo-local placement, add `.hiivmind/github/user.yaml`, `.hiivmind/github/poll-state.yaml`, and `.hiivmind/github/log/` to the host repo's `.gitignore` instead
+6. Configure `.claude/settings.json` with marketplace dependency (repo-scoped — apply to each repo where the team should get the marketplace prompt, not to the workspace repo)
 
 ### Configure Marketplace Dependency
 
@@ -329,12 +375,13 @@ All other sections remain `stale: true` with `last_checked: null` until explicit
 
 | File | Purpose | Git Status |
 |------|---------|------------|
-| `.hiivmind/github/config.yaml` | Workspace config (shared) | Committed |
-| `.hiivmind/github/user.yaml` | User identity (personal) | Gitignored |
-| `.hiivmind/github/freshness.yaml` | Staleness tracking | Committed |
-| `.claude/settings.json` | Plugin dependencies | Committed |
-| `.hiivmind/github/workflows/*.yaml` | Heartbeat workflow configs | Committed |
-| `.hiivmind/github/log/` | Heartbeat run logs | Gitignored |
+| `{WORKSPACE_ROOT}/.hiivmind/github/config.yaml` | Workspace config (shared) | Committed (workspace repo) |
+| `{WORKSPACE_ROOT}/.hiivmind/github/user.yaml` | User identity (personal) | Gitignored |
+| `{WORKSPACE_ROOT}/.hiivmind/github/freshness.yaml` | Staleness tracking | Committed (workspace repo) |
+| `{WORKSPACE_ROOT}/.hiivmind/github/.gitignore` | Per-machine transient split | Committed (workspace repo) |
+| `{WORKSPACE_ROOT}/.hiivmind/github/workflows/*.yaml` | Heartbeat workflow configs | Committed (workspace repo) |
+| `{WORKSPACE_ROOT}/.hiivmind/github/log/` | Heartbeat run logs | Gitignored |
+| `.claude/settings.json` (per repo, optional) | Plugin dependencies | Committed to each repo |
 
 ---
 
@@ -406,6 +453,46 @@ After healthcheck completes, return to Phase 6 (VERIFY).
 ### If No
 
 Skip — the user can run `/gh healthcheck` at any time.
+
+---
+
+## Phase 5.9: WORKSPACE REPO
+
+**Goal:** Version the workspace so the team can share it (D1). Skip this phase
+entirely when placement was repo-local (the host repo versions the config).
+
+### What to Do
+
+```bash
+cd "$WORKSPACE_ROOT/.hiivmind/github"
+if [[ ! -d .git ]]; then
+    git init
+    cp "{PLUGIN_ROOT}/templates/workspace-gitignore.template" .gitignore
+    git add -A
+    git commit -m "chore: initialize hiivmind workspace repo for {login}"
+fi
+```
+
+The `.gitignore` keeps per-machine transients (`user.yaml`, `poll-state.yaml`,
+snapshots, result files, `log/`) out of the shared repo. Everything else —
+config, freshness, workflows, views, teams, relationships, healthcheck, runs —
+is committed.
+
+### STOP Point
+
+```
+Workspace repo initialized at {WORKSPACE_ROOT}/.hiivmind/github/
+
+Create a private GitHub remote so your team can share it?
+  gh repo create {login}/{login}-workspace --private --source=. --push
+
+[Y/n — you can also do this later]
+```
+
+If yes, run the command and confirm the push succeeded. If the repo name is
+taken or the user prefers another name, ask for one. Teammates join with:
+
+    git clone git@github.com:{login}/{login}-workspace.git {workspace_root}/.hiivmind/github
 
 ---
 

@@ -1,0 +1,8 @@
+# hiivmind-pulse-gh workspace repo
+# Per-machine transient state — never commit (two machines legitimately differ)
+user.yaml
+poll-state.yaml
+project-snapshot.json
+*-result.yaml
+log/
+.assignments-tmp.json
