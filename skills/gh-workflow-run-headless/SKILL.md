@@ -102,13 +102,14 @@ Update poll-state (`last_run_at`, `last_result`, `run_count`) as the executor sp
 contract_version: 1
 kind: workflow-run
 workspace: {LOGIN}
-run_at: {RUN_AT}
+run_at: "{RUN_AT}"               # quote: an unquoted ISO-8601 value parses as a YAML datetime; the contract requires a string
 actor: { gh_login: {GH_LOGIN}, machine: {MACHINE}, mode: {MODE} }
 workflow: {workflow name from YAML}
 repos: {[repo input] if given, else repos the workflow touched, else []}
-run_id: {RUN_ID}
+run_id: "{RUN_ID}"               # quote: keep it a string (the {date}-... prefix would otherwise risk datetime coercion)
 outcome: {OUTCOME}
 findings: {FINDINGS}              # [{kind, repo, severity, detail?, ref?, classification?, inferred?}]
+                                 # ref, when present, is a MAPPING: { type: <str>, id: <any>, url: <str> } (see headless-contract.md) — never a bare string
 proposed_actions: {PROPOSED_ACTIONS}
 asks_recorded: {ASKS_RECORDED}
 errors: {ERRORS}

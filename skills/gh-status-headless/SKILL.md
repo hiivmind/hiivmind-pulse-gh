@@ -91,7 +91,7 @@ gh api rate_limit --jq '.resources.core.remaining'
 contract_version: 1
 kind: status
 workspace: {LOGIN}
-run_at: {RUN_AT}
+run_at: "{RUN_AT}"    # quote: an unquoted ISO-8601 value parses as a YAML datetime; the contract requires a string
 actor:
   gh_login: {GH_LOGIN}
   machine: {MACHINE}
