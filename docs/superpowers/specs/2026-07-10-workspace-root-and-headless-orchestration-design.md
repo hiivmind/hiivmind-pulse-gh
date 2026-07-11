@@ -588,16 +588,16 @@ input still yields a valid result file with `errors[]` populated.
 
 Deliverables:
 
-- [ ] P4.1 Single executor pattern: `workflow-execution.md` becomes the one
+- [x] P4.1 Single executor pattern: `workflow-execution.md` becomes the one
       normative execution description; gh-heartbeat §4/§5 and gh-workflows
       "Run" reduced to delegation stubs referencing it.
-- [ ] P4.2 `headless:` policy block added to the workflow schema
+- [x] P4.2 `headless:` policy block added to the workflow schema
       (`on_ask`, `on_mutation`, `mutation_allowlist`); documented in
       `workflow-execution.md`; `operation-blocklist.md` declared
       unconditional in headless mode.
-- [ ] P4.3 `gh-workflow-run-headless` → `workflow-run-result.yaml` with
+- [x] P4.3 `gh-workflow-run-headless` → `workflow-run-result.yaml` with
       `findings` / `proposed_actions` / `asks_recorded`.
-- [ ] P4.4 Two shipped templates annotated with `headless:` blocks as
+- [x] P4.4 Two shipped templates annotated with `headless:` blocks as
       reference implementations (suggest: repo-healthcheck, stale-check).
 
 Exit criteria: the same workflow YAML runs interactively (ASKs prompt) and
@@ -674,7 +674,7 @@ work. Status values: `not-started | in-progress | blocked({on}) | done`.
 | P1 | Result contract + validator | P0 | ✅ done | 2026-07-10 |
 | P2 | Python extraction (poll, checks) | P0 | ✅ done | 2026-07-11 |
 | P3 | Headless skills (status/healthcheck/refresh) | P1, P2 | ✅ done | 2026-07-11 |
-| P4 | Executor split + headless policy | P1 | not-started | |
+| P4 | Executor split + headless policy | P1 | ✅ done | 2026-07-11 |
 | P5 | pulse-scheduler + fleet report **(goal 1)** | P3 (opt. P4.3) | not-started | |
 | P6 | Workflow v3: ledger, steps, gates **(goal 2)** | P4 | not-started | |
 | P7 | Housekeeping (CLAUDE.md, DAG doc, lint) | P0+ (final: P6) | not-started | |
