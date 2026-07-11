@@ -7,6 +7,13 @@ description: "Run governance healthcheck to assess repository maturity"
 enabled: true
 auto: false  # Must be explicitly requested — never runs automatically
 
+# Reference headless annotation: the audit is read-only; INVOKE maps to the
+# gh-healthcheck-headless sibling when present (see workflow-execution.md).
+headless:
+  enabled: true
+  on_ask: record
+  on_mutation: propose   # fixes are proposed, never applied unattended
+
 trigger:
   type: on_demand
   condition: user_requested
