@@ -570,11 +570,11 @@ needs `poll.py`'s rate-limit/status helpers).
 Deliverables (each: `inputs:` frontmatter, State block, ABORT-emits-result,
 result gitignored, zero prompts):
 
-- [ ] P3.1 `gh-status-headless` → `status-result.yaml` (`refresh_needed`).
-- [ ] P3.2 `gh-healthcheck-headless` → `healthcheck-result.yaml`; iterates
+- [x] P3.1 `gh-status-headless` → `status-result.yaml` (`refresh_needed`).
+- [x] P3.2 `gh-healthcheck-headless` → `healthcheck-result.yaml`; iterates
       `repositories[]` or a passed repo filter; honors dismissals; updates
       committed `healthcheck.yaml`.
-- [ ] P3.3 `gh-refresh-headless` → `refresh-result.yaml`; replays recorded
+- [x] P3.3 `gh-refresh-headless` → `refresh-result.yaml`; replays recorded
       init/refresh decisions (decision-capture fields added to config where
       needed).
 
@@ -673,7 +673,7 @@ work. Status values: `not-started | in-progress | blocked({on}) | done`.
 | P0 | Workspace root formalization | — | ✅ done | 2026-07-10 |
 | P1 | Result contract + validator | P0 | ✅ done | 2026-07-10 |
 | P2 | Python extraction (poll, checks) | P0 | ✅ done | 2026-07-11 |
-| P3 | Headless skills (status/healthcheck/refresh) | P1, P2 | not-started | |
+| P3 | Headless skills (status/healthcheck/refresh) | P1, P2 | ✅ done | 2026-07-11 |
 | P4 | Executor split + headless policy | P1 | not-started | |
 | P5 | pulse-scheduler + fleet report **(goal 1)** | P3 (opt. P4.3) | not-started | |
 | P6 | Workflow v3: ledger, steps, gates **(goal 2)** | P4 | not-started | |

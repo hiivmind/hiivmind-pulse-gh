@@ -179,6 +179,9 @@ Use natural language to describe any GitHub operation:
 | `gh-heartbeat` | Present/execute heartbeat-triggered workflows |
 | `gh-workflows` | Manage and run workflow definitions |
 | `gh-discover` | Discover workspace resources |
+| `gh-status-headless` | Headless status pre-check → status-result.yaml (zero prompts) |
+| `gh-healthcheck-headless` | Headless fleet governance audit → healthcheck-result.yaml |
+| `gh-refresh-headless` | Headless config sync (replays recorded decisions) → refresh-result.yaml |
 
 ### Skill Architecture
 
@@ -295,7 +298,10 @@ hiivmind-pulse-gh/
 │   ├── gh-healthcheck/    # Repository governance audit
 │   ├── gh-heartbeat/      # Present/execute heartbeat-triggered workflows
 │   ├── gh-workflows/      # Manage and run workflow definitions
-│   └── gh-discover/       # Discover workspace resources
+│   ├── gh-discover/       # Discover workspace resources
+│   ├── gh-status-headless/       # Headless status pre-check
+│   ├── gh-healthcheck-headless/  # Headless fleet governance audit
+│   └── gh-refresh-headless/      # Headless config sync
 ├── lib/
 │   ├── patterns/                         # HOW to do things (executable guides)
 │   │   ├── config-parsing.md
@@ -307,6 +313,7 @@ hiivmind-pulse-gh/
 │   │   └── scripts/                      # Deterministic Python (PEP 723, uv run)
 │   │       ├── poll.py                   # Heartbeat engine (GraphQL + lakehouse)
 │   │       ├── evaluate_checks.py        # Mechanical healthcheck evaluator
+│   │       ├── freshness_status.py       # Staleness computation for headless status
 │   │       └── validate_result.py        # Headless result contract validator
 │   └── references/                       # WHAT exists (static lookup data)
 │       ├── api-routing.md                # Quick reference + method selection

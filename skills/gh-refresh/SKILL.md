@@ -255,6 +255,17 @@ For each refreshed section:
 
 ISO 8601 UTC: `2024-01-15T14:30:00Z`
 
+### Decision Capture (headless replay)
+
+Record the sections just refreshed so `gh-refresh-headless` can replay this decision
+without prompting (spec: decision capture — headless variants replay, never guess):
+
+1. Read `automation.refresh_sections` from config.yaml (treat missing as `[]`)
+2. Set it to the **union** of the existing list and the sections refreshed this run
+3. Set `automation.refresh_recorded_at` to the current UTC timestamp
+
+The list only grows through interactive use; the team prunes it by editing config.yaml.
+
 ---
 
 ## Phase 6: REPORT
