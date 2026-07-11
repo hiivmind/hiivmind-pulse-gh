@@ -1,0 +1,18 @@
+contract_version: 1
+kind: status
+workspace: testorg
+run_at: "2026-07-10T09:00:00Z"
+actor:
+  gh_login: octocat
+  machine: mba-m4
+  mode: scheduled
+sections:
+  - id: workspace
+    stale: false
+    last_checked: "2026-07-10T08:00:00Z"
+  - id: projects
+    stale: true
+    last_checked: null
+rate_limit_remaining: 4980
+refresh_needed: true
+errors: []

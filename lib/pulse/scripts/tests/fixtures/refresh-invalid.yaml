@@ -1,0 +1,12 @@
+contract_version: 2
+kind: refresh
+workspace: testorg
+run_at: "2026-07-10T09:10:00Z"
+actor:
+  gh_login: octocat
+  machine: nuc-lab
+  mode: scheduled
+sections:
+  - id: projects
+    status: done
+errors: []

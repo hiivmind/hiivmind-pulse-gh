@@ -1,0 +1,18 @@
+contract_version: 1
+kind: healthcheck
+workspace: testorg
+run_at: "2026-07-10T09:05:00Z"
+actor:
+  gh_login: octocat
+  machine: mba-m4
+  mode: interactive
+repos:
+  - repo: testorg/widget
+    score: 7
+    total: 9
+    grade: B
+    checks:
+      branch_protection:
+        status: passed
+        detail: "ok"
+errors: []
