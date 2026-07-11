@@ -1,0 +1,15 @@
+{"data": {"p0": {"items": {"nodes": [
+  {"id": "PVTI_1",
+   "content": {"__typename": "Issue", "number": 29, "title": "Fix schema"},
+   "fieldValues": {"nodes": [
+     {"name": "In progress", "optionId": "47fc9ee4", "field": {"name": "Status"}},
+     {"name": "P1", "optionId": "aa11", "field": {"name": "Priority"}},
+     {"users": {"nodes": [{"login": "octocat"}]}, "field": {"name": "Assignees"}}
+   ]}},
+  {"id": "PVTI_2",
+   "content": {"__typename": "PullRequest", "number": 30, "title": "Add docs"},
+   "fieldValues": {"nodes": [
+     {"name": "Backlog", "optionId": "f75ad846", "field": {"name": "Status"}},
+     {"users": {"nodes": [{"login": "someone-else"}]}, "field": {"name": "Assignees"}}
+   ]}}
+]}}}}

@@ -6,3 +6,4 @@ project-snapshot.json
 *-result.yaml
 log/
 .assignments-tmp.json
+.project-changes.json

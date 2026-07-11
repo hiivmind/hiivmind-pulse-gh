@@ -188,10 +188,188 @@ def evaluate_source(source: str, repo: str, config: dict, config_dir: Path,
 
 
 # ---------------------------------------------------------------- projects
-# (implemented in Task 2 — Task 1 lands this stub so the file is complete)
+
+FIELD_KEYS = ("Status", "Priority", "Size", "Iteration")
+
+
+def _build_query(catalog: list[dict]) -> tuple[str, list[dict]]:
+    """One batched query, expanded fragment (zero additional API calls)."""
+    parts = []
+    aliases = []
+    for idx, proj in enumerate(catalog):
+        pid = proj.get("id")
+        if not pid:
+            continue
+        alias = f"p{idx}"
+        aliases.append({"alias": alias, "number": proj.get("number"),
+                        "title": proj.get("title", "")})
+        parts.append(
+            f'{alias}: node(id: "{pid}") {{ ... on ProjectV2 {{ items(first: 100) {{ nodes {{ '
+            f'id content {{ __typename ... on Issue {{ number title }} '
+            f'... on PullRequest {{ number title }} ... on DraftIssue {{ title }} }} '
+            f'fieldValues(first: 20) {{ nodes {{ '
+            f'... on ProjectV2ItemFieldSingleSelectValue {{ name optionId field {{ ... on ProjectV2FieldCommon {{ name }} }} }} '
+            f'... on ProjectV2ItemFieldIterationValue {{ title startDate duration field {{ ... on ProjectV2FieldCommon {{ name }} }} }} '
+            f'... on ProjectV2ItemFieldUserValue {{ users(first: 10) {{ nodes {{ login }} }} field {{ ... on ProjectV2FieldCommon {{ name }} }} }} '
+            f'}} }} }} }} }} }}'
+        )
+    return "query { " + " ".join(parts) + " }", aliases
+
+
+def _bronze_item(node: dict) -> dict:
+    content = node.get("content") or {}
+    fields: dict = {}
+    for fv in ((node.get("fieldValues") or {}).get("nodes") or []):
+        fname = ((fv or {}).get("field") or {}).get("name")
+        if not fname:
+            continue
+        if "users" in fv:
+            fields[fname] = [u["login"] for u in (fv["users"].get("nodes") or [])]
+        elif "name" in fv:                      # single-select
+            fields[fname] = fv["name"]
+        elif "title" in fv:                     # iteration
+            fields[fname] = fv["title"]
+    typename = content.get("__typename")
+    return {
+        "id": node.get("id"),
+        "content_type": typename,
+        "number": content.get("number"),
+        "title": content.get("title", "Draft"),
+        "fields": fields,
+    }
+
+
+def _item_type(content_type) -> str:
+    return {"Issue": "issue", "PullRequest": "pull_request"}.get(content_type, "draft")
+
+
+def _silver_views(snapshot: dict, gh_user: str):
+    my_assignments, distribution = [], []
+    total, by_status, by_priority = 0, {}, {}
+    for pnum, proj in snapshot["projects"].items():
+        mine = []
+        counts: dict = {}
+        for item in proj["items"]:
+            status = item["fields"].get("Status")
+            if status:
+                counts[status] = counts.get(status, 0) + 1
+            assigned = any(isinstance(v, list) and gh_user in v
+                           for v in item["fields"].values())
+            if assigned:
+                mine.append({
+                    "id": item["id"],
+                    "number": item["number"],
+                    "title": item["title"],
+                    "type": _item_type(item["content_type"]),
+                    "status": status,
+                    "priority": item["fields"].get("Priority"),
+                    "size": item["fields"].get("Size"),
+                    "iteration": item["fields"].get("Iteration"),
+                })
+                total += 1
+                if status:
+                    by_status[status] = by_status.get(status, 0) + 1
+                prio = item["fields"].get("Priority")
+                if prio:
+                    by_priority[prio] = by_priority.get(prio, 0) + 1
+        if mine:
+            my_assignments.append({"project": proj["title"],
+                                   "project_number": int(pnum), "items": mine})
+        distribution.append({"project": proj["title"], "project_number": int(pnum),
+                             "counts": counts, "total": len(proj["items"])})
+    summary = {"total_assigned": total, "by_status": by_status,
+               "by_priority": by_priority}
+    return my_assignments, distribution, summary
+
+
+def _flatten(assignments: list) -> dict:
+    flat = {}
+    for proj in assignments or []:
+        for item in proj.get("items", []):
+            key = item.get("id") or f"#{item.get('number')}"
+            flat[key] = item
+    return flat
+
+
+def _gold_changeset(prev: list, curr: list) -> dict:
+    p, c = _flatten(prev), _flatten(curr)
+    label = lambda it: f"#{it.get('number')}" if it.get("number") else str(it.get("title"))
+    changes = {"status_changes": [], "new_assignments": [],
+               "removed_assignments": [], "priority_changes": []}
+    for key, item in c.items():
+        if key not in p:
+            changes["new_assignments"].append({"item": label(item),
+                                               "title": item.get("title")})
+            continue
+        old = p[key]
+        if old.get("status") != item.get("status"):
+            changes["status_changes"].append({"item": label(item),
+                                              "from": old.get("status"),
+                                              "to": item.get("status")})
+        if old.get("priority") != item.get("priority"):
+            changes["priority_changes"].append({"item": label(item),
+                                                "from": old.get("priority"),
+                                                "to": item.get("priority")})
+    for key, item in p.items():
+        if key not in c:
+            changes["removed_assignments"].append({"item": label(item),
+                                                   "title": item.get("title")})
+    return changes
+
 
 def check_projects(config: dict, config_dir: Path, state: dict, gold: dict) -> bool:
-    return False
+    catalog = ((config.get("projects") or {}).get("catalog")) or []
+    if not catalog:
+        return False
+    user = (gh_api("/user") or {}).get("login")
+    if not user:
+        return False
+    query, aliases = _build_query(catalog)
+    result = gh_api("graphql", graphql_query=query)
+    if not result:
+        return False
+
+    # BRONZE: full snapshot, no filtering
+    snapshot = {"captured_at": now_iso(), "projects": {}}
+    for a in aliases:
+        node = ((result.get("data") or {}).get(a["alias"])) or {}
+        items = [(n) for n in ((node.get("items") or {}).get("nodes") or []) if n]
+        snapshot["projects"][str(a["number"])] = {
+            "title": a["title"],
+            "items": [_bronze_item(n) for n in items],
+        }
+    snapshot_json = json.dumps(snapshot["projects"], sort_keys=True)
+    snapshot_hash = hashlib.sha256(snapshot_json.encode()).hexdigest()
+    (config_dir / "project-snapshot.json").write_text(
+        json.dumps(snapshot, indent=2))
+
+    slot = state.setdefault("projects", {})
+    if slot.get("snapshot_hash") == snapshot_hash:
+        return False                      # fast path: bronze unchanged
+
+    # SILVER: derived views
+    my_assignments, distribution, summary = _silver_views(snapshot, user)
+    item_count = sum(len(p["items"]) for p in snapshot["projects"].values())
+    prev_assignments = slot.get("my_assignments") or []
+    prev_distribution = slot.get("status_distribution") or []
+    prev_count = slot.get("item_count", 0)
+
+    changed = (
+        json.dumps(my_assignments, sort_keys=True) != json.dumps(prev_assignments, sort_keys=True)
+        or json.dumps(distribution, sort_keys=True) != json.dumps(prev_distribution, sort_keys=True)
+        or item_count != prev_count
+    )
+
+    # GOLD: structured changeset
+    if changed:
+        changes = _gold_changeset(prev_assignments, my_assignments)
+        (config_dir / ".project-changes.json").write_text(json.dumps(changes, indent=2))
+        gold["project_changes"] = changes
+
+    slot.update({"snapshot_hash": snapshot_hash, "item_count": item_count,
+                 "my_assignments": my_assignments,
+                 "status_distribution": distribution, "my_summary": summary})
+    return changed
 
 
 # ---------------------------------------------------------------- main
