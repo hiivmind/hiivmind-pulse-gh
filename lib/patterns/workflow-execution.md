@@ -17,6 +17,35 @@ Execute workflows after triggers fire, with format detection, parameter resoluti
 
 ---
 
+## Single Executor
+
+This document is the ONE normative execution description. gh-heartbeat, gh-workflows
+"Run", and gh-workflow-run-headless are **callers**: they select workflows, obtain
+approval, build an execution context, and delegate here. Skills MUST NOT re-describe
+execution steps.
+
+Callers supply an execution context:
+
+| Field | Values | Meaning |
+|-------|--------|---------|
+| `mode` | `interactive` \| `headless` | interactive: ASK/SHOW reach a user. headless: policy projection (see Headless Execution below) |
+| `approval` | `pre-approved` \| `ask` | pre-approved skips the `auto: false` permission gate (step 3 of the flow) |
+| `enforce_cooldown` | `true` \| `false` | on-demand interactive runs pass `false` |
+| `workspace_root` | path | resolved by the caller (interactive walk-up, or explicit headless input — D4) |
+| `repo` | `owner/name` or empty | repo scope, when the caller has one |
+
+Caller contexts:
+
+| Caller | mode | approval | enforce_cooldown |
+|--------|------|----------|------------------|
+| gh-heartbeat (auto + user-selected workflows) | interactive | pre-approved | true |
+| gh-workflows "Run" (on demand) | interactive | pre-approved | false |
+| gh-workflow-run-headless | headless | pre-approved | true — but the skill pre-checks the cooldown itself (Phase 2) so it can emit `skipped-cooldown`, then delegates with `enforce_cooldown: false`; skipped entirely under its `ignore_cooldown` input |
+
+Poll-state paths in this document are relative to `{workspace_root}/.hiivmind/github/`.
+
+---
+
 ## Format Detection
 
 Workflows exist in two formats. Detect which format before executing:
@@ -198,16 +227,68 @@ presented workflows and the user selected which to run), downstream execution MU
 
 ---
 
+## Headless Execution (v2 Projection)
+
+One workflow definition serves both modes. A per-workflow policy block declares how
+interactive constructs project onto an unattended run — headless runs **replay policy**
+instead of guessing:
+
+```yaml
+headless:
+  enabled: true           # default false — a headless run of a non-enabled workflow
+                          # aborts (outcome: aborted, error "workflow not headless-enabled")
+  on_ask: record          # record | default | abort  (default: record)
+  on_mutation: propose    # propose | allow-listed | allow  (default: propose)
+  mutation_allowlist: []  # operation verbs permitted under allow-listed, e.g. [comment, label]
+```
+
+### Interpretation overrides in headless mode
+
+All other rows of the v2 interpretation table apply unchanged. A **mutation** is any
+state-changing GitHub operation (create, update, close, comment, label, merge, assign,
+delete, …); read-only operations always execute.
+
+| Construct | Headless behavior |
+|-----------|-------------------|
+| `ASK "q" (options)` | per `on_ask` — **record**: append `"{phase}: {q}"` to `asks_recorded`, then take the explicitly non-mutating option (skip/none/cancel) if one is offered, else end that branch and continue; **default**: take the workflow-declared default option, falling back to record behavior when none exists; **abort**: outcome `aborted`, write result, stop |
+| Mutation | per `on_mutation` — **propose**: append a one-line description (verb + target) to `proposed_actions`, do not execute; **allow-listed**: execute if the operation's verb is in `mutation_allowlist`, else propose; **allow**: execute |
+| `SHOW` / `PRESENT` phases | no user to show to; notable items become `findings` entries — `kind` from the workflow's domain (e.g. `stale-item`, `ci-failure`), `severity` via `INFER` with `inferred: true` |
+| `INFER` | executes normally; any finding it classifies carries `inferred: true` and its label in `classification` |
+| `INVOKE skill X` | if a headless sibling exists (`X-headless`), invoke it with explicit inputs (its `workspace_path` = the context's `workspace_root`); otherwise append `"invoke {X}"` to `proposed_actions` |
+| `STOP "reason"` | normal completion (outcome `success`); the reason lands in the result summary, not `errors` |
+| `params` with `default: null` | if the caller did not supply the param: append to `asks_recorded`, outcome `aborted` |
+
+### Unconditional rules (regardless of `on_mutation`)
+
+- `lib/references/operation-blocklist.md` applies **absolutely** in headless mode — a
+  blocked operation is never executed, not even under `on_mutation: allow`; it is
+  appended to `proposed_actions` prefixed `"blocked: "`.
+- Cooldowns are enforced (context `enforce_cooldown: true`); an active cooldown yields
+  outcome `skipped-cooldown` with a valid result file — never a silent skip.
+- v1 (`actions:`) workflows are not headless-runnable: outcome `aborted`, error
+  `"v1 workflows have no headless projection"`.
+
+### Result file
+
+Headless runs write `workflow-run-result.yaml` per `lib/patterns/headless-contract.md`
+(kind `workflow-run`) to `{workspace_root}/.hiivmind/github/workflow-run-result.yaml`
+(or the caller's `result_path`), and still record `last_run_at` / `last_result` /
+`run_count` in poll-state as usual. `run_id` = `{UTC date}-{gh_login}-{n}` with `n` =
+UTC `HHMMSS` at run start — actor-embedded so concurrent machines cannot collide
+(interim scheme until the P6 run ledger assigns sequence numbers).
+
+---
+
 ## Cooldown Check
 
-Before executing any workflow:
+Before executing any workflow (skip when the context has `enforce_cooldown: false`):
 
 ```bash
 WORKFLOW_NAME="$1"
 WORKFLOW_FILE="$2"
 
 COOLDOWN=$(yq -r '.cooldown_minutes // 5' "$WORKFLOW_FILE")
-LAST_RUN=$(yq -r ".workflows.\"${WORKFLOW_NAME}\".last_run_at // \"null\"" .hiivmind/github/poll-state.yaml)
+LAST_RUN=$(yq -r ".workflows.\"${WORKFLOW_NAME}\".last_run_at // \"null\"" "${WORKSPACE_ROOT}/.hiivmind/github/poll-state.yaml")
 
 if [[ "$LAST_RUN" != "null" ]]; then
     NOW=$(date -u +%s)

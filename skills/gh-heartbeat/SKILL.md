@@ -152,32 +152,17 @@ Display what was detected:
 
 ### 4. Execute Auto Workflows
 
-**Execution context:** Auto workflows are pre-approved by definition. Execute without confirmation.
-When invoking downstream skills (operations, refresh), all execution is pre-approved — do NOT
-re-confirm with the user.
+Auto workflows are pre-approved by definition — execute without confirmation, and do NOT
+re-confirm operations invoked downstream.
 
-**See:** `{PLUGIN_ROOT}/lib/patterns/workflow-execution.md`
-
-For each workflow in `auto_workflows`:
-
-1. Load workflow YAML from `.hiivmind/github/workflows/`
-2. Detect format:
-   - **If `workflow:` field exists (v2):** Follow the pseudocode handoff pattern:
-     - Read `state:` field and initialize variables
-     - If `params:` exists, resolve parameters (extract from context → apply defaults → ASK for required)
-     - Follow the `workflow:` pseudocode as executable instructions
-     - Use gh-operations for data operations, AskUserQuestion for `ASK` statements
-     - Track state variables through FSM phases
-   - **If `actions:` field exists (v1):** Fall back to sequential dispatch:
-     - Execute actions in order
-     - `operation` → invoke gh-operations with the operation string
-     - `skill_invoke` → invoke the named skill
-3. Update poll-state.yaml with result
+**Delegate to the executor:** for each workflow in `auto_workflows`, execute it per
+`{PLUGIN_ROOT}/lib/patterns/workflow-execution.md` with context
+`{mode: interactive, approval: pre-approved, enforce_cooldown: true, workspace_root: <resolved root>}`.
+The executor owns format detection (v1/v2), parameter resolution, FSM interpretation,
+and poll-state result recording — this skill only reports the outcome:
 
 ```
 Running auto workflow: auto-refresh
-  Following workflow pseudocode...
-  EXECUTE: Invoking skill hiivmind-pulse-gh:gh-refresh
   Result: success
 ```
 
@@ -210,13 +195,9 @@ without any further confirmation. This means:
 
 **See:** `{PLUGIN_ROOT}/lib/patterns/workflow-execution.md` (Pre-Approved Execution section)
 
-For each selected workflow, execute using the workflow execution pattern:
-
-1. Load workflow YAML
-2. Detect format:
-   - **v2 (`workflow:` field):** Follow pseudocode handoff — resolve params, follow FSM
-   - **v1 (`actions:` field):** Sequential dispatch
-3. Update poll-state.yaml with result
+**Delegate to the executor:** for each selected workflow, execute it per
+`{PLUGIN_ROOT}/lib/patterns/workflow-execution.md` with context
+`{mode: interactive, approval: pre-approved, enforce_cooldown: true, workspace_root: <resolved root>}`.
 
 ### 6. Collect Results
 

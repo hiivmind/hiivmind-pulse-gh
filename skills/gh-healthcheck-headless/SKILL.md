@@ -125,7 +125,7 @@ uv run "${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/evaluate_checks.py" \
 contract_version: 1
 kind: healthcheck
 workspace: {LOGIN}
-run_at: {RUN_AT}
+run_at: "{RUN_AT}"    # quote: an unquoted ISO-8601 value parses as a YAML datetime; the contract requires a string
 actor: { gh_login: {GH_LOGIN}, machine: {MACHINE}, mode: {MODE} }
 repos: {REPO_RESULTS}          # each: {repo, score, total, grade, checks}
 aggregate: { score: {sum}, total: {sum}, grade: {computed} }

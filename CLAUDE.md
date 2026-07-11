@@ -117,6 +117,7 @@ Executable guides with step-by-step instructions:
 | `lib/patterns/workspace-detection.md` | Git remote → owner/repo |
 | `lib/patterns/corpus-lookup.md` | Look up API syntax when uncertain |
 | `lib/patterns/healthcheck-evaluation.md` | Healthcheck evaluation logic per check |
+| `lib/patterns/workflow-execution.md` | THE workflow executor (single normative description; interactive + headless) |
 
 ### References (WHAT exists)
 
@@ -182,6 +183,7 @@ Use natural language to describe any GitHub operation:
 | `gh-status-headless` | Headless status pre-check → status-result.yaml (zero prompts) |
 | `gh-healthcheck-headless` | Headless fleet governance audit → healthcheck-result.yaml |
 | `gh-refresh-headless` | Headless config sync (replays recorded decisions) → refresh-result.yaml |
+| `gh-workflow-run-headless` | Run a v2 workflow unattended under its headless policy → workflow-run-result.yaml |
 
 ### Skill Architecture
 
@@ -301,7 +303,8 @@ hiivmind-pulse-gh/
 │   ├── gh-discover/       # Discover workspace resources
 │   ├── gh-status-headless/       # Headless status pre-check
 │   ├── gh-healthcheck-headless/  # Headless fleet governance audit
-│   └── gh-refresh-headless/      # Headless config sync
+│   ├── gh-refresh-headless/      # Headless config sync
+│   └── gh-workflow-run-headless/ # Headless workflow run (policy-projected)
 ├── lib/
 │   ├── patterns/                         # HOW to do things (executable guides)
 │   │   ├── config-parsing.md

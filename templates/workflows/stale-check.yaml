@@ -7,6 +7,14 @@ description: "Find stale PRs and issues, prioritize by age, and offer actions"
 enabled: true
 auto: false
 
+# Reference headless annotation: stale items become findings; ping/label may run
+# unattended, close is only ever proposed.
+headless:
+  enabled: true
+  on_ask: record
+  on_mutation: allow-listed
+  mutation_allowlist: [comment, label]
+
 trigger:
   type: session_poll
   source: pull_requests
