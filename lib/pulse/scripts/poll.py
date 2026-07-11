@@ -1,0 +1,305 @@
+#!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["pyyaml>=6.0"]
+# ///
+"""Session-poll engine for hiivmind-pulse-gh (extracted from hooks/heartbeat.sh).
+
+Implements the lakehouse layering for the projects source:
+RAW (one batched GraphQL query) -> BRONZE (project-snapshot.json, all items,
+all fields) -> SILVER (poll-state views: my_assignments, status_distribution,
+my_summary) -> GOLD (structured changeset in the summary JSON and
+.project-changes.json). See docs/polymorphic-giggling-bentley.md.
+
+Usage:
+  poll.py --workspace <workspace_root> --plugin-root <dir>
+          [--repo owner/name] [--overlay-workflows <dir>]
+
+Never discovers the workspace (D4): --workspace is explicit. Prints the
+heartbeat summary JSON to stdout; exit 0 for all operational outcomes (hook
+semantics), 2 for usage errors.
+
+Testing: set PULSE_GH_FIXTURES=<dir> to serve recorded API responses.
+A request for <path> reads <dir>/<slug>.json where slug replaces every
+non-[A-Za-z0-9._-] char with '_'. GraphQL requests use the slug 'graphql'.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+import yaml
+
+REPO_SCOPED_SOURCES = {"pull_requests", "issues", "actions", "releases",
+                       "dependabot", "deployments"}
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def gh_api(path: str, graphql_query: str | None = None):
+    """Single network seam. Returns parsed JSON or None on any failure."""
+    fixtures = os.environ.get("PULSE_GH_FIXTURES")
+    if fixtures:
+        slug = "graphql" if graphql_query else re.sub(r"[^A-Za-z0-9._-]", "_", path)
+        f = Path(fixtures) / f"{slug}.json"
+        if not f.exists():
+            return None
+        return json.loads(f.read_text())
+    if graphql_query:
+        cmd = ["gh", "api", "graphql", "-f", f"query={graphql_query}"]
+    else:
+        cmd = ["gh", "api", path]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if proc.returncode != 0:
+        return None
+    try:
+        return json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return None
+
+
+def load_yaml(path: Path):
+    try:
+        return yaml.safe_load(path.read_text()) or {}
+    except (OSError, yaml.YAMLError):
+        return {}
+
+
+def save_yaml(path: Path, data) -> None:
+    path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
+
+
+def parse_iso(ts: str):
+    try:
+        return datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+# ---------------------------------------------------------------- sources
+
+def check_pull_requests(repo: str, state: dict) -> bool:
+    resp = gh_api(f"/repos/{repo}/pulls?state=open&per_page=1&sort=updated") or []
+    curr = len(resp)
+    slot = state.setdefault("pull_requests", {})
+    if curr != slot.get("open_count", 0):
+        slot["open_count"] = curr
+        return True
+    return False
+
+
+def check_issues(repo: str, state: dict) -> bool:
+    resp = gh_api(f"/repos/{repo}/issues?state=open&per_page=1&sort=updated") or []
+    curr = len(resp)
+    slot = state.setdefault("issues", {})
+    if curr != slot.get("open_count", 0):
+        slot["open_count"] = curr
+        return True
+    return False
+
+
+def check_actions(repo: str, state: dict) -> bool:
+    resp = gh_api(f"/repos/{repo}/actions/runs?per_page=1") or {"workflow_runs": []}
+    runs = resp.get("workflow_runs") or []
+    curr_id = str(runs[0]["id"]) if runs else ""
+    slot = state.setdefault("actions", {})
+    prev_id = str(slot.get("latest_run_id") or "")
+    if curr_id and curr_id != prev_id:
+        slot["latest_run_id"] = curr_id
+        slot["latest_run_conclusion"] = str(runs[0].get("conclusion") or "null")
+        return True
+    return False
+
+
+def check_releases(repo: str, state: dict) -> bool:
+    resp = gh_api(f"/repos/{repo}/releases?per_page=1") or []
+    curr_id = str(resp[0]["id"]) if resp else ""
+    slot = state.setdefault("releases", {})
+    prev_id = str(slot.get("latest_id") or "")
+    if curr_id and curr_id != prev_id:
+        slot["latest_id"] = curr_id
+        slot["latest_tag"] = str(resp[0].get("tag_name") or "null")
+        return True
+    return False
+
+
+def check_dependabot(repo: str, state: dict) -> bool:
+    resp = gh_api(f"/repos/{repo}/dependabot/alerts?state=open&per_page=1&sort=updated")
+    if not isinstance(resp, list):     # 403/404/error -> skip silently
+        return False
+    curr = len(resp)
+    slot = state.setdefault("dependabot", {})
+    if curr != slot.get("open_count", 0):
+        slot["open_count"] = curr
+        return True
+    return False
+
+
+def check_deployments(repo: str, state: dict) -> bool:
+    resp = gh_api(f"/repos/{repo}/deployments?per_page=1") or []
+    curr_id = str(resp[0]["id"]) if resp else ""
+    slot = state.setdefault("deployments", {})
+    prev_id = str(slot.get("latest_id") or "")
+    if curr_id and curr_id != prev_id:
+        slot["latest_id"] = curr_id
+        slot["latest_environment"] = str(resp[0].get("environment") or "null")
+        return True
+    return False
+
+
+REPO_CHECKS = {
+    "pull_requests": check_pull_requests,
+    "issues": check_issues,
+    "actions": check_actions,
+    "releases": check_releases,
+    "dependabot": check_dependabot,
+    "deployments": check_deployments,
+}
+
+# The projects source (lakehouse) is added in check_projects() below.
+
+
+def evaluate_source(source: str, repo: str, config: dict, config_dir: Path,
+                    state: dict, cache: dict, gold: dict) -> bool:
+    """Memoized per-source evaluation (spec 5.2: dedup is per run)."""
+    if source in cache:
+        return cache[source]
+    changed = False
+    if source in REPO_CHECKS:
+        if repo:
+            changed = REPO_CHECKS[source](repo, state)
+    elif source == "projects":
+        changed = check_projects(config, config_dir, state, gold)
+    cache[source] = changed
+    return changed
+
+
+# ---------------------------------------------------------------- projects
+# (implemented in Task 2 — Task 1 lands this stub so the file is complete)
+
+def check_projects(config: dict, config_dir: Path, state: dict, gold: dict) -> bool:
+    return False
+
+
+# ---------------------------------------------------------------- main
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--workspace", required=True)
+    ap.add_argument("--plugin-root", required=True)
+    ap.add_argument("--repo", default="")
+    ap.add_argument("--overlay-workflows", default="")
+    args = ap.parse_args()
+
+    config_dir = Path(args.workspace) / ".hiivmind" / "github"
+    config_path = config_dir / "config.yaml"
+    if not config_path.is_file():
+        return 0
+    config = load_yaml(config_path)
+
+    workflows_dir = config_dir / "workflows"
+    overlay_dir = Path(args.overlay_workflows) if args.overlay_workflows else None
+    wf_files = sorted(workflows_dir.glob("*.yaml")) if workflows_dir.is_dir() else []
+    if overlay_dir and overlay_dir.is_dir():
+        wf_files += sorted(overlay_dir.glob("*.yaml"))
+    if not wf_files and not workflows_dir.is_dir() and overlay_dir is None:
+        return 0
+    if not workflows_dir.is_dir() and not (overlay_dir and overlay_dir.is_dir()):
+        return 0
+
+    rate = gh_api("/rate_limit") or {}
+    remaining = (rate.get("rate") or {}).get("remaining", 100)
+    if remaining < 50:
+        print(json.dumps({"skipped": True, "reason": "rate_limit_low",
+                          "remaining": remaining}))
+        return 0
+
+    freshness = load_yaml(config_dir / "freshness.yaml")
+    stale_sections = [k for k, v in (freshness.get("sections") or {}).items()
+                      if isinstance(v, dict) and v.get("stale") is True]
+
+    poll_state_path = config_dir / "poll-state.yaml"
+    if not poll_state_path.is_file():
+        template = Path(args.plugin_root) / "templates" / "poll-state.yaml.template"
+        try:
+            shutil.copy(template, poll_state_path)
+        except OSError:
+            return 0
+        print(json.dumps({"first_run": True, "stale_sections": stale_sections}))
+        return 0
+
+    poll_state = load_yaml(poll_state_path)
+    state = poll_state.setdefault("state", {})
+    now = datetime.now(timezone.utc)
+
+    triggered: list[str] = []
+    auto_workflows: list[str] = []
+    source_cache: dict[str, bool] = {}
+    gold: dict = {}
+
+    for wf_file in wf_files:
+        wf = load_yaml(wf_file)
+        if not wf or wf.get("enabled", True) is not True:
+            continue
+        name = str(wf.get("name") or wf_file.stem)
+        trigger = wf.get("trigger") or {}
+        cooldown = int(wf.get("cooldown_minutes", 5))
+
+        last_run = ((poll_state.get("workflows") or {}).get(name) or {}).get("last_run_at")
+        last_dt = parse_iso(last_run) if isinstance(last_run, str) else None
+        if last_dt and (now - last_dt).total_seconds() / 60 < cooldown:
+            continue
+
+        should = False
+        ttype = trigger.get("type")
+        if ttype == "session_poll":
+            source = str(trigger.get("source") or "")
+            if source in REPO_SCOPED_SOURCES and not args.repo:
+                continue          # D3: repo-scoped sources need repo context
+            should = evaluate_source(source, args.repo, config, config_dir,
+                                     state, source_cache, gold)
+        elif ttype == "freshness":
+            should = bool(stale_sections)
+
+        if should:
+            triggered.append(name)
+            if wf.get("auto", False) is True:
+                auto_workflows.append(name)
+
+    poll_state["last_polled_at"] = now_iso()
+    save_yaml(poll_state_path, poll_state)
+
+    summary = {"stale_sections": stale_sections,
+               "triggered_workflows": triggered,
+               "auto_workflows": auto_workflows}
+    if gold.get("project_changes"):
+        summary["project_changes"] = gold["project_changes"]
+
+    log_dir = config_dir / "log"
+    log_dir.mkdir(exist_ok=True)
+    log_file = log_dir / "heartbeat.log"
+    with log_file.open("a") as fh:
+        fh.write(f"[{now_iso()}] {json.dumps(summary)}\n")
+    lines = log_file.read_text().splitlines(keepends=True)
+    if len(lines) > 500:
+        log_file.write_text("".join(lines[-250:]))
+
+    print(json.dumps(summary))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
