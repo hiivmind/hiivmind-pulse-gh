@@ -1,0 +1,19 @@
+defaults:
+  threshold_hours: 168
+sections:
+  workspace:
+    threshold_hours: 720
+    last_checked: "2026-07-01T12:00:00Z"   # 216h old, threshold 720h -> fresh
+    stale: false
+  projects:
+    threshold_hours: 168
+    last_checked: "2026-07-01T12:00:00Z"   # 216h old, threshold 168h -> stale (recomputed; stored flag ignored)
+    stale: false
+  views:
+    threshold_hours: 24
+    last_checked: null                      # never checked -> stale
+    stale: true
+  teams:
+    last_checked: "2026-07-09T12:00:00Z"   # 24h old, defaults 168h -> fresh
+  repo_settings:
+    last_checked: 2026-07-09T12:00:00Z     # UNQUOTED — pyyaml parses this to a datetime object

@@ -1,0 +1,8 @@
+defaults:
+  threshold_hours: 168
+sections:
+  workspace:
+    last_checked: "2026-07-10T11:00:00Z"
+  projects:
+    threshold_hours: 24
+    last_checked: "2026-07-10T00:00:00Z"   # 12h < 24h -> fresh
