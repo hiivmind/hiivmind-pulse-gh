@@ -13,3 +13,6 @@ Thumbs.db
 .claude-plugin/skills/*/.cache/
 
 .claude/**
+
+# SDD progress scratch
+.superpowers/
