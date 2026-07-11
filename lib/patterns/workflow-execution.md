@@ -40,7 +40,7 @@ Caller contexts:
 |--------|------|----------|------------------|
 | gh-heartbeat (auto + user-selected workflows) | interactive | pre-approved | true |
 | gh-workflows "Run" (on demand) | interactive | pre-approved | false |
-| gh-workflow-run-headless | headless | pre-approved | true (unless its `ignore_cooldown` input) |
+| gh-workflow-run-headless | headless | pre-approved | true — but the skill pre-checks the cooldown itself (Phase 2) so it can emit `skipped-cooldown`, then delegates with `enforce_cooldown: false`; skipped entirely under its `ignore_cooldown` input |
 
 Poll-state paths in this document are relative to `{workspace_root}/.hiivmind/github/`.
 
@@ -254,7 +254,7 @@ delete, …); read-only operations always execute.
 | Mutation | per `on_mutation` — **propose**: append a one-line description (verb + target) to `proposed_actions`, do not execute; **allow-listed**: execute if the operation's verb is in `mutation_allowlist`, else propose; **allow**: execute |
 | `SHOW` / `PRESENT` phases | no user to show to; notable items become `findings` entries — `kind` from the workflow's domain (e.g. `stale-item`, `ci-failure`), `severity` via `INFER` with `inferred: true` |
 | `INFER` | executes normally; any finding it classifies carries `inferred: true` and its label in `classification` |
-| `INVOKE skill X` | if a headless sibling exists (`X-headless`), invoke it with explicit inputs (`workspace_path` from context); otherwise append `"invoke {X}"` to `proposed_actions` |
+| `INVOKE skill X` | if a headless sibling exists (`X-headless`), invoke it with explicit inputs (its `workspace_path` = the context's `workspace_root`); otherwise append `"invoke {X}"` to `proposed_actions` |
 | `STOP "reason"` | normal completion (outcome `success`); the reason lands in the result summary, not `errors` |
 | `params` with `default: null` | if the caller did not supply the param: append to `asks_recorded`, outcome `aborted` |
 
