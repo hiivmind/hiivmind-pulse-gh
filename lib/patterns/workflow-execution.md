@@ -17,6 +17,35 @@ Execute workflows after triggers fire, with format detection, parameter resoluti
 
 ---
 
+## Single Executor
+
+This document is the ONE normative execution description. gh-heartbeat, gh-workflows
+"Run", and gh-workflow-run-headless are **callers**: they select workflows, obtain
+approval, build an execution context, and delegate here. Skills MUST NOT re-describe
+execution steps.
+
+Callers supply an execution context:
+
+| Field | Values | Meaning |
+|-------|--------|---------|
+| `mode` | `interactive` \| `headless` | interactive: ASK/SHOW reach a user. headless: policy projection (see Headless Execution below) |
+| `approval` | `pre-approved` \| `ask` | pre-approved skips the `auto: false` permission gate (step 3 of the flow) |
+| `enforce_cooldown` | `true` \| `false` | on-demand interactive runs pass `false` |
+| `workspace_root` | path | resolved by the caller (interactive walk-up, or explicit headless input — D4) |
+| `repo` | `owner/name` or empty | repo scope, when the caller has one |
+
+Caller contexts:
+
+| Caller | mode | approval | enforce_cooldown |
+|--------|------|----------|------------------|
+| gh-heartbeat (auto + user-selected workflows) | interactive | pre-approved | true |
+| gh-workflows "Run" (on demand) | interactive | pre-approved | false |
+| gh-workflow-run-headless | headless | pre-approved | true (unless its `ignore_cooldown` input) |
+
+Poll-state paths in this document are relative to `{workspace_root}/.hiivmind/github/`.
+
+---
+
 ## Format Detection
 
 Workflows exist in two formats. Detect which format before executing:
@@ -200,14 +229,14 @@ presented workflows and the user selected which to run), downstream execution MU
 
 ## Cooldown Check
 
-Before executing any workflow:
+Before executing any workflow (skip when the context has `enforce_cooldown: false`):
 
 ```bash
 WORKFLOW_NAME="$1"
 WORKFLOW_FILE="$2"
 
 COOLDOWN=$(yq -r '.cooldown_minutes // 5' "$WORKFLOW_FILE")
-LAST_RUN=$(yq -r ".workflows.\"${WORKFLOW_NAME}\".last_run_at // \"null\"" .hiivmind/github/poll-state.yaml)
+LAST_RUN=$(yq -r ".workflows.\"${WORKFLOW_NAME}\".last_run_at // \"null\"" "${WORKSPACE_ROOT}/.hiivmind/github/poll-state.yaml")
 
 if [[ "$LAST_RUN" != "null" ]]; then
     NOW=$(date -u +%s)

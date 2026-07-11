@@ -157,56 +157,14 @@ yq -i '.enabled = false' "$WORKFLOWS_DIR/${WF_NAME}.yaml"  # disable
 
 ### Run Workflow (On Demand)
 
-**See:** `{PLUGIN_ROOT}/lib/patterns/workflow-execution.md`
+On-demand runs are pre-approved by the user's request and skip cooldowns.
 
-1. Load the workflow YAML
-2. Skip cooldown check (on-demand ignores cooldown)
-3. Detect format and execute:
-
-**V2 workflows (has `workflow:` field):**
-
-1. If workflow has `params:`, resolve parameters:
-   - Extract values from the user's run request (e.g., "run commit-summary last 3 days on main")
-   - Apply defaults for params not mentioned
-   - ASK for required params (where `default: null`) that weren't provided
-2. Initialize `state:` variables
-3. Follow the `workflow:` pseudocode as executable instructions
-4. Update poll-state.yaml with result
-
-```
-Running workflow: ci-monitor
-
-Following workflow pseudocode...
-
-GATHER: Listing recent failed workflow runs...
-  Found 2 failures.
-  Classifying each failure...
-
-PRESENT:
-  | Workflow | Branch | Classification | You Touched | Time |
-  |----------|--------|----------------|-------------|------|
-  | CI       | main   | test           | yes         | 2h ago |
-  | Deploy   | main   | infra          | no          | 5h ago |
-
-  Which failure to investigate?
-```
-
-**V1 workflows (has `actions:` field, legacy):**
-
-1. Execute actions sequentially
-2. Update poll-state.yaml with result
-
-```
-Running workflow: pr-lifecycle
-
-Action 1/2: Summarize open PRs
-[operations skill output]
-
-Action 2/2: Highlight review needs
-[operations skill output]
-
-Workflow complete. Result: success
-```
+**Delegate to the executor:** execute the named workflow per
+`{PLUGIN_ROOT}/lib/patterns/workflow-execution.md` with context
+`{mode: interactive, approval: pre-approved, enforce_cooldown: false, workspace_root: <resolved root>}`.
+The executor owns format detection, parameter resolution (extract from the run request →
+defaults → ASK for required), FSM interpretation, and poll-state recording. Report the
+executor's summary when it finishes.
 
 ### Create Workflow
 
