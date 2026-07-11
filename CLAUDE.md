@@ -305,6 +305,8 @@ hiivmind-pulse-gh/
 │   │   └── ...
 │   ├── pulse/
 │   │   └── scripts/                      # Deterministic Python (PEP 723, uv run)
+│   │       ├── poll.py                   # Heartbeat engine (GraphQL + lakehouse)
+│   │       ├── evaluate_checks.py        # Mechanical healthcheck evaluator
 │   │       └── validate_result.py        # Headless result contract validator
 │   └── references/                       # WHAT exists (static lookup data)
 │       ├── api-routing.md                # Quick reference + method selection

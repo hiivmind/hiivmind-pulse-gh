@@ -547,16 +547,16 @@ fails correctly for all eight fixtures in CI-runnable tests.
 
 Deliverables:
 
-- [ ] P2.1 `poll.py`: heartbeat GraphQL + diff logic extracted; implements the
+- [x] P2.1 `poll.py`: heartbeat GraphQL + diff logic extracted; implements the
       lakehouse plan (RAW→BRONZE `project-snapshot.json`→SILVER poll-state
       →GOLD changeset JSON). Includes the shared rate-limit pre-check.
-- [ ] P2.2 `heartbeat.sh` reduced to a thin wrapper invoking `poll.py`;
+- [x] P2.2 `heartbeat.sh` reduced to a thin wrapper invoking `poll.py`;
       output JSON contract to gh-heartbeat unchanged (no skill edits needed).
-- [ ] P2.3 `evaluate_checks.py`: mechanical healthcheck checks as pure data
+- [x] P2.3 `evaluate_checks.py`: mechanical healthcheck checks as pure data
       comparisons; emits per-check results in the `healthcheck` kind's shape;
       LLM-judgment checks explicitly listed as out of scope and flagged
       `inferred` by the calling skill.
-- [ ] P2.4 Tests for both scripts against recorded API fixtures.
+- [x] P2.4 Tests for both scripts against recorded API fixtures.
 
 Exit criteria: heartbeat output byte-compatible (same JSON keys) with the bash
 implementation on the same inputs; `evaluate_checks.py` reproduces the current
@@ -672,7 +672,7 @@ work. Status values: `not-started | in-progress | blocked({on}) | done`.
 |-------|-------|------------|--------|-----------|
 | P0 | Workspace root formalization | — | ✅ done | 2026-07-10 |
 | P1 | Result contract + validator | P0 | ✅ done | 2026-07-10 |
-| P2 | Python extraction (poll, checks) | P0 | not-started | |
+| P2 | Python extraction (poll, checks) | P0 | ✅ done | 2026-07-11 |
 | P3 | Headless skills (status/healthcheck/refresh) | P1, P2 | not-started | |
 | P4 | Executor split + headless policy | P1 | not-started | |
 | P5 | pulse-scheduler + fleet report **(goal 1)** | P3 (opt. P4.3) | not-started | |

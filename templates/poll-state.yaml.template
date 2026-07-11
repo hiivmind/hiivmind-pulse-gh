@@ -28,8 +28,11 @@ state:
     latest_id: null
     latest_environment: null
   projects:
+    snapshot_hash: null
     item_count: 0
     my_assignments: []
+    status_distribution: []
+    my_summary: {}
 
 # Per-workflow execution tracking
 workflows:

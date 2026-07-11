@@ -140,3 +140,21 @@ fi
 - **config-parsing.md** — YAML read/write operations
 - **workflow-execution.md** — How workflows are executed after triggers fire
 - **error-handling.md** — Handle API errors during polling
+
+---
+
+## Lakehouse Layers (projects source)
+
+The projects source is layered (see `docs/polymorphic-giggling-bentley.md`);
+all layers derive from **one** batched GraphQL query per poll:
+
+| Layer | Artifact | Contents |
+|-------|----------|----------|
+| RAW | GraphQL response (in-memory) | All catalog projects, items, field values |
+| BRONZE | `project-snapshot.json` | Full items + all fields, unfiltered; SHA-256 hash stored as `state.projects.snapshot_hash` — unchanged hash short-circuits derivation |
+| SILVER | `poll-state.yaml` → `state.projects.*` | `my_assignments` (enriched with status/priority/size/iteration), `status_distribution`, `my_summary` |
+| GOLD | `.project-changes.json` + `project_changes` in heartbeat JSON | `status_changes`, `new_assignments`, `removed_assignments`, `priority_changes` |
+
+Triggers fire on silver-view change (assignments, distribution, or item
+count), not on every bronze change. `project-snapshot.json` and
+`.project-changes.json` are per-machine transients (gitignored).
