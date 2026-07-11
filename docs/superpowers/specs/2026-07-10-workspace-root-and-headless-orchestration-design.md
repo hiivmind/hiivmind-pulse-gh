@@ -611,15 +611,15 @@ runs are in scope for v1 of the template — otherwise P3 alone).
 
 Deliverables:
 
-- [ ] P5.1 New repo `hiivmind-pulse-scheduler`: CLAUDE.md, symlink deployment
+- [x] P5.1 New repo `hiivmind-pulse-scheduler`: CLAUDE.md, symlink deployment
       docs (copy corpus-scheduler conventions).
-- [ ] P5.2 `TEMPLATE-workspace-maintenance.md`: status pre-check
+- [x] P5.2 `TEMPLATE-workspace-maintenance.md`: status pre-check
       (optimization-never-gate) → refresh → fleet healthcheck → commit/PR to
       workspace repo, with superseded-PR cleanup.
-- [ ] P5.3 One stub (`workspace-maintenance-hiivmind/`) with
+- [x] P5.3 One stub (`workspace-maintenance-hiivmind/`) with
       `WORKSPACE_PATH` / `WORKSPACE_REPO` / `BRANCH_PREFIX`; symlinked into
       `~/.claude/scheduled-tasks/`.
-- [ ] P5.4 Fleet report format in the PR body: per-repo grades + deltas,
+- [x] P5.4 Fleet report format in the PR body: per-repo grades + deltas,
       `asks_recorded` / `proposed_actions` under a "Needs attention" heading.
 
 Exit criteria: one unattended scheduled run against the hiivmind workspace
@@ -675,7 +675,7 @@ work. Status values: `not-started | in-progress | blocked({on}) | done`.
 | P2 | Python extraction (poll, checks) | P0 | ✅ done | 2026-07-11 |
 | P3 | Headless skills (status/healthcheck/refresh) | P1, P2 | ✅ done | 2026-07-11 |
 | P4 | Executor split + headless policy | P1 | ✅ done | 2026-07-11 |
-| P5 | pulse-scheduler + fleet report **(goal 1)** | P3 (opt. P4.3) | not-started | |
+| P5 | pulse-scheduler + fleet report **(goal 1)** | P3 (opt. P4.3) | ✅ done | 2026-07-12 |
 | P6 | Workflow v3: ledger, steps, gates **(goal 2)** | P4 | not-started | |
 | P7 | Housekeeping (CLAUDE.md, DAG doc, lint) | P0+ (final: P6) | not-started | |
 

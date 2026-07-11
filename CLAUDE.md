@@ -353,6 +353,16 @@ This keeps the plugin lean for distribution while allowing comprehensive test co
 
 ---
 
+## Scheduled Maintenance
+
+Unattended fleet maintenance lives in a separate repo:
+[hiivmind-pulse-scheduler](https://github.com/hiivmind/hiivmind-pulse-scheduler) —
+a shared `TEMPLATE-workspace-maintenance.md` composes the headless skills
+(status pre-check → refresh → fleet healthcheck → PR on the workspace repo);
+thin per-workspace stubs are symlinked into `~/.claude/scheduled-tasks/`.
+
+---
+
 ## Plugin Development Resources
 
 When working on plugin structure, use the `plugin-dev` skills:
