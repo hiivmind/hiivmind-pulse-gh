@@ -49,7 +49,10 @@ computed:
   GH_LOGIN     = $(gh api user --jq .login)   ("unknown" on failure, + errors[] entry)
   MACHINE      = $(hostname -s)
   MODE         = {mode input, default "scheduled"}
-  ALL_SECTIONS = section ids present in CONFIG_DIR/freshness.yaml
+  ALL_SECTIONS = union of the section ids in CONFIG_DIR/freshness.yaml (if present)
+                 and every id in TARGETS — so a target absent from freshness.yaml is
+                 still refreshed and reported, never silently dropped (resolved after
+                 TARGETS in Phase 1)
   TARGETS      = resolved per the priority order above (minus "automations")
   SECTION_RESULTS = []   ({id, status} per section in ALL_SECTIONS)
   ERRORS       = []
@@ -66,12 +69,17 @@ computed:
 4. **Pull before reconcile** (multi-machine rule, workspace-detection.md): if CONFIG_DIR
    is a git repo with a remote, `git -C CONFIG_DIR pull --ff-only` first; a pull failure
    is an ERRORS entry, not an abort (proceed on local state).
-5. Resolve TARGETS by the priority order in the intro. For the stale fallback, run
+5. **Bootstrap freshness.yaml** if `CONFIG_DIR/freshness.yaml` is missing (a workspace that
+   predates freshness tracking): create it from `{PLUGIN_ROOT}/templates/freshness.yaml.template`.
+   This is not an abort — it gives Phase 2 a file to stamp and lets the stale-fallback run.
+6. Resolve TARGETS by the priority order in the intro. For the stale fallback, run
    `uv run {PLUGIN_ROOT}/lib/pulse/scripts/freshness_status.py --freshness CONFIG_DIR/freshness.yaml`
-   and take sections with `stale: true`. Remove `automations` from TARGETS always.
+   and take sections with `stale: true` (exit 2 → treat as no stale info: empty fallback,
+   append an ERRORS entry). Remove `automations` from TARGETS always.
    Unknown section ids in the `sections` input → ERRORS entry, dropped.
-6. Verify gitignore coverage (`*-result.yaml`), append if missing.
-7. Record baseline for config_updated:
+   Then set ALL_SECTIONS = the union of freshness.yaml's section ids and TARGETS.
+7. Verify gitignore coverage (`*-result.yaml`), append if missing.
+8. Record baseline for config_updated:
 
 ```bash
 BASELINE=$(git -C "$CONFIG_DIR" status --porcelain 2>/dev/null | sort | shasum | cut -d' ' -f1)
@@ -89,7 +97,8 @@ ALL_SECTIONS:
   Phase 4 (query GitHub, write the section's config file — see the "Refreshable Sections"
   table in `skills/gh-refresh/SKILL.md`; GraphQL via `lib/patterns/graphql-execution.md`).
   - Success → `{id, status: refreshed}`; update the section in freshness.yaml
-    (`last_checked: RUN_AT`, `stale: false`).
+    (`last_checked: RUN_AT`, `stale: false`), creating the `sections.{id}` entry if the
+    section was a target not previously tracked in freshness.yaml.
   - Any error → `{id, status: failed}`, append `"{id}: {error}"` to ERRORS, leave
     freshness untouched, continue.
 
