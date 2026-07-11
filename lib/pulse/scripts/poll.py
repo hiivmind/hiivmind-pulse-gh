@@ -189,9 +189,6 @@ def evaluate_source(source: str, repo: str, config: dict, config_dir: Path,
 
 # ---------------------------------------------------------------- projects
 
-FIELD_KEYS = ("Status", "Priority", "Size", "Iteration")
-
-
 def _build_query(catalog: list[dict]) -> tuple[str, list[dict]]:
     """One batched query, expanded fragment (zero additional API calls)."""
     parts = []
@@ -329,14 +326,26 @@ def check_projects(config: dict, config_dir: Path, state: dict, gold: dict) -> b
     if not result:
         return False
 
+    try:
+        return _check_projects_impl(result, aliases, user, config_dir, state, gold)
+    except Exception:
+        # A malformed catalog entry or unexpected API shape must not crash
+        # the SessionStart hook or starve the other sources' summary.
+        return False
+
+
+def _check_projects_impl(result: dict, aliases: list[dict], user: str,
+                          config_dir: Path, state: dict, gold: dict) -> bool:
     # BRONZE: full snapshot, no filtering
     snapshot = {"captured_at": now_iso(), "projects": {}}
     for a in aliases:
         node = ((result.get("data") or {}).get(a["alias"])) or {}
         items = [(n) for n in ((node.get("items") or {}).get("nodes") or []) if n]
+        bronze_items = sorted((_bronze_item(n) for n in items),
+                              key=lambda it: it.get("id") or "")
         snapshot["projects"][str(a["number"])] = {
             "title": a["title"],
-            "items": [_bronze_item(n) for n in items],
+            "items": bronze_items,
         }
     snapshot_json = json.dumps(snapshot["projects"], sort_keys=True)
     snapshot_hash = hashlib.sha256(snapshot_json.encode()).hexdigest()
@@ -360,11 +369,12 @@ def check_projects(config: dict, config_dir: Path, state: dict, gold: dict) -> b
         or item_count != prev_count
     )
 
-    # GOLD: structured changeset
+    # GOLD: structured changeset (only emitted when it has real content)
     if changed:
         changes = _gold_changeset(prev_assignments, my_assignments)
-        (config_dir / ".project-changes.json").write_text(json.dumps(changes, indent=2))
-        gold["project_changes"] = changes
+        if any(changes.values()):
+            (config_dir / ".project-changes.json").write_text(json.dumps(changes, indent=2))
+            gold["project_changes"] = changes
 
     slot.update({"snapshot_hash": snapshot_hash, "item_count": item_count,
                  "my_assignments": my_assignments,
@@ -393,8 +403,6 @@ def main() -> int:
     wf_files = sorted(workflows_dir.glob("*.yaml")) if workflows_dir.is_dir() else []
     if overlay_dir and overlay_dir.is_dir():
         wf_files += sorted(overlay_dir.glob("*.yaml"))
-    if not wf_files and not workflows_dir.is_dir() and overlay_dir is None:
-        return 0
     if not workflows_dir.is_dir() and not (overlay_dir and overlay_dir.is_dir()):
         return 0
 
