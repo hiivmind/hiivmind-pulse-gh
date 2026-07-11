@@ -8,6 +8,11 @@
 .DS_Store
 Thumbs.db
 
+# Python (dev/test env for lib/pulse/scripts; scripts themselves are PEP 723)
+__pycache__/
+*.pyc
+.venv/
+
 # Corpus skills - cloned sources and caches
 .claude-plugin/skills/*/.source/
 .claude-plugin/skills/*/.cache/
