@@ -24,6 +24,13 @@ When a user requests a blocked operation:
 
 **Do not proceed** with blocked operations under any circumstances.
 
+### Headless mode
+
+In headless workflow runs this blocklist is **unconditional**: it overrides any
+`headless.on_mutation` policy, including `allow`. The executor records the blocked
+operation in the result file's `proposed_actions` with a `"blocked: "` prefix and
+continues. See `lib/patterns/workflow-execution.md` — Headless Execution.
+
 ## Why These Operations Are Blocked
 
 ### Repository Deletion

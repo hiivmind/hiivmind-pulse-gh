@@ -8,6 +8,14 @@ description: "{{workflow_description}}"
 enabled: true
 auto: false  # true = execute without asking, false = present and ask
 
+# Headless policy (optional) — how this workflow projects onto unattended runs.
+# See lib/patterns/workflow-execution.md "Headless Execution". Absent => headless disabled.
+# headless:
+#   enabled: true
+#   on_ask: record          # record | default | abort
+#   on_mutation: propose    # propose | allow-listed | allow
+#   mutation_allowlist: []  # verbs permitted when allow-listed, e.g. [comment, label]
+
 trigger:
   type: {{trigger_type}}  # session_poll | post_operation | freshness | on_demand
   source: {{trigger_source}}  # pull_requests | issues | actions | projects | config
