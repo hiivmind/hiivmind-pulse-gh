@@ -22,6 +22,12 @@ repositories: []
 # Populated by hiivmind-pulse-gh-workspace-init
 milestones: {}
 
+# Headless automation decisions (recorded by interactive skills, replayed by headless siblings)
+# refresh_sections: sections gh-refresh-headless may sync without prompting.
+# Recorded as the union of sections refreshed interactively; edit to prune.
+automation:
+  refresh_sections: []
+
 # Cache metadata
 cache:
   initialized_at: {{initialized_at}}
