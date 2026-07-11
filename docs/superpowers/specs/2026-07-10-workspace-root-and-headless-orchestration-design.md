@@ -527,14 +527,14 @@ against it; `gh-init` on a fresh parent folder produces the Part 3.2 layout.
 
 Deliverables:
 
-- [ ] P1.1 `lib/patterns/headless-contract.md` — kinds `status`,
+- [x] P1.1 `lib/patterns/headless-contract.md` — kinds `status`,
       `healthcheck`, `refresh`, `workflow-run`; `contract_version: 1`;
       required `actor:` block on all kinds (Part 3.3 / I4);
       gitignore + consumption rules ported from corpus.
-- [ ] P1.2 `lib/pulse/scripts/validate_result.py` (PEP 723, `uv run`) with
+- [x] P1.2 `lib/pulse/scripts/validate_result.py` (PEP 723, `uv run`) with
       exit codes 0/1/2; pyproject + tests scaffolded (first Python in repo —
       copy corpus `pyproject.toml` conventions).
-- [ ] P1.3 Schema fixtures: one valid + one invalid example per kind, used by
+- [x] P1.3 Schema fixtures: one valid + one invalid example per kind, used by
       tests.
 
 Exit criteria: `uv run .../validate_result.py <fixture> --kind <k>` passes/
@@ -655,8 +655,8 @@ showing the full step history.
 true, final pass after P6.
 
 - [ ] P7.1 CLAUDE.md rewrite: 7 skills, hooks, workflow system, workspace
-      root, Python scripts. (Do the stale-skills fix immediately after P0 —
-      it misleads today.)
+      root, Python scripts. (Stale-skills interim fix landed with P1; full
+      rewrite after P6.)
 - [ ] P7.2 Cross-cutting concerns table in CLAUDE.md.
 - [ ] P7.3 `lib/patterns/derivation-dag.md`.
 - [ ] P7.4 `workflow_lint.py` v1 (schema + FSM references + headless policy)
@@ -671,7 +671,7 @@ work. Status values: `not-started | in-progress | blocked({on}) | done`.
 | Phase | Title | Depends on | Status | Completed |
 |-------|-------|------------|--------|-----------|
 | P0 | Workspace root formalization | — | ✅ done | 2026-07-10 |
-| P1 | Result contract + validator | P0 | not-started | |
+| P1 | Result contract + validator | P0 | ✅ done | 2026-07-10 |
 | P2 | Python extraction (poll, checks) | P0 | not-started | |
 | P3 | Headless skills (status/healthcheck/refresh) | P1, P2 | not-started | |
 | P4 | Executor split + headless policy | P1 | not-started | |
