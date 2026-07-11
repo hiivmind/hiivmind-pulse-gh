@@ -1,0 +1,32 @@
+contract_version: 1
+kind: healthcheck
+workspace: testorg
+run_at: "2026-07-10T09:05:00Z"
+actor:
+  gh_login: octocat
+  machine: mba-m4
+  mode: interactive
+repos:
+  - repo: testorg/widget
+    score: 7.5
+    total: 9
+    grade: B
+    checks:
+      branch_protection:
+        status: warn
+        detail: "main: 1 required review, enforce_admins: no"
+        data: {}
+      releases:
+        status: fail
+        detail: "No releases or tags"
+        data: {}
+      issue_triage:
+        status: pass
+        detail: "Bug: bug, Priority: P1"
+        data: {}
+        inferred: false
+aggregate:
+  score: 7.5
+  total: 9
+  grade: B
+errors: []

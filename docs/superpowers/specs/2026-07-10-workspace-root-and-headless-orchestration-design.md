@@ -166,7 +166,10 @@ What the placement resolves:
 The current premise "config.yaml committed to git, shared across team" breaks
 when the parent folder isn't a repo. Resolution: initialize the workspace root
 (or just its `.hiivmind/` directory) as a small git repository, with repo clone
-directories ignored. This:
+directories ignored. **Resolved during P0: the workspace repo is rooted at
+`.hiivmind/github/` itself (not the whole parent folder — avoids nested-clone
+hazards and respects the multi-plugin `.hiivmind/` namespace); default remote
+`{login}-workspace`, private.** This:
 
 - restores team sharing and versioning for the human-authored assets
   (workflow definitions, healthcheck dismissals, `repo_dependencies`,
@@ -499,18 +502,18 @@ P2/P3); P5 and P6 are independent of each other.
 
 Deliverables:
 
-- [ ] P0.1 `workspace-detection.md` rewritten: normative `workspace_root`
+- [x] P0.1 `workspace-detection.md` rewritten: normative `workspace_root`
       resolution algorithm (walk-up, `workspace:` section marker), D2 layering
       rule (workspace base, repo overlay), D4 explicit-inputs rule stated as a
       convention for all future headless skills.
-- [ ] P0.2 `heartbeat.sh` config discovery replaced with the full walk-up;
+- [x] P0.2 `heartbeat.sh` config discovery replaced with the full walk-up;
       two-level check removed. Scope behavior per D3 decision.
-- [ ] P0.3 Workspace repo initialized (per D1): gitignore strategy
+- [x] P0.3 Workspace repo initialized (per D1): gitignore strategy
       implemented, `.hiivmind/github/` migrated from this repo's copy,
       derivation split applied (committed vs gitignored per Part 3.2 layout).
-- [ ] P0.4 `gh-init` updated: offers workspace-root placement as the default
+- [x] P0.4 `gh-init` updated: offers workspace-root placement as the default
       for multi-repo parents; repo-local placement demoted to overlay case.
-- [ ] P0.5 Multi-machine topology (Part 3.3) documented in
+- [x] P0.5 Multi-machine topology (Part 3.3) documented in
       `workspace-detection.md`: shared vs per-machine state split,
       pull-before-reconcile rule, cooldowns-are-advisory.
 
@@ -524,14 +527,14 @@ against it; `gh-init` on a fresh parent folder produces the Part 3.2 layout.
 
 Deliverables:
 
-- [ ] P1.1 `lib/patterns/headless-contract.md` — kinds `status`,
+- [x] P1.1 `lib/patterns/headless-contract.md` — kinds `status`,
       `healthcheck`, `refresh`, `workflow-run`; `contract_version: 1`;
       required `actor:` block on all kinds (Part 3.3 / I4);
       gitignore + consumption rules ported from corpus.
-- [ ] P1.2 `lib/pulse/scripts/validate_result.py` (PEP 723, `uv run`) with
+- [x] P1.2 `lib/pulse/scripts/validate_result.py` (PEP 723, `uv run`) with
       exit codes 0/1/2; pyproject + tests scaffolded (first Python in repo —
       copy corpus `pyproject.toml` conventions).
-- [ ] P1.3 Schema fixtures: one valid + one invalid example per kind, used by
+- [x] P1.3 Schema fixtures: one valid + one invalid example per kind, used by
       tests.
 
 Exit criteria: `uv run .../validate_result.py <fixture> --kind <k>` passes/
@@ -652,8 +655,8 @@ showing the full step history.
 true, final pass after P6.
 
 - [ ] P7.1 CLAUDE.md rewrite: 7 skills, hooks, workflow system, workspace
-      root, Python scripts. (Do the stale-skills fix immediately after P0 —
-      it misleads today.)
+      root, Python scripts. (Stale-skills interim fix landed with P1; full
+      rewrite after P6.)
 - [ ] P7.2 Cross-cutting concerns table in CLAUDE.md.
 - [ ] P7.3 `lib/patterns/derivation-dag.md`.
 - [ ] P7.4 `workflow_lint.py` v1 (schema + FSM references + headless policy)
@@ -667,8 +670,8 @@ work. Status values: `not-started | in-progress | blocked({on}) | done`.
 
 | Phase | Title | Depends on | Status | Completed |
 |-------|-------|------------|--------|-----------|
-| P0 | Workspace root formalization | — | not-started | |
-| P1 | Result contract + validator | P0 | not-started | |
+| P0 | Workspace root formalization | — | ✅ done | 2026-07-10 |
+| P1 | Result contract + validator | P0 | ✅ done | 2026-07-10 |
 | P2 | Python extraction (poll, checks) | P0 | not-started | |
 | P3 | Headless skills (status/healthcheck/refresh) | P1, P2 | not-started | |
 | P4 | Executor split + headless policy | P1 | not-started | |

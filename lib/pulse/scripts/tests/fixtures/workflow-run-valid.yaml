@@ -1,0 +1,23 @@
+contract_version: 1
+kind: workflow-run
+workspace: testorg
+run_at: "2026-07-10T09:15:00Z"
+actor:
+  gh_login: octocat
+  machine: mba-m4
+  mode: scheduled
+workflow: ci-monitor
+repos: [testorg/widget]
+run_id: 2026-07-10-octocat-1
+outcome: success
+findings:
+  - kind: ci-failure
+    repo: testorg/widget
+    severity: high
+    detail: "run 12345 failed on main"
+    ref: { type: run, id: 12345, url: "https://github.com/testorg/widget/actions/runs/12345" }
+    classification: flaky
+    inferred: true
+proposed_actions: ["rerun workflow 12345"]
+asks_recorded: []
+errors: []

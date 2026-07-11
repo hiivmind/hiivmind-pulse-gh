@@ -71,20 +71,20 @@ When invoked by the gateway command, expect:
 Check for `.hiivmind/github/config.yaml` in current directory OR parent directories:
 
 ```bash
-# Check current and parent directory (covers workspace setups)
-if [[ -f ".hiivmind/github/config.yaml" ]]; then
-    CONFIG_PATH=".hiivmind/github/config.yaml"
-elif [[ -f "../.hiivmind/github/config.yaml" ]]; then
-    CONFIG_PATH="../.hiivmind/github/config.yaml"
-else
-    CONFIG_PATH=""
-fi
+# Resolve workspace root (see lib/patterns/workspace-detection.md)
+CONFIG_PATH=""
+DIR="$PWD"
+while [[ "$DIR" != "/" ]]; do
+    if [[ -f "$DIR/.hiivmind/github/config.yaml" ]] \
+       && grep -q '^workspace:' "$DIR/.hiivmind/github/config.yaml"; then
+        CONFIG_PATH="$DIR/.hiivmind/github/config.yaml"
+        break
+    fi
+    DIR="$(dirname "$DIR")"
+done
 ```
 
-**If config found in parent:** Use that config path for all operations. This is common in:
-- Monorepo setups where config lives at root
-- Workspace directories containing multiple repositories
-- Child projects within an initialized workspace
+**If config found at a workspace root above cwd:** use that config path for all operations. This is the normal case when repos live under a shared workspace root.
 
 **If not found in current or parent:**
 

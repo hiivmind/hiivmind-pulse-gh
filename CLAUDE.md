@@ -17,7 +17,7 @@ Direct `gh` CLI commands miss context enrichment:
 | `gh issue close 42` | Issue closed + project Status → Done |
 | Milestone ID lookup required | Milestone name resolves from cache |
 
-**Rule of thumb:** If the repo has a `.hiivmind/github/config.yaml`, route ALL GitHub operations through this plugin.
+**Rule of thumb:** If a workspace root resolves above cwd (a `.hiivmind/github/config.yaml` with a top-level `workspace:` section, at any parent depth — see `lib/patterns/workspace-detection.md`), route ALL GitHub operations through this plugin.
 
 ### What This Plugin Provides
 
@@ -90,7 +90,7 @@ Every operation benefits from cached context, not just complex ones.
 ### When to Bypass the Plugin
 
 Only bypass if:
-1. Workspace is NOT initialized (no `.hiivmind/github/config.yaml`)
+1. Workspace is NOT initialized (no workspace root resolvable above cwd)
 2. You need raw, unenriched output
 3. User explicitly requests `gh` CLI
 
@@ -170,12 +170,15 @@ Use natural language to describe any GitHub operation:
 
 ## Skills
 
-| Skill | Purpose | Structure |
-|-------|---------|-----------|
-| `gh-init` | First-time workspace setup | 6 phases (~150 lines) |
-| `gh-refresh` | Sync config with GitHub | 6 phases (~200 lines) |
-| `gh-operations` | Execute GitHub operations | 5 phases (~270 lines) |
-| `gh-healthcheck` | Repository governance audit | 5 phases (~270 lines) |
+| Skill | Purpose |
+|-------|---------|
+| `gh-init` | First-time workspace setup (workspace-root placement, workspace repo init) |
+| `gh-refresh` | Sync config with GitHub |
+| `gh-operations` | Execute GitHub operations |
+| `gh-healthcheck` | Repository governance audit |
+| `gh-heartbeat` | Present/execute heartbeat-triggered workflows |
+| `gh-workflows` | Manage and run workflow definitions |
+| `gh-discover` | Discover workspace resources |
 
 ### Skill Architecture
 
@@ -194,9 +197,11 @@ CONTEXT → RESOLVE → ROUTE → EXECUTE → REPORT
 
 ## Configuration
 
-### Team Config: `.hiivmind/github/config.yaml`
+### Team Config: `{workspace_root}/.hiivmind/github/config.yaml`
 
-Shared across team, committed to git:
+The workspace root is typically the parent folder of an org's repo clones;
+`.hiivmind/github/` there is its own small git repo shared by the team
+(remote `{login}-workspace`). Per-machine transients are gitignored:
 
 ```yaml
 workspace:
@@ -281,11 +286,16 @@ hiivmind-pulse-gh/
 │   └── plugin.json                       # Plugin manifest + dependencies
 ├── commands/
 │   └── hiivmind-pulse-gh.md              # Gateway command
+├── hooks/
+│   └── heartbeat.sh                      # SessionStart poll (workspace-root walk-up)
 ├── skills/
 │   ├── gh-init/           # Workspace initialization
 │   ├── gh-refresh/        # Config sync
 │   ├── gh-operations/     # Execute operations
-│   └── gh-healthcheck/    # Repository governance audit
+│   ├── gh-healthcheck/    # Repository governance audit
+│   ├── gh-heartbeat/      # Present/execute heartbeat-triggered workflows
+│   ├── gh-workflows/      # Manage and run workflow definitions
+│   └── gh-discover/       # Discover workspace resources
 ├── lib/
 │   ├── patterns/                         # HOW to do things (executable guides)
 │   │   ├── config-parsing.md
@@ -293,6 +303,9 @@ hiivmind-pulse-gh/
 │   │   ├── graphql-execution.md
 │   │   ├── corpus-lookup.md
 │   │   └── ...
+│   ├── pulse/
+│   │   └── scripts/                      # Deterministic Python (PEP 723, uv run)
+│   │       └── validate_result.py        # Headless result contract validator
 │   └── references/                       # WHAT exists (static lookup data)
 │       ├── api-routing.md                # Quick reference + method selection
 │       ├── token-permissions.md          # Token permission requirements

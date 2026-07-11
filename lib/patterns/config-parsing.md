@@ -27,11 +27,13 @@ Extract fields from workspace `.hiivmind/github/config.yaml` files using availab
 Before any config operation, locate the config file:
 
 ```bash
-# Find config in current or parent directories
+# Resolve config via the workspace root (normative algorithm:
+# lib/patterns/workspace-detection.md § Workspace Root Resolution)
 find_config_path() {
-    local dir="$PWD"
+    local dir="${1:-$PWD}"
     while [[ "$dir" != "/" ]]; do
-        if [[ -f "$dir/.hiivmind/github/config.yaml" ]]; then
+        if [[ -f "$dir/.hiivmind/github/config.yaml" ]] \
+           && grep -q '^workspace:' "$dir/.hiivmind/github/config.yaml"; then
             echo "$dir/.hiivmind/github/config.yaml"
             return 0
         fi
@@ -43,16 +45,9 @@ find_config_path() {
 CONFIG_PATH=$(find_config_path) || { echo "Config not found"; exit 1; }
 ```
 
-**Quick check (2 levels - covers most cases):**
-```bash
-if [[ -f ".hiivmind/github/config.yaml" ]]; then
-    CONFIG_PATH=".hiivmind/github/config.yaml"
-elif [[ -f "../.hiivmind/github/config.yaml" ]]; then
-    CONFIG_PATH="../.hiivmind/github/config.yaml"
-else
-    CONFIG_PATH=""  # Not initialized
-fi
-```
+A config **without** a top-level `workspace:` section is a repo overlay
+(repo-scoped overrides), not the workspace config — the search skips it and
+keeps walking up.
 
 ### Usage in Commands
 

@@ -52,13 +52,17 @@ When invoked by the gateway command, expect:
 Check for `.hiivmind/github/config.yaml` in current directory OR parent directories:
 
 ```bash
-if [[ -f ".hiivmind/github/config.yaml" ]]; then
-    CONFIG_DIR=".hiivmind/github"
-elif [[ -f "../.hiivmind/github/config.yaml" ]]; then
-    CONFIG_DIR="../.hiivmind/github"
-else
-    CONFIG_DIR=""
-fi
+# Resolve workspace root (see lib/patterns/workspace-detection.md)
+CONFIG_DIR=""
+DIR="$PWD"
+while [[ "$DIR" != "/" ]]; do
+    if [[ -f "$DIR/.hiivmind/github/config.yaml" ]] \
+       && grep -q '^workspace:' "$DIR/.hiivmind/github/config.yaml"; then
+        CONFIG_DIR="$DIR/.hiivmind/github"
+        break
+    fi
+    DIR="$(dirname "$DIR")"
+done
 ```
 
 **See:** `{PLUGIN_ROOT}/lib/patterns/config-parsing.md`

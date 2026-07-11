@@ -154,27 +154,28 @@ These actions either handle their own context checks internally or don't require
 
 **See:** `lib/patterns/config-parsing.md`
 
-Check for `.hiivmind/github/config.yaml` in **current directory and parent directories**:
+Resolve the workspace root by walking up from cwd:
 
 ```bash
-# Check current and parent directory (covers workspace setups)
-if [[ -f ".hiivmind/github/config.yaml" ]]; then
-    CONFIG_PATH=".hiivmind/github/config.yaml"
-    initialized="yes"
-elif [[ -f "../.hiivmind/github/config.yaml" ]]; then
-    CONFIG_PATH="../.hiivmind/github/config.yaml"
-    initialized="yes"
-else
-    initialized="no"
-fi
+# Resolve workspace root (see lib/patterns/workspace-detection.md)
+CONFIG_PATH=""
+initialized="no"
+DIR="$PWD"
+while [[ "$DIR" != "/" ]]; do
+    if [[ -f "$DIR/.hiivmind/github/config.yaml" ]] \
+       && grep -q '^workspace:' "$DIR/.hiivmind/github/config.yaml"; then
+        CONFIG_PATH="$DIR/.hiivmind/github/config.yaml"
+        initialized="yes"
+        break
+    fi
+    DIR="$(dirname "$DIR")"
+done
 ```
 
-**Why check parent:** Common in workspace setups where:
-- Parent directory contains multiple repos with shared config
-- User runs init from workspace root, operates from child repos
-- Monorepo with config at root
+**Why walk up:** repos live under a shared workspace root; the config with a
+top-level `workspace:` section is the workspace config, at any depth above cwd.
 
-**If not found (in current or parent):**
+**If not found (no workspace root above cwd):**
 1. Inform user: "This workspace hasn't been initialized for GitHub operations."
 2. Ask: "Would you like to initialize now?"
 3. If yes → Invoke skill: `hiivmind-pulse-gh:gh-init`
@@ -289,16 +290,20 @@ Select a quick action below, or choose "Other" to describe what you need.
 Gather context to suggest relevant actions:
 
 ```bash
-# 1. Check workspace initialization (current and parent directory)
-if [[ -f ".hiivmind/github/config.yaml" ]]; then
-    initialized="yes"
-    CONFIG_PATH=".hiivmind/github/config.yaml"
-elif [[ -f "../.hiivmind/github/config.yaml" ]]; then
-    initialized="yes"
-    CONFIG_PATH="../.hiivmind/github/config.yaml"
-else
-    initialized="no"
-fi
+# 1. Check workspace initialization
+# Resolve workspace root (see lib/patterns/workspace-detection.md)
+CONFIG_PATH=""
+initialized="no"
+DIR="$PWD"
+while [[ "$DIR" != "/" ]]; do
+    if [[ -f "$DIR/.hiivmind/github/config.yaml" ]] \
+       && grep -q '^workspace:' "$DIR/.hiivmind/github/config.yaml"; then
+        CONFIG_PATH="$DIR/.hiivmind/github/config.yaml"
+        initialized="yes"
+        break
+    fi
+    DIR="$(dirname "$DIR")"
+done
 
 # 2. Check git state
 current_branch=$(git branch --show-current 2>/dev/null)
