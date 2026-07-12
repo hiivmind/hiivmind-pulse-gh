@@ -127,7 +127,7 @@ Static lookup data for routing and domain info:
 | Reference | Purpose |
 |-----------|---------|
 | `lib/references/api-routing.md` | Quick reference + method selection guide |
-| `lib/references/domains/*.md` | Per-domain detailed syntax (25 files) |
+| `lib/references/domains/*.md` | Per-domain detailed syntax (26 files) |
 | `lib/references/token-permissions.md` | Token permission requirements |
 | `lib/references/healthcheck-checks.md` | Healthcheck check catalog (11 checks) |
 
@@ -324,7 +324,7 @@ hiivmind-pulse-gh/
 │   └── references/                       # WHAT exists (static lookup data)
 │       ├── api-routing.md                # Quick reference + method selection
 │       ├── token-permissions.md          # Token permission requirements
-│       └── domains/                      # Per-domain detailed syntax (25 files)
+│       └── domains/                      # Per-domain detailed syntax (26 files)
 │           ├── issues.md
 │           ├── pull-requests.md
 │           └── ...

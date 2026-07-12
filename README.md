@@ -1,63 +1,75 @@
 # hiivmind-pulse-gh
 
-A Claude Code plugin for deep GitHub automation — Projects v2, Milestones, Branch Protection, and more.
+A Claude Code plugin that enriches **every** GitHub operation with cached workspace
+context — Projects v2, milestones, branch protection, and more — and layers on a
+headless automation engine for unattended fleet maintenance and resumable,
+cross-repo workflows.
 
 ## The Problem
 
 GitHub's APIs are powerful but painful:
-- **GraphQL node IDs** — Every operation needs opaque IDs like `PVT_kwDOBx...`
-- **Repeated lookups** — "What's the ID for the Status field? What's the option ID for 'In Progress'?"
-- **Context amnesia** — Each Claude session starts fresh, forgetting your org structure
+- **GraphQL node IDs** — every operation needs opaque IDs like `PVT_kwDOBx...`
+- **Repeated lookups** — "What's the ID for the Status field? The option ID for 'In Progress'?"
+- **Context amnesia** — each Claude session starts fresh, forgetting your org structure
+- **No unattended path** — scheduled or headless maintenance needs zero-prompt skills and
+  a machine-readable result contract, not interactive prose
 
 ## The Solution
 
-This plugin takes a **discover-once, use-forever** approach:
+A **discover-once, use-forever** cache plus a deterministic Python engine:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  1. DISCOVER                                                     │
-│     Init skill inspects your GitHub org structure               │
-│     → Projects, fields, options, repositories, milestones       │
+│     Init inspects your GitHub org structure                     │
+│     → projects, fields, options, repositories, milestones       │
 │                                                                  │
 │  2. CACHE                                                        │
-│     Store discovered IDs in .hiivmind/github/config.yaml        │
-│     → Committed to git, shared with team                        │
+│     Store discovered IDs in {workspace_root}/.hiivmind/github/   │
+│     → committed to a shared workspace repo, synced across team   │
 │                                                                  │
 │  3. USE                                                          │
-│     Gateway command routes to appropriate skill                 │
-│     → Natural language intent detection, corpus-backed syntax   │
+│     Gateway routes intent → skill; every op is enriched with     │
+│     cached IDs. Headless skills + workflows automate the rest.   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+**Rule of thumb:** if a workspace root resolves above your cwd (a
+`.hiivmind/github/config.yaml` with a top-level `workspace:` section, at any parent
+depth), route **all** GitHub operations through this plugin — even simple ones —
+so they pick up context enrichment (auto-link to project, set Status, resolve
+milestone names, etc.).
+
 ## Installation
 
-### 1. Install Prerequisites
+### 1. Install prerequisites
 
 | Tool | Purpose | Install |
 |------|---------|---------|
 | **gh** | GitHub CLI | [cli.github.com](https://cli.github.com/) |
 | **jq** | JSON processing | `apt install jq` / `brew install jq` |
-| **yq** | YAML processing | [github.com/mikefarah/yq](https://github.com/mikefarah/yq) |
+| **yq** (v4+) | YAML processing | [github.com/mikefarah/yq](https://github.com/mikefarah/yq) |
+| **uv** | runs the bundled Python scripts (PEP 723) | [docs.astral.sh/uv](https://docs.astral.sh/uv/) |
 
 ```bash
 # Verify installation
-gh auth status && jq --version && yq --version
+gh auth status && jq --version && yq --version && uv --version
 
 # Ensure gh has required scopes
-gh auth refresh -s read:project -s project -s repo
+gh auth refresh -s read:project -s project -s repo -s read:org
 ```
 
-### 2. Install the Plugin
+### 2. Install the plugin
 
-```bash
+Run these in Claude Code (not a terminal):
+
+```
 # Add the marketplace
-/plugin marketplace add hiivmind/gh
+/plugin marketplace add hiivmind/hiivmind-pulse-gh
 
-# Install the plugin
-/plugin install hiivmind-pulse-gh@hiivmind-pulse-gh
+# Install the plugin (plugin name `gh`, marketplace `hiivmind-pulse-gh`)
+/plugin install gh@hiivmind-pulse-gh
 ```
-
-Run these commands in Claude Code (not in a terminal).
 
 ## Gateway Command
 
@@ -77,118 +89,129 @@ The primary entry point for all GitHub operations:
 /gh protect main branch with required reviews
 /gh trigger workflow ci.yml
 
-# Discover capabilities
+# Discover / explore
 /gh discover
 /gh what can I do with projects
-/gh explore milestones
 /gh help
 ```
 
-### How It Works
+### How it works
 
-1. **Intent Detection** — Parses natural language to determine domain + operation + target
-2. **Context Check** — Verifies workspace is initialized (if needed)
-3. **Confirmation** — Asks before mutations
-4. **Execution** — Routes to appropriate skill with corpus-backed API syntax
-
-### Interactive Menu
-
-Run without arguments for a guided menu:
-
-```
-/gh
-```
-
-### Discovery Mode
-
-Explore available operations across all 26 GitHub domains:
-
-```
-/gh discover
-```
-
-**What you get:**
-
-1. **Quick Reference Table** — All domains with their API support (CLI, REST, GraphQL)
-2. **Domain Drill-Down** — Select a domain to see its full operation matrix
-3. **CLI Commands** — Ready-to-use `gh` commands for each operation
-4. **Handoff to Execute** — When ready, seamlessly transition to the operations skill
-
-**Example session:**
-
-```
-You: /gh discover
-
-Claude: === GitHub Operations Quick Reference ===
-
-        | Domain          | gh CLI | REST | GraphQL | Notes                    |
-        |-----------------|--------|------|---------|--------------------------|
-        | Issues          | ✓      | ✓    | ✓       | Full CRUD via all methods|
-        | Pull Requests   | ✓      | ✓    | ✓       | Full CRUD via all methods|
-        | Projects v2     | ✓      | Read | ✓       | Views UI-only            |
-        | Milestones      | ✗      | ✓    | Read    | CRUD via REST            |
-        ... [26 domains total]
-
-        Which domain would you like to explore?
-
-You: Projects v2
-
-Claude: === Projects v2 Domain ===
-
-        | Operation        | gh CLI | REST | GraphQL | Notes                   |
-        |------------------|--------|------|---------|-------------------------|
-        | Add item         | ✓      | ✗    | ✓       | addProjectV2ItemById    |
-        | Update field     | ✓      | ✗    | ✓       | updateProjectV2ItemField|
-        | Archive item     | ✓      | ✗    | ✓       |                         |
-        ...
-
-        CLI Commands:
-        | Operation   | Command                                              |
-        |-------------|------------------------------------------------------|
-        | Add item    | gh project item-add {number} --owner {o} --url {url} |
-        | Edit field  | gh project item-edit --id {id} --field-id {f} ...    |
-
-        What would you like to do?
-        1. Execute an operation now
-        2. Explore another domain
-        3. Done
-```
+1. **Intent detection** — parses natural language → domain + operation + target
+2. **Context check** — verifies a workspace is initialized; offers init if not
+3. **Freshness check** — offers a refresh if the cached config is stale
+4. **Confirmation** — asks before mutations
+5. **Execution** — routes to the right skill with corpus-backed API syntax
 
 ## Skills
 
-The plugin provides **seven skills** with a clear dependency structure:
+The plugin ships **11 skills** — seven interactive, four headless (zero-prompt,
+for schedulers and orchestrators).
 
-### Skill Overview
+### Interactive
 
-| Skill | Purpose | When to Use |
-|-------|---------|-------------|
-| `gh-init` | Validate environment, discover org structure, create config.yaml | First-time setup (once per workspace) |
-| `gh-refresh` | Sync cached config with GitHub | Periodically, or when "ID not found" errors occur |
-| `gh-operations` | Execute GitHub operations (all domains) | Via gateway command |
-| `gh-discover` | Explore available operations across all 26 domains | Find the right operation, learn what's possible |
-| `gh-healthcheck` | On-demand governance audit for repository maturity | Evaluate branch protection, CI/CD, docs, security policy, etc. |
-| `gh-heartbeat` | Process triggered workflows on session wake-up | Automatically on session start when pending work is detected |
-| `gh-workflows` | Manage event-driven workflows for GitHub automation | List, enable, disable, run, or create workflows |
-| `hiivmind-corpus-github-docs-navigate` | Look up GitHub API syntax (GraphQL/REST) | When uncertain about exact API syntax (external corpus) |
+| Skill | Purpose |
+|-------|---------|
+| `gh-init` | First-time setup: validate environment, discover org structure, place the workspace root, write `config.yaml` |
+| `gh-refresh` | Sync cached config with GitHub |
+| `gh-operations` | Execute GitHub operations across all domains |
+| `gh-discover` | Explore available operations across every domain |
+| `gh-healthcheck` | On-demand repository governance audit |
+| `gh-heartbeat` | Present/execute heartbeat-triggered workflows on session start |
+| `gh-workflows` | Manage and run workflow definitions |
 
-### Skill Hierarchy
+### Headless (zero prompts, explicit inputs only, every exit writes a result file)
 
+| Skill | Purpose |
+|-------|---------|
+| `gh-status-headless` | Status pre-check → `status-result.yaml` (is a refresh warranted?) |
+| `gh-refresh-headless` | Config sync replaying recorded decisions → `refresh-result.yaml` |
+| `gh-healthcheck-headless` | Fleet governance audit → `healthcheck-result.yaml` |
+| `gh-workflow-run-headless` | Run a workflow unattended under its headless policy → `workflow-run-result.yaml` |
+
+> Syntax lookup uses an external corpus, `hiivmind-corpus-github-docs-navigate`
+> (declared as a plugin dependency), for exact GraphQL/REST definitions when needed.
+
+## Headless orchestration & the result contract
+
+Every headless skill is **read-only against GitHub** (except committed workspace
+files), takes **explicit inputs only** (never discovers a workspace), and on **every**
+exit writes a result file conforming to a versioned contract
+(`lib/patterns/headless-contract.md`):
+
+```yaml
+contract_version: 1
+kind: status | healthcheck | refresh | workflow-run
+workspace: <login>
+run_at: "<ISO 8601>"          # always a quoted string
+actor: { gh_login: <str>, machine: <str>, mode: interactive | scheduled }
+# ...kind-specific fields...
+errors: []
 ```
-gh-init            ← Run FIRST (creates config.yaml)
-       │
-       ▼
-gh-operations      ← Requires init completed
-gh-refresh         ← Requires init completed
-gh-healthcheck     ← Requires init completed (read-only audit)
-       │
-       ├── hiivmind-corpus-github-docs-navigate ← External corpus (syntax lookup)
-       │
-gh-discover        ← Independent (explore capabilities)
-gh-workflows       ← Independent (manage automation)
-gh-heartbeat       ← Triggered by SessionStart hook
+
+Result files are validated mechanically:
+
+```bash
+uv run lib/pulse/scripts/validate_result.py <file> --kind <kind>   # exit 0/1/2
 ```
 
-## Supported Domains
+Orchestrators read the result **file**, never the skill's prose — so a scheduled run
+is deterministic and auditable.
+
+## Workflows (v1 → v3)
+
+Workflows are declarative YAML in `{workspace_root}/.hiivmind/github/workflows/`.
+Three formats coexist and are fully backward-compatible (a file has exactly one of
+`actions:` / `workflow:` / `steps:`):
+
+| Version | Shape | Use |
+|---------|-------|-----|
+| **v1** | `actions:` — sequential dispatch | Simple linear automations (legacy) |
+| **v2** | `workflow:` — a pseudocode FSM with `state:`, phases, `GOTO` | Interactive, single-repo triggered workflows |
+| **v3** | `steps:` — a DAG over v2 blocks with `repos:`, `depends_on:`, `gate:` | Cross-repo, resumable, gate-driven releases |
+
+**v3 run ledger.** A v3 run persists as a ledger record so it survives sessions — a
+run started in one session (or on one machine) is resumed by any later session or
+scheduled run:
+
+- Cross-repo runs → `{workspace_root}/.hiivmind/github/runs/{workflow}-{run_id}.yaml`
+  (**committed** — the team's shared release-state view)
+- Single-repo/personal runs → `runs/local/` (gitignored)
+
+The ledger is only ever read/written through `resolve_run.py` (the LLM never
+hand-edits it); the LLM evaluates each **gate's** truth against GitHub and records
+it. Gate-blocked runs surface in the heartbeat so releases advance as a side effect
+of normal session starts. Lint any workflow file with:
+
+```bash
+uv run lib/pulse/scripts/workflow_lint.py path/to/workflow.yaml
+```
+
+A `release-train.yaml` reference workflow ships in `templates/workflows/`.
+
+## The Python engine
+
+Deterministic, mechanical work lives in self-contained PEP 723 scripts
+(`lib/pulse/scripts/`, run via `uv run`) so skills stay orchestration documents:
+
+| Script | Responsibility |
+|--------|----------------|
+| `poll.py` | Heartbeat engine — GraphQL polling + workflow trigger detection; surfaces gate-blocked runs |
+| `evaluate_checks.py` | Mechanical healthcheck evaluator (11-check catalog) |
+| `freshness_status.py` | Per-section staleness computation for the status pre-check |
+| `validate_result.py` | Headless result-contract validator |
+| `resolve_run.py` | Deterministic run-ledger operations (create/advance/gate/lease) |
+| `workflow_lint.py` | Workflow YAML lint (v1/v2/v3 schema, FSM refs, headless policy, DAG acyclicity) |
+
+## Scheduled fleet maintenance
+
+Unattended maintenance lives in a separate repo,
+[hiivmind-pulse-scheduler](https://github.com/hiivmind/hiivmind-pulse-scheduler):
+a shared `TEMPLATE-workspace-maintenance.md` composes the headless skills
+(status pre-check → refresh → fleet healthcheck → PR on the workspace repo), and
+thin per-workspace stubs are symlinked into `~/.claude/scheduled-tasks/`.
+
+## Supported domains
 
 | Domain | Operations | API |
 |--------|------------|-----|
@@ -204,11 +227,14 @@ gh-heartbeat       ← Triggered by SessionStart hook
 | **Variables** | set, update, delete, list | REST |
 | **Releases** | create, update, delete, upload | REST |
 
-> **Note:** This table shows commonly used domains for quick reference. The plugin supports **26 domains** via corpus lookup — if you have permissions, it can help. Some dangerous operations (delete repository, transfer ownership) are blocked for safety. See `lib/references/operation-blocklist.md`.
+> This table shows commonly used domains. The plugin supports **any** GitHub domain
+> via corpus lookup — **26 domains** have dedicated syntax references under
+> `lib/references/domains/`. Some dangerous operations (delete repository, transfer
+> ownership) are blocked for safety; see `lib/references/operation-blocklist.md`.
 
 ## Quick Start
 
-### First-Time Setup
+### First-time setup
 
 ```
 You: /gh create issue for new feature
@@ -234,7 +260,7 @@ Claude: [Runs gh-init]
         Now proceeding with your original request...
 ```
 
-### Daily Usage
+### Daily usage
 
 ```
 You: /gh create issue for authentication timeout
@@ -247,29 +273,38 @@ Claude: Create issue in acme-corp/api?
 You: Yes
 
 Claude: Issue #143 created: https://github.com/acme-corp/api/issues/143
+        Linked to Product Roadmap · Status → Backlog
 ```
 
-## Workspace Configuration
+## Workspace configuration
 
-### Philosophy
+### The workspace-root model
 
-The workspace config separates **shared team knowledge** from **personal user data**:
+The **workspace root** is typically the parent folder holding an org's repo clones.
+`.hiivmind/github/` there is its own small **git repo** shared by the team (remote
+`{login}-workspace`) — it holds shared structure, and gitignores per-machine
+transients. Any operation whose cwd is at or below the workspace root is enriched.
 
 ```
-.hiivmind/
-└── github/
-    ├── config.yaml      # SHARED — commit to git
-    │                    # Org structure, project IDs, field mappings
-    │
-    ├── freshness.yaml   # SHARED — tracks config staleness
-    │
-    └── user.yaml        # PERSONAL — add to .gitignore
-                         # Your identity, cached permissions
+{workspace_root}/                    ← parent of repo clones
+├── api/                             ← a repo clone
+├── frontend/                        ← a repo clone
+└── .hiivmind/
+    └── github/                      ← its own git repo (the "workspace repo")
+        ├── config.yaml              # SHARED — org structure, project/field/milestone IDs
+        ├── freshness.yaml           # SHARED — per-section staleness tracking
+        ├── healthcheck.yaml         # SHARED — fleet governance record
+        ├── workflows/               # SHARED — workflow definitions
+        ├── runs/                    # SHARED — committed cross-repo run ledgers
+        ├── runs/local/              # gitignored — per-machine single-repo runs
+        ├── user.yaml                # PERSONAL — gitignored
+        └── *-result.yaml            # gitignored — headless result files
 ```
 
-### What Gets Cached
+### What gets cached
 
 **config.yaml** (shared):
+
 ```yaml
 workspace:
   type: organization
@@ -294,114 +329,68 @@ cache:
   last_synced_at: "2025-12-08T22:05:29Z"
 ```
 
-### Multi-Repository Setup
-
-For organizations with multiple repos, use symlinks to share config:
-
-```bash
-# Create centralized config
-mkdir -p ~/github-workspaces/acme-corp
-cd ~/github-workspaces/acme-corp
-# Run /gh init here
-
-# Symlink from each repository
-cd ~/projects/api
-ln -s ~/github-workspaces/acme-corp .hiivmind
-
-cd ~/projects/frontend
-ln -s ~/github-workspaces/acme-corp .hiivmind
-```
-
 ## Architecture
 
 ```
 hiivmind-pulse-gh/
 ├── .claude-plugin/
-│   └── plugin.json                       # Plugin manifest
-│
+│   ├── plugin.json                       # Plugin manifest + dependencies
+│   └── marketplace.json                  # Marketplace manifest
 ├── commands/
 │   ├── gh.md                             # Gateway command
 │   └── intent-mapping.yaml               # Intent detection rules
-│
 ├── skills/
-│   ├── gh-init/           # Workspace initialization
-│   ├── gh-refresh/        # Config sync
-│   ├── gh-operations/     # Execute operations
-│   ├── gh-discover/       # Explore capabilities
-│   ├── gh-healthcheck/    # Repository governance audit
-│   ├── gh-heartbeat/      # Session wake-up handler
-│   └── gh-workflows/      # Workflow management
-│
+│   ├── gh-init/  gh-refresh/  gh-operations/  gh-discover/
+│   ├── gh-healthcheck/  gh-heartbeat/  gh-workflows/
+│   ├── gh-status-headless/       # Headless status pre-check
+│   ├── gh-refresh-headless/      # Headless config sync
+│   ├── gh-healthcheck-headless/  # Headless fleet audit
+│   └── gh-workflow-run-headless/ # Headless workflow run
 ├── hooks/
 │   ├── hooks.json                        # Hook configuration
-│   ├── heartbeat.sh                      # Heartbeat polling logic
+│   ├── heartbeat.sh                      # SessionStart poll (workspace-root walk-up)
 │   ├── post-operation-check.sh           # Post-operation validation
 │   └── validate-gh-operation.sh          # Operation validation
-│
 ├── lib/
 │   ├── patterns/                         # HOW to do things (executable guides)
-│   │   ├── authentication.md
-│   │   ├── config-parsing.md
-│   │   ├── corpus-lookup.md
-│   │   ├── error-handling.md             # Error handling overview
-│   │   ├── error-auth.md                 # Auth-specific errors
-│   │   ├── error-graphql.md              # GraphQL-specific errors
-│   │   ├── error-rest.md                 # REST-specific errors
-│   │   ├── error-local.md                # Local/tool errors
-│   │   ├── graphql-execution.md
-│   │   ├── graphql-queries.md
-│   │   ├── healthcheck-evaluation.md
-│   │   ├── id-resolution.md
-│   │   ├── poll-state.md
-│   │   ├── tool-detection.md
-│   │   ├── workflow-execution.md
-│   │   └── workspace-detection.md
-│   │
+│   │   ├── config-parsing.md  id-resolution.md  graphql-execution.md
+│   │   ├── workspace-detection.md  corpus-lookup.md  error-*.md
+│   │   ├── headless-contract.md          # The headless result schema
+│   │   ├── workflow-execution.md         # THE workflow executor (v1/v2/v3)
+│   │   └── run-ledger.md                 # Run-ledger schema + resume protocol
+│   ├── pulse/
+│   │   └── scripts/                      # Deterministic Python (PEP 723, uv run)
+│   │       ├── poll.py  evaluate_checks.py  freshness_status.py
+│   │       ├── validate_result.py  resolve_run.py  workflow_lint.py
+│   │       └── tests/                    # pytest suite
 │   └── references/                       # WHAT exists (static lookup data)
-│       ├── api-routing.md                # GraphQL vs REST decisions
-│       ├── config-schema.md              # Config file schema
-│       ├── healthcheck-checks.md         # Healthcheck check catalog
-│       ├── operation-blocklist.md        # Blocked dangerous operations
-│       ├── token-permissions.md          # Token permission requirements
-│       ├── workflow-triggers.md          # Workflow trigger events
+│       ├── api-routing.md  config-schema.md  healthcheck-checks.md
+│       ├── operation-blocklist.md  token-permissions.md  workflow-triggers.md
 │       └── domains/                      # Per-domain API syntax (26 files)
-│
-├── docs/
-│   └── quickstart.md                     # Quick start guide
-│
 ├── templates/
-│   ├── config.yaml.template
-│   ├── freshness.yaml.template
-│   ├── healthcheck.yaml.template
-│   ├── user.yaml.template
-│   ├── repo.yaml.template
-│   ├── teams.yaml.template
-│   ├── views.yaml.template
-│   ├── relationships.yaml.template
-│   ├── automations.yaml.template
-│   ├── poll-state.yaml.template
-│   ├── workflow.yaml.template
-│   ├── gitignore.template
-│   └── workflows/                        # 10 pre-built workflow templates
-│       ├── auto-refresh.yaml
-│       ├── ci-monitor.yaml
-│       ├── issue-triage.yaml
-│       ├── pr-lifecycle.yaml
-│       └── ...
-│
+│   ├── config.yaml.template  freshness.yaml.template  healthcheck.yaml.template
+│   ├── user.yaml.template  workspace-gitignore.template  ...
+│   └── workflows/                        # Pre-built workflow templates (incl. release-train.yaml)
+├── docs/
+│   ├── superpowers/                      # Specs and phased implementation plans
+│   └── backlogs/                         # Tracked follow-ups
+├── pyproject.toml  uv.lock               # Python dev/test env
 └── # External dependency: hiivmind-corpus-github
 ```
 
-### Design Principles
+### Design principles
 
-1. **Skills over MCP** — Load on-demand, not all upfront. Better context efficiency.
-2. **Pattern library** — Reusable markdown patterns, not embedded shell scripts.
-3. **Corpus lookup** — Just-in-time API syntax from bundled documentation.
-4. **Cache structure, not data** — IDs are stable; item data changes constantly.
-5. **Shared config, personal permissions** — Team collaborates; permissions are individual.
-6. **Graceful degradation** — Works without config (explicit params required).
+1. **Skills over MCP** — load on-demand, better context efficiency.
+2. **Skills orchestrate, scripts compute** — deterministic work lives in Python
+   (PEP 723, `uv run`), not embedded shell in skills.
+3. **Pattern library** — reusable markdown patterns referenced via `See:`.
+4. **Corpus lookup** — just-in-time API syntax from bundled documentation.
+5. **Cache structure, not data** — IDs are stable; item data changes constantly.
+6. **Shared config, personal transients** — team collaborates; per-machine state is gitignored.
+7. **Result files, not prose** — headless runs communicate via a validated contract.
+8. **Graceful degradation** — works without config (explicit params required).
 
-### How Operations Work
+### How operations work
 
 ```
 1. ROUTE       →   2. RESOLVE   →   3. EXECUTE
@@ -413,46 +402,44 @@ api-routing.md     cache            or gh api REST
                   corpus (if uncertain about syntax)
 ```
 
-1. **Route** — Consult `lib/references/api-routing.md` for GraphQL vs REST decision
-2. **Resolve** — Get IDs from cached config; if uncertain about syntax, query the external GitHub API corpus
-3. **Execute** — Run the operation via `gh api` with temp file for complex queries
-
 ## Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
-| "No workspace configuration found" | Run `/hiivmind-pulse-gh` and accept init prompt |
+| "No workspace configuration found" | Run `/gh` and accept the init prompt |
 | "Field ID not found" | Run `/gh refresh` to sync with GitHub |
 | "Config is stale" | Run `/gh refresh` |
 | `gh: command not found` | Install GitHub CLI: [cli.github.com](https://cli.github.com/) |
 | `yq: command not found` | Install yq v4+: [github.com/mikefarah/yq](https://github.com/mikefarah/yq) |
-| Permission errors | `gh auth refresh -s read:project -s project -s repo` |
+| `uv: command not found` | Install uv: [docs.astral.sh/uv](https://docs.astral.sh/uv/) |
+| Permission errors | `gh auth refresh -s read:project -s project -s repo -s read:org` |
 | "Resource not accessible" | Check access: `gh repo view owner/repo` |
 
 ## Limitations
 
-- **Claude Code only** — This is a Claude Code plugin (skills), not an MCP server. Won't work with VS Code Copilot, Cursor, or other LLM tools.
-- **Requires local tools** — `gh`, `jq`, `yq` must be installed on the machine where Claude Code runs.
-- **Inherits gh permissions** — Can only access what your `gh` CLI can access. No elevation, no bypass.
+- **Claude Code only** — this is a Claude Code plugin (skills), not an MCP server.
+- **Requires local tools** — `gh`, `jq`, `yq`, and `uv` must be installed where Claude Code runs.
+- **Inherits gh permissions** — can only access what your `gh` CLI can. No elevation, no bypass.
 
 ## Testing
 
-Tests are maintained in a separate repository to keep the plugin installation lean:
+Two suites:
 
-**[hiivmind-pulse-gh-tests](https://github.com/hiivmind/hiivmind-pulse-gh-tests)**
+**Python unit tests (in-repo)** cover the deterministic engine:
 
 ```bash
-# Clone test repo
+uv run pytest          # 47 tests across lib/pulse/scripts/tests/
+```
+
+**End-to-end / integration tests** live in a separate repository to keep the plugin
+lean for distribution:
+[hiivmind-pulse-gh-tests](https://github.com/hiivmind/hiivmind-pulse-gh-tests).
+
+```bash
 git clone https://github.com/hiivmind/hiivmind-pulse-gh-tests.git
 cd hiivmind-pulse-gh-tests
-
-# Setup (clones this repo + installs deps)
-./scripts/setup.sh
-
-# Run tests
-./node_modules/.bin/bats e2e/smoke/   # Quick smoke tests
-./node_modules/.bin/bats unit/        # Full unit tests
-./node_modules/.bin/bats integration/ # Integration tests
+./scripts/setup.sh                     # clones this repo + installs deps
+./node_modules/.bin/bats e2e/smoke/    # smoke tests
 ```
 
 ## Contributing
@@ -462,10 +449,14 @@ commands/*.md                              → Gateway and slash commands
 skills/*/SKILL.md                          → Skill documentation
 hooks/                                     → Event-driven hook scripts
 lib/patterns/*.md                          → Executable patterns (HOW to do things)
+lib/pulse/scripts/*.py                     → Deterministic Python (PEP 723)
 lib/references/*.md                        → Static lookup data (WHAT exists)
 templates/                                 → Config and workflow templates
-docs/                                      → Quick start and documentation
+docs/superpowers/                          → Specs and phased implementation plans
 ```
+
+When working on plugin structure, use the `plugin-dev` skills (plugin-structure,
+skill-development, command-development, hook-development).
 
 ## License
 

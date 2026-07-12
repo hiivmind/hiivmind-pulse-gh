@@ -6,14 +6,14 @@
   "repository": "https://github.com/hiivmind/hiivmind-pulse-gh",
   "metadata": {
     "description": "GitHub workspace initialization and API documentation corpus. Run init once, then use gh CLI directly with routing guide and corpus for GraphQL/REST operations.",
-    "version": "4.0.0"
+    "version": "4.9.0"
   },
   "plugins": [
     {
       "name": "gh",
       "source": "./",
       "description": "GitHub workspace initialization and embedded API documentation corpus. Initialize once to cache project/repo IDs, then use gh CLI directly with routing guide for API decisions and corpus for exact syntax. Covers Projects v2, milestones, issues, PRs, branch protection, rulesets, actions, secrets, variables, and releases.",
-      "version": "4.0.0",
+      "version": "4.9.0",
       "keywords": [
         "github",
         "graphql",
