@@ -471,6 +471,20 @@ def main() -> int:
     summary = {"stale_sections": stale_sections,
                "triggered_workflows": triggered,
                "auto_workflows": auto_workflows}
+
+    # v3 run ledger: surface gate-blocked runs so sessions can resume them
+    blocked_runs = []
+    runs_dir = config_dir / "runs"
+    for rf in sorted(runs_dir.glob("*.yaml")) + sorted(runs_dir.glob("local/*.yaml")):
+        try:
+            doc = yaml.safe_load(rf.read_text()) or {}
+        except yaml.YAMLError:
+            continue
+        if doc.get("status") == "blocked-on-gate":
+            blocked_runs.append(doc.get("run_id") or rf.stem)
+    if blocked_runs:
+        summary["gate_blocked_runs"] = blocked_runs
+
     if gold.get("project_changes"):
         summary["project_changes"] = gold["project_changes"]
 

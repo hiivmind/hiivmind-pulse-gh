@@ -1,0 +1,9 @@
+name: "bad-headless"
+description: "Bad enum + allow-listed without allowlist"
+headless:
+  enabled: true
+  on_ask: ignore
+  on_mutation: allow-listed
+workflow: |
+  GATHER:
+    x = 1

@@ -1,0 +1,31 @@
+name: "demo-check"
+description: "Valid v2 workflow"
+enabled: true
+auto: false
+trigger:
+  type: session_poll
+  source: issues
+  condition: state_changed
+headless:
+  enabled: true
+  on_ask: record
+  on_mutation: allow-listed
+  mutation_allowlist: [comment]
+state:
+  items: []
+  selected: null
+workflow: |
+  GATHER:
+    items = list open issues
+    IF items is empty: STOP "nothing to do"
+
+  PRESENT:
+    SHOW items as table
+    ASK "Which item?" (choices | skip)
+    selected = answer
+    IF selected != skip: GOTO ACT
+
+  ACT:
+    comment on selected
+    GOTO PRESENT
+cooldown_minutes: 30

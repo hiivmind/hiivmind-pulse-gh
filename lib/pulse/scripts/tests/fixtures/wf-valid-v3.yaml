@@ -1,0 +1,27 @@
+name: "mini-train"
+description: "Valid v3"
+repos: [testorg/lib, testorg/app]
+params:
+  version:
+    type: string
+    default: null
+headless:
+  enabled: true
+  on_ask: record
+  on_mutation: propose
+steps:
+  - id: tag
+    repo: testorg/lib
+    workflow: |
+      EXECUTE:
+        create release {params.version}
+  - id: verify
+    repo: testorg/lib
+    depends_on: [tag]
+    gate: "release {params.version} published"
+  - id: bump
+    repo: [testorg/app]
+    depends_on: [verify]
+    workflow: |
+      EXECUTE:
+        open bump PR

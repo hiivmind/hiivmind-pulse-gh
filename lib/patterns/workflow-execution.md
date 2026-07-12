@@ -51,9 +51,10 @@ Poll-state paths in this document are relative to `{workspace_root}/.hiivmind/gi
 Workflows exist in two formats. Detect which format before executing:
 
 ```
-IF workflow YAML has 'workflow:' field → use pseudocode handoff (v2)
-ELIF workflow YAML has 'actions:' field → use sequential dispatch (v1, legacy)
-ELSE → error: workflow has neither actions nor workflow field
+IF workflow YAML has 'steps:' field    → use step-DAG execution (v3)
+ELIF workflow YAML has 'workflow:' field → use pseudocode handoff (v2)
+ELIF workflow YAML has 'actions:' field  → use sequential dispatch (v1, legacy)
+ELSE → error: workflow has none of steps/workflow/actions
 ```
 
 ---
@@ -138,6 +139,81 @@ state:
 ```
 
 The pseudocode reads and writes these variables throughout execution. They exist only for the duration of the workflow run — no persistence across sessions.
+
+---
+
+## V3 Execution: Step DAG
+
+v3 adds a DAG layer over v2 — additions only, fully backward-compatible:
+
+```yaml
+repos: [<catalog name or owner/name>, ...]   # scope; names resolve via the workspace
+                                             # repositories[] catalog; depends_on context
+                                             # available from relationships.yaml
+steps:
+  - id: <unique>
+    repo: <name or [names]>                  # which repo(s) this step acts on
+    depends_on: [<step ids>]                 # optional
+    gate: "<natural-language condition>"     # optional; blocks until satisfied
+    workflow: |                              # optional; a v2-style pseudocode block
+      PHASE: ...
+```
+
+A step needs `workflow`, `gate`, or both (gate-only steps are pure checkpoints).
+Params and the `headless:` policy work exactly as in v2 and apply to every step.
+
+### Execution flow
+
+```
+1. LOAD workflow YAML; resolve params (v2 rules)
+2. LEDGER (see lib/patterns/run-ledger.md — all ledger I/O via resolve_run.py):
+   ├── new run:  RUN_ID = {UTC date}-{gh_login}-{HHMMSS}
+   │             resolve_run.py create --runs-dir {workspace_root}/.hiivmind/github/runs
+   │               --workflow {name} --run-id {RUN_ID} --actor-login/-machine/--mode ...
+   │               --repos {resolved} --params {json} --steps {json from steps:}
+   │             (cross-repo → committed runs/; single-repo → add --local)
+   └── resume:   pull the workspace repo FIRST, then locate the ledger
+                 (explicit run_id, or the newest non-terminal ledger for this workflow)
+3. LOOP until next reports done, or only blocked remain, or a step fails:
+   a. next = resolve_run.py next --file {ledger}
+   b. FOR each blocked step: evaluate the gate condition against GitHub —
+      translate the natural-language condition into concrete gh queries
+      (e.g. "release {v} published" → gh api repos/{r}/releases/tags/{v};
+       "checks green on main" → gh api repos/{r}/commits/main/check-runs).
+      Record: resolve_run.py gate-result --step {id} --satisfied true|false --note "{evidence}"
+   c. re-run next. FOR each runnable step:
+      - resolve_run.py lease --step {id} --by "{gh_login}@{machine}"
+        (exit 3 → another session is on it; skip this step this pass)
+      - resolve_run.py update --step {id} --status running --actor-login ... 
+      - execute the step's workflow block as v2 pseudocode, scoped to step.repo
+        (headless mode → the headless projection applies per the workflow's policy)
+      - resolve_run.py update --step {id} --status done|failed --note "{summary}"
+   d. IF nothing became runnable and gates stayed unsatisfied → stop looping
+4. FINISH:
+   ├── ledger status done   → report success
+   ├── ledger status failed → report which step, record failure in poll-state
+   └── ledger status blocked-on-gate → report the open gates and STOP — the run is
+       resumable; any later session (or scheduled run) picks it up via step 2's
+       resume path. This is normal, not an error.
+5. Commit + push the ledger change when it lives in committed runs/ (the workspace
+   repo is shared state). runs/local/ ledgers are per-machine; no commit.
+6. Result recording: poll-state as usual; headless runs also write
+   workflow-run-result.yaml (repos: from the workflow's repos:).
+```
+
+### Ledger for v1/v2 runs
+
+Every run leaves a ledger record: v1/v2 runs create a single-step ledger
+(`--steps '[{"id": "run", "repo": "{repo or empty}"}]' --local`) at start and
+update it to done/failed at finish. Cheap, uniform history.
+
+### Resumption triggers
+
+- **Heartbeat:** the poll summary's `gate_blocked_runs` lists non-terminal runs
+  whose status is blocked-on-gate; gh-heartbeat offers "re-evaluate gates" which
+  re-enters the flow above at step 2's resume path.
+- **On demand:** `/gh run {workflow}` when a non-terminal ledger exists → ASK
+  resume-or-new (interactive); headless resumes automatically.
 
 ---
 
