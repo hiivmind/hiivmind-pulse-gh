@@ -118,6 +118,7 @@ Executable guides with step-by-step instructions:
 | `lib/patterns/corpus-lookup.md` | Look up API syntax when uncertain |
 | `lib/patterns/healthcheck-evaluation.md` | Healthcheck evaluation logic per check |
 | `lib/patterns/workflow-execution.md` | THE workflow executor (single normative description; interactive + headless) |
+| `lib/patterns/run-ledger.md` | Run ledger: resumable cross-repo runs |
 
 ### References (WHAT exists)
 
@@ -317,7 +318,9 @@ hiivmind-pulse-gh/
 │   │       ├── poll.py                   # Heartbeat engine (GraphQL + lakehouse)
 │   │       ├── evaluate_checks.py        # Mechanical healthcheck evaluator
 │   │       ├── freshness_status.py       # Staleness computation for headless status
-│   │       └── validate_result.py        # Headless result contract validator
+│   │       ├── validate_result.py        # Headless result contract validator
+│   │       ├── resolve_run.py            # Run-ledger operations
+│   │       └── workflow_lint.py          # Workflow YAML lint
 │   └── references/                       # WHAT exists (static lookup data)
 │       ├── api-routing.md                # Quick reference + method selection
 │       ├── token-permissions.md          # Token permission requirements

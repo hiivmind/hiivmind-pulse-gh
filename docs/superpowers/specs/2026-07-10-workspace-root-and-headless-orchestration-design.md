@@ -631,14 +631,14 @@ with no upstream changes exits at the pre-check without a PR.
 **Depends on:** P4 (executor + policy). P6.1–P6.2 have no dependency on P5.
 Sub-phased because the run ledger is independently useful:
 
-- [ ] P6.1 Run ledger: `runs/{workflow}-{run_id}.yaml` schema; executor writes
+- [x] P6.1 Run ledger: `runs/{workflow}-{run_id}.yaml` schema; executor writes
       it for every run; committed-vs-transient split per Part 9 decision.
-- [ ] P6.2 `resolve_run.py`: create/advance/gate-evaluate ledger records
+- [x] P6.2 `resolve_run.py`: create/advance/gate-evaluate ledger records
       deterministically; tests.
-- [ ] P6.3 Schema v3: `repos:` scope + `steps:`/`depends_on:`/`gate:`;
+- [x] P6.3 Schema v3: `repos:` scope + `steps:`/`depends_on:`/`gate:`;
       documented in `workflow-execution.md`; `workflow_lint.py` extended for
       DAG acyclicity and gate syntax.
-- [ ] P6.4 Resumability: executor picks up `blocked-on-gate` runs,
+- [x] P6.4 Resumability: executor picks up `blocked-on-gate` runs,
       re-evaluates gates, continues; heartbeat watches `runs/` for
       gate-blocked runs as a poll source.
 - [ ] P6.5 Reference workflow: `release-train.yaml` for the corpus →
@@ -676,7 +676,7 @@ work. Status values: `not-started | in-progress | blocked({on}) | done`.
 | P3 | Headless skills (status/healthcheck/refresh) | P1, P2 | ✅ done | 2026-07-11 |
 | P4 | Executor split + headless policy | P1 | ✅ done | 2026-07-11 |
 | P5 | pulse-scheduler + fleet report **(goal 1)** | P3 (opt. P4.3) | ✅ done | 2026-07-12 |
-| P6 | Workflow v3: ledger, steps, gates **(goal 2)** | P4 | not-started | |
+| P6 | Workflow v3: ledger, steps, gates **(goal 2)** | P4 | in-progress (P6.5 pending live release) | |
 | P7 | Housekeeping (CLAUDE.md, DAG doc, lint) | P0+ (final: P6) | not-started | |
 
 ## Part 9: Risks and open questions
