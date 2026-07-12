@@ -1,0 +1,62 @@
+# hiivmind-pulse-gh - Release Train Workflow (v3 reference)
+# Coordinate a versioned release from a library repo into its consumers.
+# Copy to: {workspace_root}/.hiivmind/github/workflows/release-train.yaml
+# and replace the {{...}} placeholders with catalog repo names.
+
+name: "release-train"
+description: "Release a library version and roll it through consumer repos"
+enabled: true
+auto: false
+
+trigger:
+  type: on_demand
+  condition: user_requested
+
+headless:
+  enabled: true
+  on_ask: record
+  on_mutation: propose   # releases/PRs are proposed when run unattended
+
+repos:
+  - {{lib_repo}}
+  - {{consumer_repo_1}}
+  - {{consumer_repo_2}}
+
+params:
+  version:
+    description: "Version to release (e.g. 1.2.0)"
+    type: string
+    default: null   # required
+
+steps:
+  - id: tag-lib
+    repo: {{lib_repo}}
+    workflow: |
+      EXECUTE:
+        create release {params.version} on {{lib_repo}} from the default branch,
+        with generated release notes
+
+  - id: verify-lib
+    repo: {{lib_repo}}
+    depends_on: [tag-lib]
+    gate: "release {params.version} published AND checks green on the default branch"
+
+  - id: bump-consumers
+    repo: [{{consumer_repo_1}}, {{consumer_repo_2}}]
+    depends_on: [verify-lib]
+    workflow: |
+      GATHER:
+        FOR EACH consumer repo:
+          locate the pinned {{lib_repo}} version reference
+      EXECUTE:
+        FOR EACH consumer repo:
+          open a PR bumping the reference to {params.version}
+      SUMMARIZE:
+        SHOW opened PR urls
+
+  - id: verify-consumers
+    repo: [{{consumer_repo_1}}, {{consumer_repo_2}}]
+    depends_on: [bump-consumers]
+    gate: "all bump PRs merged AND checks green on consumer default branches"
+
+cooldown_minutes: 0

@@ -122,6 +122,14 @@ AUTO=$(echo "$HEARTBEAT_OUTPUT" | jq -r '.auto_workflows[]')
 STALE=$(echo "$HEARTBEAT_OUTPUT" | jq -r '.stale_sections[]')
 ```
 
+Also check for gate-blocked v3 runs:
+
+```bash
+BLOCKED_RUNS=$(echo "$HEARTBEAT_OUTPUT" | jq -r '.gate_blocked_runs[]? // empty')
+```
+
+If any exist, they count as "something to do" (do not report All clear).
+
 **If nothing triggered and no stale sections:**
 
 ```
@@ -253,6 +261,7 @@ Map workflow types to suggestion patterns:
 | deploy-monitor | Recent deployments | "Deployment to [env] [succeeded/failed]" |
 | release-monitor | New releases | "Release [tag] published — review notes?" |
 | dependabot-alerts | New or critical alerts | "N new dependabot alerts — review?" |
+| (any) | `gate_blocked_runs` in heartbeat output | "Run {run_id} is blocked on a gate — re-evaluate and resume? (see workflow-execution.md V3 resume)" |
 
 **Example:**
 ```

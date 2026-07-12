@@ -96,3 +96,17 @@ def test_shared_source_triggers_both_workflows(tmp_path):
     out = json.loads(r.stdout)
     assert sorted(out["triggered_workflows"]) == ["pr-watch", "pr-watch2"]
     assert out["auto_workflows"] == ["pr-watch2"]
+
+
+def test_gate_blocked_runs_in_summary(tmp_path, monkeypatch):
+    ws, _ = make_workspace(tmp_path)       # existing helper from the P2 tests
+    runs = ws / ".hiivmind" / "github" / "runs"
+    runs.mkdir()
+    (runs / "release-train-2026-07-11-octocat-100000.yaml").write_text(
+        "ledger_version: 1\nworkflow: release-train\n"
+        "run_id: 2026-07-11-octocat-100000\nstatus: blocked-on-gate\nsteps: []\n")
+    (runs / "old-done.yaml").write_text(
+        "ledger_version: 1\nrun_id: x\nstatus: done\nsteps: []\n")
+    run_poll(ws)                            # bootstrap poll-state.yaml (first_run)
+    out = json.loads(run_poll(ws).stdout)  # existing helper
+    assert out["gate_blocked_runs"] == ["2026-07-11-octocat-100000"]
