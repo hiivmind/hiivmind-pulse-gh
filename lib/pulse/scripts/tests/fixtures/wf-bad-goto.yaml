@@ -1,0 +1,9 @@
+name: "bad-goto"
+description: "GOTO points nowhere; state var unused"
+state:
+  items: []
+  ghost: null
+workflow: |
+  GATHER:
+    items = list things
+    GOTO REVIEW

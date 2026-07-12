@@ -1,0 +1,11 @@
+name: "cyclic"
+description: "a <-> b"
+steps:
+  - id: a
+    repo: r
+    depends_on: [b]
+    gate: "x"
+  - id: b
+    repo: r
+    depends_on: [a]
+    gate: "y"
