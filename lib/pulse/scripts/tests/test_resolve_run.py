@@ -113,3 +113,42 @@ def test_lease_conflict_and_steal(tmp_path):
     doc = yaml.safe_load(open(path))
     step = [s for s in doc["steps"] if s["id"] == "tag-lib"][0]
     assert step["lease"]["leased_by"] == "hubot@nuc-lab"
+
+
+def test_gate_plus_workflow_step_runs_not_skipped(tmp_path):
+    # A step carrying BOTH a gate and a workflow block must still run its block
+    # after the gate clears: gate-result may not force it terminal, or its
+    # mutations are silently dropped. (Whole-branch review finding, P6.)
+    steps = json.dumps([
+        {"id": "build", "repo": "r"},
+        {"id": "gated-work", "repo": "r", "depends_on": ["build"],
+         "gate": "artifact published", "workflow": "EXECUTE:\n  do the thing"},
+    ])
+    path = create(tmp_path, steps=steps)
+    assert run("update", "--file", path, "--step", "build",
+               "--status", "done").returncode == 0
+    # gate cleared, but the step has work to do → runnable, not done
+    assert run("gate-result", "--file", path, "--step", "gated-work",
+               "--satisfied", "true").returncode == 0
+    out = json.loads(run("next", "--file", path).stdout)
+    assert out["runnable"] == ["gated-work"]
+    assert out["done"] is False
+    step = [s for s in yaml.safe_load(open(path))["steps"]
+            if s["id"] == "gated-work"][0]
+    assert step["status"] != "done"
+    # the executor then runs the block and marks it done → run completes
+    run("update", "--file", path, "--step", "gated-work", "--status", "done")
+    assert json.loads(run("next", "--file", path).stdout)["done"] is True
+
+
+def test_gate_only_step_completes_on_satisfy(tmp_path):
+    # Guard the other side: a gate-ONLY step (no workflow block) still completes
+    # when its gate clears, so downstream steps unblock (existing behavior).
+    path = create(tmp_path)  # STEPS' verify-lib is gate-only
+    run("update", "--file", path, "--step", "tag-lib", "--status", "done")
+    run("gate-result", "--file", path, "--step", "verify-lib", "--satisfied", "true")
+    out = json.loads(run("next", "--file", path).stdout)
+    assert out["runnable"] == ["bump-consumers"]
+    step = [s for s in yaml.safe_load(open(path))["steps"]
+            if s["id"] == "verify-lib"][0]
+    assert step["status"] == "done"

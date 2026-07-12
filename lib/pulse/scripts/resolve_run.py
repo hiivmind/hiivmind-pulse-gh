@@ -128,6 +128,7 @@ def cmd_create(args):
         "repo": s.get("repo", ""),
         "depends_on": s.get("depends_on", []),
         "gate": s.get("gate"),
+        "has_workflow": bool(s.get("workflow")),
         "gate_satisfied": None,
         "gate_checked_at": None,
         "status": "pending",
@@ -205,10 +206,15 @@ def cmd_gate_result(args):
     if args.note:
         step["notes"].append(f"{now_iso()} gate: {args.note}")
     if satisfied:
-        step["status"] = "done" if step["status"] in {"pending", "blocked-on-gate"} \
-            else step["status"]
-        step.setdefault("finished_at", None)
-        if step["status"] == "done":
+        # A gate-only step (pure checkpoint) completes when its gate clears.
+        # A gate+workflow step must still run its workflow block: only clear the
+        # gate and leave the step non-terminal so classify()/next surfaces it as
+        # runnable — the executor then leases, runs the block, and marks it done.
+        if step.get("has_workflow"):
+            if step["status"] == "blocked-on-gate":
+                step["status"] = "pending"
+        elif step["status"] in {"pending", "blocked-on-gate"}:
+            step["status"] = "done"
             step["finished_at"] = now_iso()
     else:
         step["status"] = "blocked-on-gate"

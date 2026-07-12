@@ -20,7 +20,7 @@ mint colliding records. `resolve_run.py create` refuses to overwrite.
 ledger_version: 1
 workflow: release-train
 run_id: 2026-07-11-octocat-093012
-status: running | blocked-on-gate | done | failed | aborted
+status: running | blocked-on-gate | done | failed
 created_at: <ISO 8601>
 updated_at: <ISO 8601>
 actor: { gh_login: <str>, machine: <str>, mode: interactive | scheduled }   # creator
@@ -32,6 +32,9 @@ steps:
     repo: <name or [names]>
     depends_on: []               # step ids
     gate: <str or null>          # natural-language condition; null = no gate
+    has_workflow: <bool>         # true if the step carries a workflow block; a satisfied
+                                 # gate completes a gate-only step but leaves a gate+workflow
+                                 # step runnable so its block still executes
     gate_satisfied: <bool|null>  # null until evaluated; set via resolve_run.py gate-result
     gate_checked_at: <ISO|null>
     status: pending | running | blocked-on-gate | done | failed | skipped
