@@ -38,6 +38,16 @@ class Completed:
     state: str = "ok"
 
 
+@dataclass(frozen=True)
+class LifecycleResult:
+    """Exit-status-only result for Nave lifecycle commands."""
+
+    state: str
+    returncode: int
+    stdout: str
+    stderr: str
+
+
 def _fixture_output_path(root: Path, args: Sequence[str]) -> Path:
     if list(args) == ["--version"]:
         return root / "probe" / "version.txt"
@@ -204,6 +214,90 @@ def probe(runner: NaveRunner) -> dict:
         "capabilities": sorted(capabilities),
         "errors": errors,
     }
+
+
+def _lifecycle_result(completed: Completed) -> LifecycleResult:
+    return LifecycleResult(
+        state="success" if completed.returncode == 0 else "error",
+        returncode=completed.returncode,
+        stdout=completed.stdout,
+        stderr=completed.stderr,
+    )
+
+
+def scan(
+    runner: NaveRunner,
+    user: str | None = None,
+    prune: bool = False,
+) -> LifecycleResult:
+    """Refresh Nave's fleet inventory without assuming machine output."""
+    args = ["scan"]
+    if user is not None:
+        args.extend(["--user", user])
+    if prune:
+        args.append("--prune")
+    return _lifecycle_result(runner.run(args))
+
+
+def pull(runner: NaveRunner) -> LifecycleResult:
+    """Refresh Nave checkouts using exit status as the only protocol."""
+    return _lifecycle_result(runner.run(["pull"]))
+
+
+def _decode_json(command: str, completed: Completed) -> dict:
+    try:
+        parsed = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        return {
+            "adapter_state": "error",
+            "command": command,
+            "returncode": completed.returncode,
+            "error": f"invalid JSON from nave {command}: {exc.msg}",
+            "stderr": completed.stderr,
+        }
+    if not isinstance(parsed, dict):
+        return {
+            "adapter_state": "error",
+            "command": command,
+            "returncode": completed.returncode,
+            "error": f"invalid JSON from nave {command}: root is not an object",
+            "stderr": completed.stderr,
+        }
+    return parsed
+
+
+def search(
+    runner: NaveRunner,
+    terms: Sequence[str],
+    matches: Sequence[str] = (),
+) -> dict:
+    """Run structural fleet search and require Nave's JSON protocol."""
+    args = ["search", "--json", *terms]
+    for predicate in matches:
+        args.extend(["--match", predicate])
+    return _decode_json("search", runner.run(args))
+
+
+def build(
+    runner: NaveRunner,
+    file_filter: str | None,
+    where: Sequence[str] = (),
+    matches: Sequence[str] = (),
+) -> dict:
+    """Build structural fleet groups using Nave's JSON protocol."""
+    args = ["build", "--json"]
+    if file_filter is not None:
+        args.extend(["--filter", file_filter])
+    for term in where:
+        args.extend(["--where", term])
+    for predicate in matches:
+        args.extend(["--match", predicate])
+    return _decode_json("build", runner.run(args))
+
+
+def check(runner: NaveRunner) -> dict:
+    """Run round-trip validation and decode JSON even when checks fail."""
+    return _decode_json("check", runner.run(["check", "--json"]))
 
 
 def _runner_from_args(args: argparse.Namespace) -> NaveRunner:

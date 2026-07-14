@@ -1,0 +1,15 @@
+{
+  "results": [
+    {"owner": "acme", "repo": "api", "path": "pyproject.toml", "format": "toml", "outcome": "ok"},
+    {"owner": "acme", "repo": "web", "path": "package.json", "format": null, "outcome": "unknown_format"}
+  ],
+  "totals": {
+    "ok": 3,
+    "drift": 0,
+    "parse_failed": 0,
+    "render_failed": 0,
+    "reparse_failed": 0,
+    "unknown_format": 1,
+    "missing": 0
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "repos": [
+    {
+      "owner": "acme",
+      "repo": "api",
+      "pushed_at": "2026-07-13T10:00:00Z",
+      "hits": [
+        {
+          "term": "anything",
+          "files": [{"path": "pyproject.toml", "matched_needle": "anything"}]
+        }
+      ]
+    }
+  ],
+  "repos_considered": 1,
+  "repos_without_checkout": 0
+}

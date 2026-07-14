@@ -1,0 +1,14 @@
+{
+  "groups": [
+    {
+      "pattern": "pyproject.toml",
+      "instance_count": 1,
+      "instances": [{"owner": "acme", "repo": "api", "path": "pyproject.toml"}],
+      "template_text": "[project]",
+      "holes": [],
+      "fca": {"profiles": [], "total_concepts": 0},
+      "display_addresses": {}
+    }
+  ],
+  "skipped": []
+}
