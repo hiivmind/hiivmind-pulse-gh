@@ -27,6 +27,8 @@ state:
   deployments:
     latest_id: null
     latest_environment: null
+  org_repos:
+    signature: null
   projects:
     snapshot_hash: null
     item_count: 0

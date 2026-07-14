@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -228,13 +230,49 @@ def _load(path: Path) -> Any:
         raise MembershipError(f"could not load {path}: {exc}") from exc
 
 
+def _apply_catalog(path: Path, config: dict[str, Any], repositories: list[dict]) -> bool:
+    if config.get("repositories", []) == repositories:
+        return False
+    updated = dict(config)
+    updated["repositories"] = repositories
+    temporary_name: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary_name = handle.name
+            yaml.safe_dump(updated, handle, sort_keys=False, allow_unicode=True)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_name, path)
+    except OSError as exc:
+        if temporary_name:
+            try:
+                Path(temporary_name).unlink()
+            except OSError:
+                pass
+        raise MembershipError(f"could not apply catalog patch: {exc}") from exc
+    return True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--org-repos", required=True, type=Path)
     parser.add_argument("--config", required=True, type=Path)
+    parser.add_argument("--apply-catalog", action="store_true")
     args = parser.parse_args()
     try:
-        result = reconcile_membership(_load(args.org_repos), _load(args.config))
+        config = _load(args.config)
+        result = reconcile_membership(_load(args.org_repos), config)
+        result["catalog_updated"] = (
+            _apply_catalog(args.config, config, result["catalog_patch"])
+            if args.apply_catalog
+            else False
+        )
     except MembershipError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

@@ -159,3 +159,34 @@ def test_cli_emits_deterministic_json(tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["catalog_patch"][0]["full_name"] == "acme/zeta"
+
+
+def test_cli_apply_catalog_updates_only_repository_facts(tmp_path):
+    org_path = tmp_path / "org.json"
+    config_path = tmp_path / "config.yaml"
+    org_path.write_text(json.dumps([live_repo("acme/new", "R_NEW")]))
+    config_path.write_text(yaml.safe_dump({
+        "workspace": {"login": "acme"},
+        "repositories": [],
+        "milestones": {"keep": []},
+    }))
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            SCRIPT,
+            "--org-repos",
+            str(org_path),
+            "--config",
+            str(config_path),
+            "--apply-catalog",
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["catalog_updated"] is True
+    updated = yaml.safe_load(config_path.read_text())
+    assert updated["repositories"] == [catalog_repo("acme/new", "R_NEW")]
+    assert updated["milestones"] == {"keep": []}
