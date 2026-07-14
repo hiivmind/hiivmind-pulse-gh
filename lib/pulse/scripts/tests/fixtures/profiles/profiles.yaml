@@ -1,0 +1,120 @@
+repository_profiles:
+  acme/python-lib:
+    profiles: [python, library]
+    scorecard: python-library-v1
+  acme/python-service:
+    profiles: [python, service]
+    scorecard: python-service-v1
+  acme/node-web:
+    profiles: [nodejs, web]
+    scorecard: node-web-v1
+  acme/docs:
+    profiles: [documentation]
+    scorecard: docs-v1
+  acme/terraform:
+    profiles: [terraform, infrastructure]
+    scorecard: terraform-v1
+  acme/plugin:
+    profiles: [claude-plugin, python]
+    scorecard: claude-plugin-v1
+  acme/unknown:
+    profiles: [unclassified]
+    scorecard: generic-v1
+
+scorecards:
+  generic-v1:
+    checks:
+      - id: documentation
+        adapter: generic.docs
+        weight: 1
+      - id: ci
+        adapter: github.actions
+        applicability: capability:ci
+        weight: 1
+      - id: claude-plugin-structure
+        adapter: claude.plugin-structure
+        applicability: profile:claude-plugin
+        weight: 1
+
+  python-library-v1:
+    extends: generic-v1
+    checks:
+      - id: dependency-updates
+        adapter: python.dependencies
+        weight: 1
+      - id: package-release
+        adapter: python.package-release
+        applicability: evidence_path:pyproject.toml
+        weight: 1
+
+  python-service-v1:
+    extends: generic-v1
+    checks:
+      - id: dependency-updates
+        adapter: python.dependencies
+        weight: 1
+      - id: service-runtime
+        adapter: python.service-runtime
+        weight: 1
+
+  node-web-v1:
+    extends: generic-v1
+    checks:
+      - id: dependency-updates
+        adapter: node.dependencies
+        weight: 1
+      - id: web-build
+        adapter: node.web-build
+        applicability: evidence_path:package.json
+        weight: 1
+
+  docs-v1:
+    extends: generic-v1
+    checks:
+      - id: docs-links
+        adapter: docs.links
+        weight: 1
+
+  terraform-v1:
+    extends: generic-v1
+    checks:
+      - id: terraform-validation
+        adapter: terraform.validate
+        weight: 1
+      - id: dependency-updates
+        adapter: terraform.dependencies
+        weight: 1
+
+  claude-plugin-v1:
+    extends: generic-v1
+    checks:
+      - id: plugin-skills
+        adapter: claude.skills
+        weight: 1
+
+adapters:
+  generic.docs:
+    state: available
+  github.actions:
+    state: available
+  claude.plugin-structure:
+    state: available
+  python.dependencies:
+    state: available
+  python.package-release:
+    state: available
+  python.service-runtime:
+    state: available
+  node.dependencies:
+    state: available
+  node.web-build:
+    state: available
+  docs.links:
+    state: available
+  terraform.validate:
+    state: available
+  terraform.dependencies:
+    state: unsupported
+    reason: Terraform dependency adapter not implemented
+  claude.skills:
+    state: available
