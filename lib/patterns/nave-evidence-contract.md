@@ -39,6 +39,22 @@ unique. File paths and structural signals are sorted string lists in produced
 snapshots, although the validator accepts any order. Structural signals record
 facts only; they never assign authoritative repository profiles.
 
+The version 1 normalizer may emit these factual signals:
+
+| Signal | Evidence |
+|---|---|
+| `has_pyproject` | root `pyproject.toml` |
+| `has_package_json` | root `package.json` |
+| `has_documentation` | a README or path under `docs/` |
+| `has_terraform` | a `.tf` file |
+| `has_workflows` | a path under `.github/workflows/` |
+| `has_claude_context` | root `CLAUDE.md` |
+| `has_claude_plugin_manifest` | `.claude-plugin/plugin.json` |
+| `has_skill` | a file named `SKILL.md` |
+
+These are observations, not classifications. Profile selection is owned by
+reviewed workspace metadata in the profile-dispatch layer.
+
 ## Capability semantics
 
 - `available`: all capabilities needed for the requested evidence run exist.
