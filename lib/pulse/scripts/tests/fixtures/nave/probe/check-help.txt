@@ -1,0 +1,5 @@
+Usage: nave check [OPTIONS]
+
+Options:
+      --json
+      --failures-only

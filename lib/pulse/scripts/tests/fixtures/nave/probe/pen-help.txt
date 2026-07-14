@@ -1,0 +1,14 @@
+Usage: nave pen <COMMAND>
+
+Commands:
+  create
+  list
+  show
+  status
+  sync
+  clean
+  revert
+  reinit
+  exec
+  rm
+  rewrite

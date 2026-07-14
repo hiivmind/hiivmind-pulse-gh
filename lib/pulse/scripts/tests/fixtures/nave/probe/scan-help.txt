@@ -1,0 +1,6 @@
+Usage: nave scan [OPTIONS]
+
+Options:
+      --user <USER>
+      --no-interaction
+      --prune

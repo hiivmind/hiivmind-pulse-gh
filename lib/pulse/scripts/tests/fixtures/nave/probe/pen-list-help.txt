@@ -1,0 +1,4 @@
+Usage: nave pen list [OPTIONS]
+
+Options:
+      --json

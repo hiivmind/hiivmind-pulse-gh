@@ -1,0 +1,4 @@
+Usage: nave pen status [OPTIONS] <NAME>
+
+Options:
+      --json
