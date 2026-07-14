@@ -8,7 +8,7 @@ import yaml
 
 SCRIPT = "lib/pulse/scripts/validate_result.py"
 FIXTURES = Path("lib/pulse/scripts/tests/fixtures")
-KINDS = ["status", "healthcheck", "refresh", "workflow-run"]
+KINDS = ["status", "healthcheck", "refresh", "workflow-run", "fleet-membership"]
 
 
 def run_validator(path, kind):

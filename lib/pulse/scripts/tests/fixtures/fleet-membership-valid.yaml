@@ -1,0 +1,33 @@
+contract_version: 1
+kind: fleet-membership
+workspace: testorg
+run_at: "2026-07-15T09:00:00Z"
+actor:
+  gh_login: octocat
+  machine: mba-m4
+  mode: scheduled
+org_repos: [testorg/widget, testorg/new-service]
+catalog_repos: [testorg/widget]
+catalog_updated: false
+profile_proposals:
+  - repo: testorg/new-service
+    candidates:
+      - profile: python
+        confidence: 0.95
+        evidence: [pyproject.toml]
+        rule_ids: [python-pyproject]
+    evidence:
+      files: [README.md, pyproject.toml]
+      capabilities: [python]
+findings:
+  - kind: repository-created
+    repo: testorg/new-service
+    severity: medium
+    detail: Repository is present in GitHub but absent from the catalog
+proposed_actions:
+  - action: register-catalog-entry
+    repo: testorg/new-service
+asks_recorded:
+  - kind: confirm-profile
+    repo: testorg/new-service
+errors: []

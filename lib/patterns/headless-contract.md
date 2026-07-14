@@ -10,6 +10,7 @@ retained for human-readable logs only — orchestrators MUST read the file.
 |------|------|--------------|
 | status | status-result.yaml | `{workspace_root}/.hiivmind/github/status-result.yaml` |
 | healthcheck | healthcheck-result.yaml | `{workspace_root}/.hiivmind/github/healthcheck-result.yaml` |
+| fleet-membership | fleet-membership-result.yaml | `{workspace_root}/.hiivmind/github/fleet-membership-result.yaml` |
 | refresh | refresh-result.yaml | `{workspace_root}/.hiivmind/github/refresh-result.yaml` |
 | workflow-run | workflow-run-result.yaml | `{workspace_root}/.hiivmind/github/workflow-run-result.yaml` |
 
@@ -31,7 +32,7 @@ not kinds they were not asked to validate.
 
 ```yaml
 contract_version: 1                   # int, required
-kind: status | healthcheck | refresh | workflow-run
+kind: status | healthcheck | fleet-membership | refresh | workflow-run
 workspace: <login>                    # str, required — org/user login
 run_at: <ISO 8601 timestamp>          # str, required
 actor:                                # required on ALL kinds (I4)
@@ -49,6 +50,7 @@ profiles, and machines: identity-sensitive logic resolves against the
 
     uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py status-result.yaml --kind status
     uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py healthcheck-result.yaml --kind healthcheck
+    uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py fleet-membership-result.yaml --kind fleet-membership
     uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py refresh-result.yaml --kind refresh
     uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py workflow-run-result.yaml --kind workflow-run
 
@@ -125,6 +127,42 @@ with `data.dismissed: true`; the durable dismissal decision remains in
 Grades must always be presented with `scorecard`. A grade from one scorecard is
 not directly compared with a grade from another scorecard because the checks,
 weights, and applicability rules differ.
+
+### fleet-membership-result.yaml (written by gh-fleet-membership-headless, F2)
+
+```yaml
+contract_version: 1
+kind: fleet-membership
+workspace: <login>
+run_at: <ISO 8601>
+actor: { gh_login: <str>, machine: <str>, mode: <enum> }
+org_repos: [<owner/name>, ...]        # live repositories included by discovery policy
+catalog_repos: [<owner/name>, ...]    # repositories present after any catalog patch
+catalog_updated: <bool>               # true only when apply_catalog changed config.yaml
+profile_proposals:                    # non-authoritative, evidence-backed suggestions
+  - repo: <owner/name>
+    candidates:
+      - profile: <profile id>
+        confidence: <0..1>
+        evidence: [<observed fact>, ...]
+        rule_ids: [<proposal rule id>, ...]
+    evidence: {}                      # normalized evidence summary used for proposal
+    explanation: <str>                # optional inferred prose; cannot alter candidates
+    inferred: true                    # required when explanation is inferred
+findings:
+  - kind: <str>
+    repo: <owner/name>
+    severity: low | medium | high
+    detail: <str>
+proposed_actions: []                  # catalog/profile changes requiring a PR or confirmation
+asks_recorded: []                     # profile confirmations deferred by headless execution
+errors: []
+```
+
+Catalog registration and profile confirmation are separate operations. A
+membership result may record both, but `catalog_updated: true` means only stable
+repository facts were written to `config.yaml`; it never means profiles or
+profile-dependent onboarding actions were applied.
 
 ### refresh-result.yaml (written by gh-refresh-headless, P3.3)
 

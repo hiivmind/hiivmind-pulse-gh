@@ -1,0 +1,22 @@
+contract_version: 1
+kind: fleet-membership
+workspace: testorg
+run_at: "2026-07-15T09:00:00Z"
+actor:
+  gh_login: octocat
+  machine: mba-m4
+  mode: scheduled
+org_repos: testorg/widget
+catalog_repos: []
+catalog_updated: no
+profile_proposals:
+  - repo: testorg/widget
+    candidates: invalid
+    evidence: []
+findings:
+  - kind: repository-created
+    repo: testorg/widget
+    severity: urgent
+proposed_actions: invalid
+asks_recorded: []
+errors: []
