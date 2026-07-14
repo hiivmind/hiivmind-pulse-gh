@@ -118,7 +118,9 @@ uv run "${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/evaluate_checks.py" \
 
 1. Aggregate: `score` = sum of repo scores, `total` = sum of repo totals, `grade` from
    score/total fraction — A ≥ 0.90, B ≥ 0.72, C ≥ 0.54, D ≥ 0.36, F below (same table
-   evaluate_checks.py uses; total 0 → F).
+   evaluate_checks.py uses; total 0 → F). This top-level aggregate is a legacy
+   compatibility field. When results contain more than one scorecard ID, do not present
+   its grade as a comparable fleet grade; report per-repository scorecards instead.
 2. Write RESULT_PATH:
 
 ```yaml

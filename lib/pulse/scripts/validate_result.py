@@ -61,6 +61,15 @@ def _require_enum(data, key, allowed, errors, ctx=""):
     return val
 
 
+def _require_nonnegative_number(data, key, errors, ctx=""):
+    label = f"{ctx}{key}"
+    value = _require(data, key, (int, float), errors, ctx=ctx)
+    if value is not None and (isinstance(value, bool) or value < 0):
+        _err(errors, f"{label} must be a non-negative number")
+        return None
+    return value
+
+
 def _require_actor(data, errors):
     actor = _require(data, "actor", dict, errors)
     if actor is None:
@@ -71,8 +80,8 @@ def _require_actor(data, errors):
 
 
 def _validate_grade_block(block, errors, ctx):
-    _require(block, "score", (int, float), errors, ctx=ctx)
-    _require(block, "total", (int, float), errors, ctx=ctx)
+    _require_nonnegative_number(block, "score", errors, ctx=ctx)
+    _require_nonnegative_number(block, "total", errors, ctx=ctx)
     _require_enum(block, "grade", GRADES, errors, ctx=ctx)
 
 
@@ -116,11 +125,11 @@ def validate(data, kind: str) -> list[str]:
             ctx = f"repos[{i}]."
             _require(r, "repo", str, errors, ctx=ctx)
             _require(r, "scorecard", str, errors, ctx=ctx)
-            _require(r, "score", (int, float), errors, ctx=ctx)
-            _require(r, "total", (int, float), errors, ctx=ctx)
+            _require_nonnegative_number(r, "score", errors, ctx=ctx)
+            _require_nonnegative_number(r, "total", errors, ctx=ctx)
             _require_enum(r, "grade", GRADES, errors, ctx=ctx)
-            _require(r, "coverage_supported", (int, float), errors, ctx=ctx)
-            _require(r, "coverage_total", (int, float), errors, ctx=ctx)
+            _require_nonnegative_number(r, "coverage_supported", errors, ctx=ctx)
+            _require_nonnegative_number(r, "coverage_total", errors, ctx=ctx)
             checks = _require(r, "checks", dict, errors, ctx=ctx)
             for cid, c in (checks or {}).items():
                 cctx = f"{ctx}checks.{cid}."
@@ -131,7 +140,7 @@ def validate(data, kind: str) -> list[str]:
                 if check_id is not None and check_id != cid:
                     _err(errors, f"{cctx}check_id mismatch: expected {cid}, got {check_id}")
                 _require(c, "adapter", str, errors, ctx=cctx)
-                _require(c, "weight", (int, float), errors, ctx=cctx)
+                _require_nonnegative_number(c, "weight", errors, ctx=cctx)
                 _require_enum(c, "status", CHECK_STATUSES, errors, ctx=cctx)
                 _require(c, "detail", str, errors, ctx=cctx)
                 _require(c, "data", dict, errors, ctx=cctx)

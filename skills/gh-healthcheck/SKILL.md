@@ -249,14 +249,15 @@ Show aggregate first, then per-repo breakdown:
 | repo-a | python-library-v1 | B | 9/11 | 11/11 | codeowners, security_policy |
 | repo-b | node-web-v1 | C | 7/10 | 8/10 | ci_cd, releases, documentation |
 
-Aggregate: B (16/22)
+Fleet grade: not reported — multiple scorecards are present
 
 ---
 
 [Per-repo details follow]
 ```
 
-Grades are comparable only within the same scorecard revision. Compare coverage separately from
+Grades are comparable only within the same scorecard revision. Group any aggregate display by
+scorecard; never sum different scorecards into a fleet grade. Compare coverage separately from
 score so unsupported tooling is visible rather than silently lowering or inflating maturity.
 
 ---

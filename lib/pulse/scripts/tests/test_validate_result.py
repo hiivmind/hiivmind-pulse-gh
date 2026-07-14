@@ -102,3 +102,25 @@ def test_healthcheck_requires_scorecard_coverage_and_check_identity(tmp_path):
     assert "check_id" in result.stderr
     assert "adapter" in result.stderr
     assert "weight" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("repos", 0, "coverage_total"), True),
+        (("repos", 0, "checks", "branch_protection", "weight"), -1),
+    ],
+)
+def test_healthcheck_rejects_invalid_numeric_metadata(tmp_path, path, value):
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    target = doc
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+    result_path = tmp_path / "healthcheck.yaml"
+    result_path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(result_path, "healthcheck")
+
+    assert result.returncode == 1
+    assert "non-negative number" in result.stderr
