@@ -105,7 +105,7 @@ The primary entry point for all GitHub operations:
 
 ## Skills
 
-The plugin ships **11 skills** — seven interactive, four headless (zero-prompt,
+The plugin ships **12 skills** — seven interactive, five headless (zero-prompt,
 for schedulers and orchestrators).
 
 ### Interactive
@@ -128,6 +128,7 @@ for schedulers and orchestrators).
 | `gh-refresh-headless` | Config sync replaying recorded decisions → `refresh-result.yaml` |
 | `gh-healthcheck-headless` | Fleet governance audit → `healthcheck-result.yaml` |
 | `gh-workflow-run-headless` | Run a workflow unattended under its headless policy → `workflow-run-result.yaml` |
+| `gh-fleet-evidence-headless` | Nave-backed structural projection → `fleet-evidence.yaml` |
 
 > Syntax lookup uses an external corpus, `hiivmind-corpus-github-docs-navigate`
 > (declared as a plugin dependency), for exact GraphQL/REST definitions when needed.
@@ -135,9 +136,9 @@ for schedulers and orchestrators).
 ## Headless orchestration & the result contract
 
 Every headless skill is **read-only against GitHub** (except committed workspace
-files), takes **explicit inputs only** (never discovers a workspace), and on **every**
-exit writes a result file conforming to a versioned contract
-(`lib/patterns/headless-contract.md`):
+files), takes **explicit inputs only** (never discovers a workspace), and writes a
+versioned machine-readable artifact. Status, refresh, healthcheck, and workflow-run
+use `lib/patterns/headless-contract.md`:
 
 ```yaml
 contract_version: 1
@@ -154,6 +155,17 @@ Result files are validated mechanically:
 ```bash
 uv run lib/pulse/scripts/validate_result.py <file> --kind <kind>   # exit 0/1/2
 ```
+
+Fleet evidence has a separate provider contract because tooling capability is not
+repository health. Validate it with:
+
+```bash
+uv run lib/pulse/scripts/validate_evidence.py .hiivmind/github/fleet-evidence.yaml
+```
+
+Nave evidence is a tracked structural projection, not authoritative fleet
+membership. Repositories not present are unobserved; later profile/membership
+workflows resolve workspace scope independently.
 
 Orchestrators read the result **file**, never the skill's prose — so a scheduled run
 is deterministic and auditable.
@@ -200,6 +212,9 @@ Deterministic, mechanical work lives in self-contained PEP 723 scripts
 | `evaluate_checks.py` | Mechanical healthcheck evaluator (11-check catalog) |
 | `freshness_status.py` | Per-section staleness computation for the status pre-check |
 | `validate_result.py` | Headless result-contract validator |
+| `nave_adapter.py` | Fixture-testable external Nave CLI boundary |
+| `evidence_snapshot.py` | Normalize Nave JSON into profile-neutral fleet evidence |
+| `validate_evidence.py` | Fleet evidence contract validator |
 | `resolve_run.py` | Deterministic run-ledger operations (create/advance/gate/lease) |
 | `workflow_lint.py` | Workflow YAML lint (v1/v2/v3 schema, FSM refs, headless policy, DAG acyclicity) |
 
@@ -345,7 +360,8 @@ hiivmind-pulse-gh/
 │   ├── gh-status-headless/       # Headless status pre-check
 │   ├── gh-refresh-headless/      # Headless config sync
 │   ├── gh-healthcheck-headless/  # Headless fleet audit
-│   └── gh-workflow-run-headless/ # Headless workflow run
+│   ├── gh-workflow-run-headless/ # Headless workflow run
+│   └── gh-fleet-evidence-headless/ # Nave structural evidence
 ├── hooks/
 │   ├── hooks.json                        # Hook configuration
 │   ├── heartbeat.sh                      # SessionStart poll (workspace-root walk-up)
@@ -356,12 +372,14 @@ hiivmind-pulse-gh/
 │   │   ├── config-parsing.md  id-resolution.md  graphql-execution.md
 │   │   ├── workspace-detection.md  corpus-lookup.md  error-*.md
 │   │   ├── headless-contract.md          # The headless result schema
+│   │   ├── nave-evidence-contract.md     # Nave evidence projection schema
 │   │   ├── workflow-execution.md         # THE workflow executor (v1/v2/v3)
 │   │   └── run-ledger.md                 # Run-ledger schema + resume protocol
 │   ├── pulse/
 │   │   └── scripts/                      # Deterministic Python (PEP 723, uv run)
 │   │       ├── poll.py  evaluate_checks.py  freshness_status.py
 │   │       ├── validate_result.py  resolve_run.py  workflow_lint.py
+│   │       ├── nave_adapter.py  evidence_snapshot.py  validate_evidence.py
 │   │       └── tests/                    # pytest suite
 │   └── references/                       # WHAT exists (static lookup data)
 │       ├── api-routing.md  config-schema.md  healthcheck-checks.md

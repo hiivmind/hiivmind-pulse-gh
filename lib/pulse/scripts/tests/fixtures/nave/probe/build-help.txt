@@ -1,0 +1,7 @@
+Usage: nave build [OPTIONS]
+
+Options:
+      --json
+      --filter <FILTER>
+      --where <TERM>
+      --match <PREDICATE>

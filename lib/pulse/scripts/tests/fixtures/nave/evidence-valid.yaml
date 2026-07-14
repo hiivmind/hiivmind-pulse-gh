@@ -1,0 +1,25 @@
+contract_version: 1
+provider:
+  name: nave
+  version: 0.0.8
+  protocol: 1
+generated_at: "2026-07-13T10:00:00Z"
+capability_status:
+  state: available
+  capabilities:
+    - build_json
+    - check_json
+    - pull
+    - scan
+    - search_json
+repos:
+  - repo: acme/api
+    remote_sha: null
+    files:
+      - pyproject.toml
+    structural_signals:
+      - has_pyproject
+    validation:
+      state: valid
+      errors: []
+errors: []

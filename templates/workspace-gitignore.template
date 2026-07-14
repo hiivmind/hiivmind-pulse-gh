@@ -4,6 +4,7 @@ user.yaml
 poll-state.yaml
 project-snapshot.json
 *-result.yaml
+fleet-evidence.yaml
 log/
 .assignments-tmp.json
 .project-changes.json

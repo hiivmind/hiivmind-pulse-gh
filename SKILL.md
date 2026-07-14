@@ -72,6 +72,7 @@ The operations skill:
 | **gh-discover** | `skills/gh-discover/SKILL.md` | Explore available operations and domains |
 | **gh-workflows** | `skills/gh-workflows/SKILL.md` | Manage event-driven automation workflows |
 | **gh-heartbeat** | `skills/gh-heartbeat/SKILL.md` | Session wake-up, process pending work |
+| **gh-fleet-evidence-headless** | `skills/gh-fleet-evidence-headless/SKILL.md` | Build profile-neutral fleet evidence through Nave |
 
 ## Supported Domains
 

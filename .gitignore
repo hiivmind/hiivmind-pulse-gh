@@ -21,3 +21,6 @@ __pycache__/
 
 # SDD progress scratch
 .superpowers/
+
+# Isolated implementation worktrees
+.worktrees/
