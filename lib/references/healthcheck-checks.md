@@ -204,7 +204,11 @@ Each check defines:
 | D | 4-5 / 11 | Significant gaps |
 | F | 0-3 / 11 | Critical governance gaps |
 
-**Scoring:** `pass` = 1 point, `warn` = 0.5 points (rounded down for grade), `fail` = 0 points, `unknown` = excluded from total.
+**Scoring:** Each scorecard supplies the check weight. `pass` earns the full
+weight, `warn` half, and `fail` zero. `unknown`, `not_applicable`,
+`unsupported`, and `error` are excluded from the score denominator. Only
+`unsupported` reduces adapter coverage. Use `evaluate_checks.py::score_checks`
+for arithmetic; do not reimplement scoring in a skill.
 
 ---
 

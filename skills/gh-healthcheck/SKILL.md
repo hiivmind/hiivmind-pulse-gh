@@ -166,7 +166,11 @@ Execute checks in catalog order. For each check:
 FOR check IN healthcheck_catalog:
   # 1. Check dismissal
   IF is_dismissed(repo, check.id) AND NOT dismissal_expired(repo, check.id):
-    results[check.id] = {status: "dismissed", detail: "Dismissed: {reason}"}
+    results[check.id] = {
+      status: "not_applicable",
+      detail: "Dismissed: {reason}",
+      data: {dismissed: true, reason: reason}
+    }
     CONTINUE
 
   # 2. Evaluate
@@ -177,7 +181,7 @@ FOR check IN healthcheck_catalog:
 
   # 3. Record
   results[check.id] = {
-    status: result.status,      # pass | warn | fail | unknown
+    status: result.status,      # pass | warn | fail | unknown | not_applicable | unsupported | error
     detail: result.detail,
     last_evaluated: now(),
     data: result.raw_data       # optional structured data for future reference
@@ -219,7 +223,9 @@ Grade: {grade} ({score}/{total})
 | Dependency Mgmt | ✅ pass | Renovate configured |
 | Secrets Scanning | ✅ pass | Scanning: enabled, Push protection: enabled |
 
-{dismissed_count} check(s) dismissed — not counted in score.
+Scorecard: {scorecard_id}
+Coverage: {coverage_supported}/{coverage_total} supported
+{dismissed_count} check(s) dismissed — reported as not_applicable and not counted in score.
 ```
 
 **Status icons:**
@@ -227,7 +233,9 @@ Grade: {grade} ({score}/{total})
 - `warn` → ⚠️
 - `fail` → ❌
 - `unknown` → ❓
-- `dismissed` → ⏭️
+- `not_applicable` → ⏭️
+- `unsupported` → 🚫
+- `error` → 💥
 
 ### Multi-Repo Report
 
@@ -236,17 +244,21 @@ Show aggregate first, then per-repo breakdown:
 ```
 ## Healthcheck Summary
 
-| Repository | Grade | Score | Failing |
-|------------|-------|-------|---------|
-| repo-a | B | 9/11 | codeowners, security_policy |
-| repo-b | C | 7/11 | ci_cd, releases, codeowners, documentation |
+| Repository | Scorecard | Grade | Score | Coverage | Failing |
+|------------|-----------|-------|-------|----------|---------|
+| repo-a | python-library-v1 | B | 9/11 | 11/11 | codeowners, security_policy |
+| repo-b | node-web-v1 | C | 7/10 | 8/10 | ci_cd, releases, documentation |
 
-Aggregate: B (16/22)
+Fleet grade: not reported — multiple scorecards are present
 
 ---
 
 [Per-repo details follow]
 ```
+
+Grades are comparable only within the same scorecard revision. Group any aggregate display by
+scorecard; never sum different scorecards into a fleet grade. Compare coverage separately from
+score so unsupported tooling is visible rather than silently lowering or inflating maturity.
 
 ---
 

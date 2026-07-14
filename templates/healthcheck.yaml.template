@@ -18,11 +18,18 @@ repos:
   #
   # Example:
   # hiivmind-pulse-gh:
+  #   scorecard: python-library-v1
   #   score: 8
   #   total: 11
   #   grade: B
+  #   coverage_supported: 11
+  #   coverage_total: 11
   #   checks:
   #     branch_protection:
+  #       check_id: branch_protection
+  #       profile: python-library
+  #       adapter: github-branch-protection
+  #       weight: 1
   #       status: pass
   #       last_evaluated: "2026-02-21T14:30:00Z"
   #       detail: "main: 1 required review"

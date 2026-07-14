@@ -118,7 +118,9 @@ uv run "${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/evaluate_checks.py" \
 
 1. Aggregate: `score` = sum of repo scores, `total` = sum of repo totals, `grade` from
    score/total fraction — A ≥ 0.90, B ≥ 0.72, C ≥ 0.54, D ≥ 0.36, F below (same table
-   evaluate_checks.py uses; total 0 → F).
+   evaluate_checks.py uses; total 0 → F). This top-level aggregate is a legacy
+   compatibility field. When results contain more than one scorecard ID, do not present
+   its grade as a comparable fleet grade; report per-repository scorecards instead.
 2. Write RESULT_PATH:
 
 ```yaml
@@ -127,7 +129,8 @@ kind: healthcheck
 workspace: {LOGIN}
 run_at: "{RUN_AT}"    # quote: an unquoted ISO-8601 value parses as a YAML datetime; the contract requires a string
 actor: { gh_login: {GH_LOGIN}, machine: {MACHINE}, mode: {MODE} }
-repos: {REPO_RESULTS}          # each: {repo, score, total, grade, checks}
+repos: {REPO_RESULTS}          # each includes repo, scorecard, score, total, grade,
+                               # coverage_supported, coverage_total, checks
 aggregate: { score: {sum}, total: {sum}, grade: {computed} }
 errors: {ERRORS}
 ```
@@ -148,9 +151,10 @@ uv run "${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py" "$RESULT_PAT
 2. Set `last_run`: `timestamp: RUN_AT`, `scope:` comma-joined short names (or `fleet`
    when the whole catalog ran), `aggregate_score / aggregate_total / aggregate_grade`.
 3. For each repo result, write `repos.{short-name}` (short name = part after `/`):
-   `score`, `total`, `grade`, and each check with `status`, `detail`, `data`, plus
-   `last_evaluated: RUN_AT` (the governance record keeps timestamps; the result file
-   does not need them).
+   `scorecard`, `score`, `total`, `grade`, `coverage_supported`, `coverage_total`, and
+   each check with `check_id`, `profile`, `adapter`, `weight`, `status`, `detail`, and
+   `data`, plus `last_evaluated: RUN_AT` (the governance record keeps timestamps; the
+   result file does not need them).
 4. **Preserve `dismissals:` untouched** — merge, never overwrite. Repos not evaluated
    this run keep their existing blocks.
 5. Do NOT commit or push — the orchestrator (P5) owns the commit/PR step.

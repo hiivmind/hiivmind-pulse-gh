@@ -91,12 +91,19 @@ run_at: <ISO 8601>
 actor: { gh_login: <str>, machine: <str>, mode: <enum> }
 repos:                                # list, required (may be empty)
   - repo: <owner/name>                # str, required
+    scorecard: <scorecard id>         # str, required — grades are scorecard-specific
     score: <number>                   # int or float, required
-    total: <int>                      # required — checks counted (excl. unknown/dismissed)
+    total: <number>                   # required — weighted score denominator
     grade: A | B | C | D | F          # required enum
+    coverage_supported: <number>      # adapter-supported weight, including not-applicable checks
+    coverage_total: <number>          # all configured check weight
     checks:                           # dict, required: check_id -> result
       <check_id>:
-        status: pass | warn | fail | unknown | dismissed   # required enum
+        check_id: <check_id>          # str, required; must match the mapping key
+        adapter: <adapter id>         # str, required
+        weight: <number>              # non-negative, required
+        profile: <profile id>         # optional source profile
+        status: pass | warn | fail | unknown | not_applicable | unsupported | error
         detail: <str>                 # required
         data: {}                      # dict, required (may be empty)
         inferred: <bool>              # optional — true when LLM judgment produced it
@@ -106,6 +113,18 @@ aggregate:                            # dict, required
   grade: A | B | C | D | F
 errors: []
 ```
+
+`pass`, `warn`, and `fail` enter the weighted score denominator. `unknown`,
+`not_applicable`, `unsupported`, and `error` do not. Coverage includes every
+configured weight in `coverage_total`; only `unsupported` weight is excluded
+from `coverage_supported`, so adapter gaps remain visible without becoming
+false repository failures. A current dismissal is emitted as `not_applicable`
+with `data.dismissed: true`; the durable dismissal decision remains in
+`healthcheck.yaml`.
+
+Grades must always be presented with `scorecard`. A grade from one scorecard is
+not directly compared with a grade from another scorecard because the checks,
+weights, and applicability rules differ.
 
 ### refresh-result.yaml (written by gh-refresh-headless, P3.3)
 

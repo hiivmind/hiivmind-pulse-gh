@@ -24,15 +24,17 @@ Usage:
                      [--relationships relationships.yaml]
                      [--dismissals healthcheck.yaml]
 
-Scoring (catalog): pass=1, warn=0.5; unknown/dismissed excluded from total.
-Grade by score/total fraction: A >= 0.90, B >= 0.72, C >= 0.54, D >= 0.36, F below.
+Scoring is weight-aware: pass=weight, warn=0.5*weight, fail=0. Unknown,
+not_applicable, unsupported, and error are excluded from the score denominator.
+Only unsupported weight is excluded from coverage_supported. Grade by score/total
+fraction: A >= 0.90, B >= 0.72, C >= 0.54, D >= 0.36, F below.
 """
 from __future__ import annotations
 
 import argparse
 import json
-import math
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
@@ -41,6 +43,59 @@ BUG_LABELS = {"bug", "defect", "error", "incident"}
 PRIORITY_HINTS = {"priority", "p0", "p1", "p2", "p3", "p4", "critical", "urgent"}
 DEP_FILES = {"dependabot.yml", "dependabot.yaml", "renovate.json", ".renovaterc",
              ".renovaterc.json"}
+RESULT_STATES = {
+    "pass",
+    "warn",
+    "fail",
+    "unknown",
+    "not_applicable",
+    "unsupported",
+    "error",
+}
+LEGACY_SCORECARD = "github-governance-v1"
+
+
+@dataclass(frozen=True)
+class ScoreSummary:
+    score: float
+    total: float
+    grade: str
+    coverage_supported: float
+    coverage_total: float
+
+
+def score_checks(checks: dict[str, dict]) -> ScoreSummary:
+    """Compute weighted health and adapter coverage from typed check results."""
+    score = 0.0
+    total = 0.0
+    coverage_supported = 0.0
+    coverage_total = 0.0
+    for check_id, check in checks.items():
+        status = check.get("status")
+        if status not in RESULT_STATES:
+            raise ValueError(f"unknown check state for {check_id}: {status}")
+        weight = check.get("weight")
+        if isinstance(weight, bool) or not isinstance(weight, (int, float)) or weight < 0:
+            raise ValueError(f"invalid check weight for {check_id}: {weight}")
+        weight = float(weight)
+        coverage_total += weight
+        if status != "unsupported":
+            coverage_supported += weight
+        if status not in {"pass", "warn", "fail"}:
+            continue
+        total += weight
+        score += {"pass": weight, "warn": weight * 0.5, "fail": 0.0}[status]
+    score = round(score, 10)
+    total = round(total, 10)
+    coverage_supported = round(coverage_supported, 10)
+    coverage_total = round(coverage_total, 10)
+    return ScoreSummary(
+        score,
+        total,
+        grade_for(score, total),
+        coverage_supported,
+        coverage_total,
+    )
 
 
 def load(data_dir: Path, name: str):
@@ -181,7 +236,7 @@ def check_secrets_scanning(d):
     return "fail", "Secret scanning not enabled"
 
 
-def grade_for(score: float, total: int) -> str:
+def grade_for(score: float, total: float) -> str:
     if total == 0:
         return "F"
     frac = score / total
@@ -237,24 +292,40 @@ def main() -> int:
     }
 
     checks: dict = {}
-    score, total = 0.0, 0
     for cid, fn in evaluators.items():
+        adapter = f"github.{cid}"
         if cid in dismissed:
             reason = (dismissed[cid] or {}).get("reason", "")
-            checks[cid] = {"status": "dismissed",
-                           "detail": f"Dismissed: {reason}", "data": {}}
+            checks[cid] = {
+                "check_id": cid,
+                "adapter": adapter,
+                "weight": 1,
+                "status": "not_applicable",
+                "detail": f"Dismissed: {reason}",
+                "data": {"dismissed": True, "reason": reason},
+            }
             continue
         status, detail = fn()
-        checks[cid] = {"status": status, "detail": detail, "data": {}}
-        if status == "unknown":
-            continue
-        total += 1
-        score += {"pass": 1.0, "warn": 0.5, "fail": 0.0}[status]
+        checks[cid] = {
+            "check_id": cid,
+            "adapter": adapter,
+            "weight": 1,
+            "status": status,
+            "detail": detail,
+            "data": {},
+        }
 
-    score = math.floor(score * 2) / 2   # keep the 0.5 granularity, no float dust
-    print(json.dumps({"repo": args.repo, "score": score, "total": total,
-                      "grade": grade_for(score, total), "checks": checks},
-                     indent=2))
+    summary = score_checks(checks)
+    print(json.dumps({
+        "repo": args.repo,
+        "scorecard": LEGACY_SCORECARD,
+        "score": summary.score,
+        "total": summary.total,
+        "grade": summary.grade,
+        "coverage_supported": summary.coverage_supported,
+        "coverage_total": summary.coverage_total,
+        "checks": checks,
+    }, indent=2))
     return 0
 
 
