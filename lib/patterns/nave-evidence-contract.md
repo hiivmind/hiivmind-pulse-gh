@@ -55,6 +55,11 @@ The version 1 normalizer may emit these factual signals:
 These are observations, not classifications. Profile selection is owned by
 reviewed workspace metadata in the profile-dispatch layer.
 
+The repository list is also observational. Nave indexes only repositories that
+match its configured tracked paths, and its defaults do not cover every language
+or repository type. Absence therefore means "not observed by this projection";
+it is never authoritative fleet-membership evidence.
+
 ## Capability semantics
 
 - `available`: all capabilities needed for the requested evidence run exist.

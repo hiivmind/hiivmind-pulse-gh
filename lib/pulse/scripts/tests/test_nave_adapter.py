@@ -157,3 +157,18 @@ def test_invalid_json_becomes_typed_adapter_error():
     assert result["adapter_state"] == "error"
     assert result["returncode"] == 0
     assert "invalid JSON" in result["error"]
+
+
+def test_cli_exposes_fixture_backed_lifecycle_and_analysis(monkeypatch, capsys):
+    monkeypatch.setenv("PULSE_NAVE_FIXTURES", str(FIXTURES))
+
+    assert nave_adapter.main(["scan", "--user", "acme", "--prune"]) == 0
+    assert json.loads(capsys.readouterr().out)["state"] == "success"
+    assert nave_adapter.main(["pull"]) == 0
+    assert json.loads(capsys.readouterr().out)["state"] == "success"
+    assert nave_adapter.main(["search", "--term", "anything"]) == 0
+    assert json.loads(capsys.readouterr().out)["repos"][0]["repo"] == "api"
+    assert nave_adapter.main(["build", "--filter", "pyproject.toml"]) == 0
+    assert json.loads(capsys.readouterr().out)["groups"]
+    assert nave_adapter.main(["check"]) == 0
+    assert json.loads(capsys.readouterr().out)["totals"]["ok"] == 3

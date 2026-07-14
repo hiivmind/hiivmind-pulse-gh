@@ -12,7 +12,8 @@ import json
 import os
 import re
 import subprocess
-from dataclasses import dataclass
+import sys
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Sequence
 
@@ -308,14 +309,59 @@ def _runner_from_args(args: argparse.Namespace) -> NaveRunner:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    def add_runner_options(command_parser: argparse.ArgumentParser) -> None:
+        command_parser.add_argument("--binary", default="nave")
+        command_parser.add_argument("--timeout", type=int, default=120)
+
     probe_parser = subparsers.add_parser("probe")
-    probe_parser.add_argument("--binary", default="nave")
-    probe_parser.add_argument("--timeout", type=int, default=120)
+    add_runner_options(probe_parser)
+    scan_parser = subparsers.add_parser("scan")
+    add_runner_options(scan_parser)
+    scan_parser.add_argument("--user")
+    scan_parser.add_argument("--prune", action="store_true")
+    pull_parser = subparsers.add_parser("pull")
+    add_runner_options(pull_parser)
+    search_parser = subparsers.add_parser("search")
+    add_runner_options(search_parser)
+    search_parser.add_argument("--term", action="append", default=[])
+    search_parser.add_argument("--match", dest="matches", action="append", default=[])
+    build_parser = subparsers.add_parser("build")
+    add_runner_options(build_parser)
+    build_parser.add_argument("--filter")
+    build_parser.add_argument("--where", action="append", default=[])
+    build_parser.add_argument("--match", dest="matches", action="append", default=[])
+    check_parser = subparsers.add_parser("check")
+    add_runner_options(check_parser)
     args = parser.parse_args(argv)
 
+    runner = _runner_from_args(args)
     if args.command == "probe":
-        print(json.dumps(probe(_runner_from_args(args)), indent=2, sort_keys=True))
+        print(json.dumps(probe(runner), indent=2, sort_keys=True))
         return 0
+    if args.command == "scan":
+        result = scan(runner, user=args.user, prune=args.prune)
+        print(json.dumps(asdict(result), indent=2, sort_keys=True))
+        return result.returncode
+    if args.command == "pull":
+        result = pull(runner)
+        print(json.dumps(asdict(result), indent=2, sort_keys=True))
+        return result.returncode
+    if args.command == "search":
+        if not args.term and not args.matches:
+            print("search requires --term or --match", file=sys.stderr)
+            return 2
+        result = search(runner, args.term, args.matches)
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 1 if result.get("adapter_state") == "error" else 0
+    if args.command == "build":
+        result = build(runner, args.filter, args.where, args.matches)
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 1 if result.get("adapter_state") == "error" else 0
+    if args.command == "check":
+        result = check(runner)
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 1 if result.get("adapter_state") == "error" else 0
     return 2
 
 
