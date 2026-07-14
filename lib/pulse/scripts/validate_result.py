@@ -20,7 +20,9 @@ from pathlib import Path
 
 SUPPORTED_VERSIONS = {1}
 ACTOR_MODES = {"interactive", "scheduled"}
-CHECK_STATUSES = {"pass", "warn", "fail", "unknown", "dismissed"}
+CHECK_STATUSES = {
+    "pass", "warn", "fail", "unknown", "not_applicable", "unsupported", "error",
+}
 GRADES = {"A", "B", "C", "D", "F"}
 REFRESH_SECTION_STATUSES = {"refreshed", "skipped", "failed"}
 OUTCOMES = {"success", "failure", "skipped-cooldown", "aborted"}
@@ -70,7 +72,7 @@ def _require_actor(data, errors):
 
 def _validate_grade_block(block, errors, ctx):
     _require(block, "score", (int, float), errors, ctx=ctx)
-    _require(block, "total", int, errors, ctx=ctx)
+    _require(block, "total", (int, float), errors, ctx=ctx)
     _require_enum(block, "grade", GRADES, errors, ctx=ctx)
 
 
@@ -113,18 +115,28 @@ def validate(data, kind: str) -> list[str]:
                 continue
             ctx = f"repos[{i}]."
             _require(r, "repo", str, errors, ctx=ctx)
+            _require(r, "scorecard", str, errors, ctx=ctx)
             _require(r, "score", (int, float), errors, ctx=ctx)
-            _require(r, "total", int, errors, ctx=ctx)
+            _require(r, "total", (int, float), errors, ctx=ctx)
             _require_enum(r, "grade", GRADES, errors, ctx=ctx)
+            _require(r, "coverage_supported", (int, float), errors, ctx=ctx)
+            _require(r, "coverage_total", (int, float), errors, ctx=ctx)
             checks = _require(r, "checks", dict, errors, ctx=ctx)
             for cid, c in (checks or {}).items():
                 cctx = f"{ctx}checks.{cid}."
                 if not isinstance(c, dict):
                     _err(errors, f"{ctx}checks.{cid} is not a mapping")
                     continue
+                check_id = _require(c, "check_id", str, errors, ctx=cctx)
+                if check_id is not None and check_id != cid:
+                    _err(errors, f"{cctx}check_id mismatch: expected {cid}, got {check_id}")
+                _require(c, "adapter", str, errors, ctx=cctx)
+                _require(c, "weight", (int, float), errors, ctx=cctx)
                 _require_enum(c, "status", CHECK_STATUSES, errors, ctx=cctx)
                 _require(c, "detail", str, errors, ctx=cctx)
                 _require(c, "data", dict, errors, ctx=cctx)
+                if "profile" in c and not isinstance(c["profile"], str):
+                    _err(errors, f"wrong type for {cctx}profile: expected str")
                 if "inferred" in c and not isinstance(c["inferred"], bool):
                     _err(errors, f"wrong type for {cctx}inferred: expected bool")
         agg = _require(data, "aggregate", dict, errors)

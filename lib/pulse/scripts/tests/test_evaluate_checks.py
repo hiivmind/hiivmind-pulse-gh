@@ -4,6 +4,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from lib.pulse.scripts.evaluate_checks import score_checks
+
 SCRIPT = "lib/pulse/scripts/evaluate_checks.py"
 FIXTURES = Path("lib/pulse/scripts/tests/fixtures/checks")
 
@@ -57,12 +59,67 @@ def test_dismissals_honored(tmp_path):
         "      reason: Do later\n")
     r = run_checks(FIXTURES / "bare", ["--dismissals", str(dismissals)])
     out = json.loads(r.stdout)
-    assert out["checks"]["secrets_scanning"]["status"] == "dismissed"
+    assert out["checks"]["secrets_scanning"]["status"] == "not_applicable"
+    assert out["checks"]["secrets_scanning"]["data"]["dismissed"] is True
     assert out["total"] == 9   # dismissed + unknown excluded
 
 
 def test_check_shape_matches_contract():
     r = run_checks(FIXTURES / "bare")
     out = json.loads(r.stdout)
-    for c in out["checks"].values():
-        assert set(c) >= {"status", "detail", "data"}
+    assert set(out) >= {
+        "scorecard",
+        "coverage_supported",
+        "coverage_total",
+    }
+    for check_id, check in out["checks"].items():
+        assert set(check) >= {
+            "check_id",
+            "adapter",
+            "weight",
+            "status",
+            "detail",
+            "data",
+        }
+        assert check["check_id"] == check_id
+
+
+def block(status, weight):
+    return {
+        "check_id": status,
+        "adapter": "test.adapter",
+        "weight": weight,
+        "status": status,
+        "detail": "",
+        "data": {},
+    }
+
+
+def test_non_applicable_and_unsupported_do_not_enter_denominator():
+    checks = {
+        "ci": block("pass", weight=2),
+        "claude": block("not_applicable", weight=1),
+        "cargo": block("unsupported", weight=2),
+    }
+
+    result = score_checks(checks)
+
+    assert result.score == 2
+    assert result.total == 2
+    assert result.coverage_supported == 3
+    assert result.coverage_total == 5
+
+
+def test_unknown_and_error_are_unscored_but_coverage_supported():
+    checks = {
+        "known": block("warn", weight=2),
+        "unknown": block("unknown", weight=3),
+        "error": block("error", weight=4),
+    }
+
+    result = score_checks(checks)
+
+    assert result.score == 1
+    assert result.total == 2
+    assert result.coverage_supported == 9
+    assert result.coverage_total == 9

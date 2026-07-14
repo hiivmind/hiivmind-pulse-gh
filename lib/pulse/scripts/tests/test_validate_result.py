@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 SCRIPT = "lib/pulse/scripts/validate_result.py"
 FIXTURES = Path("lib/pulse/scripts/tests/fixtures")
@@ -51,3 +52,53 @@ def test_unparseable_yaml_exit_2(tmp_path):
     bad.write_text("kind: [unclosed")
     r = run_validator(bad, "status")
     assert r.returncode == 2
+
+
+@pytest.mark.parametrize(
+    "status",
+    ["pass", "warn", "fail", "unknown", "not_applicable", "unsupported", "error"],
+)
+def test_healthcheck_accepts_exact_profile_states(tmp_path, status):
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    doc["repos"][0]["checks"]["branch_protection"]["status"] = status
+    path = tmp_path / "healthcheck.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "healthcheck")
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_healthcheck_rejects_legacy_dismissed_state(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    doc["repos"][0]["checks"]["branch_protection"]["status"] = "dismissed"
+    path = tmp_path / "healthcheck.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "healthcheck")
+
+    assert result.returncode == 1
+    assert "status invalid: dismissed" in result.stderr
+
+
+def test_healthcheck_requires_scorecard_coverage_and_check_identity(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    repo = doc["repos"][0]
+    repo.pop("scorecard", None)
+    repo.pop("coverage_supported", None)
+    repo.pop("coverage_total", None)
+    for check in repo["checks"].values():
+        check.pop("check_id", None)
+        check.pop("adapter", None)
+        check.pop("weight", None)
+    path = tmp_path / "healthcheck.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "healthcheck")
+
+    assert result.returncode == 1
+    assert "scorecard" in result.stderr
+    assert "coverage_supported" in result.stderr
+    assert "check_id" in result.stderr
+    assert "adapter" in result.stderr
+    assert "weight" in result.stderr

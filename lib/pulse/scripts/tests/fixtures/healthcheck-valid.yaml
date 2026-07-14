@@ -8,25 +8,37 @@ actor:
   mode: interactive
 repos:
   - repo: testorg/widget
-    score: 7.5
-    total: 9
-    grade: B
+    scorecard: github-governance-v1
+    score: 1.5
+    total: 3
+    grade: D
+    coverage_supported: 3
+    coverage_total: 3
     checks:
       branch_protection:
+        check_id: branch_protection
+        adapter: github.branch_protection
+        weight: 1
         status: warn
         detail: "main: 1 required review, enforce_admins: no"
         data: {}
       releases:
+        check_id: releases
+        adapter: github.releases
+        weight: 1
         status: fail
         detail: "No releases or tags"
         data: {}
       issue_triage:
+        check_id: issue_triage
+        adapter: github.issue_triage
+        weight: 1
         status: pass
         detail: "Bug: bug, Priority: P1"
         data: {}
         inferred: false
 aggregate:
-  score: 7.5
-  total: 9
-  grade: B
+  score: 1.5
+  total: 3
+  grade: D
 errors: []
