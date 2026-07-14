@@ -97,7 +97,9 @@ def _adapter_error(report: Any) -> str | None:
 def _signals(paths: set[str]) -> list[str]:
     signals: set[str] = set()
     for raw_path in paths:
-        normalized = raw_path.replace("\\", "/").lstrip("./")
+        normalized = raw_path.replace("\\", "/")
+        if normalized.startswith("./"):
+            normalized = normalized[2:]
         path = PurePosixPath(normalized)
         lower = normalized.lower()
         name = path.name.lower()

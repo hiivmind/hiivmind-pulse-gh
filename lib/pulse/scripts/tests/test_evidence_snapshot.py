@@ -170,6 +170,22 @@ def test_files_and_signals_are_deterministic_and_deduplicated():
     assert python["structural_signals"] == ["has_pyproject"]
 
 
+def test_preserves_dot_prefixed_paths_when_deriving_signals():
+    paths = {
+        ".github/workflows/ci.yml",
+        ".claude-plugin/plugin.json",
+        "./CLAUDE.md",
+        "skills/release/SKILL.md",
+    }
+
+    assert evidence_snapshot._signals(paths) == [
+        "has_claude_context",
+        "has_claude_plugin_manifest",
+        "has_skill",
+        "has_workflows",
+    ]
+
+
 def test_analysis_error_degrades_capability_without_failing_repositories():
     search, build, _ = mixed_reports()
     check = {

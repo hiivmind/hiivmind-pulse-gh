@@ -89,9 +89,13 @@ def test_runner_timeout_is_typed(monkeypatch):
 def test_scan_never_adds_nonexistent_json_flag():
     runner = RecordingRunner()
 
-    result = nave_adapter.scan(runner, user="acme", prune=True)
+    result = nave_adapter.scan(
+        runner, user="acme", no_interaction=True, prune=True
+    )
 
-    assert runner.calls == [["scan", "--user", "acme", "--prune"]]
+    assert runner.calls == [
+        ["scan", "--user", "acme", "--no-interaction", "--prune"]
+    ]
     assert result.state == "success"
 
 
@@ -162,7 +166,9 @@ def test_invalid_json_becomes_typed_adapter_error():
 def test_cli_exposes_fixture_backed_lifecycle_and_analysis(monkeypatch, capsys):
     monkeypatch.setenv("PULSE_NAVE_FIXTURES", str(FIXTURES))
 
-    assert nave_adapter.main(["scan", "--user", "acme", "--prune"]) == 0
+    assert nave_adapter.main(
+        ["scan", "--user", "acme", "--no-interaction", "--prune"]
+    ) == 0
     assert json.loads(capsys.readouterr().out)["state"] == "success"
     assert nave_adapter.main(["pull"]) == 0
     assert json.loads(capsys.readouterr().out)["state"] == "success"

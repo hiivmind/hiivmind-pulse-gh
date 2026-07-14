@@ -82,7 +82,7 @@ Skip this and PULL when `MODE=analyze`. Otherwise run:
 
 ```bash
 uv run "{PLUGIN_ROOT}/lib/pulse/scripts/nave_adapter.py" scan \
-  --binary "$NAVE_BINARY" > "$TMP/scan.json"
+  --binary "$NAVE_BINARY" --no-interaction > "$TMP/scan.json"
 ```
 
 Do not add `--json` to the Nave lifecycle command. A non-zero exit appends

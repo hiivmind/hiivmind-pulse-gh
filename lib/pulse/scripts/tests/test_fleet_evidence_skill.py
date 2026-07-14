@@ -34,6 +34,7 @@ def test_skill_runs_all_evidence_phases_through_adapter_and_validator():
     assert "evidence_snapshot.py" in body
     assert "validate_evidence.py" in body
     assert "PULSE_NAVE_FIXTURES" in body
+    assert "--no-interaction" in body
 
 
 def test_missing_nave_is_valid_evidence_not_repo_failure():

@@ -229,12 +229,15 @@ def _lifecycle_result(completed: Completed) -> LifecycleResult:
 def scan(
     runner: NaveRunner,
     user: str | None = None,
+    no_interaction: bool = False,
     prune: bool = False,
 ) -> LifecycleResult:
     """Refresh Nave's fleet inventory without assuming machine output."""
     args = ["scan"]
     if user is not None:
         args.extend(["--user", user])
+    if no_interaction:
+        args.append("--no-interaction")
     if prune:
         args.append("--prune")
     return _lifecycle_result(runner.run(args))
@@ -319,6 +322,7 @@ def main(argv: list[str] | None = None) -> int:
     scan_parser = subparsers.add_parser("scan")
     add_runner_options(scan_parser)
     scan_parser.add_argument("--user")
+    scan_parser.add_argument("--no-interaction", action="store_true")
     scan_parser.add_argument("--prune", action="store_true")
     pull_parser = subparsers.add_parser("pull")
     add_runner_options(pull_parser)
@@ -340,7 +344,12 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(probe(runner), indent=2, sort_keys=True))
         return 0
     if args.command == "scan":
-        result = scan(runner, user=args.user, prune=args.prune)
+        result = scan(
+            runner,
+            user=args.user,
+            no_interaction=args.no_interaction,
+            prune=args.prune,
+        )
         print(json.dumps(asdict(result), indent=2, sort_keys=True))
         return result.returncode
     if args.command == "pull":
