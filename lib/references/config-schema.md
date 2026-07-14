@@ -601,9 +601,17 @@ availability. This file is team-shared and committed.
 | `.scorecards.{id}.checks[].replace` | boolean | Required when replacing an inherited check ID |
 | `.adapters.{id}.state` | string | `available` or `unsupported` |
 | `.adapters.{id}.reason` | string | Required explanation when unsupported |
+| `.proposal_rules.{id}.profile` | string | Non-authoritative profile candidate |
+| `.proposal_rules.{id}.confidence` | number | Deterministic confidence from 0 through 1 |
+| `.proposal_rules.{id}.priority` | integer | Optional non-negative candidate order; default 100 |
+| `.proposal_rules.{id}.any_paths[]` | string | At least one path glob must match |
+| `.proposal_rules.{id}.all_paths[]` | string | Every path glob must match |
+| `.proposal_rules.{id}.capabilities[]` | string | Every derived repository capability must be present |
+| `.proposal_rules.{id}.structural_signals[]` | string | Every F0 structural signal must be present |
 
-The file requires all three root mappings: `repository_profiles`, `scorecards`,
-and `adapters`. It never stores detector proposals. See
+The file requires `repository_profiles`, `scorecards`, and `adapters`;
+`proposal_rules` is optional. It stores reviewed detection policy but never
+stores detector proposals. See
 `lib/patterns/repository-profiles.md` for inheritance, applicability, scoring,
 and authority rules.
 

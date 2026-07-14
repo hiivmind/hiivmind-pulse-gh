@@ -52,10 +52,23 @@ class AdapterDefinition:
 
 
 @dataclass(frozen=True)
+class ProposalRule:
+    id: str
+    profile: str
+    confidence: float
+    priority: int
+    any_paths: tuple[str, ...] = ()
+    all_paths: tuple[str, ...] = ()
+    capabilities: tuple[str, ...] = ()
+    structural_signals: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class ProfileConfig:
     repositories: dict[str, RepositoryProfile]
     scorecards: dict[str, Scorecard]
     adapters: dict[str, AdapterDefinition]
+    proposal_rules: dict[str, ProposalRule]
 
 
 @dataclass(frozen=True)
@@ -191,6 +204,59 @@ def _load_repositories(raw: dict[str, Any]) -> dict[str, RepositoryProfile]:
     return repositories
 
 
+def _optional_strings(item: dict[str, Any], key: str, label: str) -> tuple[str, ...]:
+    values = item.get(key, [])
+    return tuple(
+        _string(value, f"{label}.{key}")
+        for value in _list(values, f"{label}.{key}")
+    )
+
+
+def _load_proposal_rules(raw: dict[str, Any]) -> dict[str, ProposalRule]:
+    rules: dict[str, ProposalRule] = {}
+    selector_keys = {"any_paths", "all_paths", "capabilities", "structural_signals"}
+    for rule_id, value in raw.items():
+        rule_id = _string(rule_id, "proposal rule id")
+        item = _mapping(value, f"proposal rule {rule_id}")
+        _only_keys(
+            item,
+            {"profile", "confidence", "priority", *selector_keys},
+            "proposal rule",
+        )
+        profile = _string(item.get("profile"), f"proposal rule {rule_id}.profile")
+        confidence = item.get("confidence")
+        if (
+            isinstance(confidence, bool)
+            or not isinstance(confidence, (int, float))
+            or not 0 <= confidence <= 1
+        ):
+            raise ConfigError(
+                f"proposal rule {rule_id}.confidence must be between 0 and 1"
+            )
+        priority = item.get("priority", 100)
+        if isinstance(priority, bool) or not isinstance(priority, int) or priority < 0:
+            raise ConfigError(
+                f"proposal rule {rule_id}.priority must be a non-negative integer"
+            )
+        selectors = {
+            key: _optional_strings(item, key, f"proposal rule {rule_id}")
+            for key in selector_keys
+        }
+        if not any(selectors.values()):
+            raise ConfigError(f"proposal rule {rule_id} requires an evidence selector")
+        rules[rule_id] = ProposalRule(
+            rule_id,
+            profile,
+            float(confidence),
+            priority,
+            selectors["any_paths"],
+            selectors["all_paths"],
+            selectors["capabilities"],
+            selectors["structural_signals"],
+        )
+    return rules
+
+
 def load_profiles(path: str | Path) -> ProfileConfig:
     """Load and cross-validate committed profile metadata."""
     source = Path(path)
@@ -202,7 +268,7 @@ def load_profiles(path: str | Path) -> ProfileConfig:
         raise ConfigError(f"could not load profile config: {exc}") from exc
     root = _mapping(data, "profile config")
     required = {"repository_profiles", "scorecards", "adapters"}
-    _only_keys(root, required, "profile config")
+    _only_keys(root, required | {"proposal_rules"}, "profile config")
     missing = required - set(root)
     if missing:
         raise ConfigError(f"missing profile config key: {sorted(missing)[0]}")
@@ -211,6 +277,9 @@ def load_profiles(path: str | Path) -> ProfileConfig:
     scorecards = _load_scorecards(_mapping(root["scorecards"], "scorecards"))
     repositories = _load_repositories(
         _mapping(root["repository_profiles"], "repository_profiles")
+    )
+    proposal_rules = _load_proposal_rules(
+        _mapping(root.get("proposal_rules", {}), "proposal_rules")
     )
 
     for scorecard in scorecards.values():
@@ -222,7 +291,7 @@ def load_profiles(path: str | Path) -> ProfileConfig:
     for repository in repositories.values():
         if repository.scorecard not in scorecards:
             raise ConfigError(f"unknown scorecard: {repository.scorecard}")
-    return ProfileConfig(repositories, scorecards, adapters)
+    return ProfileConfig(repositories, scorecards, adapters, proposal_rules)
 
 
 def resolve_scorecard(
