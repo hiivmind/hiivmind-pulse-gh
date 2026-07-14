@@ -92,21 +92,48 @@ Repository catalog with cached IDs and metadata.
 | `.repositories[]` | array | List of repositories |
 | `.repositories[].name` | string | Repository name |
 | `.repositories[].id` | string | GraphQL node ID (`R_kgDO...`) |
+| `.repositories[].full_name` | string | Rename-sensitive `owner/name`; identity remains `.id` |
 | `.repositories[].default_branch` | string | Default branch name |
-| `.repositories[].visibility` | string | `public`, `private`, or `internal` |
+| `.repositories[].is_public` | boolean | Whether the repository is public |
+| `.repositories[].archived` | boolean | Current GitHub archived state |
+| `.repositories[].fork` | boolean | Whether the repository is a fork |
+| `.repositories[].mirror_url` | string or null | Upstream mirror URL when the repository is a mirror |
 
 **Example:**
 ```yaml
 repositories:
   - name: hiivmind-pulse-gh
     id: R_kgDONxxxxxx
+    full_name: hiivmind/hiivmind-pulse-gh
     default_branch: main
-    visibility: public
+    is_public: true
+    archived: false
+    fork: false
+    mirror_url: null
   - name: hiivmind-corpus
     id: R_kgDONyyyyyy
+    full_name: hiivmind/hiivmind-corpus
     default_branch: main
-    visibility: public
+    is_public: true
+    archived: false
+    fork: false
+    mirror_url: null
 ```
+
+GitHub node ID is the rename- and transfer-stable identity. Fleet membership
+may backfill an id-less legacy entry only when `full_name` matches exactly.
+The desired catalog patch contains only the eight stable fact fields above.
+
+### fleet_membership.discovery
+
+| Path | Type | Default | Description |
+|------|------|---------|-------------|
+| `.fleet_membership.discovery.include_archived` | boolean | `true` | Retain archived repositories as explicit catalog facts |
+| `.fleet_membership.discovery.include_forks` | boolean | `false` | Include forks in the managed fleet |
+| `.fleet_membership.discovery.include_mirrors` | boolean | `false` | Include mirrors in the managed fleet |
+
+Excluded and missing repositories produce findings. Discovery policy never
+assigns profiles or runs onboarding mutations.
 
 ### milestones
 

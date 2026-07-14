@@ -18,6 +18,14 @@ projects:
 # Populated by hiivmind-pulse-gh-workspace-init
 repositories: []
 
+# Fleet membership discovery policy
+# Registration stores stable GitHub facts only; profile-dependent onboarding is separate.
+fleet_membership:
+  discovery:
+    include_archived: true
+    include_forks: false
+    include_mirrors: false
+
 # Milestone catalog (keyed by repository name)
 # Populated by hiivmind-pulse-gh-workspace-init
 milestones: {}
