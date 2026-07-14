@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Any
 
@@ -55,6 +56,33 @@ class ProfileConfig:
     repositories: dict[str, RepositoryProfile]
     scorecards: dict[str, Scorecard]
     adapters: dict[str, AdapterDefinition]
+
+
+@dataclass(frozen=True)
+class PlannedCheck:
+    definition: CheckDefinition
+    state: str | None
+    reason: str | None = None
+
+    @property
+    def check_id(self) -> str:
+        return self.definition.id
+
+    @property
+    def adapter(self) -> str:
+        return self.definition.adapter
+
+    @property
+    def weight(self) -> float:
+        return self.definition.weight
+
+
+@dataclass(frozen=True)
+class DispatchPlan:
+    repo: str
+    profiles: tuple[str, ...]
+    scorecard: str
+    checks: dict[str, PlannedCheck]
 
 
 def _mapping(value: Any, label: str) -> dict[str, Any]:
@@ -195,3 +223,103 @@ def load_profiles(path: str | Path) -> ProfileConfig:
         if repository.scorecard not in scorecards:
             raise ConfigError(f"unknown scorecard: {repository.scorecard}")
     return ProfileConfig(repositories, scorecards, adapters)
+
+
+def resolve_scorecard(
+    config: ProfileConfig,
+    scorecard_id: str,
+    _stack: tuple[str, ...] = (),
+) -> tuple[CheckDefinition, ...]:
+    """Resolve inheritance with explicit, deterministic check replacement."""
+    if scorecard_id not in config.scorecards:
+        raise ConfigError(f"unknown scorecard: {scorecard_id}")
+    if scorecard_id in _stack:
+        cycle = " -> ".join((*_stack, scorecard_id))
+        raise ConfigError(f"scorecard inheritance cycle: {cycle}")
+
+    scorecard = config.scorecards[scorecard_id]
+    resolved = list(
+        resolve_scorecard(config, scorecard.extends, (*_stack, scorecard_id))
+        if scorecard.extends is not None
+        else ()
+    )
+    positions = {check.id: index for index, check in enumerate(resolved)}
+    for check in scorecard.checks:
+        if check.id in positions:
+            if not check.replace:
+                raise ConfigError(
+                    f"duplicate check {check.id} requires replace: true"
+                )
+            resolved[positions[check.id]] = check
+            continue
+        if check.replace:
+            raise ConfigError(
+                f"check {check.id} sets replace but is not inherited"
+            )
+        positions[check.id] = len(resolved)
+        resolved.append(check)
+    return tuple(resolved)
+
+
+def _repo_evidence(snapshot: dict[str, Any], repo: str) -> dict[str, Any]:
+    if snapshot.get("repo") == repo:
+        return snapshot
+    repos = snapshot.get("repos", [])
+    if not isinstance(repos, list):
+        raise ConfigError("evidence repos must be a list")
+    matches = [entry for entry in repos if isinstance(entry, dict) and entry.get("repo") == repo]
+    if len(matches) > 1:
+        raise ConfigError(f"duplicate evidence for repository: {repo}")
+    return matches[0] if matches else {}
+
+
+def _string_set(evidence: dict[str, Any], key: str) -> set[str]:
+    values = evidence.get(key, [])
+    if not isinstance(values, list) or not all(isinstance(value, str) for value in values):
+        raise ConfigError(f"repository evidence {key} must be a list of strings")
+    return set(values)
+
+
+def _is_applicable(
+    predicate: str,
+    repository: RepositoryProfile,
+    evidence: dict[str, Any],
+) -> bool:
+    if predicate == "always":
+        return True
+    if ":" not in predicate:
+        raise ConfigError(f"unsupported applicability: {predicate}")
+    kind, value = predicate.split(":", 1)
+    if not value:
+        raise ConfigError(f"unsupported applicability: {predicate}")
+    if kind == "profile":
+        return value in repository.profiles
+    if kind == "capability":
+        return value in _string_set(evidence, "capabilities")
+    if kind == "evidence_path":
+        return any(fnmatchcase(path, value) for path in _string_set(evidence, "files"))
+    raise ConfigError(f"unsupported applicability: {predicate}")
+
+
+def dispatch(repo: str, evidence: dict[str, Any], config: ProfileConfig) -> DispatchPlan:
+    """Resolve one repository's authoritative scorecard into an execution plan."""
+    if repo not in config.repositories:
+        raise ConfigError(f"repository has no authoritative profile: {repo}")
+    repository = config.repositories[repo]
+    repo_evidence = _repo_evidence(evidence, repo)
+    checks: dict[str, PlannedCheck] = {}
+    for check in resolve_scorecard(config, repository.scorecard):
+        if not _is_applicable(check.applicability, repository, repo_evidence):
+            planned = PlannedCheck(
+                check,
+                "not_applicable",
+                f"predicate not satisfied: {check.applicability}",
+            )
+        else:
+            adapter = config.adapters[check.adapter]
+            if adapter.state == "unsupported":
+                planned = PlannedCheck(check, "unsupported", adapter.reason)
+            else:
+                planned = PlannedCheck(check, None)
+        checks[check.id] = planned
+    return DispatchPlan(repo, repository.profiles, repository.scorecard, checks)
