@@ -1,0 +1,22 @@
+# Authoritative repository intent and scorecard selection.
+# Detectors propose changes; only reviewed workspace commits edit this file.
+
+repository_profiles: {}
+
+scorecards:
+  generic-v1:
+    checks:
+      - id: documentation
+        adapter: generic.docs
+        applicability: always
+        weight: 1
+      - id: ci
+        adapter: github.actions
+        applicability: capability:ci
+        weight: 1
+
+adapters:
+  generic.docs:
+    state: available
+  github.actions:
+    state: available

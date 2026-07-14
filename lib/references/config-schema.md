@@ -553,6 +553,33 @@ cache:
 
 ---
 
+## Schema: profiles.yaml (repository intent and scorecards)
+
+**File:** `.hiivmind/github/profiles.yaml`
+
+**Purpose:** Authoritative repository profiles, scorecard selection, and adapter
+availability. This file is team-shared and committed.
+
+| Path | Type | Description |
+|------|------|-------------|
+| `.repository_profiles.{owner/repo}` | object | Reviewed intent for one repository |
+| `.repository_profiles.{owner/repo}.profiles[]` | string | Intent/capability labels such as `python`, `service`, or `claude-plugin` |
+| `.repository_profiles.{owner/repo}.scorecard` | string | Scorecard ID selected for the repository |
+| `.scorecards.{id}.extends` | string | Optional parent scorecard ID |
+| `.scorecards.{id}.checks[]` | array | Ordered check definitions |
+| `.scorecards.{id}.checks[].id` | string | Stable check identity |
+| `.scorecards.{id}.checks[].adapter` | string | Adapter ID from `.adapters` |
+| `.scorecards.{id}.checks[].weight` | number | Non-negative score and coverage weight |
+| `.scorecards.{id}.checks[].applicability` | string | Optional applicability predicate; default `always` |
+| `.scorecards.{id}.checks[].replace` | boolean | Required when replacing an inherited check ID |
+| `.adapters.{id}.state` | string | `available` or `unsupported` |
+| `.adapters.{id}.reason` | string | Required explanation when unsupported |
+
+The file requires all three root mappings: `repository_profiles`, `scorecards`,
+and `adapters`. It never stores detector proposals. See
+`lib/patterns/repository-profiles.md` for inheritance, applicability, scoring,
+and authority rules.
+
 ## Schema: relationships.yaml (Phase 5)
 
 Cross-repository relationships and project links. Single workspace-level file documenting all relationships.
