@@ -126,7 +126,7 @@ for schedulers and orchestrators).
 |-------|---------|
 | `gh-status-headless` | Status pre-check → `status-result.yaml` (is a refresh warranted?) |
 | `gh-refresh-headless` | Config sync replaying recorded decisions → `refresh-result.yaml` |
-| `gh-healthcheck-headless` | Fleet governance audit → `healthcheck-result.yaml` |
+| `gh-healthcheck-headless` | Profile-dispatched fleet governance audit + coverage debt → `healthcheck-result.yaml` |
 | `gh-workflow-run-headless` | Run a workflow unattended under its headless policy → `workflow-run-result.yaml` |
 | `gh-fleet-evidence-headless` | Nave-backed structural projection → `fleet-evidence.yaml` |
 
@@ -166,6 +166,12 @@ uv run lib/pulse/scripts/validate_evidence.py .hiivmind/github/fleet-evidence.ya
 Nave evidence is a tracked structural projection, not authoritative fleet
 membership. Repositories not present are unobserved; later profile/membership
 workflows resolve workspace scope independently.
+
+Fleet healthchecks combine that F0 projection with reviewed F1 repository profiles.
+Each repository is evaluated only against its assigned scorecard, so its grade is
+reported with the scorecard ID. Fleet aggregation stays within scorecards; adapter
+coverage and unprofiled repositories are reported separately as coverage debt. There
+is no universal 11-check audit or mixed-scorecard fleet grade.
 
 Orchestrators read the result **file**, never the skill's prose — so a scheduled run
 is deterministic and auditable.
@@ -209,7 +215,8 @@ Deterministic, mechanical work lives in self-contained PEP 723 scripts
 | Script | Responsibility |
 |--------|----------------|
 | `poll.py` | Heartbeat engine — GraphQL polling + workflow trigger detection; surfaces gate-blocked runs |
-| `evaluate_checks.py` | Mechanical healthcheck evaluator (11-check catalog) |
+| `evaluate_checks.py` | Legacy mechanical evaluator and centralized weighted scorer |
+| `healthcheck_dispatch.py` | F0/F1 profile dispatch, adapters, dismissals, scorecard aggregation, and coverage |
 | `freshness_status.py` | Per-section staleness computation for the status pre-check |
 | `validate_result.py` | Headless result-contract validator |
 | `nave_adapter.py` | Fixture-testable external Nave CLI boundary |

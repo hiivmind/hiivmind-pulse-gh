@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
+from math import isfinite
 from pathlib import Path
 from typing import Any
 
@@ -152,8 +153,15 @@ def _load_check(raw: Any, scorecard_id: str) -> CheckDefinition:
     check_id = _string(item.get("id"), f"scorecard {scorecard_id} check id")
     adapter = _string(item.get("adapter"), f"check {check_id}.adapter")
     weight = item.get("weight")
-    if isinstance(weight, bool) or not isinstance(weight, (int, float)) or weight < 0:
-        raise ConfigError(f"check {check_id}.weight must be a non-negative number")
+    if (
+        isinstance(weight, bool)
+        or not isinstance(weight, (int, float))
+        or not isfinite(weight)
+        or weight < 0
+    ):
+        raise ConfigError(
+            f"check {check_id}.weight must be a finite non-negative number"
+        )
     applicability = item.get("applicability", "always")
     applicability = _string(applicability, f"check {check_id}.applicability")
     replace = item.get("replace", False)

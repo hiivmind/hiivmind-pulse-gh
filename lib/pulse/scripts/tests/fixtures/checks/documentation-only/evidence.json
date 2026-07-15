@@ -1,0 +1,7 @@
+{
+  "repo": "testorg/docs",
+  "remote_sha": "docs-sha",
+  "files": ["README.md"],
+  "structural_signals": ["has_documentation"],
+  "validation": {"state": "unknown", "errors": []}
+}

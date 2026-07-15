@@ -1,29 +1,36 @@
 repos:
   - repo: acme/python-lib
+    files_complete: true
     capabilities: [ci, python]
     files: [README.md, pyproject.toml]
     structural_signals: [src-layout]
   - repo: acme/python-service
+    files_complete: true
     capabilities: [ci, python, service]
     files: [README.md, pyproject.toml, Dockerfile]
     structural_signals: [service-entrypoint]
   - repo: acme/node-web
+    files_complete: true
     capabilities: [ci, nodejs, web]
     files: [README.md, package.json]
     structural_signals: [web-build]
   - repo: acme/docs
+    files_complete: true
     capabilities: [documentation]
     files: [README.md, mkdocs.yml]
     structural_signals: [documentation-site]
   - repo: acme/terraform
+    files_complete: true
     capabilities: [ci, terraform]
     files: [README.md, main.tf]
     structural_signals: [terraform-module]
   - repo: acme/plugin
+    files_complete: true
     capabilities: [ci, python, claude-plugin]
     files: [README.md, .claude-plugin/plugin.json, skills/audit/SKILL.md]
     structural_signals: [claude-plugin-manifest, skill-directory]
   - repo: acme/unknown
+    files_complete: true
     capabilities: []
     files: [README.md]
     structural_signals: []

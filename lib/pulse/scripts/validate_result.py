@@ -15,8 +15,18 @@ Exit codes:
   2 - file missing or unparseable
 """
 import argparse
+from math import isclose, isfinite
 import sys
 from pathlib import Path
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+
+from lib.pulse.scripts.evaluate_checks import (
+    aggregate_by_scorecard,
+    fleet_coverage,
+    score_checks,
+)
 
 SUPPORTED_VERSIONS = {1}
 ACTOR_MODES = {"interactive", "scheduled"}
@@ -64,8 +74,37 @@ def _require_enum(data, key, allowed, errors, ctx=""):
 def _require_nonnegative_number(data, key, errors, ctx=""):
     label = f"{ctx}{key}"
     value = _require(data, key, (int, float), errors, ctx=ctx)
+    if value is not None and (
+        isinstance(value, bool) or not isfinite(value) or value < 0
+    ):
+        qualifier = "finite non-negative" if not isinstance(value, bool) else "non-negative"
+        _err(errors, f"{label} must be a {qualifier} number")
+        return None
+    return value
+
+
+def _require_nonnegative_integer(data, key, errors, ctx=""):
+    label = f"{ctx}{key}"
+    value = _require(data, key, int, errors, ctx=ctx)
     if value is not None and (isinstance(value, bool) or value < 0):
-        _err(errors, f"{label} must be a non-negative number")
+        _err(errors, f"{label} must be a non-negative integer")
+        return None
+    return value
+
+
+def _require_nullable_number(data, key, errors, ctx=""):
+    label = f"{ctx}{key}"
+    if key not in data:
+        _err(errors, f"missing required key: {label}")
+        return None
+    value = data[key]
+    if value is not None and (
+        isinstance(value, bool) or not isinstance(value, (int, float))
+    ):
+        _err(errors, f"wrong type for {label}: expected number or null")
+        return None
+    if value is not None and not isfinite(value):
+        _err(errors, f"{label} must be finite")
         return None
     return value
 
@@ -110,6 +149,52 @@ def _validate_findings(data, errors):
     return findings
 
 
+def _same_number(actual, expected) -> bool:
+    return (
+        not isinstance(actual, bool)
+        and isinstance(actual, (int, float))
+        and isfinite(actual)
+        and isclose(float(actual), float(expected), rel_tol=1e-9, abs_tol=1e-9)
+    )
+
+
+def _reconcile_repo_summary(repo, checks, errors, ctx):
+    try:
+        expected = score_checks(checks)
+    except (AttributeError, TypeError, ValueError):
+        return None
+    for field in ("score", "total", "coverage_supported", "coverage_total"):
+        if not _same_number(repo.get(field), getattr(expected, field)):
+            _err(errors, f"{ctx}{field} does not match checks")
+    if repo.get("grade") != expected.grade:
+        _err(errors, f"{ctx}grade does not match checks")
+    return {
+        **repo,
+        "score": expected.score,
+        "total": expected.total,
+        "grade": expected.grade,
+        "coverage_supported": expected.coverage_supported,
+        "coverage_total": expected.coverage_total,
+        "checks": checks,
+    }
+
+
+def _reconcile_mapping(actual, expected, errors, *, ctx, source):
+    if not isinstance(actual, dict):
+        return
+    for key, expected_value in expected.items():
+        if key not in actual:
+            continue
+        actual_value = actual[key]
+        matches = (
+            _same_number(actual_value, expected_value)
+            if isinstance(expected_value, float)
+            else actual_value == expected_value
+        )
+        if not matches:
+            _err(errors, f"{ctx}{key} does not match {source}")
+
+
 def validate(data, kind: str) -> list[str]:
     errors: list[str] = []
     if not isinstance(data, dict):
@@ -142,19 +227,50 @@ def validate(data, kind: str) -> list[str]:
         _require(data, "refresh_needed", bool, errors)
 
     elif kind == "healthcheck":
+        forbidden_grade_keys = {
+            "score",
+            "total",
+            "grade",
+            "aggregate_score",
+            "aggregate_total",
+            "aggregate_grade",
+        }
+        for key in sorted(forbidden_grade_keys & data.keys()):
+            _err(errors, f"forbidden mixed fleet grade key: top.{key}")
         repos = _require(data, "repos", list, errors)
+        reconciled_repos = []
+        seen_repos: set[str] = set()
         for i, r in enumerate(repos or []):
             if not isinstance(r, dict):
                 _err(errors, f"repos[{i}] is not a mapping")
                 continue
             ctx = f"repos[{i}]."
-            _require(r, "repo", str, errors, ctx=ctx)
+            repo_identity = _require(r, "repo", str, errors, ctx=ctx)
+            if repo_identity in seen_repos:
+                _err(errors, f"duplicate repository identity: {repo_identity}")
+            elif repo_identity is not None:
+                seen_repos.add(repo_identity)
             _require(r, "scorecard", str, errors, ctx=ctx)
-            _require_nonnegative_number(r, "score", errors, ctx=ctx)
-            _require_nonnegative_number(r, "total", errors, ctx=ctx)
+            score = _require_nonnegative_number(r, "score", errors, ctx=ctx)
+            total = _require_nonnegative_number(r, "total", errors, ctx=ctx)
             _require_enum(r, "grade", GRADES, errors, ctx=ctx)
-            _require_nonnegative_number(r, "coverage_supported", errors, ctx=ctx)
-            _require_nonnegative_number(r, "coverage_total", errors, ctx=ctx)
+            coverage_supported = _require_nonnegative_number(
+                r, "coverage_supported", errors, ctx=ctx
+            )
+            coverage_total = _require_nonnegative_number(
+                r, "coverage_total", errors, ctx=ctx
+            )
+            if score is not None and total is not None and score > total:
+                _err(errors, f"{ctx}score must not exceed total")
+            if (
+                coverage_supported is not None
+                and coverage_total is not None
+                and coverage_supported > coverage_total
+            ):
+                _err(
+                    errors,
+                    f"{ctx}coverage_supported must not exceed coverage_total",
+                )
             checks = _require(r, "checks", dict, errors, ctx=ctx)
             for cid, c in (checks or {}).items():
                 cctx = f"{ctx}checks.{cid}."
@@ -168,14 +284,136 @@ def validate(data, kind: str) -> list[str]:
                 _require_nonnegative_number(c, "weight", errors, ctx=cctx)
                 _require_enum(c, "status", CHECK_STATUSES, errors, ctx=cctx)
                 _require(c, "detail", str, errors, ctx=cctx)
-                _require(c, "data", dict, errors, ctx=cctx)
+                check_data = _require(c, "data", dict, errors, ctx=cctx)
+                if check_data is not None:
+                    if "evidence" not in check_data:
+                        _err(errors, f"missing required key: {cctx}data.evidence")
+                    elif not isinstance(check_data["evidence"], dict):
+                        _err(errors, f"{cctx}data.evidence: expected mapping")
+                    else:
+                        evidence = check_data["evidence"]
+                        if set(evidence) != {"paths", "refs"}:
+                            _err(
+                                errors,
+                                f"{cctx}data.evidence keys must be exactly paths, refs",
+                            )
+                        _validate_string_list(
+                            evidence, "paths", errors, ctx=f"{cctx}data.evidence."
+                        )
+                        _validate_string_list(
+                            evidence, "refs", errors, ctx=f"{cctx}data.evidence."
+                        )
                 if "profile" in c and not isinstance(c["profile"], str):
                     _err(errors, f"wrong type for {cctx}profile: expected str")
                 if "inferred" in c and not isinstance(c["inferred"], bool):
                     _err(errors, f"wrong type for {cctx}inferred: expected bool")
+            if isinstance(checks, dict):
+                reconciled = _reconcile_repo_summary(r, checks, errors, ctx)
+                if reconciled is not None and isinstance(r.get("scorecard"), str):
+                    reconciled_repos.append(reconciled)
         agg = _require(data, "aggregate", dict, errors)
         if agg is not None:
-            _validate_grade_block(agg, errors, ctx="aggregate.")
+            for key in sorted(forbidden_grade_keys & agg.keys()):
+                _err(errors, f"forbidden mixed fleet grade key: aggregate.{key}")
+            by_scorecard = _require(
+                agg, "by_scorecard", dict, errors, ctx="aggregate."
+            )
+            for scorecard, entry in (by_scorecard or {}).items():
+                ctx = f"aggregate.by_scorecard.{scorecard}."
+                if not isinstance(scorecard, str):
+                    _err(errors, "aggregate.by_scorecard keys must be strings")
+                if not isinstance(entry, dict):
+                    _err(errors, f"{ctx[:-1]} is not a mapping")
+                    continue
+                repo_count = _require_nonnegative_integer(
+                    entry, "repos", errors, ctx=ctx
+                )
+                repos_scored = _require_nonnegative_integer(
+                    entry, "repos_scored", errors, ctx=ctx
+                )
+                average_percent = _require_nullable_number(
+                    entry, "average_percent", errors, ctx=ctx
+                )
+                if (
+                    repo_count is not None
+                    and repos_scored is not None
+                    and repos_scored > repo_count
+                ):
+                    _err(errors, f"{ctx}repos_scored must not exceed repos")
+                if average_percent is not None and not 0 <= average_percent <= 100:
+                    _err(errors, f"{ctx}average_percent must be between 0 and 100")
+            if isinstance(by_scorecard, dict) and len(reconciled_repos) == len(
+                repos or []
+            ):
+                expected_groups = aggregate_by_scorecard(reconciled_repos)
+                actual_groups = set(by_scorecard)
+                for scorecard in sorted(
+                    set(expected_groups) - actual_groups, key=str
+                ):
+                    _err(errors, f"missing aggregate.by_scorecard group: {scorecard}")
+                for scorecard in sorted(
+                    actual_groups - set(expected_groups), key=str
+                ):
+                    _err(errors, f"extra aggregate.by_scorecard group: {scorecard}")
+                for scorecard in sorted(
+                    actual_groups & set(expected_groups), key=str
+                ):
+                    _reconcile_mapping(
+                        by_scorecard[scorecard],
+                        expected_groups[scorecard],
+                        errors,
+                        ctx=f"aggregate.by_scorecard.{scorecard}.",
+                        source="repos",
+                    )
+        coverage = _require(data, "coverage", dict, errors)
+        if coverage is not None:
+            checks_total = _require_nonnegative_integer(
+                coverage, "checks_total", errors, ctx="coverage."
+            )
+            checks_supported = _require_nonnegative_integer(
+                coverage, "checks_supported", errors, ctx="coverage."
+            )
+            if (
+                checks_total is not None
+                and checks_supported is not None
+                and checks_supported > checks_total
+            ):
+                _err(
+                    errors,
+                    "coverage.checks_supported must not exceed checks_total",
+                )
+            unsupported = _require(
+                coverage,
+                "unsupported_by_adapter",
+                dict,
+                errors,
+                ctx="coverage.",
+            )
+            for adapter, count in (unsupported or {}).items():
+                if not isinstance(adapter, str):
+                    _err(errors, "coverage.unsupported_by_adapter keys must be strings")
+                if (
+                    isinstance(count, bool)
+                    or not isinstance(count, int)
+                    or count < 0
+                ):
+                    _err(
+                        errors,
+                        "coverage.unsupported_by_adapter."
+                        f"{adapter} must be a non-negative integer",
+                    )
+            _validate_string_list(
+                coverage, "unprofiled_repos", errors, ctx="coverage."
+            )
+            if len(reconciled_repos) == len(repos or []):
+                expected_coverage = fleet_coverage(reconciled_repos)
+                _reconcile_mapping(
+                    coverage,
+                    expected_coverage,
+                    errors,
+                    ctx="coverage.",
+                    source="repo checks",
+                )
 
     elif kind == "refresh":
         sections = _require(data, "sections", list, errors)

@@ -6,6 +6,64 @@
 
 ## Evaluation Strategy
 
+### Adapter registry contract
+
+Profile-dispatched checks cross a pure registry boundary before scoring. An
+adapter is registered by identifier with `AdapterRegistry.register(name, fn)`
+and evaluated with `AdapterRegistry.evaluate(name, context)`. `CheckContext` is
+an immutable value containing `repo`, `evidence`, `check`, and `workspace`.
+Construction defensively freezes nested mappings, sequences, and sets while
+preserving `Path` values and frozen domain objects. The check may be a mapping
+with `id` and `weight`, or a dispatched `PlannedCheck` with `check_id` and
+`weight`. Its identifier must be non-empty and its weight finite and
+nonnegative.
+
+Adapters return any `Mapping` containing `status`, `detail`, and mapping
+`data`; the registry normalizes mappings to dictionaries. Every registered
+adapter result must include an exact evidence citation mapping at
+`data.evidence`: it has only `paths` and `refs`, and each value is a sequence of
+strings. Immutable sequences such as tuples are accepted and normalized to
+lists. The registry adds authoritative check metadata and emits this normalized
+block:
+
+```yaml
+check_id: <check id>
+adapter: <adapter id>
+weight: <finite nonnegative number>
+status: pass | warn | fail | unknown | not_applicable | unsupported | error
+detail: <string>
+data:
+  evidence:
+    paths: [<repository-relative evidence path>, ...]
+    refs: [<non-path evidence reference>, ...]
+  # adapter-specific fields may also appear in data
+```
+
+An unregistered identifier produces `unsupported`. An adapter exception or an
+invalid output shape produces `error`. Both are normal result states: neither
+enters the score denominator, while only `unsupported` creates adapter coverage
+debt. These boundary-generated blocks retain `check_id`, `adapter`, and
+`weight`, and use empty evidence citation lists because no adapter evidence is
+available. Registry evaluation is data-only and performs no network or
+filesystem I/O.
+
+### F0 file-observation semantics
+
+The generic documentation, CI, license, and security-policy adapters treat an
+observed path as positive evidence. They treat an absent path as negative evidence
+only when the repository evidence has `files_complete: true`. Missing or false
+`files_complete` means the file list is observational, so absence produces `unknown`
+with an evidence-gap detail and F0 citations.
+
+- Documentation passes for an observed README plus `docs/` or `CONTRIBUTING.md`.
+  README alone warns only for a complete file list; otherwise it is unknown. No
+  README fails only for a complete list.
+- CI passes for an observed workflow and fails for no workflows only when complete.
+- Security policy passes when observed and fails when absent only when complete.
+- License passes for recognized GitHub license metadata or an observed root license
+  file. Explicit `github.repo.license: null` is authoritative negative evidence when
+  no license file was observed. Other file absence fails only when complete.
+
 For each check, determine if the target repo is the **current repo** (local) or a **remote repo** (in catalog but not cwd):
 
 | Scenario | Data Source | Approach |
@@ -70,8 +128,19 @@ PROTECTION=$(gh api "/repos/${OWNER}/${REPO_NAME}/branches/${DEFAULT_BRANCH}/pro
 |-----------|--------|
 | Protection enabled with required reviews >= 1 and enforce_admins | pass |
 | Protection enabled but missing enforce_admins or no required reviews | warn |
-| Active rulesets exist (even without legacy protection) | pass |
+| Active branch ruleset demonstrably includes the default branch and does not exclude it | pass |
+| Active branch ruleset has incomplete ref-condition facts | unknown |
+| Only tag rulesets, nonmatching branch rulesets, or default-branch exclusions | fail |
 | No protection and no rulesets | fail |
+
+Ruleset inclusion is demonstrated by `~ALL`, `~DEFAULT_BRANCH`, or a matching
+`refs/heads/<default>` ref pattern. Pattern matching is slash-aware: `*` matches
+zero or more characters except `/`, `?` matches one character except `/`, and
+`**` can match across `/`. Other characters are literals. Unsupported tokens,
+malformed wildcard forms, and unimplemented constructs such as bracket classes
+make active-branch ruleset targeting `unknown` rather than allowing a false pass.
+An explicit legacy default-branch protection response retains its pass/warn
+outcome independently of ruleset condition completeness.
 
 **Detail string:** `"{branch}: {review_count} required review(s), admins enforced: {yes/no}"` or `"No protection on {branch}"`
 

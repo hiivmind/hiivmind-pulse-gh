@@ -1,0 +1,13 @@
+{
+  "repo": "testorg/archived",
+  "remote_sha": "archived-sha",
+  "files": [".github/SECURITY.md", ".github/workflows/ci.yml", "LICENSE", "README.md"],
+  "files_complete": true,
+  "structural_signals": ["has_documentation", "has_workflows"],
+  "validation": {"state": "unknown", "errors": []},
+  "github": {
+    "repo": {"archived": true, "license": null},
+    "protection": null,
+    "rulesets": []
+  }
+}
