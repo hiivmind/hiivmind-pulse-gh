@@ -1,0 +1,32 @@
+# Reconcile live organization membership with the workspace catalog.
+name: fleet-watch
+description: Detect repository creation, rename, transfer, archival, and profile proposals
+enabled: true
+auto: false
+
+headless:
+  enabled: true
+  on_ask: record
+  on_mutation: propose
+
+trigger:
+  type: session_poll
+  source: org_repos
+  condition: state_changed
+
+params:
+  apply_catalog:
+    description: Apply stable repository facts to workspace config
+    type: boolean
+    default: false
+
+state: {}
+
+workflow: |
+  RECONCILE:
+    INVOKE skill hiivmind-pulse-gh:gh-fleet-membership-headless
+      WITH workspace_path=workspace_root,
+           apply_catalog=params.apply_catalog,
+           mode=scheduled
+
+cooldown_minutes: 60

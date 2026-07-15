@@ -26,13 +26,13 @@ def make_workspace(tmp_path, with_workflow=True):
     return tmp_path, cfg
 
 
-def run_poll(workspace, repo="testorg/widget"):
+def run_poll(workspace, repo="testorg/widget", fixtures=FIXTURES):
     cmd = [sys.executable, SCRIPT, "--workspace", str(workspace),
            "--plugin-root", str(REPO_ROOT)]
     if repo:
         cmd += ["--repo", repo]
     return subprocess.run(cmd, capture_output=True, text=True,
-                          env={"PULSE_GH_FIXTURES": str(FIXTURES), "PATH": "/usr/bin:/bin"})
+                          env={"PULSE_GH_FIXTURES": str(fixtures), "PATH": "/usr/bin:/bin"})
 
 
 def test_first_run_bootstraps_poll_state(tmp_path):
@@ -110,3 +110,55 @@ def test_gate_blocked_runs_in_summary(tmp_path, monkeypatch):
     run_poll(ws)                            # bootstrap poll-state.yaml (first_run)
     out = json.loads(run_poll(ws).stdout)  # existing helper
     assert out["gate_blocked_runs"] == ["2026-07-11-octocat-100000"]
+
+
+def test_org_repos_first_sight_baselines_then_signature_change_triggers(tmp_path):
+    ws, cfg = make_workspace(tmp_path, with_workflow=False)
+    (cfg / "workflows" / "fleet-watch.yaml").write_text(
+        "name: fleet-watch\nenabled: true\nauto: false\ncooldown_minutes: 0\n"
+        "trigger:\n  type: session_poll\n  source: org_repos\n"
+    )
+    fixtures = tmp_path / "fixtures"
+    fixtures.mkdir()
+    (fixtures / "_rate_limit.json").write_text('{"rate":{"remaining":5000}}')
+    org_fixture = fixtures / (
+        "_orgs_testorg_repos_per_page_100_type_all_sort_full_name_direction_asc.json"
+    )
+    org_fixture.write_text(json.dumps([
+        {"node_id": "R_ONE", "full_name": "testorg/one", "archived": False}
+    ]))
+
+    run_poll(ws, fixtures=fixtures)  # poll-state bootstrap
+    first_observation = json.loads(run_poll(ws, fixtures=fixtures).stdout)
+
+    assert first_observation["triggered_workflows"] == []
+    state = yaml.safe_load((cfg / "poll-state.yaml").read_text())
+    assert set(state["state"]["org_repos"]) == {"signature"}
+
+    org_fixture.write_text(json.dumps([
+        {"node_id": "R_ONE", "full_name": "testorg/one", "archived": False},
+        {"node_id": "R_TWO", "full_name": "testorg/two", "archived": False},
+    ]))
+    changed = json.loads(run_poll(ws, fixtures=fixtures).stdout)
+
+    assert changed["triggered_workflows"] == ["fleet-watch"]
+
+
+def test_org_repos_unchanged_signature_does_not_trigger(tmp_path):
+    ws, cfg = make_workspace(tmp_path, with_workflow=False)
+    (cfg / "workflows" / "fleet-watch.yaml").write_text(
+        "name: fleet-watch\nenabled: true\nauto: false\ncooldown_minutes: 0\n"
+        "trigger:\n  type: session_poll\n  source: org_repos\n"
+    )
+    fixtures = tmp_path / "fixtures"
+    fixtures.mkdir()
+    (fixtures / "_rate_limit.json").write_text('{"rate":{"remaining":5000}}')
+    (fixtures / "_orgs_testorg_repos_per_page_100_type_all_sort_full_name_direction_asc.json").write_text(
+        '[{"node_id":"R_ONE","full_name":"testorg/one"}]'
+    )
+
+    run_poll(ws, fixtures=fixtures)
+    run_poll(ws, fixtures=fixtures)
+    unchanged = json.loads(run_poll(ws, fixtures=fixtures).stdout)
+
+    assert unchanged["triggered_workflows"] == []

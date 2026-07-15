@@ -5,7 +5,7 @@
 # ///
 """Validate a headless result file against the pulse result contract.
 
-Usage: validate_result.py <result.yaml> --kind status|healthcheck|refresh|workflow-run
+Usage: validate_result.py <result.yaml> --kind status|healthcheck|refresh|workflow-run|fleet-membership
 
 See lib/patterns/headless-contract.md for the schemas.
 
@@ -83,6 +83,31 @@ def _validate_grade_block(block, errors, ctx):
     _require_nonnegative_number(block, "score", errors, ctx=ctx)
     _require_nonnegative_number(block, "total", errors, ctx=ctx)
     _require_enum(block, "grade", GRADES, errors, ctx=ctx)
+
+
+def _validate_string_list(data, key, errors, ctx=""):
+    values = _require(data, key, list, errors, ctx=ctx)
+    for index, value in enumerate(values or []):
+        if not isinstance(value, str):
+            _err(errors, f"{ctx}{key}[{index}] is not a string")
+    return values
+
+
+def _validate_findings(data, errors):
+    findings = _require(data, "findings", list, errors)
+    for index, finding in enumerate(findings or []):
+        if not isinstance(finding, dict):
+            _err(errors, f"findings[{index}] is not a mapping")
+            continue
+        ctx = f"findings[{index}]."
+        _require(finding, "kind", str, errors, ctx=ctx)
+        _require(finding, "repo", str, errors, ctx=ctx)
+        _require_enum(finding, "severity", SEVERITIES, errors, ctx=ctx)
+        if "inferred" in finding and not isinstance(finding["inferred"], bool):
+            _err(errors, f"wrong type for {ctx}inferred: expected bool")
+        if "ref" in finding and not isinstance(finding["ref"], dict):
+            _err(errors, f"wrong type for {ctx}ref: expected mapping")
+    return findings
 
 
 def validate(data, kind: str) -> list[str]:
@@ -171,19 +196,43 @@ def validate(data, kind: str) -> list[str]:
                 _err(errors, f"repos[{i}] is not a string")
         _require(data, "run_id", str, errors)
         _require_enum(data, "outcome", OUTCOMES, errors)
-        findings = _require(data, "findings", list, errors)
-        for i, f in enumerate(findings or []):
-            if not isinstance(f, dict):
-                _err(errors, f"findings[{i}] is not a mapping")
+        _validate_findings(data, errors)
+        _require(data, "proposed_actions", list, errors)
+        _require(data, "asks_recorded", list, errors)
+
+    elif kind == "fleet-membership":
+        _validate_string_list(data, "org_repos", errors)
+        _validate_string_list(data, "catalog_repos", errors)
+        _require(data, "catalog_updated", bool, errors)
+        proposals = _require(data, "profile_proposals", list, errors)
+        for index, proposal in enumerate(proposals or []):
+            if not isinstance(proposal, dict):
+                _err(errors, f"profile_proposals[{index}] is not a mapping")
                 continue
-            ctx = f"findings[{i}]."
-            _require(f, "kind", str, errors, ctx=ctx)
-            _require(f, "repo", str, errors, ctx=ctx)
-            _require_enum(f, "severity", SEVERITIES, errors, ctx=ctx)
-            if "inferred" in f and not isinstance(f["inferred"], bool):
+            ctx = f"profile_proposals[{index}]."
+            _require(proposal, "repo", str, errors, ctx=ctx)
+            _require(proposal, "evidence", dict, errors, ctx=ctx)
+            candidates = _require(proposal, "candidates", list, errors, ctx=ctx)
+            for candidate_index, candidate in enumerate(candidates or []):
+                cctx = f"{ctx}candidates[{candidate_index}]."
+                if not isinstance(candidate, dict):
+                    _err(errors, f"{cctx[:-1]} is not a mapping")
+                    continue
+                _require(candidate, "profile", str, errors, ctx=cctx)
+                confidence = _require_nonnegative_number(
+                    candidate, "confidence", errors, ctx=cctx
+                )
+                if confidence is not None and confidence > 1:
+                    _err(errors, f"{cctx}confidence must be at most 1")
+                _validate_string_list(candidate, "evidence", errors, ctx=cctx)
+                _validate_string_list(candidate, "rule_ids", errors, ctx=cctx)
+            if "explanation" in proposal and not isinstance(proposal["explanation"], str):
+                _err(errors, f"wrong type for {ctx}explanation: expected str")
+            if "explanation" in proposal and proposal.get("inferred") is not True:
+                _err(errors, f"{ctx}explanation requires inferred: true")
+            if "inferred" in proposal and not isinstance(proposal["inferred"], bool):
                 _err(errors, f"wrong type for {ctx}inferred: expected bool")
-            if "ref" in f and not isinstance(f["ref"], dict):
-                _err(errors, f"wrong type for {ctx}ref: expected mapping")
+        _validate_findings(data, errors)
         _require(data, "proposed_actions", list, errors)
         _require(data, "asks_recorded", list, errors)
 
@@ -194,7 +243,8 @@ def main():
     parser = argparse.ArgumentParser(description="Validate a headless result file")
     parser.add_argument("file", help="Path to result YAML file")
     parser.add_argument("--kind", required=True,
-                        choices=["status", "healthcheck", "refresh", "workflow-run"])
+                        choices=["status", "healthcheck", "refresh", "workflow-run",
+                                 "fleet-membership"])
     args = parser.parse_args()
 
     path = Path(args.file)

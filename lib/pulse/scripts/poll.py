@@ -46,7 +46,7 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def gh_api(path: str, graphql_query: str | None = None):
+def gh_api(path: str, graphql_query: str | None = None, paginate: bool = False):
     """Single network seam. Returns parsed JSON or None on any failure."""
     fixtures = os.environ.get("PULSE_GH_FIXTURES")
     if fixtures:
@@ -57,6 +57,8 @@ def gh_api(path: str, graphql_query: str | None = None):
         return json.loads(f.read_text())
     if graphql_query:
         cmd = ["gh", "api", "graphql", "-f", f"query={graphql_query}"]
+    elif paginate:
+        cmd = ["gh", "api", "--paginate", "--slurp", path]
     else:
         cmd = ["gh", "api", path]
     try:
@@ -160,6 +162,42 @@ def check_deployments(repo: str, state: dict) -> bool:
     return False
 
 
+def check_org_repos(config: dict, state: dict) -> bool:
+    """Store only a rename-stable signature; first observation is a baseline."""
+    workspace = config.get("workspace") or {}
+    if workspace.get("type") != "organization":
+        return False
+    login = workspace.get("login")
+    if not isinstance(login, str) or not login:
+        return False
+    path = f"/orgs/{login}/repos?per_page=100&type=all&sort=full_name&direction=asc"
+    response = gh_api(path, paginate=True)
+    if not isinstance(response, list):
+        return False
+    pages = response if response and all(isinstance(page, list) for page in response) else [response]
+    repos = [repo for page in pages for repo in page if isinstance(repo, dict)]
+    signature_rows = []
+    for repo in repos:
+        signature_rows.append({
+            "id": repo.get("node_id") or repo.get("id"),
+            "full_name": repo.get("full_name"),
+            "default_branch": repo.get("default_branch"),
+            "visibility": repo.get("visibility"),
+            "private": repo.get("private"),
+            "archived": bool(repo.get("archived", False)),
+            "fork": bool(repo.get("fork", False)),
+            "mirror_url": repo.get("mirror_url"),
+        })
+    signature_rows.sort(key=lambda row: (str(row["id"] or ""), str(row["full_name"] or "")))
+    signature = hashlib.sha256(
+        json.dumps(signature_rows, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    slot = state.setdefault("org_repos", {})
+    previous = slot.get("signature")
+    slot["signature"] = signature
+    return isinstance(previous, str) and previous != signature
+
+
 REPO_CHECKS = {
     "pull_requests": check_pull_requests,
     "issues": check_issues,
@@ -183,6 +221,8 @@ def evaluate_source(source: str, repo: str, config: dict, config_dir: Path,
             changed = REPO_CHECKS[source](repo, state)
     elif source == "projects":
         changed = check_projects(config, config_dir, state, gold)
+    elif source == "org_repos":
+        changed = check_org_repos(config, state)
     cache[source] = changed
     return changed
 

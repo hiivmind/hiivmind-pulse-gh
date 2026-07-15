@@ -20,3 +20,31 @@ adapters:
     state: available
   github.actions:
     state: available
+
+# Non-authoritative detection policy. Matching rules create review proposals only.
+proposal_rules:
+  python-pyproject:
+    profile: python
+    confidence: 0.95
+    priority: 10
+    any_paths: [pyproject.toml]
+  node-package-json:
+    profile: nodejs
+    confidence: 0.95
+    priority: 10
+    any_paths: [package.json]
+  terraform-files:
+    profile: terraform
+    confidence: 0.9
+    priority: 10
+    any_paths: ["*.tf", "**/*.tf"]
+  documentation-site:
+    profile: documentation
+    confidence: 0.85
+    priority: 10
+    any_paths: [mkdocs.yml, "docs/**"]
+  claude-plugin-layout:
+    profile: claude-plugin
+    confidence: 1.0
+    priority: 20
+    all_paths: [.claude-plugin/plugin.json, "skills/*/SKILL.md"]

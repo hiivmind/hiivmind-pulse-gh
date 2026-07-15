@@ -115,6 +115,25 @@ def test_rejects_duplicate_profiles(tmp_path):
         profile_dispatch.load_profiles(write_yaml(tmp_path, data))
 
 
+def test_loads_strict_optional_proposal_rules(tmp_path):
+    data = minimal_config()
+    data["proposal_rules"] = {
+        "python-pyproject": {
+            "profile": "python",
+            "confidence": 0.95,
+            "priority": 10,
+            "any_paths": ["pyproject.toml"],
+        }
+    }
+
+    config = profile_dispatch.load_profiles(write_yaml(tmp_path, data))
+
+    rule = config.proposal_rules["python-pyproject"]
+    assert rule.profile == "python"
+    assert rule.confidence == 0.95
+    assert rule.any_paths == ("pyproject.toml",)
+
+
 def inheritance_config(tmp_path, child_checks):
     data = {
         "repository_profiles": {

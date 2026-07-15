@@ -8,7 +8,7 @@ import yaml
 
 SCRIPT = "lib/pulse/scripts/validate_result.py"
 FIXTURES = Path("lib/pulse/scripts/tests/fixtures")
-KINDS = ["status", "healthcheck", "refresh", "workflow-run"]
+KINDS = ["status", "healthcheck", "refresh", "workflow-run", "fleet-membership"]
 
 
 def run_validator(path, kind):
@@ -124,3 +124,15 @@ def test_healthcheck_rejects_invalid_numeric_metadata(tmp_path, path, value):
 
     assert result.returncode == 1
     assert "non-negative number" in result.stderr
+
+
+def test_membership_explanation_requires_inferred_marker(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "fleet-membership-valid.yaml").read_text())
+    doc["profile_proposals"][0]["explanation"] = "Inferred explanation"
+    path = tmp_path / "fleet-membership.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "fleet-membership")
+
+    assert result.returncode == 1
+    assert "inferred: true" in result.stderr

@@ -92,21 +92,48 @@ Repository catalog with cached IDs and metadata.
 | `.repositories[]` | array | List of repositories |
 | `.repositories[].name` | string | Repository name |
 | `.repositories[].id` | string | GraphQL node ID (`R_kgDO...`) |
+| `.repositories[].full_name` | string | Rename-sensitive `owner/name`; identity remains `.id` |
 | `.repositories[].default_branch` | string | Default branch name |
-| `.repositories[].visibility` | string | `public`, `private`, or `internal` |
+| `.repositories[].is_public` | boolean | Whether the repository is public |
+| `.repositories[].archived` | boolean | Current GitHub archived state |
+| `.repositories[].fork` | boolean | Whether the repository is a fork |
+| `.repositories[].mirror_url` | string or null | Upstream mirror URL when the repository is a mirror |
 
 **Example:**
 ```yaml
 repositories:
   - name: hiivmind-pulse-gh
     id: R_kgDONxxxxxx
+    full_name: hiivmind/hiivmind-pulse-gh
     default_branch: main
-    visibility: public
+    is_public: true
+    archived: false
+    fork: false
+    mirror_url: null
   - name: hiivmind-corpus
     id: R_kgDONyyyyyy
+    full_name: hiivmind/hiivmind-corpus
     default_branch: main
-    visibility: public
+    is_public: true
+    archived: false
+    fork: false
+    mirror_url: null
 ```
+
+GitHub node ID is the rename- and transfer-stable identity. Fleet membership
+may backfill an id-less legacy entry only when `full_name` matches exactly.
+The desired catalog patch contains only the eight stable fact fields above.
+
+### fleet_membership.discovery
+
+| Path | Type | Default | Description |
+|------|------|---------|-------------|
+| `.fleet_membership.discovery.include_archived` | boolean | `true` | Retain archived repositories as explicit catalog facts |
+| `.fleet_membership.discovery.include_forks` | boolean | `false` | Include forks in the managed fleet |
+| `.fleet_membership.discovery.include_mirrors` | boolean | `false` | Include mirrors in the managed fleet |
+
+Excluded and missing repositories produce findings. Discovery policy never
+assigns profiles or runs onboarding mutations.
 
 ### milestones
 
@@ -574,9 +601,17 @@ availability. This file is team-shared and committed.
 | `.scorecards.{id}.checks[].replace` | boolean | Required when replacing an inherited check ID |
 | `.adapters.{id}.state` | string | `available` or `unsupported` |
 | `.adapters.{id}.reason` | string | Required explanation when unsupported |
+| `.proposal_rules.{id}.profile` | string | Non-authoritative profile candidate |
+| `.proposal_rules.{id}.confidence` | number | Deterministic confidence from 0 through 1 |
+| `.proposal_rules.{id}.priority` | integer | Optional non-negative candidate order; default 100 |
+| `.proposal_rules.{id}.any_paths[]` | string | At least one path glob must match |
+| `.proposal_rules.{id}.all_paths[]` | string | Every path glob must match |
+| `.proposal_rules.{id}.capabilities[]` | string | Every derived repository capability must be present |
+| `.proposal_rules.{id}.structural_signals[]` | string | Every F0 structural signal must be present |
 
-The file requires all three root mappings: `repository_profiles`, `scorecards`,
-and `adapters`. It never stores detector proposals. See
+The file requires `repository_profiles`, `scorecards`, and `adapters`;
+`proposal_rules` is optional. It stores reviewed detection policy but never
+stores detector proposals. See
 `lib/patterns/repository-profiles.md` for inheritance, applicability, scoring,
 and authority rules.
 
