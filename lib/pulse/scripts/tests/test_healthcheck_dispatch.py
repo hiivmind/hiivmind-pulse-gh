@@ -265,3 +265,77 @@ def test_entirely_unscored_scorecard_has_null_average(tmp_path):
         "repos_scored": 0,
         "average_percent": None,
     }
+
+
+def test_dismissals_match_full_and_short_repo_names_before_scoring(tmp_path):
+    evidence = yaml.safe_load((FIXTURES / "evidence.yaml").read_text())
+    dismissals = tmp_path / "healthcheck.yaml"
+    dismissals.write_text(
+        yaml.safe_dump(
+            {
+                "dismissals": {
+                    "acme/docs": {
+                        "documentation": {
+                            "reason": "Docs are hosted elsewhere",
+                            "dismissed_by": "octocat",
+                        },
+                        "not-in-scorecard": {"reason": "Must not be invented"},
+                    },
+                    "docs": {
+                        "docs-links": {
+                            "reason": "External checker owns this",
+                            "review_after": "2027-01-01",
+                        }
+                    },
+                }
+            }
+        )
+    )
+
+    result = evaluate_fleet(
+        evidence=evidence,
+        profiles_path=FIXTURES / "profiles.yaml",
+        workspace=tmp_path,
+        dismissals_path=dismissals,
+    )
+
+    docs = next(repo for repo in result["repos"] if repo["repo"] == "acme/docs")
+    assert "not-in-scorecard" not in docs["checks"]
+    for check_id in ("documentation", "docs-links"):
+        assert docs["checks"][check_id]["status"] == "not_applicable"
+        assert docs["checks"][check_id]["data"]["dismissed"] is True
+        assert docs["checks"][check_id]["data"]["dismissal"]["reason"]
+        assert docs["checks"][check_id]["data"]["evidence"]["refs"]
+    assert docs["score"] == 0
+    assert docs["total"] == 0
+
+
+def test_cli_accepts_optional_dismissals_path(tmp_path):
+    dismissals = tmp_path / "healthcheck.yaml"
+    dismissals.write_text(
+        "dismissals:\n  acme/docs:\n    documentation:\n"
+        "      reason: Docs are hosted elsewhere\n"
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--evidence",
+            str(FIXTURES / "evidence.yaml"),
+            "--profiles",
+            str(FIXTURES / "profiles.yaml"),
+            "--workspace",
+            str(tmp_path),
+            "--dismissals",
+            str(dismissals),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    docs = next(repo for repo in result["repos"] if repo["repo"] == "acme/docs")
+    assert docs["checks"]["documentation"]["status"] == "not_applicable"

@@ -70,6 +70,29 @@ def _require_nonnegative_number(data, key, errors, ctx=""):
     return value
 
 
+def _require_nonnegative_integer(data, key, errors, ctx=""):
+    label = f"{ctx}{key}"
+    value = _require(data, key, int, errors, ctx=ctx)
+    if value is not None and (isinstance(value, bool) or value < 0):
+        _err(errors, f"{label} must be a non-negative integer")
+        return None
+    return value
+
+
+def _require_nullable_number(data, key, errors, ctx=""):
+    label = f"{ctx}{key}"
+    if key not in data:
+        _err(errors, f"missing required key: {label}")
+        return None
+    value = data[key]
+    if value is not None and (
+        isinstance(value, bool) or not isinstance(value, (int, float))
+    ):
+        _err(errors, f"wrong type for {label}: expected number or null")
+        return None
+    return value
+
+
 def _require_actor(data, errors):
     actor = _require(data, "actor", dict, errors)
     if actor is None:
@@ -175,7 +198,52 @@ def validate(data, kind: str) -> list[str]:
                     _err(errors, f"wrong type for {cctx}inferred: expected bool")
         agg = _require(data, "aggregate", dict, errors)
         if agg is not None:
-            _validate_grade_block(agg, errors, ctx="aggregate.")
+            by_scorecard = _require(
+                agg, "by_scorecard", dict, errors, ctx="aggregate."
+            )
+            for scorecard, entry in (by_scorecard or {}).items():
+                ctx = f"aggregate.by_scorecard.{scorecard}."
+                if not isinstance(scorecard, str):
+                    _err(errors, "aggregate.by_scorecard keys must be strings")
+                if not isinstance(entry, dict):
+                    _err(errors, f"{ctx[:-1]} is not a mapping")
+                    continue
+                _require_nonnegative_integer(entry, "repos", errors, ctx=ctx)
+                _require_nonnegative_integer(
+                    entry, "repos_scored", errors, ctx=ctx
+                )
+                _require_nullable_number(
+                    entry, "average_percent", errors, ctx=ctx
+                )
+        coverage = _require(data, "coverage", dict, errors)
+        if coverage is not None:
+            _require_nonnegative_integer(coverage, "checks_total", errors, ctx="coverage.")
+            _require_nonnegative_integer(
+                coverage, "checks_supported", errors, ctx="coverage."
+            )
+            unsupported = _require(
+                coverage,
+                "unsupported_by_adapter",
+                dict,
+                errors,
+                ctx="coverage.",
+            )
+            for adapter, count in (unsupported or {}).items():
+                if not isinstance(adapter, str):
+                    _err(errors, "coverage.unsupported_by_adapter keys must be strings")
+                if (
+                    isinstance(count, bool)
+                    or not isinstance(count, int)
+                    or count < 0
+                ):
+                    _err(
+                        errors,
+                        "coverage.unsupported_by_adapter."
+                        f"{adapter} must be a non-negative integer",
+                    )
+            _validate_string_list(
+                coverage, "unprofiled_repos", errors, ctx="coverage."
+            )
 
     elif kind == "refresh":
         sections = _require(data, "sections", list, errors)

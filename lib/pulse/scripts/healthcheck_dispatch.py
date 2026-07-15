@@ -63,12 +63,78 @@ def _planned_block(planned: PlannedCheck) -> dict[str, Any]:
     }
 
 
+def _load_dismissals(path: str | Path | None) -> Mapping[str, Any]:
+    if path is None:
+        return {}
+    dismissal_path = Path(path)
+    try:
+        loaded = yaml.safe_load(dismissal_path.read_text()) or {}
+    except FileNotFoundError as exc:
+        raise ConfigError(f"dismissals not found: {dismissal_path}") from exc
+    except (OSError, UnicodeError, yaml.YAMLError) as exc:
+        raise ConfigError(f"could not load dismissals: {exc}") from exc
+    if not isinstance(loaded, Mapping):
+        raise ConfigError("dismissals document must be a mapping")
+    dismissals = loaded.get("dismissals", {})
+    if not isinstance(dismissals, Mapping):
+        raise ConfigError("dismissals must be a mapping")
+    return dismissals
+
+
+def _repo_dismissals(
+    repo: str, dismissals: Mapping[str, Any]
+) -> dict[str, tuple[dict[str, Any], str]]:
+    matched: dict[str, tuple[dict[str, Any], str]] = {}
+    for scope in (repo, repo.rsplit("/", 1)[-1]):
+        entries = dismissals.get(scope, {})
+        if not isinstance(entries, Mapping):
+            raise ConfigError(f"dismissals.{scope} must be a mapping")
+        for check_id, dismissal in entries.items():
+            if not isinstance(check_id, str):
+                raise ConfigError(f"dismissals.{scope} keys must be strings")
+            if dismissal is None:
+                dismissal = {}
+            if not isinstance(dismissal, Mapping):
+                raise ConfigError(
+                    f"dismissals.{scope}.{check_id} must be a mapping"
+                )
+            matched[check_id] = (dict(dismissal), scope)
+    return matched
+
+
+def _apply_dismissals(
+    repo: str,
+    checks: dict[str, dict[str, Any]],
+    dismissals: Mapping[str, Any],
+) -> None:
+    for check_id, (dismissal, scope) in _repo_dismissals(
+        repo, dismissals
+    ).items():
+        if check_id not in checks:
+            continue
+        reason = dismissal.get("reason", "")
+        checks[check_id] = {
+            **checks[check_id],
+            "status": "not_applicable",
+            "detail": f"Dismissed: {reason}",
+            "data": {
+                "dismissed": True,
+                "dismissal": dismissal,
+                "evidence": {
+                    "paths": [],
+                    "refs": [f"dismissals:{scope}:{check_id}"],
+                },
+            },
+        }
+
+
 def _repo_result(
     repo: str,
     evidence: dict[str, Any],
     config: Any,
     registry: AdapterRegistry,
     workspace: Path,
+    dismissals: Mapping[str, Any],
 ) -> dict[str, Any]:
     plan = dispatch(repo, {"repos": [evidence]}, config)
     checks: dict[str, dict[str, Any]] = {}
@@ -86,6 +152,7 @@ def _repo_result(
             block = registry.evaluate(planned.adapter, context)
         checks[check_id] = block
 
+    _apply_dismissals(repo, checks, dismissals)
     summary = score_checks(checks)
     return {
         "repo": repo,
@@ -104,12 +171,14 @@ def evaluate_fleet(
     evidence: Mapping[str, Any],
     profiles_path: str | Path,
     workspace: str | Path,
+    dismissals_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Dispatch and evaluate profiled repositories from one F0 fleet snapshot."""
     if not isinstance(evidence, Mapping):
         raise ConfigError("evidence must be a mapping")
     evidence_by_repo = _evidence_repositories(evidence)
     config = load_profiles(profiles_path)
+    dismissals = _load_dismissals(dismissals_path)
     registry = AdapterRegistry()
     register_universal_adapters(registry)
     workspace_path = Path(workspace)
@@ -123,6 +192,7 @@ def evaluate_fleet(
             config,
             registry,
             workspace_path,
+            dismissals,
         )
         for repo in profiled
     ]
@@ -191,6 +261,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--evidence", required=True)
     parser.add_argument("--profiles", required=True)
     parser.add_argument("--workspace", required=True)
+    parser.add_argument("--dismissals")
     args = parser.parse_args(argv)
 
     try:
@@ -198,6 +269,7 @@ def main(argv: list[str] | None = None) -> int:
             evidence=_load_evidence(Path(args.evidence)),
             profiles_path=args.profiles,
             workspace=args.workspace,
+            dismissals_path=args.dismissals,
         )
     except ConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)

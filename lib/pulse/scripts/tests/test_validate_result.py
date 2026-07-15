@@ -104,6 +104,66 @@ def test_healthcheck_requires_scorecard_coverage_and_check_identity(tmp_path):
     assert "weight" in result.stderr
 
 
+def test_healthcheck_requires_fleet_coverage(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    doc.pop("coverage")
+    path = tmp_path / "healthcheck.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "healthcheck")
+
+    assert result.returncode == 1
+    assert "missing required key: coverage" in result.stderr
+
+
+def test_healthcheck_requires_scorecard_aggregate_fields(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    entry = doc["aggregate"]["by_scorecard"]["github-governance-v1"]
+    entry.pop("repos")
+    entry.pop("repos_scored")
+    entry.pop("average_percent")
+    path = tmp_path / "healthcheck.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "healthcheck")
+
+    assert result.returncode == 1
+    assert "aggregate.by_scorecard.github-governance-v1.repos" in result.stderr
+    assert "aggregate.by_scorecard.github-governance-v1.repos_scored" in result.stderr
+    assert "aggregate.by_scorecard.github-governance-v1.average_percent" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("coverage", "checks_total"), True),
+        (("coverage", "checks_supported"), -1),
+        (("coverage", "unsupported_by_adapter", "generic.docs"), 1.5),
+        (
+            (
+                "aggregate",
+                "by_scorecard",
+                "github-governance-v1",
+                "average_percent",
+            ),
+            "100",
+        ),
+    ],
+)
+def test_healthcheck_rejects_invalid_fleet_summary_types(tmp_path, path, value):
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    target = doc
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+    result_path = tmp_path / "healthcheck.yaml"
+    result_path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(result_path, "healthcheck")
+
+    assert result.returncode == 1
+
+
 @pytest.mark.parametrize(
     ("path", "value"),
     [

@@ -110,9 +110,17 @@ repos:                                # list, required (may be empty)
         data: {}                      # dict, required (may be empty)
         inferred: <bool>              # optional — true when LLM judgment produced it
 aggregate:                            # dict, required
-  score: <number>
-  total: <int>
-  grade: A | B | C | D | F
+  by_scorecard:                       # dict, required; no mixed-scorecard fleet grade
+    <scorecard id>:
+      repos: <int>                    # repositories assigned to this scorecard
+      repos_scored: <int>             # repositories with a non-zero denominator
+      average_percent: <number|null>  # null when no repository was scoreable
+coverage:                             # required; fleet adapter-coverage debt
+  checks_total: <int>                 # resolved checks across profiled repositories
+  checks_supported: <int>             # checks not in unsupported state
+  unsupported_by_adapter:             # dict, required: adapter -> check count
+    <adapter id>: <int>
+  unprofiled_repos: [<owner/name>, ...]
 errors: []
 ```
 
@@ -121,12 +129,16 @@ errors: []
 configured weight in `coverage_total`; only `unsupported` weight is excluded
 from `coverage_supported`, so adapter gaps remain visible without becoming
 false repository failures. A current dismissal is emitted as `not_applicable`
-with `data.dismissed: true`; the durable dismissal decision remains in
-`healthcheck.yaml`.
+with `data.dismissed: true`, copied dismissal metadata, and its source citation;
+the durable dismissal decision remains in `healthcheck.yaml`.
 
 Grades must always be presented with `scorecard`. A grade from one scorecard is
 not directly compared with a grade from another scorecard because the checks,
 weights, and applicability rules differ.
+
+`aggregate.by_scorecard` averages only repositories with a non-zero scoring
+denominator. `coverage` is separate from health: unsupported adapters are explicit
+delivery debt and do not become false repository failures.
 
 ### fleet-membership-result.yaml (written by gh-fleet-membership-headless, F2)
 

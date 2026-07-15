@@ -38,7 +38,15 @@ repos:
         data: {}
         inferred: false
 aggregate:
-  score: 1.5
-  total: 3
-  grade: D
+  by_scorecard:
+    github-governance-v1:
+      repos: 1
+      repos_scored: 1
+      average_percent: 50.0
+coverage:
+  checks_total: 3
+  checks_supported: 3
+  unsupported_by_adapter:
+    generic.docs: 0
+  unprofiled_repos: []
 errors: []
