@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import tempfile
 from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Any
@@ -24,6 +26,10 @@ except ImportError:  # direct script execution
 
 class ProposalError(ValueError):
     """Raised when evidence or repository selection is malformed."""
+
+
+class ProposalConflict(ProposalError):
+    """Raised when authoritative profile metadata changed since review."""
 
 
 def _strings(data: dict[str, Any], key: str) -> list[str]:
@@ -162,26 +168,122 @@ def _selected_repos(data: Any) -> list[str]:
     return data
 
 
-def main() -> int:
+def _atomic_write(path: Path, data: dict[str, Any]) -> None:
+    temporary_name: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary_name = handle.name
+            yaml.safe_dump(data, handle, sort_keys=False, allow_unicode=True)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_name, path)
+    except OSError as exc:
+        if temporary_name:
+            try:
+                Path(temporary_name).unlink()
+            except OSError:
+                pass
+        raise ProposalError(f"could not write profile metadata: {exc}") from exc
+
+
+def confirm_profiles(
+    path: str | Path,
+    repo: str,
+    expected_scorecard: str | None,
+    profiles: list[str],
+    scorecard: str,
+) -> dict[str, Any]:
+    """Compare-and-swap one authoritative repository profile assignment."""
+    source = Path(path)
+    config = load_profiles(source)
+    raw = _load(source)
+    if not isinstance(raw, dict):
+        raise ProposalError("profile metadata root must be a mapping")
+    if not isinstance(repo, str) or "/" not in repo:
+        raise ProposalError("repo must be owner/name")
+    if not profiles or not all(isinstance(profile, str) and profile.strip() for profile in profiles):
+        raise ProposalError("profiles-list must contain non-empty profile IDs")
+    if len(set(profiles)) != len(profiles):
+        raise ProposalError("profiles-list contains duplicate profile IDs")
+    if scorecard not in config.scorecards:
+        raise ProposalError(f"unknown scorecard: {scorecard}")
+
+    repositories = raw["repository_profiles"]
+    current = repositories.get(repo)
+    target = {"profiles": list(profiles), "scorecard": scorecard}
+    if current == target:
+        return {"changed": False, "repo": repo, **target}
+
+    current_scorecard = current.get("scorecard") if isinstance(current, dict) else None
+    if current_scorecard != expected_scorecard:
+        expected = expected_scorecard if expected_scorecard is not None else "absent"
+        actual = current_scorecard if current_scorecard is not None else "absent"
+        raise ProposalConflict(
+            f"expected scorecard {expected} for {repo}, found {actual}"
+        )
+
+    updated = dict(raw)
+    updated_repositories = dict(repositories)
+    updated_repositories[repo] = target
+    updated["repository_profiles"] = updated_repositories
+    _atomic_write(source, updated)
+    return {"changed": True, "repo": repo, **target}
+
+
+def _generate_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--evidence", required=True, type=Path)
     parser.add_argument("--profiles", required=True, type=Path)
     parser.add_argument("--repos", required=True, type=Path)
     parser.add_argument("--explanations", type=Path)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    explanations = _load(args.explanations) if args.explanations else None
+    proposals = generate_profile_proposals(
+        _load(args.evidence),
+        load_profiles(args.profiles),
+        _selected_repos(_load(args.repos)),
+        explanations,
+    )
+    print(json.dumps({"profile_proposals": proposals}, indent=2, sort_keys=True))
+    return 0
+
+
+def _confirm_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--profiles", required=True, type=Path)
+    parser.add_argument("--repo", required=True)
+    parser.add_argument("--expected-scorecard", required=True)
+    parser.add_argument("--profiles-list", required=True)
+    parser.add_argument("--scorecard", required=True)
+    args = parser.parse_args(argv)
+    profiles = [profile.strip() for profile in args.profiles_list.split(",")]
+    expected = None if args.expected_scorecard == "absent" else args.expected_scorecard
+    result = confirm_profiles(
+        args.profiles,
+        args.repo,
+        expected,
+        profiles,
+        args.scorecard,
+    )
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    arguments = list(sys.argv[1:] if argv is None else argv)
     try:
-        explanations = _load(args.explanations) if args.explanations else None
-        proposals = generate_profile_proposals(
-            _load(args.evidence),
-            load_profiles(args.profiles),
-            _selected_repos(_load(args.repos)),
-            explanations,
-        )
+        if arguments[:1] == ["confirm"]:
+            return _confirm_main(arguments[1:])
+        return _generate_main(arguments)
     except (ConfigError, ProposalError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    print(json.dumps({"profile_proposals": proposals}, indent=2, sort_keys=True))
-    return 0
 
 
 if __name__ == "__main__":

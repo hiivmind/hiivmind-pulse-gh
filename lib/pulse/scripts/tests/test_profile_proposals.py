@@ -9,7 +9,11 @@ import pytest
 import yaml
 
 from lib.pulse.scripts.profile_dispatch import ConfigError, load_profiles
-from lib.pulse.scripts.profile_proposals import generate_profile_proposals
+from lib.pulse.scripts.profile_proposals import (
+    ProposalConflict,
+    confirm_profiles,
+    generate_profile_proposals,
+)
 
 
 SCRIPT = "lib/pulse/scripts/profile_proposals.py"
@@ -18,7 +22,10 @@ SCRIPT = "lib/pulse/scripts/profile_proposals.py"
 def profiles_data():
     return {
         "repository_profiles": {},
-        "scorecards": {"generic-v1": {"checks": []}},
+        "scorecards": {
+            "generic-v1": {"checks": []},
+            "python-library-v1": {"checks": []},
+        },
         "adapters": {},
         "proposal_rules": {
             "python-pyproject": {
@@ -133,3 +140,88 @@ def test_cli_selects_repositories_from_membership_output(tmp_path):
     assert result.returncode == 0, result.stderr
     output = json.loads(result.stdout)
     assert output["profile_proposals"][0]["candidates"][0]["profile"] == "python"
+
+
+def test_confirm_rejects_expected_base_conflict_without_write(tmp_path):
+    data = profiles_data()
+    data["repository_profiles"]["acme/repo"] = {
+        "profiles": ["unclassified"],
+        "scorecard": "generic-v1",
+    }
+    path = write_profiles(tmp_path, data)
+    before = path.read_text()
+
+    with pytest.raises(ProposalConflict, match="expected scorecard docs-v1"):
+        confirm_profiles(
+            path,
+            "acme/repo",
+            "docs-v1",
+            ["python", "library"],
+            "python-library-v1",
+        )
+
+    assert path.read_text() == before
+
+
+def test_confirm_is_atomic_and_idempotent_on_repeat(tmp_path):
+    data = profiles_data()
+    data["repository_profiles"]["acme/repo"] = {
+        "profiles": ["unclassified"],
+        "scorecard": "generic-v1",
+    }
+    path = write_profiles(tmp_path, data)
+
+    first = confirm_profiles(
+        path,
+        "acme/repo",
+        "generic-v1",
+        ["python", "library"],
+        "python-library-v1",
+    )
+    second = confirm_profiles(
+        path,
+        "acme/repo",
+        "generic-v1",
+        ["python", "library"],
+        "python-library-v1",
+    )
+
+    assert first["changed"] is True
+    assert second["changed"] is False
+    updated = yaml.safe_load(path.read_text())
+    assert updated["repository_profiles"]["acme/repo"] == {
+        "profiles": ["python", "library"],
+        "scorecard": "python-library-v1",
+    }
+    assert updated["proposal_rules"] == data["proposal_rules"]
+
+
+def test_confirm_cli_patches_workspace_metadata_only(tmp_path):
+    data = profiles_data()
+    path = write_profiles(tmp_path, data)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            SCRIPT,
+            "confirm",
+            "--profiles",
+            str(path),
+            "--repo",
+            "acme/repo",
+            "--expected-scorecard",
+            "absent",
+            "--profiles-list",
+            "python,library",
+            "--scorecard",
+            "python-library-v1",
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["changed"] is True
+    assert yaml.safe_load(path.read_text())["repository_profiles"]["acme/repo"][
+        "scorecard"
+    ] == "python-library-v1"

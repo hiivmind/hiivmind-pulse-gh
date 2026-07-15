@@ -75,6 +75,26 @@ annotate a completed proposal, but cannot add, remove, or reorder candidates.
 An evidence set that matches no rule produces an empty candidate list rather
 than a guessed fallback profile.
 
+### Confirmation boundary
+
+Confirmation is an explicit compare-and-swap patch of workspace metadata:
+
+```bash
+uv run "${PLUGIN_ROOT}/lib/pulse/scripts/profile_proposals.py" confirm \
+  --profiles .hiivmind/github/profiles.yaml \
+  --repo acme/widget \
+  --expected-scorecard generic-v1 \
+  --profiles-list python,library \
+  --scorecard python-library-v1
+```
+
+Use `--expected-scorecard absent` when the repository has no authoritative
+entry. A mismatched expected scorecard is a conflict and leaves the file
+unchanged. Repeating an already-applied target is idempotent even when the
+original expected base is now stale. The script atomically patches only
+`repository_profiles`; it never commits, pushes, opens a PR, or runs onboarding
+actions. The caller owns the workspace metadata PR.
+
 ## Check identity and inheritance
 
 A check ID occurs once in a resolved scorecard. A child that intentionally
