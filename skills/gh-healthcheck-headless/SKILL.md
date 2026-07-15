@@ -50,6 +50,7 @@ EVIDENCE    = CONFIG_DIR/fleet-evidence.yaml
 PROFILES    = CONFIG_DIR/profiles.yaml
 DISMISSALS  = CONFIG_DIR/healthcheck.yaml
 RESULT_PATH = {explicit result_path, workspace default, or current-directory fallback}
+LOGIN = unknown
 RUN_AT      = current UTC timestamp
 MODE        = {mode, default scheduled}
 ERRORS      = []
@@ -60,10 +61,12 @@ ERRORS      = []
 1. Missing `workspace_path` → ABORT `"missing required input: workspace_path"`.
 2. Missing `CONFIG_DIR/config.yaml` or its top-level `workspace` → ABORT
    `"not a workspace root: {workspace_path}"`.
-3. Ensure `*-result.yaml` is present in `CONFIG_DIR/.gitignore`.
-4. If `EVIDENCE` is absent or the caller requests a fresh snapshot, invoke
+3. After config validation succeeds, replace `LOGIN` with the authoritative
+   `.workspace.login` value from `CONFIG_DIR/config.yaml`.
+4. Ensure `*-result.yaml` is present in `CONFIG_DIR/.gitignore`.
+5. If `EVIDENCE` is absent or the caller requests a fresh snapshot, invoke
    `hiivmind-pulse-gh:gh-fleet-evidence-headless` with the same `workspace_path`.
-5. Validate before consumption:
+6. Validate before consumption:
 
 ```bash
 uv run "${PLUGIN_ROOT}/lib/pulse/scripts/validate_evidence.py" "$EVIDENCE"
@@ -130,13 +133,14 @@ Dispatch failure → ABORT with stderr included in `errors`.
 
 ## Phase 4: WRAP + VALIDATE RESULT
 
-Write `RESULT_PATH` by adding common contract fields around the dispatch object. Copy
-`repos`, `aggregate`, and `coverage` without transformation:
+Write `RESULT_PATH` by adding common contract fields around the dispatch object. All
+result wrapping, including ABORT, must use `LOGIN`. Copy `repos`, `aggregate`, and
+`coverage` without transformation:
 
 ```yaml
 contract_version: 1
 kind: healthcheck
-workspace: <config workspace login>
+workspace: <LOGIN>
 run_at: "<RUN_AT>"
 actor: { gh_login: <gh api user login or unknown>, machine: <hostname>, mode: <MODE> }
 repos: <DISPATCH_JSON.repos>

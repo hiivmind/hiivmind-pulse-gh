@@ -25,6 +25,21 @@ def test_result_path_has_current_directory_fallback_before_workspace_validation(
     )
 
 
+def test_login_has_early_fallback_and_authoritative_config_replacement():
+    skill = read_skill()
+    normalized = " ".join(skill.split())
+
+    assert "LOGIN = unknown" in normalized
+    assert normalized.index("LOGIN = unknown") < normalized.index(
+        "Missing `workspace_path` → ABORT"
+    )
+    assert (
+        "After config validation succeeds, replace `LOGIN` with the authoritative "
+        "`.workspace.login` value"
+    ) in normalized
+    assert "All result wrapping, including ABORT, must use `LOGIN`" in normalized
+
+
 def test_repo_filter_pairs_evidence_and_profile_scope():
     skill = read_skill()
     normalized = " ".join(skill.split())
