@@ -102,13 +102,16 @@ uv run "${PLUGIN_ROOT}/lib/pulse/scripts/healthcheck_dispatch.py" \
   --evidence "$PREPARED_EVIDENCE" \
   --profiles "$PREPARED_PROFILES" \
   --workspace "$workspace_path" \
-  --dismissals "$DISMISSALS" > "$DISPATCH_JSON"
+  --dismissals "$DISMISSALS" \
+  --as-of "$RUN_AT" > "$DISPATCH_JSON"
 ```
 
 Omit `--dismissals` when the governance record does not yet exist. Dispatch resolves
 each repository's scorecard, evaluates only checks present in that resolved scorecard,
 applies matching full-name or short-name dismissals as `not_applicable`, and calls the
-centralized scorer. The skill must not re-score, add checks, or modify states.
+centralized scorer. A dismissal with a non-null `review_after` applies only while the
+date captured in `RUN_AT` is before that ISO date; on or after it, the check is
+re-evaluated normally. The skill must not re-score, add checks, or modify states.
 
 Dispatch failure → ABORT with stderr included in `errors`.
 
@@ -143,8 +146,11 @@ Non-zero exit is a skill bug; report validator stderr verbatim.
 Skip when `update_governance: false`. Create from
 `templates/healthcheck.yaml.template` when missing.
 
-1. Copy `run_at`, `aggregate.by_scorecard`, and `coverage` from the validated result
-   into `last_run`; do not calculate replacements.
+1. Replace `last_run` with exactly `last_run.run_at`, `last_run.by_scorecard`, and
+   `last_run.coverage`, copied respectively from validated `run_at`,
+   `aggregate.by_scorecard`, and `coverage`. Never retain legacy `timestamp`, `scope`,
+   `score`, `total`, `grade`, `aggregate_score`, `aggregate_total`, or
+   `aggregate_grade` fields in `last_run`.
 2. For each repo result, copy `scorecard`, `score`, `total`, `grade`,
    `coverage_supported`, `coverage_total`, and every emitted check block into the
    matching `repos.{short-name}` entry. Copy the result's `run_at` value to

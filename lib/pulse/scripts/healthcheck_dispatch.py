@@ -12,6 +12,7 @@ import json
 import sys
 from collections import Counter, defaultdict
 from collections.abc import Mapping
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -102,15 +103,62 @@ def _repo_dismissals(
     return matched
 
 
+def _parse_as_of(value: str | date | datetime | None) -> date:
+    if value is None:
+        return datetime.now(timezone.utc).date()
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if not isinstance(value, str):
+        raise ConfigError("as-of must be an ISO date or ISO datetime")
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).date()
+        except ValueError as exc:
+            raise ConfigError(
+                "as-of must be an ISO date or ISO datetime"
+            ) from exc
+
+
+def _review_after_date(value: Any, *, scope: str, check_id: str) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        raise ConfigError(
+            f"dismissals.{scope}.{check_id}.review_after must be an ISO date or null"
+        )
+    if isinstance(value, date):
+        return value
+    if not isinstance(value, str):
+        raise ConfigError(
+            f"dismissals.{scope}.{check_id}.review_after must be an ISO date or null"
+        )
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise ConfigError(
+            f"dismissals.{scope}.{check_id}.review_after must be an ISO date or null"
+        ) from exc
+
+
 def _apply_dismissals(
     repo: str,
     checks: dict[str, dict[str, Any]],
     dismissals: Mapping[str, Any],
+    as_of: date,
 ) -> None:
     for check_id, (dismissal, scope) in _repo_dismissals(
         repo, dismissals
     ).items():
         if check_id not in checks:
+            continue
+        review_after = _review_after_date(
+            dismissal.get("review_after"), scope=scope, check_id=check_id
+        )
+        if review_after is not None and as_of >= review_after:
             continue
         reason = dismissal.get("reason", "")
         checks[check_id] = {
@@ -135,6 +183,7 @@ def _repo_result(
     registry: AdapterRegistry,
     workspace: Path,
     dismissals: Mapping[str, Any],
+    as_of: date,
 ) -> dict[str, Any]:
     plan = dispatch(repo, {"repos": [evidence]}, config)
     checks: dict[str, dict[str, Any]] = {}
@@ -152,7 +201,7 @@ def _repo_result(
             block = registry.evaluate(planned.adapter, context)
         checks[check_id] = block
 
-    _apply_dismissals(repo, checks, dismissals)
+    _apply_dismissals(repo, checks, dismissals, as_of)
     summary = score_checks(checks)
     return {
         "repo": repo,
@@ -172,6 +221,7 @@ def evaluate_fleet(
     profiles_path: str | Path,
     workspace: str | Path,
     dismissals_path: str | Path | None = None,
+    as_of: str | date | datetime | None = None,
 ) -> dict[str, Any]:
     """Dispatch and evaluate profiled repositories from one F0 fleet snapshot."""
     if not isinstance(evidence, Mapping):
@@ -179,6 +229,7 @@ def evaluate_fleet(
     evidence_by_repo = _evidence_repositories(evidence)
     config = load_profiles(profiles_path)
     dismissals = _load_dismissals(dismissals_path)
+    as_of_date = _parse_as_of(as_of)
     registry = AdapterRegistry()
     register_universal_adapters(registry)
     workspace_path = Path(workspace)
@@ -193,6 +244,7 @@ def evaluate_fleet(
             registry,
             workspace_path,
             dismissals,
+            as_of_date,
         )
         for repo in profiled
     ]
@@ -262,6 +314,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--profiles", required=True)
     parser.add_argument("--workspace", required=True)
     parser.add_argument("--dismissals")
+    parser.add_argument("--as-of")
     args = parser.parse_args(argv)
 
     try:
@@ -270,6 +323,7 @@ def main(argv: list[str] | None = None) -> int:
             profiles_path=args.profiles,
             workspace=args.workspace,
             dismissals_path=args.dismissals,
+            as_of=args.as_of,
         )
     except ConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)

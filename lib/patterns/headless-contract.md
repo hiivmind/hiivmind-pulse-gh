@@ -124,6 +124,11 @@ coverage:                             # required; fleet adapter-coverage debt
 errors: []
 ```
 
+The healthcheck top level and `aggregate` must not contain mixed fleet grade keys:
+`score`, `total`, `grade`, `aggregate_score`, `aggregate_total`, or
+`aggregate_grade`. Repository score/total/grade fields remain required because each is
+paired with its repository's scorecard.
+
 `pass`, `warn`, and `fail` enter the weighted score denominator. `unknown`,
 `not_applicable`, `unsupported`, and `error` do not. Coverage includes every
 configured weight in `coverage_total`; only `unsupported` weight is excluded
@@ -131,6 +136,13 @@ from `coverage_supported`, so adapter gaps remain visible without becoming
 false repository failures. A current dismissal is emitted as `not_applicable`
 with `data.dismissed: true`, copied dismissal metadata, and its source citation;
 the durable dismissal decision remains in `healthcheck.yaml`.
+
+Dismissal `review_after` is an ISO date for re-evaluation, not an inclusive dismissal
+end date. The dispatcher compares it with the supplied as-of date: before
+`review_after` the dismissal is current; on or after `review_after` the check is
+evaluated normally. Null or missing `review_after` keeps the dismissal current. The
+headless skill supplies its captured `run_at` as the deterministic as-of input; direct
+API/CLI callers that omit it use the current UTC date.
 
 Grades must always be presented with `scorecard`. A grade from one scorecard is
 not directly compared with a grade from another scorecard because the checks,

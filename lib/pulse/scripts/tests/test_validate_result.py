@@ -116,6 +116,62 @@ def test_healthcheck_requires_fleet_coverage(tmp_path):
     assert "missing required key: coverage" in result.stderr
 
 
+@pytest.mark.parametrize(
+    ("container", "key"),
+    [
+        ("top", "score"),
+        ("top", "total"),
+        ("top", "grade"),
+        ("top", "aggregate_score"),
+        ("top", "aggregate_total"),
+        ("top", "aggregate_grade"),
+        ("aggregate", "score"),
+        ("aggregate", "total"),
+        ("aggregate", "grade"),
+        ("aggregate", "aggregate_score"),
+        ("aggregate", "aggregate_total"),
+        ("aggregate", "aggregate_grade"),
+    ],
+)
+def test_healthcheck_rejects_mixed_fleet_grade_keys(tmp_path, container, key):
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    target = doc if container == "top" else doc["aggregate"]
+    target[key] = 100
+    path = tmp_path / "healthcheck.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "healthcheck")
+
+    assert result.returncode == 1
+    assert f"forbidden mixed fleet grade key: {container}.{key}" in result.stderr
+
+
+def test_healthcheck_allows_unrelated_common_contract_fields(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    doc["metadata"] = {"scheduler": "nightly"}
+    path = tmp_path / "healthcheck.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "healthcheck")
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_healthcheck_governance_template_uses_only_new_last_run_fields():
+    template = yaml.safe_load(Path("templates/healthcheck.yaml.template").read_text())
+
+    assert template["last_run"] == {
+        "run_at": None,
+        "by_scorecard": {},
+        "coverage": {
+            "checks_total": 0,
+            "checks_supported": 0,
+            "unsupported_by_adapter": {},
+            "unprofiled_repos": [],
+        },
+    }
+
+
 def test_healthcheck_requires_scorecard_aggregate_fields(tmp_path):
     doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
     entry = doc["aggregate"]["by_scorecard"]["github-governance-v1"]

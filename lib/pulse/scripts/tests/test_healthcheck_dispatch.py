@@ -7,6 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 from lib.pulse.scripts.healthcheck_dispatch import evaluate_fleet
@@ -297,6 +298,7 @@ def test_dismissals_match_full_and_short_repo_names_before_scoring(tmp_path):
         profiles_path=FIXTURES / "profiles.yaml",
         workspace=tmp_path,
         dismissals_path=dismissals,
+        as_of="2026-07-15T12:00:00Z",
     )
 
     docs = next(repo for repo in result["repos"] if repo["repo"] == "acme/docs")
@@ -310,7 +312,42 @@ def test_dismissals_match_full_and_short_repo_names_before_scoring(tmp_path):
     assert docs["total"] == 0
 
 
-def test_cli_accepts_optional_dismissals_path(tmp_path):
+@pytest.mark.parametrize(
+    ("dismissal", "expected_dismissed"),
+    [
+        ({"reason": "expired", "review_after": "2026-07-14"}, False),
+        ({"reason": "due today", "review_after": "2026-07-15"}, False),
+        ({"reason": "future", "review_after": "2026-07-16"}, True),
+        ({"reason": "permanent", "review_after": None}, True),
+        ({"reason": "no review date"}, True),
+    ],
+)
+def test_dismissal_review_after_is_re_evaluated_on_as_of_date(
+    tmp_path, dismissal, expected_dismissed
+):
+    dismissals = tmp_path / "healthcheck.yaml"
+    dismissals.write_text(
+        yaml.safe_dump(
+            {"dismissals": {"acme/docs": {"documentation": dismissal}}}
+        )
+    )
+
+    result = evaluate_fleet(
+        evidence=yaml.safe_load((FIXTURES / "evidence.yaml").read_text()),
+        profiles_path=FIXTURES / "profiles.yaml",
+        workspace=tmp_path,
+        dismissals_path=dismissals,
+        as_of="2026-07-15T23:59:59+10:00",
+    )
+
+    docs = next(repo for repo in result["repos"] if repo["repo"] == "acme/docs")
+    assert docs["checks"]["documentation"]["data"].get("dismissed", False) is (
+        expected_dismissed
+    )
+
+
+@pytest.mark.parametrize("as_of", ["2026-07-15", "2026-07-15T12:30:00Z"])
+def test_cli_accepts_optional_dismissals_and_as_of(tmp_path, as_of):
     dismissals = tmp_path / "healthcheck.yaml"
     dismissals.write_text(
         "dismissals:\n  acme/docs:\n    documentation:\n"
@@ -329,6 +366,8 @@ def test_cli_accepts_optional_dismissals_path(tmp_path):
             str(tmp_path),
             "--dismissals",
             str(dismissals),
+            "--as-of",
+            as_of,
         ],
         check=False,
         capture_output=True,
@@ -339,3 +378,26 @@ def test_cli_accepts_optional_dismissals_path(tmp_path):
     result = json.loads(completed.stdout)
     docs = next(repo for repo in result["repos"] if repo["repo"] == "acme/docs")
     assert docs["checks"]["documentation"]["status"] == "not_applicable"
+
+
+def test_cli_rejects_invalid_as_of(tmp_path):
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--evidence",
+            str(FIXTURES / "evidence.yaml"),
+            "--profiles",
+            str(FIXTURES / "profiles.yaml"),
+            "--workspace",
+            str(tmp_path),
+            "--as-of",
+            "not-a-date",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert "as-of" in completed.stderr

@@ -165,6 +165,16 @@ def validate(data, kind: str) -> list[str]:
         _require(data, "refresh_needed", bool, errors)
 
     elif kind == "healthcheck":
+        forbidden_grade_keys = {
+            "score",
+            "total",
+            "grade",
+            "aggregate_score",
+            "aggregate_total",
+            "aggregate_grade",
+        }
+        for key in sorted(forbidden_grade_keys & data.keys()):
+            _err(errors, f"forbidden mixed fleet grade key: top.{key}")
         repos = _require(data, "repos", list, errors)
         for i, r in enumerate(repos or []):
             if not isinstance(r, dict):
@@ -198,6 +208,8 @@ def validate(data, kind: str) -> list[str]:
                     _err(errors, f"wrong type for {cctx}inferred: expected bool")
         agg = _require(data, "aggregate", dict, errors)
         if agg is not None:
+            for key in sorted(forbidden_grade_keys & agg.keys()):
+                _err(errors, f"forbidden mixed fleet grade key: aggregate.{key}")
             by_scorecard = _require(
                 agg, "by_scorecard", dict, errors, ctx="aggregate."
             )
