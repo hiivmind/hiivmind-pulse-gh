@@ -12,23 +12,40 @@ Profile-dispatched checks cross a pure registry boundary before scoring. An
 adapter is registered by identifier with `AdapterRegistry.register(name, fn)`
 and evaluated with `AdapterRegistry.evaluate(name, context)`. `CheckContext` is
 an immutable value containing `repo`, `evidence`, `check`, and `workspace`.
+Construction defensively freezes nested mappings, sequences, and sets while
+preserving `Path` values and frozen domain objects. The check may be a mapping
+with `id` and `weight`, or a dispatched `PlannedCheck` with `check_id` and
+`weight`. Its identifier must be non-empty and its weight finite and
+nonnegative.
 
-Adapters return a mapping containing `status`, `detail`, and `data`. The
-registry adds the authoritative `adapter` identifier and emits this normalized
+Adapters return any `Mapping` containing `status`, `detail`, and mapping
+`data`; the registry normalizes mappings to dictionaries. Every registered
+adapter result must include an exact evidence citation mapping at
+`data.evidence`: it has only `paths` and `refs`, and each value is a sequence of
+strings. Immutable sequences such as tuples are accepted and normalized to
+lists. The registry adds authoritative check metadata and emits this normalized
 block:
 
 ```yaml
+check_id: <check id>
 adapter: <adapter id>
+weight: <finite nonnegative number>
 status: pass | warn | fail | unknown | not_applicable | unsupported | error
 detail: <string>
-data: {} # mapping; may be empty
+data:
+  evidence:
+    paths: [<repository-relative evidence path>, ...]
+    refs: [<non-path evidence reference>, ...]
+  # adapter-specific fields may also appear in data
 ```
 
 An unregistered identifier produces `unsupported`. An adapter exception or an
 invalid output shape produces `error`. Both are normal result states: neither
 enters the score denominator, while only `unsupported` creates adapter coverage
-debt. Registry evaluation is data-only and performs no network or filesystem
-I/O.
+debt. These boundary-generated blocks retain `check_id`, `adapter`, and
+`weight`, and use empty evidence citation lists because no adapter evidence is
+available. Registry evaluation is data-only and performs no network or
+filesystem I/O.
 
 For each check, determine if the target repo is the **current repo** (local) or a **remote repo** (in catalog but not cwd):
 
