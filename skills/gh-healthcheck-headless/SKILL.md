@@ -7,16 +7,6 @@ description: >
   validated healthcheck-result.yaml and updates the committed healthcheck.yaml record.
   Zero prompts; explicit inputs only. Use when a scheduler or orchestrator needs
   profile-specific repo grades and separate adapter-coverage debt.
-inputs:
-  workspace_path: "required — absolute workspace root containing .hiivmind/github/"
-  repos: "optional — comma-separated full or short repository names; default: reviewed F1 fleet"
-  result_path: "optional — workspace default when usable, else ./healthcheck-result.yaml"
-  update_governance: "optional — update healthcheck.yaml (default: true)"
-  mode: "optional — interactive | scheduled (default: scheduled)"
-outputs:
-  result_file: "validated healthcheck-result.yaml (kind: healthcheck)"
-  governance: "updated .hiivmind/github/healthcheck.yaml unless disabled"
-author: hiivmind
 ---
 
 # Headless Dispatched Fleet Healthcheck
@@ -26,6 +16,18 @@ Repository grades are scorecard-specific. Fleet-wide adapter coverage is reporte
 separately and is not a mixed-scorecard fleet grade.
 
 `{PLUGIN_ROOT}` is the directory containing `plugin.json`.
+
+## Inputs and outputs
+
+- `workspace_path` (required): absolute workspace root containing `.hiivmind/github/`.
+- `repos` (optional): comma-separated full or short repository names; defaults to
+  the reviewed F1 fleet.
+- `result_path` (optional): workspace default when usable, otherwise
+  `./healthcheck-result.yaml`.
+- `update_governance` (optional): update `healthcheck.yaml`; defaults to `true`.
+- `mode` (optional): `interactive` or `scheduled`; defaults to `scheduled`.
+- Result: validated `healthcheck-result.yaml` with kind `healthcheck`.
+- Governance output: updated `.hiivmind/github/healthcheck.yaml` unless disabled.
 
 ## Contract
 
