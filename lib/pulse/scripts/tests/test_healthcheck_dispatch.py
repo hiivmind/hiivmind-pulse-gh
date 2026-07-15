@@ -401,3 +401,44 @@ def test_cli_rejects_invalid_as_of(tmp_path):
 
     assert completed.returncode == 1
     assert "as-of" in completed.stderr
+
+
+def test_cli_json_normalizes_unquoted_yaml_dismissal_dates(tmp_path):
+    dismissals = tmp_path / "healthcheck.yaml"
+    dismissals.write_text(
+        "dismissals:\n"
+        "  acme/docs:\n"
+        "    documentation:\n"
+        "      reason: Temporarily external\n"
+        "      review_after: 2027-01-01\n"
+        "      dismissed_at: 2026-07-15T10:30:00Z\n"
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--evidence",
+            str(FIXTURES / "evidence.yaml"),
+            "--profiles",
+            str(FIXTURES / "profiles.yaml"),
+            "--workspace",
+            str(tmp_path),
+            "--dismissals",
+            str(dismissals),
+            "--as-of",
+            "2026-07-15",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    by_repo = {repo["repo"]: repo for repo in result["repos"]}
+    metadata = by_repo["acme/docs"]["checks"]["documentation"]["data"][
+        "dismissal"
+    ]
+    assert metadata["review_after"] == "2027-01-01"
+    assert metadata["dismissed_at"] == "2026-07-15T10:30:00+00:00"

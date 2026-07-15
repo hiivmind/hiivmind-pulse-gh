@@ -242,6 +242,111 @@ def test_healthcheck_rejects_invalid_numeric_metadata(tmp_path, path, value):
     assert "non-negative number" in result.stderr
 
 
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("repos", 0, "score"), float("nan")),
+        (("repos", 0, "total"), float("inf")),
+        (("repos", 0, "coverage_supported"), float("-inf")),
+        (("repos", 0, "coverage_total"), float("nan")),
+        (("repos", 0, "checks", "branch_protection", "weight"), float("inf")),
+        (
+            (
+                "aggregate",
+                "by_scorecard",
+                "github-governance-v1",
+                "average_percent",
+            ),
+            float("nan"),
+        ),
+    ],
+)
+def test_healthcheck_rejects_nonfinite_numbers(tmp_path, path, value):
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    target = doc
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+    result_path = tmp_path / "healthcheck.yaml"
+    result_path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(result_path, "healthcheck")
+
+    assert result.returncode == 1
+    assert "finite" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (lambda doc: doc["repos"][0].update(score=4), "score must not exceed total"),
+        (
+            lambda doc: doc["repos"][0].update(coverage_supported=4),
+            "coverage_supported must not exceed coverage_total",
+        ),
+        (
+            lambda doc: doc["coverage"].update(checks_supported=4),
+            "checks_supported must not exceed checks_total",
+        ),
+        (
+            lambda doc: doc["aggregate"]["by_scorecard"][
+                "github-governance-v1"
+            ].update(repos_scored=2),
+            "repos_scored must not exceed repos",
+        ),
+        (
+            lambda doc: doc["aggregate"]["by_scorecard"][
+                "github-governance-v1"
+            ].update(average_percent=100.1),
+            "average_percent must be between 0 and 100",
+        ),
+        (
+            lambda doc: doc["aggregate"]["by_scorecard"][
+                "github-governance-v1"
+            ].update(average_percent=-0.1),
+            "average_percent must be between 0 and 100",
+        ),
+    ],
+)
+def test_healthcheck_rejects_cross_field_numeric_invariant(tmp_path, mutate, message):
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    mutate(doc)
+    path = tmp_path / "healthcheck.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "healthcheck")
+
+    assert result.returncode == 1
+    assert message in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("evidence", "message"),
+    [
+        (None, "missing required key"),
+        ([], "expected mapping"),
+        ({"paths": "README.md", "refs": []}, "paths"),
+        ({"paths": [], "refs": [42]}, "refs[0]"),
+    ],
+)
+def test_healthcheck_requires_typed_check_evidence_citations(
+    tmp_path, evidence, message
+):
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    data = doc["repos"][0]["checks"]["branch_protection"]["data"]
+    if evidence is None:
+        data.pop("evidence")
+    else:
+        data["evidence"] = evidence
+    path = tmp_path / "healthcheck.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "healthcheck")
+
+    assert result.returncode == 1
+    assert message in result.stderr
+
+
 def test_membership_explanation_requires_inferred_marker(tmp_path):
     doc = yaml.safe_load((FIXTURES / "fleet-membership-valid.yaml").read_text())
     doc["profile_proposals"][0]["explanation"] = "Inferred explanation"

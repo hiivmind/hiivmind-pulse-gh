@@ -47,6 +47,23 @@ debt. These boundary-generated blocks retain `check_id`, `adapter`, and
 available. Registry evaluation is data-only and performs no network or
 filesystem I/O.
 
+### F0 file-observation semantics
+
+The generic documentation, CI, license, and security-policy adapters treat an
+observed path as positive evidence. They treat an absent path as negative evidence
+only when the repository evidence has `files_complete: true`. Missing or false
+`files_complete` means the file list is observational, so absence produces `unknown`
+with an evidence-gap detail and F0 citations.
+
+- Documentation passes for an observed README plus `docs/` or `CONTRIBUTING.md`.
+  README alone warns only for a complete file list; otherwise it is unknown. No
+  README fails only for a complete list.
+- CI passes for an observed workflow and fails for no workflows only when complete.
+- Security policy passes when observed and fails when absent only when complete.
+- License passes for recognized GitHub license metadata or an observed root license
+  file. Explicit `github.repo.license: null` is authoritative negative evidence when
+  no license file was observed. Other file absence fails only when complete.
+
 For each check, determine if the target repo is the **current repo** (local) or a **remote repo** (in catalog but not cwd):
 
 | Scenario | Data Source | Approach |
@@ -111,8 +128,14 @@ PROTECTION=$(gh api "/repos/${OWNER}/${REPO_NAME}/branches/${DEFAULT_BRANCH}/pro
 |-----------|--------|
 | Protection enabled with required reviews >= 1 and enforce_admins | pass |
 | Protection enabled but missing enforce_admins or no required reviews | warn |
-| Active rulesets exist (even without legacy protection) | pass |
+| Active branch ruleset demonstrably includes the default branch and does not exclude it | pass |
+| Active branch ruleset has incomplete ref-condition facts | unknown |
+| Only tag rulesets, nonmatching branch rulesets, or default-branch exclusions | fail |
 | No protection and no rulesets | fail |
+
+Ruleset inclusion is demonstrated by `~ALL`, `~DEFAULT_BRANCH`, or the exact
+`refs/heads/<default>` ref. An explicit legacy default-branch protection response
+retains its pass/warn outcome independently of ruleset condition completeness.
 
 **Detail string:** `"{branch}: {review_count} required review(s), admins enforced: {yes/no}"` or `"No protection on {branch}"`
 

@@ -7,6 +7,7 @@ from pathlib import Path
 import yaml
 
 from lib.pulse.scripts.check_adapters import AdapterRegistry
+from lib.pulse.scripts.evidence_snapshot import normalize
 from lib.pulse.scripts.healthcheck_dispatch import evaluate_fleet
 
 
@@ -150,8 +151,10 @@ def test_complete_fleet_path_is_profile_safe_for_neutral_repositories(
     assert scored["score"] == scored["total"] == 2
 
     terraform = by_repo["neutral/terraform"]
-    assert "CLAUDE.md" not in evidence["repos"][1]["files"]
-    assert "pyproject.toml" not in evidence["repos"][1]["files"]
+    evidence_by_repo = {entry["repo"]: entry for entry in evidence["repos"]}
+    terraform_evidence = evidence_by_repo["neutral/terraform"]
+    assert "CLAUDE.md" not in terraform_evidence["files"]
+    assert "pyproject.toml" not in terraform_evidence["files"]
     assert terraform["checks"]["claude-plugin-structure"]["status"] == (
         "not_applicable"
     )
@@ -162,12 +165,13 @@ def test_complete_fleet_path_is_profile_safe_for_neutral_repositories(
             "warn",
             "unknown",
         }
-    assert not any(
-        adapter == "python.dependencies" for _, adapter in evaluated_adapters
-    )
-    assert not any(
-        adapter == "claude.plugin-structure" for _, adapter in evaluated_adapters
-    )
+    terraform_evaluations = {
+        adapter
+        for repo, adapter in evaluated_adapters
+        if repo == "neutral/terraform"
+    }
+    assert "python.dependencies" not in terraform_evaluations
+    assert "claude.plugin-structure" not in terraform_evaluations
     # The high weights prove inapplicable profile checks do not enter scoring.
     assert terraform["score"] == terraform["total"] == 2
 
@@ -188,3 +192,72 @@ def test_complete_fleet_path_is_profile_safe_for_neutral_repositories(
         "repos_scored": 1,
         "average_percent": 100.0,
     }
+
+
+def test_actual_f0_pyproject_observation_cannot_create_universal_failures(tmp_path):
+    evidence = normalize(
+        {"repos": []},
+        {
+            "groups": [
+                {
+                    "pattern": "pyproject.toml",
+                    "instances": [
+                        {
+                            "owner": "neutral",
+                            "repo": "pyproject-only",
+                            "path": "pyproject.toml",
+                        }
+                    ],
+                }
+            ]
+        },
+        {"results": []},
+        {
+            "state": "available",
+            "version": "test",
+            "protocol": 1,
+            "capabilities": [],
+            "errors": [],
+        },
+        "2026-07-15T00:00:00Z",
+    )
+    profiles = {
+        "repository_profiles": {
+            "neutral/pyproject-only": {
+                "profiles": [],
+                "scorecard": "universal-v1",
+            }
+        },
+        "scorecards": {
+            "universal-v1": {
+                "checks": [
+                    {"id": "documentation", "adapter": "generic.docs", "weight": 1},
+                    {"id": "ci", "adapter": "github.actions", "weight": 1},
+                    {"id": "license", "adapter": "generic.license", "weight": 1},
+                    {
+                        "id": "security",
+                        "adapter": "github.security_policy",
+                        "weight": 1,
+                    },
+                ]
+            }
+        },
+        "adapters": {
+            "generic.docs": {"state": "available"},
+            "github.actions": {"state": "available"},
+            "generic.license": {"state": "available"},
+            "github.security_policy": {"state": "available"},
+        },
+    }
+    profiles_path = tmp_path / "profiles.yaml"
+    profiles_path.write_text(yaml.safe_dump(profiles))
+
+    result = evaluate_fleet(
+        evidence=evidence,
+        profiles_path=profiles_path,
+        workspace=tmp_path / "must-not-be-inspected",
+    )
+
+    checks = result["repos"][0]["checks"]
+    assert set(checks) == {"documentation", "ci", "license", "security"}
+    assert {check["status"] for check in checks.values()} == {"unknown"}

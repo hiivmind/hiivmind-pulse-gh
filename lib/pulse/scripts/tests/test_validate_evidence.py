@@ -51,6 +51,43 @@ def test_valid_evidence(tmp_path):
     assert result.returncode == 0, result.stderr
 
 
+def test_accepts_optional_repo_completeness_and_capabilities(tmp_path):
+    doc = valid_evidence()
+    doc["repos"][0].update(
+        {"files_complete": False, "capabilities": ["ci", "python"]}
+    )
+
+    result = run_validator(write_evidence(tmp_path, doc))
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_legacy_absence_of_repo_completeness_and_capabilities_is_valid(tmp_path):
+    result = run_validator(write_evidence(tmp_path, valid_evidence()))
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("files_complete", "false", "files_complete"),
+        ("capabilities", "ci", "capabilities"),
+        ("capabilities", ["python", "ci"], "must be sorted"),
+        ("capabilities", ["ci", "ci"], "contains duplicates"),
+    ],
+)
+def test_rejects_invalid_optional_repo_evidence_fields(
+    tmp_path, field, value, message
+):
+    doc = valid_evidence()
+    doc["repos"][0][field] = value
+
+    result = run_validator(write_evidence(tmp_path, doc))
+
+    assert result.returncode == 1
+    assert message in result.stderr
+
+
 def test_rejects_unknown_capability_state(tmp_path):
     doc = valid_evidence()
     doc["capability_status"]["state"] = "missing-ish"

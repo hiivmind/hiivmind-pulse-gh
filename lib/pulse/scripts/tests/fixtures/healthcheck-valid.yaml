@@ -21,21 +21,21 @@ repos:
         weight: 1
         status: warn
         detail: "main: 1 required review, enforce_admins: no"
-        data: {}
+        data: {evidence: {paths: [], refs: ["github:protection"]}}
       releases:
         check_id: releases
         adapter: github.releases
         weight: 1
         status: fail
         detail: "No releases or tags"
-        data: {}
+        data: {evidence: {paths: ["README.md"], refs: ["f0:files"]}}
       issue_triage:
         check_id: issue_triage
         adapter: github.issue_triage
         weight: 1
         status: pass
         detail: "Bug: bug, Priority: P1"
-        data: {}
+        data: {evidence: {paths: [], refs: ["github:labels"]}}
         inferred: false
 aggregate:
   by_scorecard:

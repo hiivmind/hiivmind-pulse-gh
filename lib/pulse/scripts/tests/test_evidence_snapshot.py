@@ -3,6 +3,7 @@
 import json
 import subprocess
 import sys
+from pathlib import Path
 
 import yaml
 
@@ -184,6 +185,63 @@ def test_preserves_dot_prefixed_paths_when_deriving_signals():
         "has_skill",
         "has_workflows",
     ]
+
+
+def test_normalize_marks_file_observations_incomplete_and_derives_ci_capability():
+    search, build, check = mixed_reports()
+    build["groups"].append(
+        {
+            "pattern": ".github/workflows/*.yml",
+            "instances": [
+                {
+                    "owner": "acme",
+                    "repo": "python-api",
+                    "path": ".github/workflows/ci.yml",
+                }
+            ],
+        }
+    )
+
+    snapshot = evidence_snapshot.normalize(
+        search, build, check, provider(), GENERATED_AT
+    )
+    python = next(r for r in snapshot["repos"] if r["repo"] == "acme/python-api")
+
+    assert python["files_complete"] is False
+    assert python["capabilities"] == ["ci"]
+
+
+def test_normalized_workflow_capability_drives_default_template_applicability(
+    tmp_path,
+):
+    search, build, check = mixed_reports()
+    build["groups"].append(
+        {
+            "pattern": ".github/workflows/*.yml",
+            "instances": [
+                {
+                    "owner": "acme",
+                    "repo": "python-api",
+                    "path": ".github/workflows/ci.yml",
+                }
+            ],
+        }
+    )
+    snapshot = evidence_snapshot.normalize(
+        search, build, check, provider(), GENERATED_AT
+    )
+    profiles = yaml.safe_load(Path("templates/profiles.yaml.template").read_text())
+    profiles["repository_profiles"] = {
+        "acme/python-api": {"profiles": [], "scorecard": "generic-v1"}
+    }
+    profiles_path = tmp_path / "profiles.yaml"
+    profiles_path.write_text(yaml.safe_dump(profiles))
+
+    from lib.pulse.scripts.profile_dispatch import dispatch, load_profiles
+
+    plan = dispatch("acme/python-api", snapshot, load_profiles(profiles_path))
+
+    assert plan.checks["ci"].state is None
 
 
 def test_analysis_error_degrades_capability_without_failing_repositories():

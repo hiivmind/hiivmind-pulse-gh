@@ -15,6 +15,7 @@ Exit codes:
   2 - file missing or unparseable
 """
 import argparse
+from math import isfinite
 import sys
 from pathlib import Path
 
@@ -64,8 +65,11 @@ def _require_enum(data, key, allowed, errors, ctx=""):
 def _require_nonnegative_number(data, key, errors, ctx=""):
     label = f"{ctx}{key}"
     value = _require(data, key, (int, float), errors, ctx=ctx)
-    if value is not None and (isinstance(value, bool) or value < 0):
-        _err(errors, f"{label} must be a non-negative number")
+    if value is not None and (
+        isinstance(value, bool) or not isfinite(value) or value < 0
+    ):
+        qualifier = "finite non-negative" if not isinstance(value, bool) else "non-negative"
+        _err(errors, f"{label} must be a {qualifier} number")
         return None
     return value
 
@@ -89,6 +93,9 @@ def _require_nullable_number(data, key, errors, ctx=""):
         isinstance(value, bool) or not isinstance(value, (int, float))
     ):
         _err(errors, f"wrong type for {label}: expected number or null")
+        return None
+    if value is not None and not isfinite(value):
+        _err(errors, f"{label} must be finite")
         return None
     return value
 
@@ -183,11 +190,26 @@ def validate(data, kind: str) -> list[str]:
             ctx = f"repos[{i}]."
             _require(r, "repo", str, errors, ctx=ctx)
             _require(r, "scorecard", str, errors, ctx=ctx)
-            _require_nonnegative_number(r, "score", errors, ctx=ctx)
-            _require_nonnegative_number(r, "total", errors, ctx=ctx)
+            score = _require_nonnegative_number(r, "score", errors, ctx=ctx)
+            total = _require_nonnegative_number(r, "total", errors, ctx=ctx)
             _require_enum(r, "grade", GRADES, errors, ctx=ctx)
-            _require_nonnegative_number(r, "coverage_supported", errors, ctx=ctx)
-            _require_nonnegative_number(r, "coverage_total", errors, ctx=ctx)
+            coverage_supported = _require_nonnegative_number(
+                r, "coverage_supported", errors, ctx=ctx
+            )
+            coverage_total = _require_nonnegative_number(
+                r, "coverage_total", errors, ctx=ctx
+            )
+            if score is not None and total is not None and score > total:
+                _err(errors, f"{ctx}score must not exceed total")
+            if (
+                coverage_supported is not None
+                and coverage_total is not None
+                and coverage_supported > coverage_total
+            ):
+                _err(
+                    errors,
+                    f"{ctx}coverage_supported must not exceed coverage_total",
+                )
             checks = _require(r, "checks", dict, errors, ctx=ctx)
             for cid, c in (checks or {}).items():
                 cctx = f"{ctx}checks.{cid}."
@@ -201,7 +223,20 @@ def validate(data, kind: str) -> list[str]:
                 _require_nonnegative_number(c, "weight", errors, ctx=cctx)
                 _require_enum(c, "status", CHECK_STATUSES, errors, ctx=cctx)
                 _require(c, "detail", str, errors, ctx=cctx)
-                _require(c, "data", dict, errors, ctx=cctx)
+                check_data = _require(c, "data", dict, errors, ctx=cctx)
+                if check_data is not None:
+                    if "evidence" not in check_data:
+                        _err(errors, f"missing required key: {cctx}data.evidence")
+                    elif not isinstance(check_data["evidence"], dict):
+                        _err(errors, f"{cctx}data.evidence: expected mapping")
+                    else:
+                        evidence = check_data["evidence"]
+                        _validate_string_list(
+                            evidence, "paths", errors, ctx=f"{cctx}data.evidence."
+                        )
+                        _validate_string_list(
+                            evidence, "refs", errors, ctx=f"{cctx}data.evidence."
+                        )
                 if "profile" in c and not isinstance(c["profile"], str):
                     _err(errors, f"wrong type for {cctx}profile: expected str")
                 if "inferred" in c and not isinstance(c["inferred"], bool):
@@ -220,19 +255,40 @@ def validate(data, kind: str) -> list[str]:
                 if not isinstance(entry, dict):
                     _err(errors, f"{ctx[:-1]} is not a mapping")
                     continue
-                _require_nonnegative_integer(entry, "repos", errors, ctx=ctx)
-                _require_nonnegative_integer(
+                repo_count = _require_nonnegative_integer(
+                    entry, "repos", errors, ctx=ctx
+                )
+                repos_scored = _require_nonnegative_integer(
                     entry, "repos_scored", errors, ctx=ctx
                 )
-                _require_nullable_number(
+                average_percent = _require_nullable_number(
                     entry, "average_percent", errors, ctx=ctx
                 )
+                if (
+                    repo_count is not None
+                    and repos_scored is not None
+                    and repos_scored > repo_count
+                ):
+                    _err(errors, f"{ctx}repos_scored must not exceed repos")
+                if average_percent is not None and not 0 <= average_percent <= 100:
+                    _err(errors, f"{ctx}average_percent must be between 0 and 100")
         coverage = _require(data, "coverage", dict, errors)
         if coverage is not None:
-            _require_nonnegative_integer(coverage, "checks_total", errors, ctx="coverage.")
-            _require_nonnegative_integer(
+            checks_total = _require_nonnegative_integer(
+                coverage, "checks_total", errors, ctx="coverage."
+            )
+            checks_supported = _require_nonnegative_integer(
                 coverage, "checks_supported", errors, ctx="coverage."
             )
+            if (
+                checks_total is not None
+                and checks_supported is not None
+                and checks_supported > checks_total
+            ):
+                _err(
+                    errors,
+                    "coverage.checks_supported must not exceed checks_total",
+                )
             unsupported = _require(
                 coverage,
                 "unsupported_by_adapter",

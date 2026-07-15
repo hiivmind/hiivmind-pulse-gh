@@ -42,6 +42,7 @@ def evidence_from_legacy(name: str) -> dict:
         "repo": f"testorg/{name}",
         "remote_sha": f"{name}-sha",
         "files": files,
+        "files_complete": True,
         "structural_signals": [],
         "validation": {"state": "unknown", "errors": []},
         "github": governance,
@@ -104,6 +105,7 @@ def test_bare_fixture_fails(adapter):
 
 def test_documentation_only_fixture_warns():
     evidence = load_json(FIXTURES / "documentation-only" / "evidence.json")
+    evidence["files_complete"] = True
 
     out = evaluate("generic.documentation", evidence)
 
@@ -117,6 +119,7 @@ def test_documentation_only_fixture_warns():
 
 def test_documentation_cites_the_observed_nested_docs_path():
     evidence = load_json(FIXTURES / "documentation-only" / "evidence.json")
+    evidence["files_complete"] = True
     evidence["files"].append("docs/index.md")
 
     out = evaluate("generic.documentation", evidence)
@@ -158,7 +161,16 @@ def test_missing_evidence_is_unknown(adapter):
 
 def test_active_ruleset_passes_without_legacy_protection():
     evidence = evidence_from_legacy("bare")
-    evidence["github"]["rulesets"] = [{"enforcement": "active"}]
+    evidence["github"]["repo"]["default_branch"] = "main"
+    evidence["github"]["rulesets"] = [
+        {
+            "enforcement": "active",
+            "target": "branch",
+            "conditions": {
+                "ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}
+            },
+        }
+    ]
 
     out = evaluate("github.branch_protection", evidence)
 
@@ -168,6 +180,149 @@ def test_active_ruleset_passes_without_legacy_protection():
         "paths": [],
         "refs": ["github:repo", "github:protection", "github:rulesets"],
     }
+
+
+@pytest.mark.parametrize(
+    "adapter",
+    [
+        "generic.ci",
+        "generic.documentation",
+        "generic.license",
+        "github.security_policy",
+    ],
+)
+def test_observational_file_absence_is_unknown_with_evidence_gap(adapter):
+    evidence = {
+        "repo": "testorg/partial",
+        "files": ["pyproject.toml"],
+        "files_complete": False,
+    }
+
+    out = evaluate(adapter, evidence)
+
+    assert out["status"] == "unknown"
+    assert "evidence gap" in out["detail"].lower()
+    assert out["data"]["evidence"]["refs"] == ["f0:files"]
+
+
+def test_observed_readme_without_complete_file_list_is_unknown():
+    out = evaluate(
+        "generic.documentation",
+        {"repo": "testorg/partial", "files": ["README.md"]},
+    )
+
+    assert out["status"] == "unknown"
+    assert out["data"]["evidence"]["paths"] == ["README.md"]
+
+
+def test_authoritative_null_github_license_is_fail_even_with_incomplete_files():
+    out = evaluate(
+        "generic.license",
+        {
+            "repo": "testorg/unlicensed",
+            "files": ["pyproject.toml"],
+            "files_complete": False,
+            "github": {"repo": {"license": None}},
+        },
+    )
+
+    assert out["status"] == "fail"
+    assert out["data"]["evidence"]["refs"] == ["github:repo"]
+
+
+def test_unrecognized_github_license_metadata_does_not_prove_presence():
+    out = evaluate(
+        "generic.license",
+        {
+            "repo": "testorg/custom-license",
+            "files": ["pyproject.toml"],
+            "files_complete": False,
+            "github": {
+                "repo": {
+                    "license": {
+                        "key": "other",
+                        "name": "Other",
+                        "spdx_id": "NOASSERTION",
+                    }
+                }
+            },
+        },
+    )
+
+    assert out["status"] == "unknown"
+
+
+def _ruleset_evidence(ruleset):
+    evidence = evidence_from_legacy("bare")
+    evidence["github"]["repo"]["default_branch"] = "main"
+    evidence["github"]["rulesets"] = [ruleset]
+    return evidence
+
+
+def test_tag_only_ruleset_does_not_protect_default_branch():
+    out = evaluate(
+        "github.branch_protection",
+        _ruleset_evidence(
+            {
+                "enforcement": "active",
+                "target": "tag",
+                "conditions": {"ref_name": {"include": ["~ALL"], "exclude": []}},
+            }
+        ),
+    )
+
+    assert out["status"] == "fail"
+
+
+def test_ruleset_matching_explicit_default_branch_passes():
+    out = evaluate(
+        "github.branch_protection",
+        _ruleset_evidence(
+            {
+                "enforcement": "active",
+                "target": "branch",
+                "conditions": {
+                    "ref_name": {
+                        "include": ["refs/heads/main"],
+                        "exclude": [],
+                    }
+                },
+            }
+        ),
+    )
+
+    assert out["status"] == "pass"
+
+
+def test_ruleset_excluding_default_branch_does_not_pass():
+    out = evaluate(
+        "github.branch_protection",
+        _ruleset_evidence(
+            {
+                "enforcement": "active",
+                "target": "branch",
+                "conditions": {
+                    "ref_name": {
+                        "include": ["~ALL"],
+                        "exclude": ["~DEFAULT_BRANCH"],
+                    }
+                },
+            }
+        ),
+    )
+
+    assert out["status"] == "fail"
+
+
+def test_active_branch_ruleset_with_incomplete_conditions_is_unknown():
+    out = evaluate(
+        "github.branch_protection",
+        _ruleset_evidence(
+            {"enforcement": "active", "target": "branch"}
+        ),
+    )
+
+    assert out["status"] == "unknown"
 
 
 def test_archived_repository_uses_the_same_universal_checks():

@@ -144,6 +144,21 @@ def _review_after_date(value: Any, *, scope: str, check_id: str) -> date | None:
         ) from exc
 
 
+def _json_native(value: Any) -> Any:
+    """Recursively copy YAML-loaded metadata into JSON-native values."""
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, Mapping):
+        return {str(key): _json_native(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_native(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    raise ConfigError(
+        f"dismissal metadata contains unsupported type: {type(value).__name__}"
+    )
+
+
 def _apply_dismissals(
     repo: str,
     checks: dict[str, dict[str, Any]],
@@ -167,7 +182,7 @@ def _apply_dismissals(
             "detail": f"Dismissed: {reason}",
             "data": {
                 "dismissed": True,
-                "dismissal": dismissal,
+                "dismissal": _json_native(dismissal),
                 "evidence": {
                     "paths": [],
                     "refs": [f"dismissals:{scope}:{check_id}"],

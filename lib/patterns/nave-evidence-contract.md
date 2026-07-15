@@ -26,6 +26,8 @@ repos:
     remote_sha: abc123 # string or null when unknown
     files:
       - pyproject.toml
+    files_complete: false # optional; absent means false
+    capabilities: []      # optional sorted factual capability list
     structural_signals:
       - has_pyproject
     validation:
@@ -36,8 +38,16 @@ errors: []
 
 All collection-level `errors` entries are strings. Repository names must be
 unique. File paths and structural signals are sorted string lists in produced
-snapshots, although the validator accepts any order. Structural signals record
-facts only; they never assign authoritative repository profiles.
+snapshots, although the validator accepts any order. Per-repository `capabilities`
+is an optional sorted string list of factual applicability capabilities; its absence
+means no capabilities were derived. Structural signals and capabilities record facts
+only; they never assign authoritative repository profiles.
+
+`files_complete` is optional for version-1 compatibility. Missing means `false`.
+Pulse's Nave build/search/check normalization always emits `false`: those operations
+observe matching paths but do not enumerate the repository exhaustively. Consumers
+may therefore use an observed file to prove presence, but must not infer absence from
+the normalized list.
 
 The version 1 normalizer may emit these factual signals:
 
@@ -51,6 +61,9 @@ The version 1 normalizer may emit these factual signals:
 | `has_claude_context` | root `CLAUDE.md` |
 | `has_claude_plugin_manifest` | `.claude-plugin/plugin.json` |
 | `has_skill` | a file named `SKILL.md` |
+
+The normalizer currently derives capability `ci` from `has_workflows`. This is an
+observed structural fact used by scorecard applicability, not a repository profile.
 
 These are observations, not classifications. Profile selection is owned by
 reviewed workspace metadata in the profile-dispatch layer.

@@ -39,6 +39,22 @@ def _files(context: CheckContext) -> tuple[str, ...] | None:
     return tuple(value)
 
 
+def _files_complete(context: CheckContext) -> bool:
+    """Legacy absence and observational F0 snapshots are both incomplete."""
+    return context.evidence.get("files_complete") is True
+
+
+def _evidence_gap(
+    detail: str,
+    *,
+    paths: Sequence[str] = (),
+    refs: Sequence[str] = (F0_FILES_REF,),
+) -> dict[str, Any]:
+    return _result(
+        "unknown", f"Evidence gap: {detail}", paths=paths, refs=refs
+    )
+
+
 def ci(context: CheckContext) -> dict[str, Any]:
     """Evaluate whether the F0 manifest contains GitHub Actions workflows."""
     files = _files(context)
@@ -58,7 +74,9 @@ def ci(context: CheckContext) -> dict[str, Any]:
             paths=workflows,
             refs=(F0_FILES_REF,),
         )
-    return _result("fail", "No workflow files found", refs=(F0_FILES_REF,))
+    if _files_complete(context):
+        return _result("fail", "No workflow files found", refs=(F0_FILES_REF,))
+    return _evidence_gap("workflow absence is not established")
 
 
 def documentation(context: CheckContext) -> dict[str, Any]:
@@ -84,13 +102,20 @@ def documentation(context: CheckContext) -> dict[str, Any]:
             refs=(F0_FILES_REF,),
         )
     if has_readme:
+        if not _files_complete(context):
+            return _evidence_gap(
+                "additional documentation absence is not established",
+                paths=("README.md",),
+            )
         return _result(
             "warn",
             "README exists but no CONTRIBUTING.md and no docs/",
             paths=("README.md",),
             refs=(F0_FILES_REF,),
         )
-    return _result("fail", "No README.md", refs=(F0_FILES_REF,))
+    if _files_complete(context):
+        return _result("fail", "No README.md", refs=(F0_FILES_REF,))
+    return _evidence_gap("README absence is not established")
 
 
 def license(context: CheckContext) -> dict[str, Any]:
@@ -99,29 +124,77 @@ def license(context: CheckContext) -> dict[str, Any]:
     github = context.evidence.get("github")
     repo = github.get("repo") if isinstance(github, Mapping) else None
     license_metadata = repo.get("license") if isinstance(repo, Mapping) else None
-    if isinstance(license_metadata, Mapping) and license_metadata:
-        label = (
-            license_metadata.get("spdx_id")
-            or license_metadata.get("name")
-            or "present"
-        )
-        return _result("pass", str(label), refs=("github:repo",))
-
-    if files is None:
-        refs = ("github:repo",) if isinstance(repo, Mapping) else ()
-        return _result("unknown", "repo metadata unavailable", refs=refs)
+    if isinstance(license_metadata, Mapping):
+        spdx_id = license_metadata.get("spdx_id")
+        if (
+            isinstance(spdx_id, str)
+            and spdx_id
+            and spdx_id != "NOASSERTION"
+        ):
+            return _result("pass", spdx_id, refs=("github:repo",))
 
     license_paths = sorted(
-        path for path in files if "/" not in path and path.startswith("LICENSE")
+        path
+        for path in files or ()
+        if "/" not in path and path.startswith("LICENSE")
     )
+    if license_paths:
+        return _result(
+            "pass",
+            "LICENSE file present",
+            paths=(license_paths[0],),
+            refs=(F0_FILES_REF,),
+        )
+    if isinstance(repo, Mapping) and "license" in repo and license_metadata is None:
+        return _result(
+            "fail", "GitHub reports no recognized license", refs=("github:repo",)
+        )
+    if files is None:
+        refs = ("github:repo",) if isinstance(repo, Mapping) else ()
+        return _evidence_gap("license metadata and files are unavailable", refs=refs)
+    if _files_complete(context):
+        refs = [F0_FILES_REF]
+        if isinstance(repo, Mapping):
+            refs.insert(0, "github:repo")
+        return _result("fail", "No LICENSE file found", refs=refs)
     refs = [F0_FILES_REF]
     if isinstance(repo, Mapping):
         refs.insert(0, "github:repo")
-    if license_paths:
-        return _result(
-            "pass", "LICENSE file present", paths=(license_paths[0],), refs=refs
-        )
-    return _result("fail", "No LICENSE file found", refs=refs)
+    return _evidence_gap("license absence is not established", refs=refs)
+
+
+def _default_branch_ruleset_match(
+    rule: Mapping[str, Any], default_branch: Any
+) -> bool | None:
+    """Return whether an active branch ruleset demonstrably targets the default."""
+    conditions = rule.get("conditions")
+    if not isinstance(conditions, Mapping):
+        return None
+    ref_name = conditions.get("ref_name")
+    if not isinstance(ref_name, Mapping):
+        return None
+    include = ref_name.get("include")
+    exclude = ref_name.get("exclude")
+    if (
+        isinstance(include, (str, bytes))
+        or not isinstance(include, Sequence)
+        or isinstance(exclude, (str, bytes))
+        or not isinstance(exclude, Sequence)
+        or not all(isinstance(ref, str) for ref in (*include, *exclude))
+    ):
+        return None
+
+    explicit_ref = (
+        f"refs/heads/{default_branch}"
+        if isinstance(default_branch, str) and default_branch
+        else None
+    )
+    default_tokens = {"~ALL", "~DEFAULT_BRANCH"}
+    if explicit_ref is not None:
+        default_tokens.add(explicit_ref)
+    included = any(ref in default_tokens for ref in include)
+    excluded = any(ref in default_tokens for ref in exclude)
+    return included and not excluded
 
 
 def branch_protection(context: CheckContext) -> dict[str, Any]:
@@ -142,16 +215,6 @@ def branch_protection(context: CheckContext) -> dict[str, Any]:
 
     protection = github["protection"]
     rulesets = github["rulesets"]
-    active_rulesets = isinstance(rulesets, Sequence) and any(
-        isinstance(rule, Mapping) and rule.get("enforcement") == "active"
-        for rule in rulesets
-    )
-    if protection is None and not active_rulesets:
-        return _result(
-            "fail",
-            "No protection rules and no active rulesets on default branch",
-            refs=refs,
-        )
     if isinstance(protection, Mapping):
         admins_value = protection.get("enforce_admins") or {}
         reviews_value = protection.get("required_pull_request_reviews") or {}
@@ -177,9 +240,32 @@ def branch_protection(context: CheckContext) -> dict[str, Any]:
             f"Protected ({count} required review(s), enforce_admins)",
             refs=refs,
         )
-    if active_rulesets:
+    if isinstance(rulesets, (str, bytes)) or not isinstance(rulesets, Sequence):
+        return _result("unknown", "ruleset targeting unavailable", refs=refs)
+    active_branch_rulesets = [
+        rule
+        for rule in rulesets
+        if isinstance(rule, Mapping)
+        and rule.get("enforcement") == "active"
+        and rule.get("target") == "branch"
+    ]
+    matches = [
+        _default_branch_ruleset_match(rule, repo.get("default_branch"))
+        for rule in active_branch_rulesets
+    ]
+    if any(match is True for match in matches):
         return _result(
             "pass", "Active ruleset on default branch", refs=refs
+        )
+    if any(match is None for match in matches):
+        return _result(
+            "unknown", "active branch ruleset targeting unavailable", refs=refs
+        )
+    if protection is None:
+        return _result(
+            "fail",
+            "No protection rules and no active rulesets on default branch",
+            refs=refs,
         )
     return _result("unknown", "branch protection unavailable", refs=refs)
 
@@ -201,4 +287,6 @@ def security_policy(context: CheckContext) -> dict[str, Any]:
             paths=(policy,),
             refs=(F0_FILES_REF,),
         )
-    return _result("fail", "No SECURITY.md found", refs=(F0_FILES_REF,))
+    if _files_complete(context):
+        return _result("fail", "No SECURITY.md found", refs=(F0_FILES_REF,))
+    return _evidence_gap("SECURITY.md absence is not established")

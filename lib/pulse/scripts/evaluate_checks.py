@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from math import isfinite
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -75,7 +76,12 @@ def score_checks(checks: dict[str, dict]) -> ScoreSummary:
         if status not in RESULT_STATES:
             raise ValueError(f"unknown check state for {check_id}: {status}")
         weight = check.get("weight")
-        if isinstance(weight, bool) or not isinstance(weight, (int, float)) or weight < 0:
+        if (
+            isinstance(weight, bool)
+            or not isinstance(weight, (int, float))
+            or not isfinite(weight)
+            or weight < 0
+        ):
             raise ValueError(f"invalid check weight for {check_id}: {weight}")
         weight = float(weight)
         coverage_total += weight
@@ -134,7 +140,7 @@ def check_project_linkage(d, repo):
     if rel is None:
         return "unknown", "no relationships data provided"
     links = rel.get("project_repo_links") or []
-    linked = [l for l in links if repo in (l.get("repos") or [])]
+    linked = [link for link in links if repo in (link.get("repos") or [])]
     if linked:
         return "pass", f"Linked to {len(linked)} project(s)"
     return "fail", "Repo not linked to any project"
@@ -143,7 +149,7 @@ def check_project_linkage(d, repo):
 def check_issue_triage(d):
     if d["labels"] is None:
         return "unknown", "labels unavailable"
-    labels = {l.get("name", "").lower() for l in d["labels"]}
+    labels = {label.get("name", "").lower() for label in d["labels"]}
     has_bug = bool(labels & BUG_LABELS)
     has_prio = any(any(h in lbl for h in PRIORITY_HINTS) for lbl in labels)
     if has_bug and has_prio:
