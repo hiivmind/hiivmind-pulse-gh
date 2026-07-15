@@ -56,19 +56,29 @@ def _stable_facts(repo: dict[str, Any]) -> dict[str, Any]:
     node_id = _repo_id(repo)
     if node_id is None:
         raise MembershipError(f"live repository has no node ID: {full_name}")
+    default_branch = repo.get("default_branch")
+    if not isinstance(default_branch, str) or not default_branch:
+        raise MembershipError(f"live repository missing stable fact default_branch: {full_name}")
     visibility = repo.get("visibility")
-    if visibility is not None:
+    if isinstance(visibility, str):
         is_public = visibility == "public"
+    elif isinstance(repo.get("private"), bool):
+        is_public = not repo["private"]
     else:
-        is_public = not bool(repo.get("private", False))
+        raise MembershipError(f"live repository missing stable fact visibility: {full_name}")
+    for key in ("archived", "fork"):
+        if not isinstance(repo.get(key), bool):
+            raise MembershipError(f"live repository missing stable fact {key}: {full_name}")
+    if "mirror_url" not in repo or not isinstance(repo["mirror_url"], (str, type(None))):
+        raise MembershipError(f"live repository missing stable fact mirror_url: {full_name}")
     return {
         "name": full_name.split("/", 1)[1],
         "id": node_id,
         "full_name": full_name,
-        "default_branch": repo.get("default_branch") or "main",
+        "default_branch": default_branch,
         "is_public": is_public,
-        "archived": bool(repo.get("archived", False)),
-        "fork": bool(repo.get("fork", False)),
+        "archived": repo["archived"],
+        "fork": repo["fork"],
         "mirror_url": repo.get("mirror_url"),
     }
 

@@ -5,8 +5,9 @@ import subprocess
 import sys
 
 import yaml
+import pytest
 
-from lib.pulse.scripts.fleet_membership import reconcile_membership
+from lib.pulse.scripts.fleet_membership import MembershipError, reconcile_membership
 
 
 SCRIPT = "lib/pulse/scripts/fleet_membership.py"
@@ -156,6 +157,17 @@ def test_legacy_name_only_catalog_entry_uses_workspace_owner_for_safe_backfill()
 
     assert finding_kinds(result) == ["repository-identity-backfilled"]
     assert result["catalog_patch"][0] == catalog_repo("acme/legacy", "R_LEGACY")
+
+
+@pytest.mark.parametrize(
+    "missing", ["default_branch", "private", "archived", "fork", "mirror_url"]
+)
+def test_incomplete_live_facts_are_rejected_instead_of_guessed(missing):
+    live = live_repo("acme/incomplete", "R_INCOMPLETE")
+    live.pop(missing)
+
+    with pytest.raises(MembershipError, match="missing stable fact"):
+        reconcile_membership([live], {"repositories": []})
 
 
 def test_cli_emits_deterministic_json(tmp_path):
