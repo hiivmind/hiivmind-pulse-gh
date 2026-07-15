@@ -10,7 +10,7 @@ description: >
 inputs:
   workspace_path: "required — absolute workspace root containing .hiivmind/github/"
   repos: "optional — comma-separated full or short repository names; default: reviewed F1 fleet"
-  result_path: "optional — default: {workspace_path}/.hiivmind/github/healthcheck-result.yaml"
+  result_path: "optional — workspace default when usable, else ./healthcheck-result.yaml"
   update_governance: "optional — update healthcheck.yaml (default: true)"
   mode: "optional — interactive | scheduled (default: scheduled)"
 outputs:
@@ -39,12 +39,17 @@ separately and is not a mixed-scorecard fleet grade.
 
 ## State
 
+Determine `RESULT_PATH` before validating the workspace: explicit `result_path`;
+otherwise the workspace default when `workspace_path` is non-empty and usable;
+otherwise `./healthcheck-result.yaml` in the current directory. This fallback must be
+available for every early ABORT to write and validate its result.
+
 ```text
 CONFIG_DIR  = {workspace_path}/.hiivmind/github
 EVIDENCE    = CONFIG_DIR/fleet-evidence.yaml
 PROFILES    = CONFIG_DIR/profiles.yaml
 DISMISSALS  = CONFIG_DIR/healthcheck.yaml
-RESULT_PATH = {result_path, or CONFIG_DIR/healthcheck-result.yaml}
+RESULT_PATH = {explicit result_path, workspace default, or current-directory fallback}
 RUN_AT      = current UTC timestamp
 MODE        = {mode, default scheduled}
 ERRORS      = []
@@ -69,7 +74,22 @@ optional `repos` filter for resolution after F1 is loaded.
 
 ## Phase 2: ADD OPTIONAL GITHUB-ONLY FACTS + LOAD F1 PROFILES
 
-For each in-scope F0 repository, use `gh api` only for facts Nave cannot observe:
+Require `PROFILES` and load it as the authoritative F1 repository-profile and scorecard
+configuration. Missing/invalid profiles → ABORT. Resolve `repos` against F0 full names
+and F1 short/full names; unknown entries become errors and are excluded. Preserve
+deterministic lexical order.
+
+When `repos` narrows scope, `PREPARED_EVIDENCE` must be a temporary copy whose `repos`
+list contains exactly the selected authoritative repositories' available F0 entries,
+in lexical order. `PREPARED_PROFILES` must contain exactly the selected
+`repository_profiles`; preserve the referenced profile, scorecard, and adapter
+definitions unchanged. A selected authoritative repository with no F0 entry remains
+absent from `PREPARED_EVIDENCE`; do not synthesize an empty F0 entry. The F3 engine
+still evaluates it from its profile as an evidence gap. Filtering both inputs prevents
+excluded F0 repositories from becoming unprofiled coverage debt.
+
+Enrich only that same selected repository set, and only entries available in
+`PREPARED_EVIDENCE`. Use `gh api` only for facts Nave cannot observe:
 
 ```text
 repos/{owner}/{repo}                                      -> github.repo
@@ -85,13 +105,6 @@ manifest fetching. Record an authenticated protection 404 as
 `github.protection: null` because it proves protection is absent. Other unavailable
 optional facts leave their keys absent so adapters report the evidence gap accurately;
 do not synthesize a healthy or unhealthy state.
-
-Require `PROFILES` and load it as the authoritative F1 repository-profile and scorecard
-configuration. Missing/invalid profiles → ABORT. Resolve `repos` against F0 full names
-and F1 short/full names; unknown entries become errors and are excluded. Preserve
-deterministic lexical order. If scope is narrowed, create a temporary profiles document
-containing only matching `repository_profiles`; preserve the referenced profile,
-scorecard, and adapter definitions unchanged.
 
 ## Phase 3: DISPATCH + APPLY DISMISSALS
 
