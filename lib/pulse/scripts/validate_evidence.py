@@ -147,6 +147,22 @@ def validate(data: Any) -> list[str]:
             seen_repos.add(repo)
         require_nullable(repo_entry, "remote_sha", str, errors, ctx)
         require_string_list(repo_entry, "files", errors, ctx)
+        if "files_complete" in repo_entry and not isinstance(
+            repo_entry["files_complete"], bool
+        ):
+            errors.append(
+                f"wrong type for {ctx}files_complete: expected bool, "
+                f"got {type(repo_entry['files_complete']).__name__}"
+            )
+        if "capabilities" in repo_entry:
+            capabilities = require_string_list(
+                repo_entry, "capabilities", errors, ctx
+            )
+            if capabilities is not None:
+                if capabilities != sorted(capabilities):
+                    errors.append(f"{ctx}capabilities must be sorted")
+                if len(capabilities) != len(set(capabilities)):
+                    errors.append(f"{ctx}capabilities contains duplicates")
         require_string_list(repo_entry, "structural_signals", errors, ctx)
         validation = require(repo_entry, "validation", dict, errors, ctx)
         if validation is not None:

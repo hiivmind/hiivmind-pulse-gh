@@ -32,7 +32,10 @@ fraction: A >= 0.90, B >= 0.72, C >= 0.54, D >= 0.36, F below.
 from __future__ import annotations
 
 import argparse
+from collections import Counter, defaultdict
+from collections.abc import Mapping, Sequence
 import json
+from math import isfinite
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -75,7 +78,12 @@ def score_checks(checks: dict[str, dict]) -> ScoreSummary:
         if status not in RESULT_STATES:
             raise ValueError(f"unknown check state for {check_id}: {status}")
         weight = check.get("weight")
-        if isinstance(weight, bool) or not isinstance(weight, (int, float)) or weight < 0:
+        if (
+            isinstance(weight, bool)
+            or not isinstance(weight, (int, float))
+            or not isfinite(weight)
+            or weight < 0
+        ):
             raise ValueError(f"invalid check weight for {check_id}: {weight}")
         weight = float(weight)
         coverage_total += weight
@@ -96,6 +104,66 @@ def score_checks(checks: dict[str, dict]) -> ScoreSummary:
         coverage_supported,
         coverage_total,
     )
+
+
+def aggregate_by_scorecard(
+    repos: Sequence[Mapping[str, object]],
+) -> dict[str, dict[str, int | float | None]]:
+    """Summarize repository scores without mixing scorecard populations."""
+    repo_counts = Counter()
+    percentages: dict[str, list[float]] = defaultdict(list)
+    for repo in repos:
+        scorecard = repo["scorecard"]
+        if not isinstance(scorecard, str):
+            raise ValueError("repository scorecard must be a string")
+        repo_counts[scorecard] += 1
+        total = repo["total"]
+        score = repo["score"]
+        if not isinstance(total, (int, float)) or not isinstance(score, (int, float)):
+            raise ValueError("repository score and total must be numbers")
+        if total:
+            percentages[scorecard].append(score / total * 100)
+    return {
+        scorecard: {
+            "repos": count,
+            "repos_scored": len(percentages[scorecard]),
+            "average_percent": (
+                round(sum(percentages[scorecard]) / len(percentages[scorecard]), 2)
+                if percentages[scorecard]
+                else None
+            ),
+        }
+        for scorecard, count in sorted(repo_counts.items())
+    }
+
+
+def fleet_coverage(
+    repos: Sequence[Mapping[str, object]],
+) -> dict[str, int | dict[str, int]]:
+    """Summarize emitted check coverage and unsupported adapter debt."""
+    unsupported = Counter()
+    checks_total = 0
+    checks_supported = 0
+    for repo in repos:
+        checks = repo["checks"]
+        if not isinstance(checks, Mapping):
+            raise ValueError("repository checks must be a mapping")
+        for check in checks.values():
+            if not isinstance(check, Mapping):
+                raise ValueError("check must be a mapping")
+            checks_total += 1
+            if check.get("status") == "unsupported":
+                adapter = check.get("adapter")
+                if not isinstance(adapter, str):
+                    raise ValueError("check adapter must be a string")
+                unsupported[adapter] += 1
+            else:
+                checks_supported += 1
+    return {
+        "checks_total": checks_total,
+        "checks_supported": checks_supported,
+        "unsupported_by_adapter": dict(sorted(unsupported.items())),
+    }
 
 
 def load(data_dir: Path, name: str):
@@ -134,7 +202,7 @@ def check_project_linkage(d, repo):
     if rel is None:
         return "unknown", "no relationships data provided"
     links = rel.get("project_repo_links") or []
-    linked = [l for l in links if repo in (l.get("repos") or [])]
+    linked = [link for link in links if repo in (link.get("repos") or [])]
     if linked:
         return "pass", f"Linked to {len(linked)} project(s)"
     return "fail", "Repo not linked to any project"
@@ -143,7 +211,7 @@ def check_project_linkage(d, repo):
 def check_issue_triage(d):
     if d["labels"] is None:
         return "unknown", "labels unavailable"
-    labels = {l.get("name", "").lower() for l in d["labels"]}
+    labels = {label.get("name", "").lower() for label in d["labels"]}
     has_bug = bool(labels & BUG_LABELS)
     has_prio = any(any(h in lbl for h in PRIORITY_HINTS) for lbl in labels)
     if has_bug and has_prio:

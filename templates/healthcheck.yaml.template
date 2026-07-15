@@ -6,11 +6,13 @@
 version: "1.0"
 
 last_run:
-  timestamp: null
-  scope: all           # "all" or specific repo name
-  aggregate_score: 0
-  aggregate_total: 11
-  aggregate_grade: null
+  run_at: null
+  by_scorecard: {}
+  coverage:
+    checks_total: 0
+    checks_supported: 0
+    unsupported_by_adapter: {}
+    unprofiled_repos: []
 
 repos:
   # Per-repo results keyed by repo name
@@ -20,70 +22,20 @@ repos:
   # hiivmind-pulse-gh:
   #   scorecard: python-library-v1
   #   score: 8
-  #   total: 11
+  #   total: 10
   #   grade: B
-  #   coverage_supported: 11
-  #   coverage_total: 11
+  #   coverage_supported: 10
+  #   coverage_total: 10
   #   checks:
-  #     branch_protection:
-  #       check_id: branch_protection
-  #       profile: python-library
-  #       adapter: github-branch-protection
-  #       weight: 1
-  #       status: pass
-  #       last_evaluated: "2026-02-21T14:30:00Z"
-  #       detail: "main: 1 required review"
-  #       data: {}
-  #     project_linkage:
-  #       status: pass
-  #       last_evaluated: "2026-02-21T14:30:00Z"
-  #       detail: "Linked to 2 project(s)"
-  #       data: {}
-  #     issue_triage:
-  #       status: warn
-  #       last_evaluated: "2026-02-21T14:30:00Z"
-  #       detail: "Bug labels present, no priority labels"
-  #       data: {}
-  #     ci_cd:
-  #       status: pass
-  #       last_evaluated: "2026-02-21T14:30:00Z"
-  #       detail: "3 workflow(s) configured"
-  #       data: {}
-  #     releases:
-  #       status: fail
-  #       last_evaluated: "2026-02-21T14:30:00Z"
-  #       detail: "No releases or tags"
-  #       data: {}
   #     documentation:
-  #       status: warn
-  #       last_evaluated: "2026-02-21T14:30:00Z"
-  #       detail: "README present, no CONTRIBUTING.md"
-  #       data: {}
-  #     codeowners:
-  #       status: fail
-  #       last_evaluated: "2026-02-21T14:30:00Z"
-  #       detail: "No CODEOWNERS file"
-  #       data: {}
-  #     security_policy:
-  #       status: fail
-  #       last_evaluated: "2026-02-21T14:30:00Z"
-  #       detail: "No security policy"
-  #       data: {}
-  #     license:
+  #       check_id: documentation
+  #       profile: python-library
+  #       adapter: generic.docs
+  #       weight: 2
   #       status: pass
   #       last_evaluated: "2026-02-21T14:30:00Z"
-  #       detail: "MIT"
-  #       data: {}
-  #     dependency_management:
-  #       status: pass
-  #       last_evaluated: "2026-02-21T14:30:00Z"
-  #       detail: "Renovate configured"
-  #       data: {}
-  #     secrets_scanning:
-  #       status: pass
-  #       last_evaluated: "2026-02-21T14:30:00Z"
-  #       detail: "Scanning: enabled, Push protection: enabled"
-  #       data: {}
+  #       detail: "README and docs present"
+  #       data: {evidence: {paths: [README.md, docs/], refs: []}}
 
 dismissals:
   # Per-repo dismissals keyed by repo name

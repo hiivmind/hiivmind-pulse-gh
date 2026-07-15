@@ -94,39 +94,74 @@ actor: { gh_login: <str>, machine: <str>, mode: <enum> }
 repos:                                # list, required (may be empty)
   - repo: <owner/name>                # str, required
     scorecard: <scorecard id>         # str, required — grades are scorecard-specific
-    score: <number>                   # int or float, required
-    total: <number>                   # required — weighted score denominator
+    score: <number>                   # finite, non-negative, and <= total
+    total: <number>                   # finite, non-negative weighted denominator
     grade: A | B | C | D | F          # required enum
-    coverage_supported: <number>      # adapter-supported weight, including not-applicable checks
-    coverage_total: <number>          # all configured check weight
+    coverage_supported: <number>      # finite, non-negative, and <= coverage_total
+    coverage_total: <number>          # finite non-negative configured check weight
     checks:                           # dict, required: check_id -> result
       <check_id>:
         check_id: <check_id>          # str, required; must match the mapping key
         adapter: <adapter id>         # str, required
-        weight: <number>              # non-negative, required
+        weight: <number>              # finite and non-negative, required
         profile: <profile id>         # optional source profile
         status: pass | warn | fail | unknown | not_applicable | unsupported | error
         detail: <str>                 # required
-        data: {}                      # dict, required (may be empty)
+        data:                         # dict, required
+          evidence:                   # mapping, required on every check
+            paths: [<str>, ...]
+            refs: [<str>, ...]
         inferred: <bool>              # optional — true when LLM judgment produced it
 aggregate:                            # dict, required
-  score: <number>
-  total: <int>
-  grade: A | B | C | D | F
+  by_scorecard:                       # dict, required; no mixed-scorecard fleet grade
+    <scorecard id>:
+      repos: <int>                    # repositories assigned to this scorecard
+      repos_scored: <int>             # non-negative and <= repos
+      average_percent: <number|null>  # finite 0..100, or null when unscoreable
+coverage:                             # required; fleet adapter-coverage debt
+  checks_total: <int>                 # resolved checks across profiled repositories
+  checks_supported: <int>             # non-negative, <= checks_total
+  unsupported_by_adapter:             # dict, required: adapter -> check count
+    <adapter id>: <int>
+  unprofiled_repos: [<owner/name>, ...]
 errors: []
 ```
+
+The healthcheck top level and `aggregate` must not contain mixed fleet grade keys:
+`score`, `total`, `grade`, `aggregate_score`, `aggregate_total`, or
+`aggregate_grade`. Repository score/total/grade fields remain required because each is
+paired with its repository's scorecard.
+
+All result numeric fields reject booleans and non-finite values (`NaN` and positive or
+negative infinity). Cross-field bounds prevent impossible summaries: repository score
+cannot exceed total, supported coverage cannot exceed total coverage, supported check
+count cannot exceed total check count, and scored repository count cannot exceed the
+scorecard repository count.
 
 `pass`, `warn`, and `fail` enter the weighted score denominator. `unknown`,
 `not_applicable`, `unsupported`, and `error` do not. Coverage includes every
 configured weight in `coverage_total`; only `unsupported` weight is excluded
 from `coverage_supported`, so adapter gaps remain visible without becoming
 false repository failures. A current dismissal is emitted as `not_applicable`
-with `data.dismissed: true`; the durable dismissal decision remains in
-`healthcheck.yaml`.
+with `data.dismissed: true`, copied dismissal metadata, and its source citation;
+the durable dismissal decision remains in `healthcheck.yaml`.
+Copied dismissal metadata is recursively JSON-normalized; YAML dates and datetimes
+become ISO strings before CLI JSON output.
+
+Dismissal `review_after` is an ISO date for re-evaluation, not an inclusive dismissal
+end date. The dispatcher compares it with the supplied as-of date: before
+`review_after` the dismissal is current; on or after `review_after` the check is
+evaluated normally. Null or missing `review_after` keeps the dismissal current. The
+headless skill supplies its captured `run_at` as the deterministic as-of input; direct
+API/CLI callers that omit it use the current UTC date.
 
 Grades must always be presented with `scorecard`. A grade from one scorecard is
 not directly compared with a grade from another scorecard because the checks,
 weights, and applicability rules differ.
+
+`aggregate.by_scorecard` averages only repositories with a non-zero scoring
+denominator. `coverage` is separate from health: unsupported adapters are explicit
+delivery debt and do not become false repository failures.
 
 ### fleet-membership-result.yaml (written by gh-fleet-membership-headless, F2)
 

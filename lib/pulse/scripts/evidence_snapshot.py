@@ -122,6 +122,14 @@ def _signals(paths: set[str]) -> list[str]:
     return sorted(signals)
 
 
+def _capabilities(structural_signals: list[str]) -> list[str]:
+    """Derive factual runtime applicability capabilities from observed structure."""
+    capabilities = set()
+    if "has_workflows" in structural_signals:
+        capabilities.add("ci")
+    return sorted(capabilities)
+
+
 def _validation(results: list[dict], check_available: bool) -> dict:
     if not check_available or not results:
         return {"state": "unknown", "errors": []}
@@ -173,12 +181,15 @@ def normalize(
 
     repos = []
     for repo in sorted(files):
+        structural_signals = _signals(files[repo])
         repos.append(
             {
                 "repo": repo,
                 "remote_sha": None,
                 "files": sorted(files[repo]),
-                "structural_signals": _signals(files[repo]),
+                "files_complete": False,
+                "capabilities": _capabilities(structural_signals),
+                "structural_signals": structural_signals,
                 "validation": _validation(
                     outcomes[repo], report_errors["check"] is None
                 ),

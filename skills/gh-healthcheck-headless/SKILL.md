@@ -1,172 +1,217 @@
 ---
 name: gh-healthcheck-headless
 description: >
-  Headless multi-repo governance audit. Fetches per-repo API data, evaluates the 11-check catalog
-  deterministically via evaluate_checks.py honoring team dismissals, writes healthcheck-result.yaml
-  (kind: healthcheck) and updates the committed healthcheck.yaml governance record. Zero prompts;
-  explicit inputs only. Use when: a scheduled fleet audit runs, an orchestrator needs repo grades.
-  Trigger phrases: "headless healthcheck", "fleet healthcheck", "scheduled governance audit".
-inputs:
-  workspace_path: "required — absolute path to the workspace root (directory containing .hiivmind/github/)"
-  repos: "optional — comma-separated repo filter (full owner/name or short names); default: every entry in the config repositories[] catalog"
-  result_path: "optional — where to write the result (default: {workspace_path}/.hiivmind/github/healthcheck-result.yaml)"
-  update_governance: "optional — also update the committed healthcheck.yaml (default: true)"
-  mode: "optional — actor mode recorded in the result: interactive | scheduled (default: scheduled)"
-outputs:
-  result_file: "healthcheck-result.yaml conforming to lib/patterns/headless-contract.md (kind: healthcheck)"
-  governance: "updated {workspace_path}/.hiivmind/github/healthcheck.yaml (unless update_governance: false)"
-author: hiivmind
+  Headless multi-repo governance audit. Validates an F0 fleet-evidence snapshot,
+  enriches it with optional GitHub-only governance facts, loads reviewed F1 repository
+  profiles, and dispatches each repository to its authoritative scorecard. Writes a
+  validated healthcheck-result.yaml and updates the committed healthcheck.yaml record.
+  Zero prompts; explicit inputs only. Use when a scheduler or orchestrator needs
+  profile-specific repo grades and separate adapter-coverage debt.
 ---
 
-# Headless Fleet Healthcheck
+# Headless Dispatched Fleet Healthcheck
 
-The 11-check governance catalog (`lib/references/healthcheck-checks.md`) evaluated per repo,
-deterministically, with dismissals honored. Read-only against GitHub — fixes are never applied.
+Evaluate each repository against the scorecard selected by its reviewed F1 profile.
+Repository grades are scorecard-specific. Fleet-wide adapter coverage is reported
+separately and is not a mixed-scorecard fleet grade.
 
-## Path Convention
+`{PLUGIN_ROOT}` is the directory containing `plugin.json`.
 
-`{PLUGIN_ROOT}` = plugin root (where plugin.json lives).
+## Inputs and outputs
+
+- `workspace_path` (required): absolute workspace root containing `.hiivmind/github/`.
+- `repos` (optional): comma-separated full or short repository names; defaults to
+  the reviewed F1 fleet.
+- `result_path` (optional): workspace default when usable, otherwise
+  `./healthcheck-result.yaml`.
+- `update_governance` (optional): update `healthcheck.yaml`; defaults to `true`.
+- `mode` (optional): `interactive` or `scheduled`; defaults to `scheduled`.
+- Result: validated `healthcheck-result.yaml` with kind `healthcheck`.
+- Governance output: updated `.hiivmind/github/healthcheck.yaml` unless disabled.
 
 ## Contract
 
-- **Zero prompts. Explicit inputs only (D4). Every exit writes a result file.**
-- A repo that fails to evaluate does not abort the run: record an `errors[]` entry and
-  continue with the remaining repos (partial fleets are valid results).
+- Zero prompts. Explicit inputs only. Every exit writes a result file.
+- Read-only against GitHub; fixes are never applied.
+- The skill performs no arithmetic and never edits individual check states. It copies
+  deterministic dispatch output into the result and governance record.
+- A failure to collect an optional GitHub fact leaves that fact absent, except for the
+  explicit incomplete ruleset evidence required in Phase 2. It does not imply a
+  failing check. Nave does not provide license metadata, branch protection, or
+  rulesets.
 
 ## State
 
+Determine `RESULT_PATH` before validating the workspace: explicit `result_path`;
+otherwise the workspace default when `workspace_path` is non-empty and usable;
+otherwise `./healthcheck-result.yaml` in the current directory. This fallback must be
+available for every early ABORT to write and validate its result.
+
+```text
+CONFIG_DIR  = {workspace_path}/.hiivmind/github
+EVIDENCE    = CONFIG_DIR/fleet-evidence.yaml
+PROFILES    = CONFIG_DIR/profiles.yaml
+DISMISSALS  = CONFIG_DIR/healthcheck.yaml
+RESULT_PATH = {explicit result_path, workspace default, or current-directory fallback}
+LOGIN = unknown
+RUN_AT      = current UTC timestamp
+MODE        = {mode, default scheduled}
+ERRORS      = []
 ```
-computed:
-  CONFIG_DIR   = {workspace_path}/.hiivmind/github
-  RESULT_PATH  = {result_path input, or CONFIG_DIR/healthcheck-result.yaml}
-  RUN_AT       = $(date -u +%Y-%m-%dT%H:%M:%SZ)
-  LOGIN        = yq -r '.workspace.login' CONFIG_DIR/config.yaml
-  GH_LOGIN     = $(gh api user --jq .login)   ("unknown" on failure, + errors[] entry)
-  MACHINE      = $(hostname -s)
-  MODE         = {mode input, default "scheduled"}
-  REPOS        = resolved full_name list (Phase 1)
-  REPO_RESULTS = []   (per-repo JSON blocks from evaluate_checks.py)
-  ERRORS       = []
-```
 
-## Phase 1: VALIDATE + SCOPE
+## Phase 1: VALIDATE + OBTAIN F0 FLEET EVIDENCE
 
-**Outputs:** REPOS.
-
-1. `workspace_path` missing → ABORT `"missing required input: workspace_path"`.
-2. `CONFIG_DIR/config.yaml` missing or lacking a top-level `workspace:` key →
-   ABORT `"not a workspace root: {workspace_path}"`.
-3. `gh` unavailable → ABORT `"gh CLI not found"`.
-4. Catalog:
+1. Missing `workspace_path` → ABORT `"missing required input: workspace_path"`.
+2. Missing `CONFIG_DIR/config.yaml` or its top-level `workspace` → ABORT
+   `"not a workspace root: {workspace_path}"`.
+3. After config validation succeeds, replace `LOGIN` with the authoritative
+   `.workspace.login` value from `CONFIG_DIR/config.yaml`.
+4. Ensure `*-result.yaml` is present in `CONFIG_DIR/.gitignore`.
+5. If `EVIDENCE` is absent or the caller requests a fresh snapshot, invoke
+   `hiivmind-pulse-gh:gh-fleet-evidence-headless` with the same `workspace_path`.
+6. Validate before consumption:
 
 ```bash
-yq -r '.repositories[].full_name' "${CONFIG_DIR}/config.yaml"
+uv run "${PLUGIN_ROOT}/lib/pulse/scripts/validate_evidence.py" "$EVIDENCE"
 ```
 
-   Empty catalog and no `repos` input → ABORT `"repositories catalog is empty"`.
-5. If `repos` input given: match each entry against catalog `full_name` or `name`;
-   entries with no catalog match are still evaluated if they look like `owner/name`
-   (API-only repos are legitimate — see spec Part 9), otherwise append
-   `"unknown repo: {entry}"` to ERRORS and drop it. REPOS = the resolved full names.
-6. Verify gitignore coverage: append `*-result.yaml` to `CONFIG_DIR/.gitignore` if missing.
+Validation failure → ABORT and record validator stderr verbatim in `errors`. Retain an
+optional `repos` filter for resolution after F1 is loaded.
 
-## Phase 2: EVALUATE (per repo)
+## Phase 2: ADD OPTIONAL GITHUB-ONLY FACTS + LOAD F1 PROFILES
 
-**Outputs:** REPO_RESULTS.
+Require `PROFILES` and load it as the authoritative F1 repository-profile and scorecard
+configuration. Missing/invalid profiles → ABORT. Resolve `repos` against F0 full names
+and F1 short/full names; unknown entries become errors and are excluded. Preserve
+deterministic lexical order.
 
-For each `FULL` (owner/name) in REPOS:
+When `repos` narrows scope, `PREPARED_EVIDENCE` must be a temporary copy whose `repos`
+list contains exactly the selected authoritative repositories' available F0 entries,
+in lexical order. `PREPARED_PROFILES` must contain exactly the selected
+`repository_profiles`; preserve the referenced profile, scorecard, and adapter
+definitions unchanged. A selected authoritative repository with no F0 entry remains
+absent from `PREPARED_EVIDENCE`; do not synthesize an empty F0 entry. The F3 engine
+still evaluates it from its profile as an evidence gap. Filtering both inputs prevents
+excluded F0 repositories from becoming unprofiled coverage debt.
 
-1. Fetch API data into a fresh temp dir (404s are expected for some endpoints —
-   a missing file is how evaluate_checks.py learns the resource is absent):
+Enrich only that same selected repository set, and only entries available in
+`PREPARED_EVIDENCE`. Use `gh api` only for facts Nave cannot observe:
+
+```text
+repos/{owner}/{repo}                                      -> github.repo
+repos/{owner}/{repo}/branches/{default_branch}/protection -> github.protection
+repos/{owner}/{repo}/rulesets                             -> ruleset summaries
+repos/{owner}/{repo}/rulesets/{ruleset_id}                -> github.rulesets[]
+```
+
+`github.repo` supplies GitHub license metadata and `default_branch`. Fetch protection
+for that default branch. The ruleset list response does not establish `target` or
+`conditions`. After fetching the list, fetch the detail endpoint for every relevant
+active ruleset ID in ascending numeric ID order. Store `github.rulesets` as the
+deterministic list of hydrated detail objects in that same order; never copy the list
+response directly into `github.rulesets`.
+
+If the ruleset list request fails, record `github.rulesets` as an explicit incomplete
+evidence mapping rather than an empty list. If an active detail request fails, retain
+an explicit incomplete evidence object containing its `id`, `name`, `enforcement`,
+and detail error in the deterministic list, but omit `target` and `conditions` even if
+the list summary happened to include them. This ensures the adapter returns `unknown`:
+a collection failure never establishes a pass or fail. Disabled or evaluating
+summaries need not be hydrated because they cannot establish active protection.
+
+Merge successful responses into that repository's `github` namespace in a temporary
+copy of the F0 document. Do not fetch root contents,
+`.github` contents, labels, workflows, releases, or tags: the F0 projection replaces
+manifest fetching. Record an authenticated protection 404 as
+`github.protection: null` because it proves protection is absent. Other unavailable
+optional facts leave their keys absent so adapters report the evidence gap accurately;
+do not synthesize a healthy or unhealthy state.
+
+## Phase 3: DISPATCH + APPLY DISMISSALS
+
+Invoke the F3 engine exactly once over the prepared F0/F1 inputs:
 
 ```bash
-DATA_DIR=$(mktemp -d)
-fetch() { gh api "$1" > "$DATA_DIR/$2" 2>/dev/null || rm -f "$DATA_DIR/$2"; }
-
-fetch "repos/${FULL}" repo.json
-DEFAULT_BRANCH=$(jq -r '.default_branch // "main"' "$DATA_DIR/repo.json" 2>/dev/null || echo main)
-fetch "repos/${FULL}/branches/${DEFAULT_BRANCH}/protection" protection.json
-fetch "repos/${FULL}/rulesets" rulesets.json
-fetch "repos/${FULL}/labels?per_page=100" labels.json
-fetch "repos/${FULL}/actions/workflows" workflows.json
-fetch "repos/${FULL}/releases?per_page=30" releases.json
-fetch "repos/${FULL}/tags?per_page=30" tags.json
-fetch "repos/${FULL}/contents/" root-contents.json
-fetch "repos/${FULL}/contents/.github" github-contents.json
+uv run "${PLUGIN_ROOT}/lib/pulse/scripts/healthcheck_dispatch.py" \
+  --evidence "$PREPARED_EVIDENCE" \
+  --profiles "$PREPARED_PROFILES" \
+  --workspace "$workspace_path" \
+  --dismissals "$DISMISSALS" \
+  --as-of "$RUN_AT" > "$DISPATCH_JSON"
 ```
 
-   If `repo.json` is missing after the fetch (repo inaccessible), append
-   `"{FULL}: repo metadata unavailable"` to ERRORS and continue to the next repo.
+Omit `--dismissals` when the governance record does not yet exist. Dispatch resolves
+each repository's scorecard, evaluates only checks present in that resolved scorecard,
+applies matching full-name or short-name dismissals as `not_applicable`, and calls the
+centralized scorer. A dismissal with a non-null `review_after` applies only while the
+date captured in `RUN_AT` is before that ISO date; on or after it, the check is
+re-evaluated normally. The skill must not re-score, add checks, or modify states.
 
-2. Evaluate deterministically:
+Dispatch failure → ABORT with stderr included in `errors`.
 
-```bash
-uv run "${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/evaluate_checks.py" \
-  --repo "$FULL" --data-dir "$DATA_DIR" \
-  --relationships "${CONFIG_DIR}/relationships.yaml" \
-  --dismissals "${CONFIG_DIR}/healthcheck.yaml"
-```
+## Phase 4: WRAP + VALIDATE RESULT
 
-   Append the printed JSON object to REPO_RESULTS. Non-zero exit → append
-   `"{FULL}: evaluate_checks failed"` to ERRORS, continue.
-
-3. Space repos out (fleet politeness): no parallel fetching; sequential per repo.
-
-## Phase 3: AGGREGATE + WRITE RESULT
-
-**Outputs:** RESULT_PATH written and validated.
-
-1. Aggregate: `score` = sum of repo scores, `total` = sum of repo totals, `grade` from
-   score/total fraction — A ≥ 0.90, B ≥ 0.72, C ≥ 0.54, D ≥ 0.36, F below (same table
-   evaluate_checks.py uses; total 0 → F). This top-level aggregate is a legacy
-   compatibility field. When results contain more than one scorecard ID, do not present
-   its grade as a comparable fleet grade; report per-repository scorecards instead.
-2. Write RESULT_PATH:
+Write `RESULT_PATH` by adding common contract fields around the dispatch object. All
+result wrapping, including ABORT, must use `LOGIN`. Copy `repos`, `aggregate`, and
+`coverage` without transformation:
 
 ```yaml
 contract_version: 1
 kind: healthcheck
-workspace: {LOGIN}
-run_at: "{RUN_AT}"    # quote: an unquoted ISO-8601 value parses as a YAML datetime; the contract requires a string
-actor: { gh_login: {GH_LOGIN}, machine: {MACHINE}, mode: {MODE} }
-repos: {REPO_RESULTS}          # each includes repo, scorecard, score, total, grade,
-                               # coverage_supported, coverage_total, checks
-aggregate: { score: {sum}, total: {sum}, grade: {computed} }
-errors: {ERRORS}
+workspace: <LOGIN>
+run_at: "<RUN_AT>"
+actor: { gh_login: <gh api user login or unknown>, machine: <hostname>, mode: <MODE> }
+repos: <DISPATCH_JSON.repos>
+aggregate: <DISPATCH_JSON.aggregate>
+coverage: <DISPATCH_JSON.coverage>
+errors: <ERRORS>
 ```
 
-3. Validate:
+There is no top-level mixed-scorecard score, total, or grade. Validate:
 
 ```bash
-uv run "${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py" "$RESULT_PATH" --kind healthcheck
+uv run "${PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py" \
+  "$RESULT_PATH" --kind healthcheck
 ```
 
-   Exit ≠ 0 → skill bug; report validator stderr verbatim.
+Non-zero exit is a skill bug; report validator stderr verbatim.
 
-## Phase 4: UPDATE GOVERNANCE RECORD
+## Phase 5: UPDATE GOVERNANCE RECORD
 
-**Outputs:** updated `CONFIG_DIR/healthcheck.yaml` (skip entirely if `update_governance: false`).
+Skip when `update_governance: false`. Create from
+`templates/healthcheck.yaml.template` when missing.
 
-1. Create from `{PLUGIN_ROOT}/templates/healthcheck.yaml.template` if missing.
-2. Set `last_run`: `timestamp: RUN_AT`, `scope:` comma-joined short names (or `fleet`
-   when the whole catalog ran), `aggregate_score / aggregate_total / aggregate_grade`.
-3. For each repo result, write `repos.{short-name}` (short name = part after `/`):
-   `scorecard`, `score`, `total`, `grade`, `coverage_supported`, `coverage_total`, and
-   each check with `check_id`, `profile`, `adapter`, `weight`, `status`, `detail`, and
-   `data`, plus `last_evaluated: RUN_AT` (the governance record keeps timestamps; the
-   result file does not need them).
-4. **Preserve `dismissals:` untouched** — merge, never overwrite. Repos not evaluated
-   this run keep their existing blocks.
-5. Do NOT commit or push — the orchestrator (P5) owns the commit/PR step.
+1. Replace `last_run` with exactly `last_run.run_at`, `last_run.by_scorecard`, and
+   `last_run.coverage`, copied respectively from validated `run_at`,
+   `aggregate.by_scorecard`, and `coverage`. Never retain legacy `timestamp`, `scope`,
+   `score`, `total`, `grade`, `aggregate_score`, `aggregate_total`, or
+   `aggregate_grade` fields in `last_run`.
+2. For each repo result, copy `scorecard`, `score`, `total`, `grade`,
+   `coverage_supported`, `coverage_total`, and every emitted check block into the
+   matching `repos.{short-name}` entry. Copy the result's `run_at` value to
+   `last_evaluated` in the durable repo/check record.
+3. Preserve `dismissals` and repositories outside this run untouched. Merge; never
+   overwrite governance decisions.
+4. Do not commit or push; the orchestrator owns that mutation.
 
-## ABORT semantics
+## ABORT Semantics
 
-On ABORT: write RESULT_PATH with `repos: []`, `aggregate: {score: 0, total: 0, grade: F}`,
-`errors: [<reason>, ...]`, all common fields populated; validate; stop. Fallback write
-locations as in gh-status-headless.
+Write common fields plus these already-defined empty engine values, validate, and stop:
+
+```yaml
+repos: []
+aggregate: { by_scorecard: {} }
+coverage:
+  checks_total: 0
+  checks_supported: 0
+  unsupported_by_adapter: {}
+  unprofiled_repos: []
+errors: [<reason>, ...]
+```
 
 ## Related
 
-- `lib/patterns/headless-contract.md` — schema
-- `lib/references/healthcheck-checks.md` — the catalog evaluate_checks.py implements
-- `skills/gh-healthcheck/` — the interactive sibling (fix/dismiss flows live there)
+- `lib/patterns/nave-evidence-contract.md` — F0 evidence
+- `lib/patterns/repository-profiles.md` — F1 profiles and scorecards
+- `lib/patterns/headless-contract.md` — result schema
+- `lib/pulse/scripts/healthcheck_dispatch.py` — deterministic F3 dispatch/scoring

@@ -64,6 +64,17 @@ def test_rejects_unknown_adapter(tmp_path):
         profile_dispatch.load_profiles(write_yaml(tmp_path, data))
 
 
+@pytest.mark.parametrize("weight", [float("nan"), float("inf"), float("-inf"), -1])
+def test_rejects_nonfinite_or_negative_check_weight(tmp_path, weight):
+    data = minimal_config()
+    data["scorecards"]["python-service-v1"]["checks"][0]["weight"] = weight
+
+    with pytest.raises(
+        profile_dispatch.ConfigError, match="must be a finite non-negative number"
+    ):
+        profile_dispatch.load_profiles(write_yaml(tmp_path, data))
+
+
 def test_loads_explicitly_unsupported_adapter(tmp_path):
     data = minimal_config()
     data["adapters"]["terraform.dependencies"] = {

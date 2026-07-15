@@ -4,6 +4,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from lib.pulse.scripts.evaluate_checks import score_checks
 
 SCRIPT = "lib/pulse/scripts/evaluate_checks.py"
@@ -123,3 +125,12 @@ def test_unknown_and_error_are_unscored_but_coverage_supported():
     assert result.total == 2
     assert result.coverage_supported == 9
     assert result.coverage_total == 9
+
+
+@pytest.mark.parametrize("status", ["pass", "unsupported", "not_applicable"])
+@pytest.mark.parametrize("weight", [float("nan"), float("inf"), float("-inf"), -1])
+def test_score_checks_rejects_nonfinite_or_negative_weight_in_every_state(
+    status, weight
+):
+    with pytest.raises(ValueError, match="invalid check weight"):
+        score_checks({"unsafe": block(status, weight)})
