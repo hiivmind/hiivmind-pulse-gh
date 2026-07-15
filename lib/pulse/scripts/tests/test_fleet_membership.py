@@ -71,6 +71,7 @@ def test_new_repository_is_added_with_stable_facts_only():
     assert set(result["catalog_patch"][0]) == STABLE_FIELDS
     assert "profiles" not in result["catalog_patch"][0]
     assert "scorecard" not in result["catalog_patch"][0]
+    assert result["catalog_repos"] == []
 
 
 def test_rename_matches_by_node_id_and_updates_name():
@@ -145,6 +146,18 @@ def test_idless_catalog_entry_is_backfilled_only_by_exact_full_name():
     assert result["catalog_patch"][0]["id"] == "R_LEGACY"
 
 
+def test_legacy_name_only_catalog_entry_uses_workspace_owner_for_safe_backfill():
+    config = {
+        "workspace": {"login": "acme"},
+        "repositories": [{"name": "legacy"}],
+    }
+
+    result = reconcile_membership([live_repo("acme/legacy", "R_LEGACY")], config)
+
+    assert finding_kinds(result) == ["repository-identity-backfilled"]
+    assert result["catalog_patch"][0] == catalog_repo("acme/legacy", "R_LEGACY")
+
+
 def test_cli_emits_deterministic_json(tmp_path):
     org_path = tmp_path / "org.json"
     config_path = tmp_path / "config.yaml"
@@ -186,7 +199,9 @@ def test_cli_apply_catalog_updates_only_repository_facts(tmp_path):
     )
 
     assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout)["catalog_updated"] is True
+    output = json.loads(result.stdout)
+    assert output["catalog_updated"] is True
+    assert output["catalog_repos"] == ["acme/new"]
     updated = yaml.safe_load(config_path.read_text())
     assert updated["repositories"] == [catalog_repo("acme/new", "R_NEW")]
     assert updated["milestones"] == {"keep": []}

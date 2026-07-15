@@ -73,6 +73,8 @@ def _match_rule(rule: ProposalRule, evidence: dict[str, Any]) -> list[str] | Non
 
 
 def _evidence_by_repo(snapshot: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    if not isinstance(snapshot, dict):
+        raise ProposalError("evidence snapshot must be a mapping")
     repos = snapshot.get("repos", [])
     if not isinstance(repos, list):
         raise ProposalError("evidence repos must be a list")
@@ -135,13 +137,21 @@ def generate_profile_proposals(
     proposals: list[dict[str, Any]] = []
     for repo in sorted(set(repos)):
         evidence = by_repo.get(repo, {"repo": repo, "files": [], "capabilities": [], "structural_signals": []})
+        candidates = _candidate_list(evidence, config.proposal_rules)
+        authoritative = config.repositories.get(repo)
+        if authoritative is not None and {
+            candidate["profile"] for candidate in candidates
+        }.issubset(set(authoritative.profiles)):
+            continue
         proposal = {
             "repo": repo,
-            "candidates": _candidate_list(evidence, config.proposal_rules),
+            "candidates": candidates,
             "evidence": {
-                "files": _strings(evidence, "files"),
-                "capabilities": _strings(evidence, "capabilities"),
-                "structural_signals": _strings(evidence, "structural_signals"),
+                "files": sorted(set(_strings(evidence, "files"))),
+                "capabilities": sorted(set(_strings(evidence, "capabilities"))),
+                "structural_signals": sorted(
+                    set(_strings(evidence, "structural_signals"))
+                ),
             },
         }
         if explanations and repo in explanations:

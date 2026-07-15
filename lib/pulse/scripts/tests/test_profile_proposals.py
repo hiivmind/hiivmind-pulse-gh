@@ -100,6 +100,46 @@ def test_optional_explanation_cannot_change_or_reorder_candidates(tmp_path):
     assert with_explanation["inferred"] is True
 
 
+def test_matching_authoritative_profiles_do_not_create_repeat_proposal(tmp_path):
+    data = profiles_data()
+    data["repository_profiles"]["acme/repo"] = {
+        "profiles": ["python", "library"],
+        "scorecard": "python-library-v1",
+    }
+    config = load_profiles(write_profiles(tmp_path, data))
+
+    proposals = generate_profile_proposals(
+        evidence(["pyproject.toml"]), config, ["acme/repo"]
+    )
+
+    assert proposals == []
+
+
+def test_new_additive_candidate_keeps_existing_context_and_sorted_evidence(tmp_path):
+    data = profiles_data()
+    data["repository_profiles"]["acme/repo"] = {
+        "profiles": ["python", "library"],
+        "scorecard": "python-library-v1",
+    }
+    config = load_profiles(write_profiles(tmp_path, data))
+
+    proposals = generate_profile_proposals(
+        evidence(["skills/a/SKILL.md", "pyproject.toml", ".claude-plugin/plugin.json"]),
+        config,
+        ["acme/repo"],
+    )
+
+    assert [candidate["profile"] for candidate in proposals[0]["candidates"]] == [
+        "python",
+        "claude-plugin",
+    ]
+    assert proposals[0]["evidence"]["files"] == [
+        ".claude-plugin/plugin.json",
+        "pyproject.toml",
+        "skills/a/SKILL.md",
+    ]
+
+
 @pytest.mark.parametrize(
     "mutation",
     [

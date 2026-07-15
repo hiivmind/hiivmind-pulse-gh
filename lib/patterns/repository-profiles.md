@@ -73,7 +73,9 @@ Matching rules create ordered candidates with observed evidence and rule IDs.
 They never edit `repository_profiles`. Optional inferred explanation may
 annotate a completed proposal, but cannot add, remove, or reorder candidates.
 An evidence set that matches no rule produces an empty candidate list rather
-than a guessed fallback profile.
+than a guessed fallback profile. A repository with authoritative profiles is
+omitted when every detected candidate is already assigned; only additive or
+conflicting evidence returns it for renewed review.
 
 ### Confirmation boundary
 

@@ -228,6 +228,8 @@ def validate(data, kind: str) -> list[str]:
                 _validate_string_list(candidate, "rule_ids", errors, ctx=cctx)
             if "explanation" in proposal and not isinstance(proposal["explanation"], str):
                 _err(errors, f"wrong type for {ctx}explanation: expected str")
+            if "explanation" in proposal and proposal.get("inferred") is not True:
+                _err(errors, f"{ctx}explanation requires inferred: true")
             if "inferred" in proposal and not isinstance(proposal["inferred"], bool):
                 _err(errors, f"wrong type for {ctx}inferred: expected bool")
         _validate_findings(data, errors)

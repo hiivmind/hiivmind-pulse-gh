@@ -39,6 +39,7 @@ CONFIG_DIR = {workspace_path}/.hiivmind/github
 CONFIG = CONFIG_DIR/config.yaml
 PROFILES = CONFIG_DIR/profiles.yaml
 EVIDENCE = CONFIG_DIR/fleet-evidence.yaml
+EVIDENCE_INPUT = EVIDENCE, or TMP/evidence.yaml when F0 cannot produce a valid artifact
 RESULT = CONFIG_DIR/fleet-membership-result.yaml
 APPLY = {apply_catalog input, default false}
 MODE = {mode input, default scheduled}
@@ -89,7 +90,8 @@ degraded observation, not a negative profile signal and not a membership fact.
 
 If no valid evidence artifact is available, write an empty normalized evidence
 snapshot to `$TMP/evidence.yaml`, append an error, and continue with empty
-candidate lists. Membership reconciliation must not depend on Nave coverage.
+candidate lists. Set `EVIDENCE_INPUT=$TMP/evidence.yaml`. Membership
+reconciliation must not depend on Nave coverage.
 
 ## Phase 4: PROPOSE PROFILES
 
@@ -98,7 +100,7 @@ repositories:
 
 ```bash
 uv run "{PLUGIN_ROOT}/lib/pulse/scripts/profile_proposals.py" \
-  --evidence "$EVIDENCE" \
+  --evidence "$EVIDENCE_INPUT" \
   --profiles "$PROFILES" \
   --repos "$TMP/membership.json" > "$TMP/proposals.json"
 ```

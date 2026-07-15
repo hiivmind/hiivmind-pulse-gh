@@ -125,6 +125,26 @@ def _unique_index(
     return index
 
 
+def _normalized_catalog(
+    catalog: list[dict[str, Any]],
+    config: dict[str, Any],
+) -> list[dict[str, Any]]:
+    workspace = config.get("workspace") or {}
+    owner = workspace.get("login") if isinstance(workspace, dict) else None
+    normalized = []
+    for repository in catalog:
+        item = dict(repository)
+        if not item.get("full_name"):
+            name = item.get("name")
+            if not isinstance(owner, str) or not owner or not isinstance(name, str) or not name:
+                raise MembershipError(
+                    "legacy catalog entry requires workspace.login and repository name"
+                )
+            item["full_name"] = f"{owner}/{name}"
+        normalized.append(item)
+    return normalized
+
+
 def reconcile_membership(
     org_repos: list[dict[str, Any]],
     config: dict[str, Any],
@@ -132,9 +152,10 @@ def reconcile_membership(
     """Return a deterministic desired catalog and identity-aware findings."""
     if not isinstance(org_repos, list) or not all(isinstance(r, dict) for r in org_repos):
         raise MembershipError("org repositories must be a list of mappings")
-    catalog = config.get("repositories", [])
-    if not isinstance(catalog, list) or not all(isinstance(r, dict) for r in catalog):
+    raw_catalog = config.get("repositories", [])
+    if not isinstance(raw_catalog, list) or not all(isinstance(r, dict) for r in raw_catalog):
         raise MembershipError("config repositories must be a list of mappings")
+    catalog = _normalized_catalog(raw_catalog, config)
 
     policy = _discovery_policy(config)
     catalog_by_id = _unique_index(catalog, _repo_id, "catalog node ID")
@@ -217,7 +238,7 @@ def reconcile_membership(
         "findings": findings,
         "catalog_patch": desired,
         "org_repos": sorted(included_names),
-        "catalog_repos": [repo["full_name"] for repo in desired],
+        "catalog_repos": sorted(_full_name(repo) for repo in catalog),
     }
 
 
@@ -273,6 +294,10 @@ def main() -> int:
             if args.apply_catalog
             else False
         )
+        if args.apply_catalog:
+            result["catalog_repos"] = [
+                repository["full_name"] for repository in result["catalog_patch"]
+            ]
     except MembershipError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
