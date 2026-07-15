@@ -127,14 +127,18 @@ def evaluate_fleet(
         for repo in profiled
     ]
 
+    scorecard_repo_counts = Counter()
     scorecard_percentages: dict[str, list[float]] = defaultdict(list)
     unsupported = Counter()
     checks_total = 0
     checks_supported = 0
     for repo in repos:
+        scorecard = repo["scorecard"]
+        scorecard_repo_counts[scorecard] += 1
         total = repo["total"]
-        percent = repo["score"] / total * 100 if total else 0.0
-        scorecard_percentages[repo["scorecard"]].append(percent)
+        if total:
+            percent = repo["score"] / total * 100
+            scorecard_percentages[scorecard].append(percent)
         for check in repo["checks"].values():
             checks_total += 1
             if check["status"] == "unsupported":
@@ -144,10 +148,19 @@ def evaluate_fleet(
 
     by_scorecard = {
         scorecard: {
-            "repos": len(percentages),
-            "average_percent": round(sum(percentages) / len(percentages), 2),
+            "repos": repos_count,
+            "repos_scored": len(scorecard_percentages[scorecard]),
+            "average_percent": (
+                round(
+                    sum(scorecard_percentages[scorecard])
+                    / len(scorecard_percentages[scorecard]),
+                    2,
+                )
+                if scorecard_percentages[scorecard]
+                else None
+            ),
         }
-        for scorecard, percentages in sorted(scorecard_percentages.items())
+        for scorecard, repos_count in sorted(scorecard_repo_counts.items())
     }
     return {
         "repos": repos,

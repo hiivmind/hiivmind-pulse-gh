@@ -114,13 +114,41 @@ def test_dispatches_only_authoritative_resolved_checks_across_a_mixed_fleet():
 
     assert result["aggregate"] == {
         "by_scorecard": {
-            "claude-plugin-v1": {"repos": 1, "average_percent": 25.0},
-            "docs-v1": {"repos": 1, "average_percent": 50.0},
-            "generic-v1": {"repos": 1, "average_percent": 50.0},
-            "node-web-v1": {"repos": 1, "average_percent": 25.0},
-            "python-library-v1": {"repos": 1, "average_percent": 0.0},
-            "python-service-v1": {"repos": 1, "average_percent": 25.0},
-            "terraform-v1": {"repos": 1, "average_percent": 25.0},
+            "claude-plugin-v1": {
+                "repos": 1,
+                "repos_scored": 1,
+                "average_percent": 25.0,
+            },
+            "docs-v1": {
+                "repos": 1,
+                "repos_scored": 1,
+                "average_percent": 50.0,
+            },
+            "generic-v1": {
+                "repos": 1,
+                "repos_scored": 1,
+                "average_percent": 50.0,
+            },
+            "node-web-v1": {
+                "repos": 1,
+                "repos_scored": 1,
+                "average_percent": 25.0,
+            },
+            "python-library-v1": {
+                "repos": 1,
+                "repos_scored": 0,
+                "average_percent": None,
+            },
+            "python-service-v1": {
+                "repos": 1,
+                "repos_scored": 1,
+                "average_percent": 25.0,
+            },
+            "terraform-v1": {
+                "repos": 1,
+                "repos_scored": 1,
+                "average_percent": 25.0,
+            },
         }
     }
     assert result["coverage"] == {
@@ -169,3 +197,71 @@ def test_cli_accepts_yaml_and_json_evidence_without_reading_workspace(tmp_path):
 
     assert outputs[0] == outputs[1]
     assert list(outputs[0]) == ["repos", "aggregate", "coverage"]
+
+
+def test_scorecard_average_excludes_unscored_repositories(tmp_path):
+    profiles = {
+        "repository_profiles": {
+            "acme/scored": {"profiles": [], "scorecard": "docs-v1"},
+            "acme/unscored": {"profiles": [], "scorecard": "docs-v1"},
+        },
+        "scorecards": {
+            "docs-v1": {
+                "checks": [
+                    {"id": "documentation", "adapter": "generic.docs", "weight": 1}
+                ]
+            }
+        },
+        "adapters": {"generic.docs": {"state": "available"}},
+    }
+    profiles_path = tmp_path / "profiles.yaml"
+    profiles_path.write_text(yaml.safe_dump(profiles))
+
+    result = evaluate_fleet(
+        evidence={
+            "repos": [
+                {
+                    "repo": "acme/scored",
+                    "files": ["README.md", "docs/index.md"],
+                }
+            ]
+        },
+        profiles_path=profiles_path,
+        workspace=tmp_path,
+    )
+
+    assert result["aggregate"]["by_scorecard"]["docs-v1"] == {
+        "repos": 2,
+        "repos_scored": 1,
+        "average_percent": 100.0,
+    }
+
+
+def test_entirely_unscored_scorecard_has_null_average(tmp_path):
+    profiles = {
+        "repository_profiles": {
+            "acme/unscored": {"profiles": [], "scorecard": "docs-v1"}
+        },
+        "scorecards": {
+            "docs-v1": {
+                "checks": [
+                    {"id": "documentation", "adapter": "generic.docs", "weight": 1}
+                ]
+            }
+        },
+        "adapters": {"generic.docs": {"state": "available"}},
+    }
+    profiles_path = tmp_path / "profiles.yaml"
+    profiles_path.write_text(yaml.safe_dump(profiles))
+
+    result = evaluate_fleet(
+        evidence={"repos": []},
+        profiles_path=profiles_path,
+        workspace=tmp_path,
+    )
+
+    assert result["aggregate"]["by_scorecard"]["docs-v1"] == {
+        "repos": 1,
+        "repos_scored": 0,
+        "average_percent": None,
+    }
