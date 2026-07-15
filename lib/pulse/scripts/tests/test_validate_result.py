@@ -6,6 +6,12 @@ from pathlib import Path
 import pytest
 import yaml
 
+from lib.pulse.scripts.evaluate_checks import (
+    aggregate_by_scorecard,
+    fleet_coverage,
+    score_checks,
+)
+
 SCRIPT = "lib/pulse/scripts/validate_result.py"
 FIXTURES = Path("lib/pulse/scripts/tests/fixtures")
 KINDS = ["status", "healthcheck", "refresh", "workflow-run", "fleet-membership"]
@@ -16,6 +22,20 @@ def run_validator(path, kind):
         [sys.executable, SCRIPT, str(path), "--kind", kind],
         capture_output=True, text=True,
     )
+
+
+def reconcile_healthcheck_summaries(doc):
+    for repo in doc["repos"]:
+        summary = score_checks(repo["checks"])
+        repo.update(
+            score=summary.score,
+            total=summary.total,
+            grade=summary.grade,
+            coverage_supported=summary.coverage_supported,
+            coverage_total=summary.coverage_total,
+        )
+    doc["aggregate"]["by_scorecard"] = aggregate_by_scorecard(doc["repos"])
+    doc["coverage"].update(fleet_coverage(doc["repos"]))
 
 
 @pytest.mark.parametrize("kind", KINDS)
@@ -61,6 +81,7 @@ def test_unparseable_yaml_exit_2(tmp_path):
 def test_healthcheck_accepts_exact_profile_states(tmp_path, status):
     doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
     doc["repos"][0]["checks"]["branch_protection"]["status"] = status
+    reconcile_healthcheck_summaries(doc)
     path = tmp_path / "healthcheck.yaml"
     path.write_text(yaml.safe_dump(doc))
 
@@ -345,6 +366,131 @@ def test_healthcheck_requires_typed_check_evidence_citations(
 
     assert result.returncode == 1
     assert message in result.stderr
+
+
+def test_healthcheck_rejects_extra_check_evidence_citation_key(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    evidence = doc["repos"][0]["checks"]["branch_protection"]["data"][
+        "evidence"
+    ]
+    evidence["urls"] = ["https://example.test/forged"]
+    path = tmp_path / "healthcheck.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "healthcheck")
+
+    assert result.returncode == 1
+    assert "data.evidence keys must be exactly paths, refs" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("score", 0),
+        ("total", 0),
+        ("grade", "A"),
+        ("coverage_supported", 0),
+        ("coverage_total", 0),
+    ],
+)
+def test_healthcheck_rejects_repo_summary_not_derived_from_checks(
+    tmp_path, field, value
+):
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    doc["repos"][0][field] = value
+    path = tmp_path / "healthcheck.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "healthcheck")
+
+    assert result.returncode == 1
+    assert f"repos[0].{field} does not match checks" in result.stderr
+
+
+def test_healthcheck_rejects_forged_zero_over_zero_grade_a(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    doc["repos"][0].update(score=0, total=0, grade="A")
+    path = tmp_path / "healthcheck.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "healthcheck")
+
+    assert result.returncode == 1
+    assert "repos[0].grade does not match checks" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("repos", 2), ("repos_scored", 0), ("average_percent", 49.99)],
+)
+def test_healthcheck_rejects_scorecard_aggregate_not_derived_from_repos(
+    tmp_path, field, value
+):
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    doc["aggregate"]["by_scorecard"]["github-governance-v1"][field] = value
+    path = tmp_path / "healthcheck.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "healthcheck")
+
+    assert result.returncode == 1
+    assert (
+        f"aggregate.by_scorecard.github-governance-v1.{field} "
+        "does not match repos"
+    ) in result.stderr
+
+
+@pytest.mark.parametrize("group", ["missing", "extra"])
+def test_healthcheck_rejects_missing_or_extra_scorecard_group(tmp_path, group):
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    groups = doc["aggregate"]["by_scorecard"]
+    if group == "missing":
+        groups.pop("github-governance-v1")
+    else:
+        groups["forged-v1"] = {
+            "repos": 0,
+            "repos_scored": 0,
+            "average_percent": None,
+        }
+    path = tmp_path / "healthcheck.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "healthcheck")
+
+    assert result.returncode == 1
+    assert f"{group} aggregate.by_scorecard group" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("checks_total", 4), ("checks_supported", 2)],
+)
+def test_healthcheck_rejects_fleet_counts_not_derived_from_checks(
+    tmp_path, field, value
+):
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    doc["coverage"][field] = value
+    path = tmp_path / "healthcheck.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "healthcheck")
+
+    assert result.returncode == 1
+    assert f"coverage.{field} does not match repo checks" in result.stderr
+
+
+def test_healthcheck_rejects_unsupported_adapter_mapping_not_derived_from_checks(
+    tmp_path,
+):
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    doc["coverage"]["unsupported_by_adapter"] = {"generic.docs": 1}
+    path = tmp_path / "healthcheck.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "healthcheck")
+
+    assert result.returncode == 1
+    assert "coverage.unsupported_by_adapter does not match repo checks" in result.stderr
 
 
 def test_membership_explanation_requires_inferred_marker(tmp_path):

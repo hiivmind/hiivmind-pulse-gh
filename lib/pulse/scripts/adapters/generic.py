@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from fnmatch import fnmatchcase
 from typing import Any
 
 from lib.pulse.scripts.check_adapters import CheckContext
@@ -184,16 +185,23 @@ def _default_branch_ruleset_match(
     ):
         return None
 
-    explicit_ref = (
-        f"refs/heads/{default_branch}"
-        if isinstance(default_branch, str) and default_branch
-        else None
-    )
-    default_tokens = {"~ALL", "~DEFAULT_BRANCH"}
-    if explicit_ref is not None:
-        default_tokens.add(explicit_ref)
-    included = any(ref in default_tokens for ref in include)
-    excluded = any(ref in default_tokens for ref in exclude)
+    if not isinstance(default_branch, str) or not default_branch:
+        return None
+    explicit_ref = f"refs/heads/{default_branch}"
+
+    def matches(pattern: str) -> bool | None:
+        if pattern in {"~ALL", "~DEFAULT_BRANCH"}:
+            return True
+        if pattern.startswith("~") or "[" in pattern or "]" in pattern:
+            return None
+        return fnmatchcase(explicit_ref, pattern)
+
+    include_matches = [matches(pattern) for pattern in include]
+    exclude_matches = [matches(pattern) for pattern in exclude]
+    if None in (*include_matches, *exclude_matches):
+        return None
+    included = any(include_matches)
+    excluded = any(exclude_matches)
     return included and not excluded
 
 
@@ -253,13 +261,13 @@ def branch_protection(context: CheckContext) -> dict[str, Any]:
         _default_branch_ruleset_match(rule, repo.get("default_branch"))
         for rule in active_branch_rulesets
     ]
-    if any(match is True for match in matches):
-        return _result(
-            "pass", "Active ruleset on default branch", refs=refs
-        )
     if any(match is None for match in matches):
         return _result(
             "unknown", "active branch ruleset targeting unavailable", refs=refs
+        )
+    if any(match is True for match in matches):
+        return _result(
+            "pass", "Active ruleset on default branch", refs=refs
         )
     if protection is None:
         return _result(

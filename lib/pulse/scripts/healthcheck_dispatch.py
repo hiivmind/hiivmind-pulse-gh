@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections import Counter, defaultdict
 from collections.abc import Mapping
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -23,7 +22,11 @@ if __package__ in {None, ""}:
 
 from lib.pulse.scripts.adapters import register_universal_adapters
 from lib.pulse.scripts.check_adapters import AdapterRegistry, CheckContext
-from lib.pulse.scripts.evaluate_checks import score_checks
+from lib.pulse.scripts.evaluate_checks import (
+    aggregate_by_scorecard,
+    fleet_coverage,
+    score_checks,
+)
 from lib.pulse.scripts.profile_dispatch import (
     ConfigError,
     PlannedCheck,
@@ -264,48 +267,13 @@ def evaluate_fleet(
         for repo in profiled
     ]
 
-    scorecard_repo_counts = Counter()
-    scorecard_percentages: dict[str, list[float]] = defaultdict(list)
-    unsupported = Counter()
-    checks_total = 0
-    checks_supported = 0
-    for repo in repos:
-        scorecard = repo["scorecard"]
-        scorecard_repo_counts[scorecard] += 1
-        total = repo["total"]
-        if total:
-            percent = repo["score"] / total * 100
-            scorecard_percentages[scorecard].append(percent)
-        for check in repo["checks"].values():
-            checks_total += 1
-            if check["status"] == "unsupported":
-                unsupported[check["adapter"]] += 1
-            else:
-                checks_supported += 1
-
-    by_scorecard = {
-        scorecard: {
-            "repos": repos_count,
-            "repos_scored": len(scorecard_percentages[scorecard]),
-            "average_percent": (
-                round(
-                    sum(scorecard_percentages[scorecard])
-                    / len(scorecard_percentages[scorecard]),
-                    2,
-                )
-                if scorecard_percentages[scorecard]
-                else None
-            ),
-        }
-        for scorecard, repos_count in sorted(scorecard_repo_counts.items())
-    }
+    by_scorecard = aggregate_by_scorecard(repos)
+    coverage = fleet_coverage(repos)
     return {
         "repos": repos,
         "aggregate": {"by_scorecard": by_scorecard},
         "coverage": {
-            "checks_total": checks_total,
-            "checks_supported": checks_supported,
-            "unsupported_by_adapter": dict(sorted(unsupported.items())),
+            **coverage,
             "unprofiled_repos": unprofiled,
         },
     }

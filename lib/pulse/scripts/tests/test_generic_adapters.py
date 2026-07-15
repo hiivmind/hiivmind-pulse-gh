@@ -294,6 +294,27 @@ def test_ruleset_matching_explicit_default_branch_passes():
     assert out["status"] == "pass"
 
 
+@pytest.mark.parametrize(
+    "pattern",
+    ["refs/heads/ma*", "refs/heads/m??n", "refs/heads/**"],
+)
+def test_ruleset_matching_default_branch_glob_passes(pattern):
+    out = evaluate(
+        "github.branch_protection",
+        _ruleset_evidence(
+            {
+                "enforcement": "active",
+                "target": "branch",
+                "conditions": {
+                    "ref_name": {"include": [pattern], "exclude": []}
+                },
+            }
+        ),
+    )
+
+    assert out["status"] == "pass"
+
+
 def test_ruleset_excluding_default_branch_does_not_pass():
     out = evaluate(
         "github.branch_protection",
@@ -312,6 +333,50 @@ def test_ruleset_excluding_default_branch_does_not_pass():
     )
 
     assert out["status"] == "fail"
+
+
+def test_ruleset_matching_exclusion_glob_overrides_all_include():
+    out = evaluate(
+        "github.branch_protection",
+        _ruleset_evidence(
+            {
+                "enforcement": "active",
+                "target": "branch",
+                "conditions": {
+                    "ref_name": {
+                        "include": ["~ALL"],
+                        "exclude": ["refs/heads/ma*"],
+                    }
+                },
+            }
+        ),
+    )
+
+    assert out["status"] == "fail"
+
+
+@pytest.mark.parametrize(
+    "ref_name",
+    [
+        {"include": ["~FUTURE_TOKEN"], "exclude": []},
+        {"include": ["~ALL"], "exclude": ["~FUTURE_TOKEN"]},
+        {"include": ["refs/heads/[main"], "exclude": []},
+        {"include": ["~ALL"], "exclude": "refs/heads/release"},
+    ],
+)
+def test_active_branch_ruleset_with_unknown_targeting_is_unknown(ref_name):
+    out = evaluate(
+        "github.branch_protection",
+        _ruleset_evidence(
+            {
+                "enforcement": "active",
+                "target": "branch",
+                "conditions": {"ref_name": ref_name},
+            }
+        ),
+    )
+
+    assert out["status"] == "unknown"
 
 
 def test_active_branch_ruleset_with_incomplete_conditions_is_unknown():

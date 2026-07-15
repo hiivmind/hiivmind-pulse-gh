@@ -15,9 +15,18 @@ Exit codes:
   2 - file missing or unparseable
 """
 import argparse
-from math import isfinite
+from math import isclose, isfinite
 import sys
 from pathlib import Path
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+
+from lib.pulse.scripts.evaluate_checks import (
+    aggregate_by_scorecard,
+    fleet_coverage,
+    score_checks,
+)
 
 SUPPORTED_VERSIONS = {1}
 ACTOR_MODES = {"interactive", "scheduled"}
@@ -140,6 +149,52 @@ def _validate_findings(data, errors):
     return findings
 
 
+def _same_number(actual, expected) -> bool:
+    return (
+        not isinstance(actual, bool)
+        and isinstance(actual, (int, float))
+        and isfinite(actual)
+        and isclose(float(actual), float(expected), rel_tol=1e-9, abs_tol=1e-9)
+    )
+
+
+def _reconcile_repo_summary(repo, checks, errors, ctx):
+    try:
+        expected = score_checks(checks)
+    except (AttributeError, TypeError, ValueError):
+        return None
+    for field in ("score", "total", "coverage_supported", "coverage_total"):
+        if not _same_number(repo.get(field), getattr(expected, field)):
+            _err(errors, f"{ctx}{field} does not match checks")
+    if repo.get("grade") != expected.grade:
+        _err(errors, f"{ctx}grade does not match checks")
+    return {
+        **repo,
+        "score": expected.score,
+        "total": expected.total,
+        "grade": expected.grade,
+        "coverage_supported": expected.coverage_supported,
+        "coverage_total": expected.coverage_total,
+        "checks": checks,
+    }
+
+
+def _reconcile_mapping(actual, expected, errors, *, ctx, source):
+    if not isinstance(actual, dict):
+        return
+    for key, expected_value in expected.items():
+        if key not in actual:
+            continue
+        actual_value = actual[key]
+        matches = (
+            _same_number(actual_value, expected_value)
+            if isinstance(expected_value, float)
+            else actual_value == expected_value
+        )
+        if not matches:
+            _err(errors, f"{ctx}{key} does not match {source}")
+
+
 def validate(data, kind: str) -> list[str]:
     errors: list[str] = []
     if not isinstance(data, dict):
@@ -183,6 +238,7 @@ def validate(data, kind: str) -> list[str]:
         for key in sorted(forbidden_grade_keys & data.keys()):
             _err(errors, f"forbidden mixed fleet grade key: top.{key}")
         repos = _require(data, "repos", list, errors)
+        reconciled_repos = []
         for i, r in enumerate(repos or []):
             if not isinstance(r, dict):
                 _err(errors, f"repos[{i}] is not a mapping")
@@ -231,6 +287,11 @@ def validate(data, kind: str) -> list[str]:
                         _err(errors, f"{cctx}data.evidence: expected mapping")
                     else:
                         evidence = check_data["evidence"]
+                        if set(evidence) != {"paths", "refs"}:
+                            _err(
+                                errors,
+                                f"{cctx}data.evidence keys must be exactly paths, refs",
+                            )
                         _validate_string_list(
                             evidence, "paths", errors, ctx=f"{cctx}data.evidence."
                         )
@@ -241,6 +302,10 @@ def validate(data, kind: str) -> list[str]:
                     _err(errors, f"wrong type for {cctx}profile: expected str")
                 if "inferred" in c and not isinstance(c["inferred"], bool):
                     _err(errors, f"wrong type for {cctx}inferred: expected bool")
+            if isinstance(checks, dict):
+                reconciled = _reconcile_repo_summary(r, checks, errors, ctx)
+                if reconciled is not None and isinstance(r.get("scorecard"), str):
+                    reconciled_repos.append(reconciled)
         agg = _require(data, "aggregate", dict, errors)
         if agg is not None:
             for key in sorted(forbidden_grade_keys & agg.keys()):
@@ -272,6 +337,29 @@ def validate(data, kind: str) -> list[str]:
                     _err(errors, f"{ctx}repos_scored must not exceed repos")
                 if average_percent is not None and not 0 <= average_percent <= 100:
                     _err(errors, f"{ctx}average_percent must be between 0 and 100")
+            if isinstance(by_scorecard, dict) and len(reconciled_repos) == len(
+                repos or []
+            ):
+                expected_groups = aggregate_by_scorecard(reconciled_repos)
+                actual_groups = set(by_scorecard)
+                for scorecard in sorted(
+                    set(expected_groups) - actual_groups, key=str
+                ):
+                    _err(errors, f"missing aggregate.by_scorecard group: {scorecard}")
+                for scorecard in sorted(
+                    actual_groups - set(expected_groups), key=str
+                ):
+                    _err(errors, f"extra aggregate.by_scorecard group: {scorecard}")
+                for scorecard in sorted(
+                    actual_groups & set(expected_groups), key=str
+                ):
+                    _reconcile_mapping(
+                        by_scorecard[scorecard],
+                        expected_groups[scorecard],
+                        errors,
+                        ctx=f"aggregate.by_scorecard.{scorecard}.",
+                        source="repos",
+                    )
         coverage = _require(data, "coverage", dict, errors)
         if coverage is not None:
             checks_total = _require_nonnegative_integer(
@@ -312,6 +400,15 @@ def validate(data, kind: str) -> list[str]:
             _validate_string_list(
                 coverage, "unprofiled_repos", errors, ctx="coverage."
             )
+            if len(reconciled_repos) == len(repos or []):
+                expected_coverage = fleet_coverage(reconciled_repos)
+                _reconcile_mapping(
+                    coverage,
+                    expected_coverage,
+                    errors,
+                    ctx="coverage.",
+                    source="repo checks",
+                )
 
     elif kind == "refresh":
         sections = _require(data, "sections", list, errors)

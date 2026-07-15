@@ -32,6 +32,8 @@ fraction: A >= 0.90, B >= 0.72, C >= 0.54, D >= 0.36, F below.
 from __future__ import annotations
 
 import argparse
+from collections import Counter, defaultdict
+from collections.abc import Mapping, Sequence
 import json
 from math import isfinite
 import sys
@@ -102,6 +104,66 @@ def score_checks(checks: dict[str, dict]) -> ScoreSummary:
         coverage_supported,
         coverage_total,
     )
+
+
+def aggregate_by_scorecard(
+    repos: Sequence[Mapping[str, object]],
+) -> dict[str, dict[str, int | float | None]]:
+    """Summarize repository scores without mixing scorecard populations."""
+    repo_counts = Counter()
+    percentages: dict[str, list[float]] = defaultdict(list)
+    for repo in repos:
+        scorecard = repo["scorecard"]
+        if not isinstance(scorecard, str):
+            raise ValueError("repository scorecard must be a string")
+        repo_counts[scorecard] += 1
+        total = repo["total"]
+        score = repo["score"]
+        if not isinstance(total, (int, float)) or not isinstance(score, (int, float)):
+            raise ValueError("repository score and total must be numbers")
+        if total:
+            percentages[scorecard].append(score / total * 100)
+    return {
+        scorecard: {
+            "repos": count,
+            "repos_scored": len(percentages[scorecard]),
+            "average_percent": (
+                round(sum(percentages[scorecard]) / len(percentages[scorecard]), 2)
+                if percentages[scorecard]
+                else None
+            ),
+        }
+        for scorecard, count in sorted(repo_counts.items())
+    }
+
+
+def fleet_coverage(
+    repos: Sequence[Mapping[str, object]],
+) -> dict[str, int | dict[str, int]]:
+    """Summarize emitted check coverage and unsupported adapter debt."""
+    unsupported = Counter()
+    checks_total = 0
+    checks_supported = 0
+    for repo in repos:
+        checks = repo["checks"]
+        if not isinstance(checks, Mapping):
+            raise ValueError("repository checks must be a mapping")
+        for check in checks.values():
+            if not isinstance(check, Mapping):
+                raise ValueError("check must be a mapping")
+            checks_total += 1
+            if check.get("status") == "unsupported":
+                adapter = check.get("adapter")
+                if not isinstance(adapter, str):
+                    raise ValueError("check adapter must be a string")
+                unsupported[adapter] += 1
+            else:
+                checks_supported += 1
+    return {
+        "checks_total": checks_total,
+        "checks_supported": checks_supported,
+        "unsupported_by_adapter": dict(sorted(unsupported.items())),
+    }
 
 
 def load(data_dir: Path, name: str):

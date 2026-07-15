@@ -46,7 +46,6 @@ aggregate:
 coverage:
   checks_total: 3
   checks_supported: 3
-  unsupported_by_adapter:
-    generic.docs: 0
+  unsupported_by_adapter: {}
   unprofiled_repos: []
 errors: []
