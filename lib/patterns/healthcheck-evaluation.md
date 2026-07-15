@@ -133,9 +133,14 @@ PROTECTION=$(gh api "/repos/${OWNER}/${REPO_NAME}/branches/${DEFAULT_BRANCH}/pro
 | Only tag rulesets, nonmatching branch rulesets, or default-branch exclusions | fail |
 | No protection and no rulesets | fail |
 
-Ruleset inclusion is demonstrated by `~ALL`, `~DEFAULT_BRANCH`, or the exact
-`refs/heads/<default>` ref. An explicit legacy default-branch protection response
-retains its pass/warn outcome independently of ruleset condition completeness.
+Ruleset inclusion is demonstrated by `~ALL`, `~DEFAULT_BRANCH`, or a matching
+`refs/heads/<default>` ref pattern. Pattern matching is slash-aware: `*` matches
+zero or more characters except `/`, `?` matches one character except `/`, and
+`**` can match across `/`. Other characters are literals. Unsupported tokens,
+malformed wildcard forms, and unimplemented constructs such as bracket classes
+make active-branch ruleset targeting `unknown` rather than allowing a false pass.
+An explicit legacy default-branch protection response retains its pass/warn
+outcome independently of ruleset condition completeness.
 
 **Detail string:** `"{branch}: {review_count} required review(s), admins enforced: {yes/no}"` or `"No protection on {branch}"`
 

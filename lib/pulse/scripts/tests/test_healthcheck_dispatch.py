@@ -442,3 +442,42 @@ def test_cli_json_normalizes_unquoted_yaml_dismissal_dates(tmp_path):
     ]
     assert metadata["review_after"] == "2027-01-01"
     assert metadata["dismissed_at"] == "2026-07-15T10:30:00+00:00"
+
+
+@pytest.mark.parametrize("nonfinite", [".nan", ".inf"])
+def test_cli_rejects_nested_nonfinite_yaml_dismissal_metadata(
+    tmp_path, nonfinite
+):
+    dismissals = tmp_path / "healthcheck.yaml"
+    dismissals.write_text(
+        "dismissals:\n"
+        "  acme/docs:\n"
+        "    documentation:\n"
+        "      reason: Temporarily external\n"
+        "      details:\n"
+        "        limits:\n"
+        f"          - {nonfinite}\n"
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--evidence",
+            str(FIXTURES / "evidence.yaml"),
+            "--profiles",
+            str(FIXTURES / "profiles.yaml"),
+            "--workspace",
+            str(tmp_path),
+            "--dismissals",
+            str(dismissals),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert "dismissals.acme/docs.documentation.details.limits[0]" in completed.stderr
+    assert "finite" in completed.stderr
+    assert completed.stdout == ""

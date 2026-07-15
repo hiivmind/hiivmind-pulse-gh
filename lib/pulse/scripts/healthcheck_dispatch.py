@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from collections.abc import Mapping
 from datetime import date, datetime, timezone
@@ -147,18 +148,29 @@ def _review_after_date(value: Any, *, scope: str, check_id: str) -> date | None:
         ) from exc
 
 
-def _json_native(value: Any) -> Any:
+def _json_native(value: Any, *, path: str = "dismissal metadata") -> Any:
     """Recursively copy YAML-loaded metadata into JSON-native values."""
     if isinstance(value, (datetime, date)):
         return value.isoformat()
     if isinstance(value, Mapping):
-        return {str(key): _json_native(item) for key, item in value.items()}
+        return {
+            str(key): _json_native(item, path=f"{path}.{key}")
+            for key, item in value.items()
+        }
     if isinstance(value, (list, tuple)):
-        return [_json_native(item) for item in value]
+        return [
+            _json_native(item, path=f"{path}[{index}]")
+            for index, item in enumerate(value)
+        ]
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ConfigError(
+            f"dismissal metadata at {path} must contain finite numbers"
+        )
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
     raise ConfigError(
-        f"dismissal metadata contains unsupported type: {type(value).__name__}"
+        f"dismissal metadata at {path} contains unsupported type: "
+        f"{type(value).__name__}"
     )
 
 
@@ -185,7 +197,9 @@ def _apply_dismissals(
             "detail": f"Dismissed: {reason}",
             "data": {
                 "dismissed": True,
-                "dismissal": _json_native(dismissal),
+                "dismissal": _json_native(
+                    dismissal, path=f"dismissals.{scope}.{check_id}"
+                ),
                 "evidence": {
                     "paths": [],
                     "refs": [f"dismissals:{scope}:{check_id}"],
@@ -311,7 +325,12 @@ def main(argv: list[str] | None = None) -> int:
     except ConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    print(json.dumps(result, indent=2))
+    try:
+        rendered = json.dumps(result, indent=2, allow_nan=False)
+    except ValueError as exc:
+        print(f"error: result is not strict JSON: {exc}", file=sys.stderr)
+        return 1
+    print(rendered)
     return 0
 
 

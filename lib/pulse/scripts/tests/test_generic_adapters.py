@@ -252,9 +252,9 @@ def test_unrecognized_github_license_metadata_does_not_prove_presence():
     assert out["status"] == "unknown"
 
 
-def _ruleset_evidence(ruleset):
+def _ruleset_evidence(ruleset, *, default_branch="main"):
     evidence = evidence_from_legacy("bare")
-    evidence["github"]["repo"]["default_branch"] = "main"
+    evidence["github"]["repo"]["default_branch"] = default_branch
     evidence["github"]["rulesets"] = [ruleset]
     return evidence
 
@@ -315,6 +315,33 @@ def test_ruleset_matching_default_branch_glob_passes(pattern):
     assert out["status"] == "pass"
 
 
+@pytest.mark.parametrize(
+    ("pattern", "expected_status"),
+    [
+        ("refs/heads/*", "fail"),
+        ("refs/heads/**", "pass"),
+    ],
+)
+def test_ruleset_wildcards_are_slash_aware_for_nested_branch_names(
+    pattern, expected_status
+):
+    out = evaluate(
+        "github.branch_protection",
+        _ruleset_evidence(
+            {
+                "enforcement": "active",
+                "target": "branch",
+                "conditions": {
+                    "ref_name": {"include": [pattern], "exclude": []}
+                },
+            },
+            default_branch="release/v1",
+        ),
+    )
+
+    assert out["status"] == expected_status
+
+
 def test_ruleset_excluding_default_branch_does_not_pass():
     out = evaluate(
         "github.branch_protection",
@@ -356,11 +383,39 @@ def test_ruleset_matching_exclusion_glob_overrides_all_include():
 
 
 @pytest.mark.parametrize(
+    ("pattern", "expected_status"),
+    [
+        ("refs/heads/*", "pass"),
+        ("refs/heads/**", "fail"),
+    ],
+)
+def test_ruleset_exclusion_wildcards_are_slash_aware(
+    pattern, expected_status
+):
+    out = evaluate(
+        "github.branch_protection",
+        _ruleset_evidence(
+            {
+                "enforcement": "active",
+                "target": "branch",
+                "conditions": {
+                    "ref_name": {"include": ["~ALL"], "exclude": [pattern]}
+                },
+            },
+            default_branch="release/v1",
+        ),
+    )
+
+    assert out["status"] == expected_status
+
+
+@pytest.mark.parametrize(
     "ref_name",
     [
         {"include": ["~FUTURE_TOKEN"], "exclude": []},
         {"include": ["~ALL"], "exclude": ["~FUTURE_TOKEN"]},
         {"include": ["refs/heads/[main"], "exclude": []},
+        {"include": ["refs/heads/[mr]ain"], "exclude": []},
         {"include": ["~ALL"], "exclude": "refs/heads/release"},
     ],
 )

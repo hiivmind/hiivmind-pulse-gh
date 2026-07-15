@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from fnmatch import fnmatchcase
+import re
 from typing import Any
 
 from lib.pulse.scripts.check_adapters import CheckContext
@@ -194,7 +194,24 @@ def _default_branch_ruleset_match(
             return True
         if pattern.startswith("~") or "[" in pattern or "]" in pattern:
             return None
-        return fnmatchcase(explicit_ref, pattern)
+        regex: list[str] = []
+        index = 0
+        while index < len(pattern):
+            character = pattern[index]
+            if character == "*":
+                if pattern[index : index + 3] == "***":
+                    return None
+                if pattern[index : index + 2] == "**":
+                    regex.append(".*")
+                    index += 2
+                    continue
+                regex.append("[^/]*")
+            elif character == "?":
+                regex.append("[^/]")
+            else:
+                regex.append(re.escape(character))
+            index += 1
+        return re.fullmatch("".join(regex), explicit_ref) is not None
 
     include_matches = [matches(pattern) for pattern in include]
     exclude_matches = [matches(pattern) for pattern in exclude]
