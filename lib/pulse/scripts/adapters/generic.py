@@ -267,24 +267,36 @@ def branch_protection(context: CheckContext) -> dict[str, Any]:
         )
     if isinstance(rulesets, (str, bytes)) or not isinstance(rulesets, Sequence):
         return _result("unknown", "ruleset targeting unavailable", refs=refs)
-    active_branch_rulesets = [
+    active_rulesets = [
         rule
         for rule in rulesets
         if isinstance(rule, Mapping)
         and rule.get("enforcement") == "active"
-        and rule.get("target") == "branch"
     ]
-    matches = [
-        _default_branch_ruleset_match(rule, repo.get("default_branch"))
-        for rule in active_branch_rulesets
-    ]
-    if any(match is None for match in matches):
-        return _result(
-            "unknown", "active branch ruleset targeting unavailable", refs=refs
-        )
+    matches: list[bool | None] = []
+    for rule in active_rulesets:
+        target = rule.get("target")
+        if (
+            not isinstance(target, str)
+            or not target
+            or not isinstance(rule.get("conditions"), Mapping)
+        ):
+            matches.append(None)
+        elif target == "branch":
+            matches.append(
+                _default_branch_ruleset_match(
+                    rule, repo.get("default_branch")
+                )
+            )
+        else:
+            matches.append(False)
     if any(match is True for match in matches):
         return _result(
             "pass", "Active ruleset on default branch", refs=refs
+        )
+    if any(match is None for match in matches):
+        return _result(
+            "unknown", "active ruleset targeting unavailable", refs=refs
         )
     if protection is None:
         return _result(

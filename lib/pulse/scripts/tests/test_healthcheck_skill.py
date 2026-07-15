@@ -59,3 +59,18 @@ def test_repo_filter_pairs_evidence_and_profile_scope():
         "`PREPARED_EVIDENCE`"
     ) in normalized
     assert "evaluates it from its profile as an evidence gap" in normalized
+
+
+def test_rulesets_are_hydrated_from_detail_endpoints():
+    skill = read_skill()
+    normalized = " ".join(skill.split())
+
+    list_endpoint = "repos/{owner}/{repo}/rulesets"
+    detail_endpoint = "repos/{owner}/{repo}/rulesets/{ruleset_id}"
+    assert list_endpoint in normalized
+    assert detail_endpoint in normalized
+    assert normalized.index(list_endpoint) < normalized.index(detail_endpoint)
+    assert "relevant active ruleset ID" in normalized
+    assert "deterministic list of hydrated detail objects" in normalized
+    assert "list response does not establish `target` or `conditions`" in normalized
+    assert "explicit incomplete evidence" in normalized

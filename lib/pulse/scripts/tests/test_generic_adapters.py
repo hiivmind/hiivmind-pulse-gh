@@ -182,6 +182,66 @@ def test_active_ruleset_passes_without_legacy_protection():
     }
 
 
+def test_active_list_summary_without_targeting_is_unknown():
+    evidence = evidence_from_legacy("bare")
+    evidence["github"]["repo"]["default_branch"] = "main"
+    evidence["github"]["rulesets"] = [
+        {
+            "id": 17,
+            "name": "release tags",
+            "enforcement": "active",
+            "target": "tag",
+        }
+    ]
+
+    out = evaluate("github.branch_protection", evidence)
+
+    assert out["status"] == "unknown"
+    assert out["detail"] == "active ruleset targeting unavailable"
+
+
+def test_hydrated_matching_ruleset_passes():
+    evidence = evidence_from_legacy("bare")
+    evidence["github"]["repo"]["default_branch"] = "main"
+    evidence["github"]["rulesets"] = [
+        {
+            "id": 17,
+            "name": "default protection",
+            "enforcement": "active",
+            "target": "branch",
+            "conditions": {
+                "ref_name": {
+                    "include": ["~DEFAULT_BRANCH"],
+                    "exclude": [],
+                }
+            },
+        }
+    ]
+
+    assert evaluate("github.branch_protection", evidence)["status"] == "pass"
+
+
+def test_hydrated_match_outweighs_another_incomplete_active_ruleset():
+    evidence = _ruleset_evidence(
+        {
+            "id": 17,
+            "enforcement": "active",
+            "target": "branch",
+            "conditions": {
+                "ref_name": {
+                    "include": ["~DEFAULT_BRANCH"],
+                    "exclude": [],
+                }
+            },
+        }
+    )
+    evidence["github"]["rulesets"].append(
+        {"id": 23, "enforcement": "active"}
+    )
+
+    assert evaluate("github.branch_protection", evidence)["status"] == "pass"
+
+
 @pytest.mark.parametrize(
     "adapter",
     [
@@ -259,16 +319,23 @@ def _ruleset_evidence(ruleset, *, default_branch="main"):
     return evidence
 
 
-def test_tag_only_ruleset_does_not_protect_default_branch():
+def test_hydrated_tag_only_ruleset_with_explicit_null_protection_fails():
+    evidence = _ruleset_evidence(
+        {
+            "id": 23,
+            "name": "release tags",
+            "enforcement": "active",
+            "target": "tag",
+            "conditions": {
+                "ref_name": {"include": ["~ALL"], "exclude": []}
+            },
+        }
+    )
+    assert evidence["github"]["protection"] is None
+
     out = evaluate(
         "github.branch_protection",
-        _ruleset_evidence(
-            {
-                "enforcement": "active",
-                "target": "tag",
-                "conditions": {"ref_name": {"include": ["~ALL"], "exclude": []}},
-            }
-        ),
+        evidence,
     )
 
     assert out["status"] == "fail"

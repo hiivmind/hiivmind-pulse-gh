@@ -239,12 +239,17 @@ def validate(data, kind: str) -> list[str]:
             _err(errors, f"forbidden mixed fleet grade key: top.{key}")
         repos = _require(data, "repos", list, errors)
         reconciled_repos = []
+        seen_repos: set[str] = set()
         for i, r in enumerate(repos or []):
             if not isinstance(r, dict):
                 _err(errors, f"repos[{i}] is not a mapping")
                 continue
             ctx = f"repos[{i}]."
-            _require(r, "repo", str, errors, ctx=ctx)
+            repo_identity = _require(r, "repo", str, errors, ctx=ctx)
+            if repo_identity in seen_repos:
+                _err(errors, f"duplicate repository identity: {repo_identity}")
+            elif repo_identity is not None:
+                seen_repos.add(repo_identity)
             _require(r, "scorecard", str, errors, ctx=ctx)
             score = _require_nonnegative_number(r, "score", errors, ctx=ctx)
             total = _require_nonnegative_number(r, "total", errors, ctx=ctx)

@@ -33,9 +33,10 @@ separately and is not a mixed-scorecard fleet grade.
 - Read-only against GitHub; fixes are never applied.
 - The skill performs no arithmetic and never edits individual check states. It copies
   deterministic dispatch output into the result and governance record.
-- A failure to collect an optional GitHub fact leaves that fact absent. It does not
-  imply a failing check. Nave does not provide license metadata, branch protection,
-  or rulesets.
+- A failure to collect an optional GitHub fact leaves that fact absent, except for the
+  explicit incomplete ruleset evidence required in Phase 2. It does not imply a
+  failing check. Nave does not provide license metadata, branch protection, or
+  rulesets.
 
 ## State
 
@@ -97,12 +98,27 @@ Enrich only that same selected repository set, and only entries available in
 ```text
 repos/{owner}/{repo}                                      -> github.repo
 repos/{owner}/{repo}/branches/{default_branch}/protection -> github.protection
-repos/{owner}/{repo}/rulesets                             -> github.rulesets
+repos/{owner}/{repo}/rulesets                             -> ruleset summaries
+repos/{owner}/{repo}/rulesets/{ruleset_id}                -> github.rulesets[]
 ```
 
 `github.repo` supplies GitHub license metadata and `default_branch`. Fetch protection
-for that default branch. Merge successful responses into that repository's `github`
-namespace in a temporary copy of the F0 document. Do not fetch root contents,
+for that default branch. The ruleset list response does not establish `target` or
+`conditions`. After fetching the list, fetch the detail endpoint for every relevant
+active ruleset ID in ascending numeric ID order. Store `github.rulesets` as the
+deterministic list of hydrated detail objects in that same order; never copy the list
+response directly into `github.rulesets`.
+
+If the ruleset list request fails, record `github.rulesets` as an explicit incomplete
+evidence mapping rather than an empty list. If an active detail request fails, retain
+an explicit incomplete evidence object containing its `id`, `name`, `enforcement`,
+and detail error in the deterministic list, but omit `target` and `conditions` even if
+the list summary happened to include them. This ensures the adapter returns `unknown`:
+a collection failure never establishes a pass or fail. Disabled or evaluating
+summaries need not be hydrated because they cannot establish active protection.
+
+Merge successful responses into that repository's `github` namespace in a temporary
+copy of the F0 document. Do not fetch root contents,
 `.github` contents, labels, workflows, releases, or tags: the F0 projection replaces
 manifest fetching. Record an authenticated protection 404 as
 `github.protection: null` because it proves protection is absent. Other unavailable

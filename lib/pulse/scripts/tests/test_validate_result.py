@@ -1,4 +1,5 @@
 """Tests for validate_result.py — pulse headless result contract validation."""
+import copy
 import subprocess
 import sys
 from pathlib import Path
@@ -135,6 +136,19 @@ def test_healthcheck_requires_fleet_coverage(tmp_path):
 
     assert result.returncode == 1
     assert "missing required key: coverage" in result.stderr
+
+
+def test_healthcheck_rejects_duplicate_repository_identity(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    doc["repos"].append(copy.deepcopy(doc["repos"][0]))
+    reconcile_healthcheck_summaries(doc)
+    path = tmp_path / "healthcheck.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "healthcheck")
+
+    assert result.returncode == 1
+    assert "duplicate repository identity: testorg/widget" in result.stderr
 
 
 @pytest.mark.parametrize(
