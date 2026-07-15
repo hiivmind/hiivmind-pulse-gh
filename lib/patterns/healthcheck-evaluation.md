@@ -6,6 +6,30 @@
 
 ## Evaluation Strategy
 
+### Adapter registry contract
+
+Profile-dispatched checks cross a pure registry boundary before scoring. An
+adapter is registered by identifier with `AdapterRegistry.register(name, fn)`
+and evaluated with `AdapterRegistry.evaluate(name, context)`. `CheckContext` is
+an immutable value containing `repo`, `evidence`, `check`, and `workspace`.
+
+Adapters return a mapping containing `status`, `detail`, and `data`. The
+registry adds the authoritative `adapter` identifier and emits this normalized
+block:
+
+```yaml
+adapter: <adapter id>
+status: pass | warn | fail | unknown | not_applicable | unsupported | error
+detail: <string>
+data: {} # mapping; may be empty
+```
+
+An unregistered identifier produces `unsupported`. An adapter exception or an
+invalid output shape produces `error`. Both are normal result states: neither
+enters the score denominator, while only `unsupported` creates adapter coverage
+debt. Registry evaluation is data-only and performs no network or filesystem
+I/O.
+
 For each check, determine if the target repo is the **current repo** (local) or a **remote repo** (in catalog but not cwd):
 
 | Scenario | Data Source | Approach |
