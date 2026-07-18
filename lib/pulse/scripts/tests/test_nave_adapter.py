@@ -19,6 +19,18 @@ class RecordingRunner:
         return self.result
 
 
+class QueuedRunner:
+    """Fake runner that returns a distinct Completed per call, in order."""
+
+    def __init__(self, results):
+        self.calls = []
+        self._results = list(results)
+
+    def run(self, args):
+        self.calls.append(args)
+        return self._results.pop(0)
+
+
 def test_probe_detects_current_capabilities():
     runner = nave_adapter.NaveRunner(fixtures=FIXTURES)
     result = nave_adapter.probe(runner)
@@ -314,3 +326,350 @@ def test_cli_materialize_subcommand_does_not_leak_content(monkeypatch, capsys):
     for repo in output["repos"]:
         assert "artifacts" not in repo
     assert output["repos"][0]["artifacts_by_state"]["found"] >= 1
+
+
+# --- pen lifecycle ---
+
+PEN_FIXTURES = FIXTURES / "pen"
+
+
+def test_pen_show_builds_exact_command_with_name():
+    runner = RecordingRunner(nave_adapter.Completed(0, "{}", ""))
+
+    nave_adapter.pen_show(runner, name="nave/api-audit")
+
+    assert runner.calls == [["pen", "show", "nave/api-audit", "--json"]]
+
+
+def test_pen_show_builds_exact_command_with_filter_only():
+    runner = RecordingRunner(nave_adapter.Completed(0, "{}", ""))
+
+    nave_adapter.pen_show(runner, filter_regex="api.*")
+
+    assert runner.calls == [["pen", "show", "--filter", "api.*", "--json"]]
+
+
+def test_pen_status_builds_exact_command_and_normalizes_array_root():
+    status_json = json.dumps(
+        [
+            {
+                "owner": "acme",
+                "repo": "api",
+                "working_tree": "clean",
+                "freshness": "fresh",
+                "run_state": "not-run",
+                "divergence": "up-to-date",
+                "ahead": 0,
+                "behind": 0,
+            }
+        ]
+    )
+    runner = RecordingRunner(nave_adapter.Completed(0, status_json, ""))
+
+    result = nave_adapter.pen_status(runner, "nave/api-audit")
+
+    assert runner.calls == [["pen", "status", "nave/api-audit", "--json"]]
+    assert result == {
+        "repos": [
+            {
+                "owner": "acme",
+                "repo": "api",
+                "working_tree": "clean",
+                "freshness": "fresh",
+                "run_state": "not-run",
+                "divergence": "up-to-date",
+                "ahead": 0,
+                "behind": 0,
+            }
+        ]
+    }
+
+
+def test_pen_status_invalid_json_becomes_typed_adapter_error():
+    runner = RecordingRunner(nave_adapter.Completed(0, "not json", ""))
+
+    result = nave_adapter.pen_status(runner, "nave/api-audit")
+
+    assert result["adapter_state"] == "error"
+    assert "invalid JSON" in result["error"]
+
+
+def test_pen_status_non_array_root_becomes_typed_adapter_error():
+    runner = RecordingRunner(nave_adapter.Completed(0, "{}", ""))
+
+    result = nave_adapter.pen_status(runner, "nave/api-audit")
+
+    assert result["adapter_state"] == "error"
+    assert "not an array" in result["error"]
+
+
+def test_pen_create_builds_exact_command_then_calls_show():
+    show_json = json.dumps({"name": "nave/api-audit", "branch": "nave/api-audit"})
+    runner = QueuedRunner(
+        [
+            nave_adapter.Completed(0, "nave/api-audit\n  acme/api\n", ""),
+            nave_adapter.Completed(0, show_json, ""),
+        ]
+    )
+    query = nave_adapter.PenQuery(
+        terms=["workflow:pytest"], match_preds=["tool.pytest"], ignore_case=True
+    )
+
+    handle = nave_adapter.pen_create(runner, query, "nave/api-audit")
+
+    assert runner.calls == [
+        [
+            "pen",
+            "create",
+            "--name",
+            "nave/api-audit",
+            "--ignore-case",
+            "--match",
+            "tool.pytest",
+            "workflow:pytest",
+        ],
+        ["pen", "show", "nave/api-audit", "--json"],
+    ]
+    assert handle.name == "nave/api-audit"
+    assert handle.state == "ok"
+    assert handle.pen == {"name": "nave/api-audit", "branch": "nave/api-audit"}
+
+
+def test_pen_create_never_parses_human_text_as_data():
+    # The create command's stdout is deliberately gibberish/opaque; only the
+    # exit code and the subsequent `pen show --json` call may inform state.
+    show_json = json.dumps({"name": "nave/api-audit"})
+    runner = QueuedRunner(
+        [
+            nave_adapter.Completed(0, "not structured at all !!!", ""),
+            nave_adapter.Completed(0, show_json, ""),
+        ]
+    )
+
+    handle = nave_adapter.pen_create(runner, nave_adapter.PenQuery(), "nave/api-audit")
+
+    assert handle.state == "ok"
+    assert handle.pen == {"name": "nave/api-audit"}
+
+
+def test_pen_create_nonzero_exit_skips_show_call():
+    runner = QueuedRunner([nave_adapter.Completed(1, "", "boom")])
+
+    handle = nave_adapter.pen_create(runner, nave_adapter.PenQuery(), "nave/api-audit")
+
+    assert runner.calls == [
+        ["pen", "create", "--name", "nave/api-audit"],
+    ]
+    assert handle.state == "error"
+    assert handle.returncode == 1
+    assert handle.stderr == "boom"
+    assert handle.pen is None
+
+
+def test_pen_exec_default_never_passes_push_or_commit_flags():
+    status_json = "[]"
+    runner = QueuedRunner(
+        [
+            nave_adapter.Completed(0, "ok", ""),
+            nave_adapter.Completed(0, status_json, ""),
+        ]
+    )
+
+    result = nave_adapter.pen_exec(runner, "nave/api-audit", ["echo", "hi"])
+
+    exec_call = runner.calls[0]
+    assert "--push-changes" not in exec_call
+    assert "--commit" not in exec_call
+    assert exec_call == ["pen", "exec", "nave/api-audit", "--", "echo", "hi"]
+    assert result["adapter_state"] == "ok"
+    assert result["status"] == {"repos": []}
+
+
+def test_pen_exec_explicit_commit_adds_only_commit_flag():
+    runner = QueuedRunner(
+        [
+            nave_adapter.Completed(0, "ok", ""),
+            nave_adapter.Completed(0, "[]", ""),
+        ]
+    )
+
+    nave_adapter.pen_exec(
+        runner, "nave/api-audit", ["echo", "hi"], commit=True, message="update"
+    )
+
+    exec_call = runner.calls[0]
+    assert "--commit" in exec_call
+    assert "--push-changes" not in exec_call
+    assert exec_call == [
+        "pen",
+        "exec",
+        "nave/api-audit",
+        "--commit",
+        "-m",
+        "update",
+        "--",
+        "echo",
+        "hi",
+    ]
+
+
+def test_pen_exec_explicit_push_changes_adds_only_push_flag():
+    runner = QueuedRunner(
+        [
+            nave_adapter.Completed(0, "ok", ""),
+            nave_adapter.Completed(0, "[]", ""),
+        ]
+    )
+
+    nave_adapter.pen_exec(
+        runner, "nave/api-audit", ["echo", "hi"], commit=True, push_changes=True
+    )
+
+    exec_call = runner.calls[0]
+    # --push-changes already implies --commit on the real CLI; the adapter
+    # must not also emit a redundant --commit flag.
+    assert exec_call.count("--push-changes") == 1
+    assert "--commit" not in exec_call
+
+
+def test_pen_exec_supports_only_repo_filter():
+    runner = QueuedRunner(
+        [
+            nave_adapter.Completed(0, "ok", ""),
+            nave_adapter.Completed(0, "[]", ""),
+        ]
+    )
+
+    nave_adapter.pen_exec(runner, "nave/api-audit", ["echo", "hi"], only="acme/api")
+
+    assert runner.calls[0] == [
+        "pen",
+        "exec",
+        "nave/api-audit",
+        "--only",
+        "acme/api",
+        "--",
+        "echo",
+        "hi",
+    ]
+
+
+def test_pen_exec_command_is_argv_not_shell_string():
+    runner = QueuedRunner(
+        [
+            nave_adapter.Completed(0, "ok", ""),
+            nave_adapter.Completed(0, "[]", ""),
+        ]
+    )
+
+    nave_adapter.pen_exec(runner, "nave/api-audit", ["git", "grep", "-l", "TODO"])
+
+    exec_call = runner.calls[0]
+    tail = exec_call[exec_call.index("--") + 1 :]
+    assert tail == ["git", "grep", "-l", "TODO"]
+
+
+def test_pen_exec_rejects_empty_command():
+    runner = QueuedRunner([])
+
+    try:
+        nave_adapter.pen_exec(runner, "nave/api-audit", [])
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected ValueError for empty command")
+    assert runner.calls == []
+
+
+def test_pen_exec_calls_status_after_exec_for_verification():
+    status_json = json.dumps(
+        [
+            {
+                "owner": "acme",
+                "repo": "api",
+                "working_tree": "dirty",
+                "freshness": "fresh",
+                "run_state": "run-local",
+                "divergence": "up-to-date",
+                "ahead": 0,
+                "behind": 0,
+            }
+        ]
+    )
+    runner = QueuedRunner(
+        [
+            nave_adapter.Completed(0, "did the thing", ""),
+            nave_adapter.Completed(0, status_json, ""),
+        ]
+    )
+
+    result = nave_adapter.pen_exec(runner, "nave/api-audit", ["make", "fmt"])
+
+    assert runner.calls[1] == ["pen", "status", "nave/api-audit", "--json"]
+    assert result["stdout"] == "did the thing"
+    assert result["status"]["repos"][0]["run_state"] == "run-local"
+
+
+def test_pen_exec_nonzero_exit_still_records_status_and_marks_error():
+    runner = QueuedRunner(
+        [
+            nave_adapter.Completed(1, "", "command failed"),
+            nave_adapter.Completed(0, "[]", ""),
+        ]
+    )
+
+    result = nave_adapter.pen_exec(runner, "nave/api-audit", ["false"])
+
+    assert result["adapter_state"] == "error"
+    assert result["returncode"] == 1
+    assert result["stderr"] == "command failed"
+    assert result["status"] == {"repos": []}
+
+
+def test_fixture_pen_show_decodes_faithful_json():
+    runner = nave_adapter.NaveRunner(fixtures=FIXTURES)
+
+    result = nave_adapter.pen_show(runner, name="nave/api-audit")
+
+    assert result["name"] == "nave/api-audit"
+    assert result["repos"][0]["owner"] == "acme"
+    assert "content" not in result
+
+
+def test_fixture_pen_status_decodes_faithful_json():
+    runner = nave_adapter.NaveRunner(fixtures=FIXTURES)
+
+    result = nave_adapter.pen_status(runner, "nave/api-audit")
+
+    assert result["repos"][0]["owner"] == "acme"
+    assert result["repos"][0]["working_tree"] in {"clean", "dirty", "missing"}
+
+
+def test_fixture_pen_create_builds_handle_from_show():
+    runner = nave_adapter.NaveRunner(fixtures=FIXTURES)
+
+    handle = nave_adapter.pen_create(
+        runner, nave_adapter.PenQuery(terms=["workflow:pytest"]), "nave/api-audit"
+    )
+
+    assert handle.state == "ok"
+    assert handle.pen["name"] == "nave/api-audit"
+
+
+def test_fixture_pen_exec_is_opaque_and_reports_status():
+    runner = nave_adapter.NaveRunner(fixtures=FIXTURES)
+
+    result = nave_adapter.pen_exec(runner, "nave/api-audit", ["make", "fmt"])
+
+    assert result["adapter_state"] == "ok"
+    assert result["status"]["repos"]
+
+
+def test_cli_pen_show_and_status_use_fixtures(monkeypatch, capsys):
+    monkeypatch.setenv("PULSE_NAVE_FIXTURES", str(FIXTURES))
+
+    assert nave_adapter.main(["pen-show", "--name", "nave/api-audit"]) == 0
+    assert json.loads(capsys.readouterr().out)["name"] == "nave/api-audit"
+
+    assert nave_adapter.main(["pen-status", "--name", "nave/api-audit"]) == 0
+    assert json.loads(capsys.readouterr().out)["repos"][0]["owner"] == "acme"

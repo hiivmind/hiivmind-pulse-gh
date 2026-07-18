@@ -1,0 +1,27 @@
+{
+  "name": "nave/api-audit",
+  "created_at": "2026-07-15T10:00:00Z",
+  "branch": "nave/api-audit",
+  "filter": {
+    "terms": [
+      "workflow:pytest"
+    ]
+  },
+  "repos": [
+    {
+      "owner": "acme",
+      "name": "api",
+      "default_branch": "main",
+      "clone_url": "git@github.com:acme/api.git",
+      "synced_at": "2026-07-15T10:00:00Z"
+    },
+    {
+      "owner": "acme",
+      "name": "web",
+      "default_branch": "main",
+      "clone_url": "git@github.com:acme/web.git",
+      "synced_at": "2026-07-15T10:00:00Z"
+    }
+  ],
+  "ops": []
+}

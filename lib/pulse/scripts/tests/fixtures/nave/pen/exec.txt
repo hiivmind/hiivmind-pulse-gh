@@ -1,0 +1,2 @@
+running `make fmt` in acme/api
+running `make fmt` in acme/web
