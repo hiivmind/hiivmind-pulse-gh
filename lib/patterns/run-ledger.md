@@ -81,8 +81,24 @@ next        --file LEDGER                   → JSON {status, runnable[], blocke
 update      --file LEDGER --step ID --status S
             [--actor-login L --actor-machine M] [--note TEXT]
 gate-result --file LEDGER --step ID --satisfied true|false [--note TEXT]
+check-gate  --file LEDGER --step ID --result FILE --gate-type TYPE
+                                             → deterministic evaluator counterpart to
+                                               gate-result: reads a headless result file
+                                               (lib/patterns/headless-contract.md), fails
+                                               closed on missing/malformed/non-conforming
+                                               evidence, records the verdict the same way,
+                                               prints JSON {satisfied, detail}
 lease       --file LEDGER --step ID --by WHO [--ttl-minutes 120]
 ```
+
+`gate-result` is for prose gates a human/LLM adjudicates against live GitHub
+state. `check-gate` is for gates a registered evaluator can compute
+deterministically from an already-validated result file — e.g.
+`binding_edges_current` (F5) reads an `impact-result.yaml` and is satisfied
+only when it validates as kind `impact` with `edges_stale == 0` and no edge
+in state `unknown`. New evaluators register by name in `resolve_run.py`'s
+`GATE_EVALUATORS`; `--gate-type` naming an evaluator that isn't registered is
+a usage error (exit 1), never silently treated as satisfied.
 
 Exit codes: 0 ok, 1 validation/state error, 2 file missing/unparseable,
 3 lease actively held by someone else.

@@ -1,0 +1,39 @@
+# hiivmind-pulse-gh - Impact Audit Workflow
+# Audit path-scoped integration currency for repo_dependencies object edges (F5)
+# and record tracking-issue / integration-workflow dispatch proposals for stale
+# bindings. Never advances integration_tested_sha markers itself.
+# Copy to: .hiivmind/github/workflows/impact-audit.yaml
+
+name: "impact-audit"
+description: "Audit binding edge currency and propose tracking issues/dispatches for stale bindings"
+enabled: true
+auto: false  # Must be explicitly requested — never runs automatically
+
+# Reference headless annotation: the audit is read-only against GitHub and
+# relationships.yaml; INVOKE maps to the gh-impact-audit-headless sibling when
+# present (see workflow-execution.md).
+headless:
+  enabled: true
+  on_ask: record
+  on_mutation: propose   # tracking issues and integration dispatches are proposed, never applied unattended
+
+trigger:
+  type: on_demand
+  condition: user_requested
+
+params:
+  repo:
+    description: "Optional dependent repo (full or short name) to scope the audit to; empty audits every configured dependent"
+    type: string
+    default: ""
+
+state: {}
+
+workflow: |
+  EXECUTE:
+    INVOKE skill hiivmind-pulse-gh:gh-impact-audit-headless
+      WITH workspace_path=workspace_root,
+           repo=params.repo,
+           mode=scheduled
+
+cooldown_minutes: 1440  # 24 hours

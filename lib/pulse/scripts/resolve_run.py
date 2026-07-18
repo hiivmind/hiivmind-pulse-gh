@@ -17,6 +17,10 @@ from pathlib import Path
 
 import yaml
 
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from lib.pulse.scripts import validate_result as _validate_result  # noqa: E402
+
 LEDGER_VERSION = 1
 STEP_STATUSES = {"pending", "running", "blocked-on-gate", "done", "failed", "skipped"}
 TERMINAL = {"done", "failed", "skipped"}
@@ -195,16 +199,15 @@ def cmd_update(args):
     save(args.file, doc)
 
 
-def cmd_gate_result(args):
-    doc = load(args.file)
-    step = find_step(doc, args.step)
-    if not step.get("gate"):
-        die(f"step {args.step} has no gate")
-    satisfied = args.satisfied == "true"
+def _apply_gate_result(step, satisfied, note=""):
+    """Shared gate-clearing logic for both the externally-adjudicated
+    `gate-result` command (a human/LLM evaluates prose and reports a
+    boolean) and `check-gate` (a registered evaluator computes the boolean
+    deterministically from a result file). Mutates `step` in place."""
     step["gate_satisfied"] = satisfied
     step["gate_checked_at"] = now_iso()
-    if args.note:
-        step["notes"].append(f"{now_iso()} gate: {args.note}")
+    if note:
+        step["notes"].append(f"{now_iso()} gate: {note}")
     if satisfied:
         # A gate-only step (pure checkpoint) completes when its gate clears.
         # A gate+workflow step must still run its workflow block: only clear the
@@ -218,8 +221,96 @@ def cmd_gate_result(args):
             step["finished_at"] = now_iso()
     else:
         step["status"] = "blocked-on-gate"
+
+
+def cmd_gate_result(args):
+    doc = load(args.file)
+    step = find_step(doc, args.step)
+    if not step.get("gate"):
+        die(f"step {args.step} has no gate")
+    satisfied = args.satisfied == "true"
+    _apply_gate_result(step, satisfied, args.note)
     recompute_status(doc)
     save(args.file, doc)
+
+
+# --------------------------------------------------------------------------
+# check-gate: deterministic gate evaluators over headless result files
+# --------------------------------------------------------------------------
+#
+# `gate-result` records an externally-adjudicated verdict (a human or LLM
+# evaluates the step's natural-language `gate` condition and reports true/
+# false). `check-gate` is the deterministic counterpart: a registered
+# evaluator computes the verdict itself from a validated headless result
+# file (see lib/patterns/headless-contract.md), fails closed on any
+# missing/malformed/non-conforming evidence, and records it the same way.
+# New evaluators register in GATE_EVALUATORS by name — this is the generic
+# extension point for future result-driven gates, not a one-off.
+
+def _load_result_kind(path, kind):
+    """Load and schema-validate a headless result file. Never raises —
+    missing files, unparseable YAML, non-mapping documents, and schema
+    violations are all reported as errors so gates built on this helper
+    fail closed on bad evidence instead of crashing the ledger operation.
+    Returns (data, errors); data is None whenever errors is non-empty."""
+    p = Path(path)
+    if not p.exists():
+        return None, [f"result file not found: {p}"]
+    try:
+        raw = yaml.safe_load(p.read_text())
+    except yaml.YAMLError as e:
+        return None, [f"unparseable YAML: {e}"]
+    if not isinstance(raw, dict):
+        return None, ["result is not a mapping"]
+    errors = _validate_result.validate(raw, kind)
+    if errors:
+        return None, errors
+    return raw, []
+
+
+def evaluate_binding_edges_gate(result_path):
+    """`binding_edges_current` — fail-closed release gate over an
+    impact-result.yaml (F5). Satisfied only when the result file is
+    present, validates cleanly as kind `impact`, and every audited edge is
+    current: `edges_stale == 0` and no edge in state `unknown`. A missing
+    file, unparseable/malformed YAML, a schema-invalid result, any stale
+    edge, or any unknown-state edge all fail closed (satisfied=False) —
+    an unauditable or incomplete result is never treated as passing."""
+    data, errors = _load_result_kind(result_path, "impact")
+    if data is None:
+        return False, "; ".join(errors) or "invalid impact result"
+    edges = data.get("edges") or []
+    stale = [e for e in edges if isinstance(e, dict) and e.get("state") == "stale"]
+    unknown = [e for e in edges if isinstance(e, dict) and e.get("state") == "unknown"]
+    if stale or unknown:
+        parts = []
+        if stale:
+            parts.append(f"{len(stale)} stale edge(s)")
+        if unknown:
+            parts.append(f"{len(unknown)} unknown-state edge(s)")
+        return False, "; ".join(parts)
+    return True, f"{len(edges)} edge(s) current"
+
+
+GATE_EVALUATORS = {
+    "binding_edges_current": evaluate_binding_edges_gate,
+}
+
+
+def cmd_check_gate(args):
+    doc = load(args.file)
+    step = find_step(doc, args.step)
+    if not step.get("gate"):
+        die(f"step {args.step} has no gate")
+    evaluator = GATE_EVALUATORS.get(args.gate_type)
+    if evaluator is None:
+        die(f"unknown gate type: {args.gate_type} "
+            f"(known: {', '.join(sorted(GATE_EVALUATORS))})")
+    satisfied, detail = evaluator(args.result)
+    _apply_gate_result(step, satisfied, detail)
+    recompute_status(doc)
+    save(args.file, doc)
+    print(json.dumps({"satisfied": satisfied, "detail": detail}))
 
 
 def cmd_lease(args):
@@ -275,6 +366,14 @@ def main():
     g.add_argument("--satisfied", required=True, choices=["true", "false"])
     g.add_argument("--note", default="")
     g.set_defaults(fn=cmd_gate_result)
+
+    cg = sub.add_parser("check-gate")
+    cg.add_argument("--file", required=True)
+    cg.add_argument("--step", required=True)
+    cg.add_argument("--result", required=True,
+                    help="path to the headless result file the evaluator reads")
+    cg.add_argument("--gate-type", required=True)
+    cg.set_defaults(fn=cmd_check_gate)
 
     l = sub.add_parser("lease")
     l.add_argument("--file", required=True)
