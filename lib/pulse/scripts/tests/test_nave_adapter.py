@@ -294,4 +294,23 @@ def test_cli_materialize_subcommand_uses_request_flag(monkeypatch, capsys):
 
     assert nave_adapter.main(["materialize", "--request", "anything"]) == 0
     output = json.loads(capsys.readouterr().out)
-    assert output["contract_version"] == 1
+    assert output["repos"][0]["repo"] == "acme/api"
+    assert output["repos"][0]["artifacts_by_state"] == {"found": 1}
+
+
+def test_cli_materialize_subcommand_does_not_leak_content(monkeypatch, capsys):
+    monkeypatch.setenv("PULSE_NAVE_FIXTURES", str(FIXTURES))
+
+    exit_code = nave_adapter.main(["materialize", "--request", "anything"])
+    raw_stdout = capsys.readouterr().out
+
+    assert exit_code == 0
+    # The fixture's found artifact contains this pyproject snippet in its
+    # decoded `content` field; it must never reach CLI stdout.
+    assert "[tool.pytest.ini_options]" not in raw_stdout
+
+    output = json.loads(raw_stdout)
+    assert "content" not in output["repos"][0]["artifacts_by_state"]
+    for repo in output["repos"]:
+        assert "artifacts" not in repo
+    assert output["repos"][0]["artifacts_by_state"]["found"] >= 1

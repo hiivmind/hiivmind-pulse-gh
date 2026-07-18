@@ -325,6 +325,31 @@ def materialize(runner: NaveRunner, request: str) -> dict:
     return _decode_json("materialize", runner.run(args))
 
 
+def _materialize_summary(report: dict) -> dict:
+    """Build a content-free per-repo, per-state artifact summary.
+
+    Never includes artifact `content` (or `blob_sha`/`detail`) — only counts,
+    so the CLI can report success without echoing decoded file bytes.
+    """
+    repos_summary = []
+    for repo in report.get("repos", []):
+        counts: dict[str, int] = {}
+        for artifact in repo.get("artifacts", []):
+            state = artifact.get("state", "unknown")
+            counts[state] = counts.get(state, 0) + 1
+        repos_summary.append(
+            {
+                "repo": repo.get("repo"),
+                "artifacts_by_state": dict(sorted(counts.items())),
+            }
+        )
+    repos_summary.sort(key=lambda entry: (entry["repo"] or ""))
+    return {
+        "repos": repos_summary,
+        "protocol_note": "content omitted from CLI output; see materialize() for in-process access",
+    }
+
+
 def _runner_from_args(args: argparse.Namespace) -> NaveRunner:
     fixtures = os.environ.get("PULSE_NAVE_FIXTURES")
     return NaveRunner(binary=args.binary, fixtures=fixtures, timeout=args.timeout)
@@ -397,8 +422,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if result.get("adapter_state") == "error" else 0
     if args.command == "materialize":
         result = materialize(runner, args.request)
-        print(json.dumps(result, indent=2, sort_keys=True))
-        return 1 if result.get("adapter_state") == "error" else 0
+        if result.get("adapter_state") == "error":
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return 1
+        print(json.dumps(_materialize_summary(result), indent=2, sort_keys=True))
+        return 0
     return 2
 
 
