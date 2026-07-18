@@ -73,6 +73,28 @@ match its configured tracked paths, and its defaults do not cover every language
 or repository type. Absence therefore means "not observed by this projection";
 it is never authoritative fleet-membership evidence.
 
+## Protocol 2
+
+Protocol `2` is a strict superset of protocol 1: it adds the `materialize_json`
+capability on top of every protocol-1 capability. The adapter negotiates it by
+probing `nave materialize --help` and requiring that its output advertise
+**both** `--request` and `--json`; if `materialize` is unlisted, or listed but
+missing either flag, negotiation falls back to protocol 1 (or `None` if the
+baseline capabilities are not met). `materialize_json` is never a baseline F0
+requirement — a valid v1 Nave install with no `materialize` command still
+negotiates protocol 1 with `available: true`.
+
+`materialize_json` backs the F4 dependency-evidence workflow: Pulse writes a
+request file describing selectors to materialize and invokes
+`nave materialize --request <path> --json`, decoding the same way as
+`search`/`build`/`check` (typed `adapter_state: error` on non-object or
+invalid JSON, non-zero exit, or timeout). The result shape mirrors Nave's
+`MaterializeResult`: a `contract_version` and a `repos` list, each repo
+carrying `repo`, `ref_name`, `tree_sha`, `tree_complete`, and an `artifacts`
+list of `{selector_id, path, blob_sha, size_bytes, state, encoding, content,
+detail}` records. Protocol 1 remains valid and sufficient for F0 structural
+evidence; it does not require `materialize_json`.
+
 ## Capability semantics
 
 - `available`: all capabilities needed for the requested evidence run exist.

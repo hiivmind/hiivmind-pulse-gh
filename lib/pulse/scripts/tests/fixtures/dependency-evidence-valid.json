@@ -1,0 +1,109 @@
+{
+  "contract_version": 1,
+  "provider": {
+    "name": "nave",
+    "version": "0.9.0",
+    "protocol": 2
+  },
+  "generated_at": "2026-07-18T10:00:00Z",
+  "request_sha256": "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0",
+  "repos": [
+    {
+      "repo": "acme/api",
+      "ref_name": "main",
+      "tree_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "tree_complete": true,
+      "artifacts": [
+        {
+          "selector_id": "python.pyproject",
+          "path": "pyproject.toml",
+          "blob_sha": "dddddddddddddddddddddddddddddddddddddddd",
+          "size_bytes": 1234,
+          "state": "found",
+          "encoding": "utf-8",
+          "content": "[project]\nname = \"api\"\n",
+          "detail": null
+        },
+        {
+          "selector_id": "python.requirements",
+          "path": null,
+          "blob_sha": null,
+          "size_bytes": null,
+          "state": "absent",
+          "encoding": null,
+          "content": null,
+          "detail": null
+        }
+      ]
+    },
+    {
+      "repo": "acme/web",
+      "ref_name": "main",
+      "tree_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "tree_complete": true,
+      "artifacts": [
+        {
+          "selector_id": "node.package_json",
+          "path": "package.json",
+          "blob_sha": "cccccccccccccccccccccccccccccccccccccccc",
+          "size_bytes": 512,
+          "state": "found",
+          "encoding": "utf-8",
+          "content": "{\"name\": \"web\"}",
+          "detail": null
+        },
+        {
+          "selector_id": "node.lockfile",
+          "path": "package-lock.json",
+          "blob_sha": null,
+          "size_bytes": 2097152,
+          "state": "too_large",
+          "encoding": null,
+          "content": null,
+          "detail": "exceeds max_bytes 65536"
+        },
+        {
+          "selector_id": "node.binary_asset",
+          "path": "assets/logo.png",
+          "blob_sha": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "size_bytes": 4096,
+          "state": "binary",
+          "encoding": null,
+          "content": null,
+          "detail": ""
+        },
+        {
+          "selector_id": "node.unresolved_ref",
+          "path": null,
+          "blob_sha": null,
+          "size_bytes": null,
+          "state": "unresolved",
+          "encoding": null,
+          "content": null,
+          "detail": "ref not found"
+        },
+        {
+          "selector_id": "node.unsupported_selector",
+          "path": null,
+          "blob_sha": null,
+          "size_bytes": 0,
+          "state": "unsupported",
+          "encoding": null,
+          "content": null,
+          "detail": "selector type not supported"
+        },
+        {
+          "selector_id": "node.errored_selector",
+          "path": "broken/path.txt",
+          "blob_sha": null,
+          "size_bytes": 0,
+          "state": "error",
+          "encoding": null,
+          "content": null,
+          "detail": "read error"
+        }
+      ]
+    }
+  ],
+  "errors": []
+}

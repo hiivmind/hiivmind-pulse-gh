@@ -1,0 +1,23 @@
+{
+  "contract_version": 1,
+  "repos": [
+    {
+      "repo": "acme/api",
+      "ref_name": "main",
+      "tree_sha": "abc123",
+      "tree_complete": false,
+      "artifacts": [
+        {
+          "selector_id": "pyproject.toml",
+          "path": "pyproject.toml",
+          "blob_sha": "def456",
+          "size_bytes": 512,
+          "state": "found",
+          "encoding": "utf-8",
+          "content": "[tool.pytest.ini_options]\n",
+          "detail": null
+        }
+      ]
+    }
+  ]
+}

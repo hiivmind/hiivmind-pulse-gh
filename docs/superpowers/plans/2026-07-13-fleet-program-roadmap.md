@@ -32,18 +32,21 @@
 | F1 | Profiles, scorecards, applicability states | P0 | Makes repository intent explicit before any scoring or onboarding | F2–F9 |
 | F2 | Generic fleet membership and profile proposals | P0 | Keeps fleet scope honest and assigns reviewed intent metadata | F3–F9 |
 | F3 | Dispatched healthcheck shell and coverage report | P0 | Proves generic top-level dispatch without language assumptions | F4, F9 |
-| F4 | Dependency coherence adapter family | P1 | First real language-dispatched workflow; validates Python/Node adapter model | future ecosystems |
+| Pre-F4 | Nave dependency evidence materialization | P0 | Adds authoritative, bounded file contents without exposing Nave cache internals or duplicating GitHub retrieval | F4 |
+| F4 | Dependency coherence adapter family | P1 | First real language-dispatched workflow; validates Python/Node adapters over authoritative content evidence | future ecosystems |
 | F5 | Generic impact bindings and branch currency | P1 | Highest-value generic cross-repo workflow; independent of repo language | F7, release gates |
 | F6 | Nave pen mutation orchestration | P1 | Adds safe repository-file writes only after read/evaluate paths are stable | F7–F9 apply paths |
 | F7 | Generic generated-artifact and contract specializations | P2 | Reuses F5 bindings and F6 pens; generator/parser behavior is adapter-driven | corpus overlay |
 | F8 | Generic plan synchronization | P2 | Adds multi-master reconciliation after mutation and binding conventions prove out | milestone alignment |
 | F9 | Hiivmind/Claude dogfood overlays | P2 | Exercises plugin-specific marketplace, Claude context, and generated-skill behavior without polluting core | self-governance |
 
+> **Pre-F4 status:** ✅ code-complete — Nave protocol-v2 `materialize_json`, the Pulse `nave_adapter`/`dependency_evidence`/`validate_dependency_evidence` contract, and the cross-repository acceptance gate (`test_pre_f4_materialization_acceptance.py`) are implemented and passing. Remaining: releasing Nave and pinning the minimum version in `lib/patterns/dependency-evidence-contract.md` before F4 begins.
+
 ### Dependency graph
 
 ```text
 F0 Nave evidence ─────┐
-                     ├─► F2 membership/profile proposals ─► F3 healthcheck dispatch ─► F4 dependency adapters
+                     ├─► F2 membership/profile proposals ─► F3 healthcheck dispatch ─► Pre-F4 materialization ─► F4 dependency adapters
 F1 profiles/scorecards┘                                  └─► F9 dogfood checks
 
 F5 impact bindings ────────────────┐
@@ -61,12 +64,13 @@ F0 and F1 may be developed in parallel after their shared normalized evidence/pr
 2. `2026-07-13-f1-profile-scorecard-core.md`
 3. `2026-07-13-f2-fleet-membership-profiles.md`
 4. `2026-07-13-f3-dispatched-healthchecks.md`
-5. `2026-07-13-f4-dependency-adapters.md`
-6. `2026-07-13-f5-impact-bindings.md`
-7. `2026-07-13-f6-nave-pen-mutations.md`
-8. `2026-07-13-f7-binding-specializations.md`
-9. `2026-07-13-f8-plan-sync.md`
-10. `2026-07-13-f9-dogfood-overlays.md`
+5. `2026-07-15-pre-f4-nave-dependency-evidence.md`
+6. `2026-07-13-f4-dependency-adapters.md`
+7. `2026-07-13-f5-impact-bindings.md`
+8. `2026-07-13-f6-nave-pen-mutations.md`
+9. `2026-07-13-f7-binding-specializations.md`
+10. `2026-07-13-f8-plan-sync.md`
+11. `2026-07-13-f9-dogfood-overlays.md`
 
 The earlier W1–W9 plans are source material, not executable program order. W1/W2 assumed profile infrastructure that did not exist; W3/W8 were dogfood overlays presented as fleet defaults; W5 mixed a generic manifest with a Claude-skill generator. The F-series supersedes them.
 
@@ -82,6 +86,7 @@ The earlier W1–W9 plans are source material, not executable program order. W1/
 
 ### General workflow gate — after F4–F6
 
+- Dependency manifests and locks are materialized through a released Nave protocol-v2 capability; Pulse does not read Nave cache internals.
 - Dependency coherence dispatches by ecosystem adapter.
 - Unsupported ecosystems are visible without false failures.
 - Impact audit detects path-scoped remote drift independent of language.

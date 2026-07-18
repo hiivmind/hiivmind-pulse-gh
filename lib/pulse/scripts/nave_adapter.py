@@ -18,8 +18,7 @@ from pathlib import Path
 from typing import Sequence
 
 
-CURRENT_PROTOCOL = 1
-CURRENT_CAPABILITIES = {
+BASELINE_CAPABILITIES = {
     "scan",
     "pull",
     "search_json",
@@ -27,6 +26,7 @@ CURRENT_CAPABILITIES = {
     "check_json",
     "pen",
 }
+PROTOCOL_2_CAPABILITIES = BASELINE_CAPABILITIES | {"materialize_json"}
 
 
 @dataclass(frozen=True)
@@ -206,7 +206,22 @@ def probe(runner: NaveRunner) -> dict:
             if pen_json:
                 capabilities.add("pen")
 
-    protocol = CURRENT_PROTOCOL if CURRENT_CAPABILITIES <= capabilities else None
+    if _listed(help_text, "materialize"):
+        has_request, request_error = _help_has(runner, ["materialize"], "--request")
+        if request_error:
+            errors.append(request_error)
+        has_json, json_error = _help_has(runner, ["materialize"], "--json")
+        if json_error:
+            errors.append(json_error)
+        if has_request and has_json:
+            capabilities.add("materialize_json")
+
+    if PROTOCOL_2_CAPABILITIES <= capabilities:
+        protocol = 2
+    elif BASELINE_CAPABILITIES <= capabilities:
+        protocol = 1
+    else:
+        protocol = None
     return {
         "available": True,
         "state": "available" if protocol is not None and not errors else "degraded",
@@ -304,6 +319,37 @@ def check(runner: NaveRunner) -> dict:
     return _decode_json("check", runner.run(["check", "--json"]))
 
 
+def materialize(runner: NaveRunner, request: str) -> dict:
+    """Materialize requested content using Nave's protocol-2 JSON contract."""
+    args = ["materialize", "--request", request, "--json"]
+    return _decode_json("materialize", runner.run(args))
+
+
+def _materialize_summary(report: dict) -> dict:
+    """Build a content-free per-repo, per-state artifact summary.
+
+    Never includes artifact `content` (or `blob_sha`/`detail`) — only counts,
+    so the CLI can report success without echoing decoded file bytes.
+    """
+    repos_summary = []
+    for repo in report.get("repos", []):
+        counts: dict[str, int] = {}
+        for artifact in repo.get("artifacts", []):
+            state = artifact.get("state", "unknown")
+            counts[state] = counts.get(state, 0) + 1
+        repos_summary.append(
+            {
+                "repo": repo.get("repo"),
+                "artifacts_by_state": dict(sorted(counts.items())),
+            }
+        )
+    repos_summary.sort(key=lambda entry: (entry["repo"] or ""))
+    return {
+        "repos": repos_summary,
+        "protocol_note": "content omitted from CLI output; see materialize() for in-process access",
+    }
+
+
 def _runner_from_args(args: argparse.Namespace) -> NaveRunner:
     fixtures = os.environ.get("PULSE_NAVE_FIXTURES")
     return NaveRunner(binary=args.binary, fixtures=fixtures, timeout=args.timeout)
@@ -337,6 +383,9 @@ def main(argv: list[str] | None = None) -> int:
     build_parser.add_argument("--match", dest="matches", action="append", default=[])
     check_parser = subparsers.add_parser("check")
     add_runner_options(check_parser)
+    materialize_parser = subparsers.add_parser("materialize")
+    add_runner_options(materialize_parser)
+    materialize_parser.add_argument("--request", required=True)
     args = parser.parse_args(argv)
 
     runner = _runner_from_args(args)
@@ -371,6 +420,13 @@ def main(argv: list[str] | None = None) -> int:
         result = check(runner)
         print(json.dumps(result, indent=2, sort_keys=True))
         return 1 if result.get("adapter_state") == "error" else 0
+    if args.command == "materialize":
+        result = materialize(runner, args.request)
+        if result.get("adapter_state") == "error":
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return 1
+        print(json.dumps(_materialize_summary(result), indent=2, sort_keys=True))
+        return 0
     return 2
 
 
