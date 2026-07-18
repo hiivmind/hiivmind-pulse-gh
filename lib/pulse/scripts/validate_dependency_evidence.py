@@ -41,6 +41,15 @@ ARTIFACT_STATES = {
     "unsupported",
     "error",
 }
+TOP_LEVEL_KEYS = {
+    "contract_version",
+    "provider",
+    "generated_at",
+    "request_sha256",
+    "repos",
+    "errors",
+}
+PROVIDER_KEYS = {"name", "version", "protocol"}
 REPO_KEYS = {"repo", "ref_name", "tree_sha", "tree_complete", "artifacts"}
 ARTIFACT_KEYS = {
     "selector_id",
@@ -140,8 +149,6 @@ def _require_nonnegative_finite_int(
     if not isfinite(value) or value < 0 or (isinstance(value, float) and not value.is_integer()):
         errors.append(f"{label} must be a finite non-negative integer")
         return
-    if isinstance(value, int) and value < 0:
-        errors.append(f"{label} must be a finite non-negative integer")
 
 
 def _validate_artifact(
@@ -233,12 +240,15 @@ def validate(data: Any) -> list[str]:
     if not isinstance(data, dict):
         return ["dependency evidence is not a mapping"]
 
+    _require_exact_keys(data, TOP_LEVEL_KEYS, errors, "")
+
     version = require(data, "contract_version", int, errors)
     if version is not None and version not in SUPPORTED_VERSIONS:
         errors.append(f"unsupported contract_version: {version}")
 
     provider = require(data, "provider", dict, errors)
     if provider is not None:
+        _require_exact_keys(provider, PROVIDER_KEYS, errors, "provider.")
         require(provider, "name", str, errors, "provider.")
         require_nullable(provider, "version", str, errors, "provider.")
         protocol = require(provider, "protocol", int, errors, "provider.")

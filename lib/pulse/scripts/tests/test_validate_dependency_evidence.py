@@ -69,6 +69,20 @@ def test_missing_key_rejected():
     assert any("request_sha256" in e for e in errors)
 
 
+def test_extra_top_level_key_rejected():
+    doc = load_fixture()
+    doc["unexpected"] = "x"
+    errors = vde.validate(doc)
+    assert any("unexpected key: unexpected" in e for e in errors)
+
+
+def test_extra_provider_key_rejected():
+    doc = load_fixture()
+    doc["provider"]["unexpected_key"] = "x"
+    errors = vde.validate(doc)
+    assert any("unexpected_key" in e for e in errors)
+
+
 def test_extra_repo_key_rejected():
     doc = load_fixture()
     doc["repos"][0]["unexpected_key"] = "nope"
