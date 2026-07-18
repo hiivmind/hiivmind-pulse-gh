@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import yaml
 
-from lib.pulse.scripts.impact import audit, mark
+from lib.pulse.scripts.impact import audit, apply_proposals, mark, propose_marks
 
 
 def relationships(depends_on):
@@ -329,6 +329,155 @@ def test_mark_not_found_for_legacy_string_edge(tmp_path):
 
     assert result.status == "not_found"
     assert path.read_text() == before
+
+
+# --- propose_marks(): workflow-run evidence -> exact mark proposal ---
+
+def run_evidence(**overrides):
+    e = {
+        "workflow": "ci.yml",
+        "repo": "upstream-repo",
+        "outcome": "success",
+        "head_sha": "head999",
+        "tested_at": "2026-07-19T00:00:00Z",
+    }
+    e.update(overrides)
+    return e
+
+
+def test_propose_marks_only_configured_successful_workflow_proposes():
+    rel = relationships([edge(integration_workflow="ci.yml",
+                               integration_tested_sha="base111")])
+
+    proposals = propose_marks(rel, [run_evidence()])
+
+    assert len(proposals) == 1
+    proposal = proposals[0]
+    assert proposal.dependent == "dependent-repo"
+    assert proposal.upstream == "upstream-repo"
+    assert proposal.expected_sha == "base111"
+    assert proposal.new_sha == "head999"
+    assert proposal.tested_at == "2026-07-19T00:00:00Z"
+
+
+def test_propose_marks_failed_run_produces_nothing():
+    rel = relationships([edge(integration_workflow="ci.yml",
+                               integration_tested_sha="base111")])
+
+    proposals = propose_marks(rel, [run_evidence(outcome="failure")])
+
+    assert proposals == []
+
+
+def test_propose_marks_in_progress_run_produces_nothing():
+    rel = relationships([edge(integration_workflow="ci.yml",
+                               integration_tested_sha="base111")])
+
+    proposals = propose_marks(rel, [run_evidence(outcome="aborted")])
+
+    assert proposals == []
+
+
+def test_propose_marks_unrelated_workflow_produces_nothing():
+    rel = relationships([edge(integration_workflow="ci.yml",
+                               integration_tested_sha="base111")])
+
+    proposals = propose_marks(rel, [run_evidence(workflow="other-workflow.yml")])
+
+    assert proposals == []
+
+
+def test_propose_marks_unrelated_repo_produces_nothing():
+    rel = relationships([edge(integration_workflow="ci.yml",
+                               integration_tested_sha="base111")])
+
+    proposals = propose_marks(rel, [run_evidence(repo="some-other-repo")])
+
+    assert proposals == []
+
+
+def test_propose_marks_edge_without_configured_workflow_produces_nothing():
+    rel = relationships([edge(integration_tested_sha="base111")])  # no integration_workflow
+
+    proposals = propose_marks(rel, [run_evidence()])
+
+    assert proposals == []
+
+
+def test_propose_marks_legacy_string_edge_produces_nothing():
+    rel = relationships(["upstream-repo"])
+
+    proposals = propose_marks(rel, [run_evidence()])
+
+    assert proposals == []
+
+
+def test_propose_marks_dispatch_alone_never_advances_markers():
+    # skipped-cooldown means the workflow never actually ran this pass —
+    # dispatch/skip is not evidence of validation.
+    rel = relationships([edge(integration_workflow="ci.yml",
+                               integration_tested_sha="base111")])
+
+    proposals = propose_marks(rel, [run_evidence(outcome="skipped-cooldown")])
+
+    assert proposals == []
+
+
+def test_apply_proposals_writes_marks(tmp_path):
+    path = make_relationships_file(
+        tmp_path, [edge(integration_workflow="ci.yml", integration_tested_sha="base111")])
+    rel = yaml.safe_load(path.read_text())
+
+    proposals = propose_marks(rel, [run_evidence()])
+    results = apply_proposals(path, proposals)
+
+    assert len(results) == 1
+    assert results[0].status == "updated"
+    assert results[0].new_sha == "head999"
+
+    on_disk = yaml.safe_load(path.read_text())
+    written_edge = on_disk["repo_dependencies"]["dependent-repo"]["depends_on"][0]
+    assert written_edge["integration_tested_sha"] == "head999"
+
+
+def test_apply_proposals_idempotent_on_repeat_application(tmp_path):
+    path = make_relationships_file(
+        tmp_path, [edge(integration_workflow="ci.yml", integration_tested_sha="base111")])
+    rel = yaml.safe_load(path.read_text())
+    proposals = propose_marks(rel, [run_evidence()])
+
+    first = apply_proposals(path, proposals)
+    second = apply_proposals(path, proposals)
+
+    assert first[0].status == "updated"
+    assert second[0].status == "noop"
+
+    on_disk = yaml.safe_load(path.read_text())
+    written_edge = on_disk["repo_dependencies"]["dependent-repo"]["depends_on"][0]
+    assert written_edge["integration_tested_sha"] == "head999"
+
+
+def test_apply_proposals_expected_base_conflict_passes_through(tmp_path):
+    path = make_relationships_file(
+        tmp_path, [edge(integration_workflow="ci.yml", integration_tested_sha="base111")])
+    rel = yaml.safe_load(path.read_text())
+    # Build the proposal from a stale in-memory view (expected_sha base111),
+    # then have the on-disk marker move to something else before applying —
+    # the expected-base guard must surface a conflict, not silently overwrite.
+    proposals = propose_marks(rel, [run_evidence()])
+
+    mark(path, "dependent-repo", "upstream-repo",
+         expected_sha="base111", new_sha="unexpected-sha",
+         tested_at="2026-07-18T00:00:00Z")
+
+    results = apply_proposals(path, proposals)
+
+    assert results[0].status == "conflict"
+    assert results[0].previous_sha == "unexpected-sha"
+
+    on_disk = yaml.safe_load(path.read_text())
+    written_edge = on_disk["repo_dependencies"]["dependent-repo"]["depends_on"][0]
+    assert written_edge["integration_tested_sha"] == "unexpected-sha"
 
 
 def test_mark_preserves_other_edges_and_sections(tmp_path):

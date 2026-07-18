@@ -355,6 +355,53 @@ UTC `HHMMSS` at run start — actor-embedded so concurrent machines cannot colli
 
 ---
 
+## Marker Advancement from Workflow-Run Evidence (F5)
+
+`repo_dependencies.*.depends_on[]` object edges (`lib/references/config-schema.md`
+§ depends_on edges) may configure `integration_workflow`: the name of the
+workflow whose **successful run** is the dependent's evidence that it has
+validated against the upstream repo's current state. Closing that loop —
+turning a successful run into an `integration_tested_sha` marker update — is
+`lib/pulse/scripts/impact.py`'s `propose_marks()` / `apply_proposals()`, not
+this executor. This section states the contract so callers know when to
+invoke it; it does not re-describe execution steps (see Single Executor,
+above).
+
+**Dispatch alone never advances a marker.** Triggering `integration_workflow`
+— via a workflow's `proposed_actions` dispatch proposal, a headless run, or
+an interactive one — is not evidence of anything; only a subsequent
+*successful* run is. A `headless: on_mutation: propose` workflow that
+proposes dispatching `integration_workflow` (as `gh-impact-audit-headless`
+does, per Task 4) is explicitly not a marker write, and must not be treated
+as one by any caller.
+
+**How a caller closes the loop:**
+
+1. Obtain run evidence for the configured `integration_workflow` — e.g. from
+   `workflow-run-result.yaml` (`lib/patterns/headless-contract.md` §
+   workflow-run-result.yaml) after that workflow runs, or from any other
+   source of `{workflow, repo, outcome, head_sha, tested_at}` records (see
+   `propose_marks()`'s docstring for the exact evidence item shape — `repo`
+   and `head_sha` are per-repo since a run's `repos:` list can span more than
+   one).
+2. Call `propose_marks(relationships, run_evidence)`. It joins each
+   configured edge's `integration_workflow`/`repo` against the evidence and
+   proposes an advancement **only** when the matching evidence item's
+   `outcome == "success"` — `failure`, `aborted`, and `skipped-cooldown` all
+   propose nothing, and an edge with no `integration_workflow` configured (or
+   a legacy string edge) is never eligible regardless of evidence.
+3. Call `apply_proposals(relationships_path, proposals)` (or `mark()`
+   directly per proposal) to write. Each write is expected-base guarded and
+   idempotent per `mark()`'s existing contract — a proposal built from a
+   stale in-memory view surfaces as `conflict`, not a silent overwrite.
+
+Severity inference (breaking vs. additive, `lib/patterns/headless-contract.md`
+§ impact-result.yaml) is orthogonal and out of scope here: it may annotate an
+edge's findings but never changes `state`, and has no bearing on whether a
+marker advances.
+
+---
+
 ## Cooldown Check
 
 Before executing any workflow (skip when the context has `enforce_cooldown: false`):

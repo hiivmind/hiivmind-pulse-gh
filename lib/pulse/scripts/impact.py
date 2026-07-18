@@ -334,6 +334,109 @@ def mark(path: Path | str, dependent: str, upstream: str, expected_sha: str,
 
 
 # --------------------------------------------------------------------------
+# propose_marks() / apply_proposals() — close the validation loop
+# --------------------------------------------------------------------------
+#
+# Dispatch alone is never evidence of currency (see Task 4 report and
+# `lib/patterns/workflow-execution.md` § Marker Advancement from Workflow-Run
+# Evidence). Only a SUCCESSFUL run of the edge's *configured*
+# `integration_workflow`, evaluated against the edge's *upstream repo*,
+# proposes marker advancement. Everything else — failure, in-progress/aborted,
+# cooldown-skipped, an unrelated workflow, an edge with no
+# `integration_workflow` configured, or a legacy string edge — proposes
+# nothing.
+#
+# `run_evidence` items are grounded in the workflow-run-result.yaml contract
+# (`lib/patterns/headless-contract.md` § workflow-run-result.yaml): `workflow`
+# and `outcome` reuse that contract's field names and `outcome` enum
+# (success | failure | skipped-cooldown | aborted) verbatim. `repos` on that
+# contract is a list (a run can span repos); a proposal is evaluated per
+# upstream repo, so evidence here is per-repo: `repo` (one entry of that
+# list) and `head_sha` (the commit on `repo` that the run validated — not a
+# field the workflow-run contract carries today, since it has no per-repo SHA
+# concept; a caller adapting a workflow-run-result.yaml into evidence supplies
+# it from the run's known head). `tested_at` carries through to the proposal
+# and, ultimately, to `mark()`'s `tested_at` argument.
+#
+#   run_evidence item shape:
+#     {
+#       "workflow": <str>,     # workflow identifier, e.g. "ci.yml"
+#       "repo": <str>,         # owner/name of the repo the run validated
+#       "outcome": <str>,      # success | failure | skipped-cooldown | aborted
+#       "head_sha": <str>,     # commit on `repo` validated by this run
+#       "tested_at": <str>,    # ISO 8601 timestamp
+#     }
+
+@dataclass(frozen=True)
+class MarkProposal:
+    dependent: str
+    upstream: str
+    expected_sha: str | None
+    new_sha: str
+    tested_at: str
+
+
+def propose_marks(relationships: dict, run_evidence: list[dict]) -> list[MarkProposal]:
+    """Join configured object edges to workflow-run evidence and propose
+    exact expected-base `mark` calls. Pure: no I/O, no mutation — a proposal
+    only becomes a write via `apply_proposals`/`mark`.
+
+    An edge proposes advancement only when ALL hold:
+      - the edge is an object edge (legacy string edges carry no
+        `integration_workflow` and are never proposed)
+      - the edge configures `integration_workflow`
+      - a `run_evidence` item's `workflow` matches that configured value
+      - that same item's `repo` matches the edge's upstream `repo`
+      - that same item's `outcome` == "success" (failure, aborted, and
+        skipped-cooldown are all non-evidence — dispatch/attempt alone never
+        advances a marker)
+
+    `expected_sha` is the edge's *current* `integration_tested_sha` at
+    proposal time (the exact base `mark()` must still see for the write to
+    apply) and `new_sha` is the evidence's validated `head_sha`.
+    """
+    proposals: list[MarkProposal] = []
+    repo_dependencies = (relationships or {}).get("repo_dependencies") or {}
+
+    for dependent, entry in repo_dependencies.items():
+        for depends_on in (entry or {}).get("depends_on") or []:
+            if not isinstance(depends_on, dict):
+                continue  # legacy string edge: no watch/workflow metadata
+            configured_workflow = depends_on.get("integration_workflow")
+            if not configured_workflow:
+                continue
+            upstream = depends_on.get("repo")
+            for evidence in run_evidence:
+                if evidence.get("outcome") != "success":
+                    continue
+                if evidence.get("workflow") != configured_workflow:
+                    continue
+                if evidence.get("repo") != upstream:
+                    continue
+                proposals.append(MarkProposal(
+                    dependent=dependent,
+                    upstream=upstream,
+                    expected_sha=depends_on.get("integration_tested_sha"),
+                    new_sha=evidence["head_sha"],
+                    tested_at=evidence["tested_at"],
+                ))
+
+    return proposals
+
+
+def apply_proposals(path: Path | str, proposals: list[MarkProposal]) -> list[MarkerResult]:
+    """Apply each proposal via `mark()`, in order. Each call is independently
+    expected-base guarded and idempotent — a conflict or not_found on one
+    proposal does not block the rest. Returns one `MarkerResult` per
+    proposal, in the same order."""
+    return [
+        mark(path, proposal.dependent, proposal.upstream,
+             proposal.expected_sha, proposal.new_sha, proposal.tested_at)
+        for proposal in proposals
+    ]
+
+
+# --------------------------------------------------------------------------
 # CLI (thin — orchestration lives in the calling skill/script)
 # --------------------------------------------------------------------------
 
