@@ -1,0 +1,94 @@
+# hiivmind-pulse-gh - Repository-file transformation registry
+# Loaded by lib/pulse/scripts/mutation_plan.py (load_registry).
+# See lib/patterns/repository-mutations.md for the full contract this file
+# implements — proposal shape, gating rules, expected-SHA guarding.
+#
+# Every transformation here is a STRICT ARGV ARRAY. There is no shell
+# string, no template/command substitution of any kind: command_argv is
+# executed verbatim (subprocess, shell=False) via `nave pen exec ... --
+# <command_argv...>`. An argv element containing shell metacharacters
+# ($(...), backticks, ;, |, &&) is literal data to the executed process,
+# never interpreted by a shell — because no shell is ever invoked.
+#
+# `nave pen exec` with FREE-FORM commands (not one of these registered
+# IDs) always requires explicit human approval. Automatic/scheduled runs
+# (actor.mode: scheduled) may ONLY use a transformation with
+# allow_scheduled: true below.
+
+transformations:
+
+  # {{transformation_id}}:               # Registry key; must equal `id` below.
+  #   id: {{transformation_id}}          # Required, must match the key exactly.
+  #   command_argv:                      # Required, non-empty list of plain
+  #     - {{argv_element}}                # strings. No nested lists/dicts,
+  #     - {{argv_element}}                # no booleans, no interpolation.
+  #   applies_to:                        # Required, non-empty list of
+  #     - {{predicate}}                   # OR-matched eligibility predicates:
+  #                                        #   always
+  #                                        #   profile:<profile id>
+  #                                        #   capability:<capability id>
+  #                                        #   evidence_path:<glob>
+  #                                        # Same grammar as scorecard check
+  #                                        # applicability (profile_dispatch.py).
+  #   validation:
+  #     kind: none | json_schema          # Required. `none` takes no other
+  #                                        # keys. `json_schema` requires:
+  #     path: {{repo_relative_path}}      #   file the transformation is
+  #                                        #   expected to produce/modify
+  #     schema: {{inline_json_schema}}    #   parsed content must satisfy this
+  #   allow_scheduled: {{true|false}}     # Required. Whether an unattended
+  #                                        # (scheduled) run may select this
+  #                                        # transformation at all.
+
+  # Example: a formatting transformation with fixed argv, safe to run
+  # unattended because it only rewrites formatting and never touches
+  # dependency/lock files or repo configuration.
+  format-python:
+    id: format-python
+    command_argv:
+      - ruff
+      - format
+      - .
+    applies_to:
+      - profile:python
+    validation:
+      kind: none
+    allow_scheduled: true
+
+  # Example: a dependency-lock refresh. Applies only to repos carrying a
+  # capability signal (surfaced by their profile/scorecard evidence), and
+  # its result is checked against a JSON Schema before it can be proposed
+  # as a mutation. Not allowed to run unattended — a human reviews the
+  # lockfile diff before it can proceed.
+  refresh-node-lockfile:
+    id: refresh-node-lockfile
+    command_argv:
+      - npm
+      - install
+      - --package-lock-only
+    applies_to:
+      - profile:nodejs
+      - capability:npm
+    validation:
+      kind: json_schema
+      path: package-lock.json
+      schema:
+        type: object
+        required: [lockfileVersion]
+    allow_scheduled: false
+
+  # Example: a documentation-only transformation, scoped by evidence path
+  # rather than profile — applies to any repo that actually carries a
+  # mkdocs config, regardless of its assigned profile.
+  regenerate-docs-index:
+    id: regenerate-docs-index
+    command_argv:
+      - mkdocs
+      - build
+      - --site-dir
+      - .generated/docs
+    applies_to:
+      - evidence_path:mkdocs.yml
+    validation:
+      kind: none
+    allow_scheduled: true
