@@ -59,9 +59,14 @@ contract violation, since `materialize` is a protocol-2-only capability (see
 [Protocol 2](nave-evidence-contract.md#protocol-2)).
 
 Repository names are unique across `repos` and match `owner/name`. Within a
-repo, `selector_id` is unique, and non-null `path` values are unique.
-`size_bytes` is always a finite non-negative integer. `blob_sha` and
-`tree_sha` are hex strings (40- or 64-char) or null.
+repo, non-null `path` values are unique. `selector_id` is **not** required to
+be unique: a glob selector (e.g. `*.lock`) fans out into one artifact per
+matched path, and all of those artifacts share the originating selector's
+`selector_id`, distinguished from each other by `path` — this mirrors Nave's
+own `MaterializeResult` ordering, which sorts artifacts by
+`(path is None, path, selector_id)` rather than by a unique selector
+identity. `size_bytes` is always a finite non-negative integer. `blob_sha`
+and `tree_sha` are hex strings (40- or 64-char) or null.
 
 `content` is present (a string) if and only if `state == found`, and in that
 case `encoding` must be `utf-8`. For every other state, `content` must be

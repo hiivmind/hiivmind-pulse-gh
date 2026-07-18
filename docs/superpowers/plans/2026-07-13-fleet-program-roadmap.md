@@ -40,6 +40,8 @@
 | F8 | Generic plan synchronization | P2 | Adds multi-master reconciliation after mutation and binding conventions prove out | milestone alignment |
 | F9 | Hiivmind/Claude dogfood overlays | P2 | Exercises plugin-specific marketplace, Claude context, and generated-skill behavior without polluting core | self-governance |
 
+> **Pre-F4 status:** ✅ code-complete — Nave protocol-v2 `materialize_json`, the Pulse `nave_adapter`/`dependency_evidence`/`validate_dependency_evidence` contract, and the cross-repository acceptance gate (`test_pre_f4_materialization_acceptance.py`) are implemented and passing. Remaining: releasing Nave and pinning the minimum version in `lib/patterns/dependency-evidence-contract.md` before F4 begins.
+
 ### Dependency graph
 
 ```text

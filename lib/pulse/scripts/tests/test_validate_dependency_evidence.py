@@ -45,12 +45,27 @@ def test_duplicate_repo_rejected():
     assert any("duplicate repo" in e for e in errors)
 
 
-def test_duplicate_selector_id_within_repo_rejected():
+def test_exact_duplicate_artifact_rejected_via_duplicate_path():
+    """Appending an identical artifact duplicates both selector_id and path;
+    the path-uniqueness check alone is sufficient to reject it."""
     doc = load_fixture()
     artifact = copy.deepcopy(doc["repos"][0]["artifacts"][0])
     doc["repos"][0]["artifacts"].append(artifact)
     errors = vde.validate(doc)
-    assert any("duplicate selector_id" in e for e in errors)
+    assert any("duplicate path" in e for e in errors)
+
+
+def test_shared_selector_id_across_distinct_paths_is_glob_fan_out_and_allowed():
+    """A single glob selector (e.g. `*.lock`) matching multiple files
+    produces multiple artifacts sharing one selector_id, distinguished by
+    path — this is Nave's real MaterializeResult shape and must validate."""
+    doc = load_fixture()
+    matched = copy.deepcopy(doc["repos"][0]["artifacts"][0])
+    matched["path"] = "poetry.lock"
+    matched["blob_sha"] = "1" * 40
+    doc["repos"][0]["artifacts"].append(matched)
+    errors = vde.validate(doc)
+    assert errors == []
 
 
 def test_duplicate_path_within_repo_rejected():

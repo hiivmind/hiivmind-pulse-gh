@@ -217,15 +217,16 @@ def _validate_repo(repo_entry: Any, errors: list[str], ctx: str) -> str | None:
     require(repo_entry, "tree_complete", bool, errors, ctx)
 
     artifacts = require(repo_entry, "artifacts", list, errors, ctx)
-    seen_selector_ids: set[str] = set()
     seen_paths: set[str] = set()
     for index, artifact in enumerate(artifacts or []):
         actx = f"{ctx}artifacts[{index}]."
         selector_id, path = _validate_artifact(artifact, errors, actx)
-        if selector_id is not None:
-            if selector_id in seen_selector_ids:
-                errors.append(f"{ctx}duplicate selector_id: {selector_id}")
-            seen_selector_ids.add(selector_id)
+        # selector_id is intentionally NOT required to be unique per repo: a
+        # single glob selector fans out into one artifact per matched path,
+        # all sharing that selector_id (see Nave's
+        # `glob_fan_out_yields_sorted_found_sharing_selector_id` contract
+        # test). Non-null `path` uniqueness below is what actually catches
+        # duplicate/conflicting entries.
         if path is not None:
             if path in seen_paths:
                 errors.append(f"{ctx}duplicate path: {path}")
