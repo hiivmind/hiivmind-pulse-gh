@@ -650,9 +650,37 @@ Documents repository dependency relationships (manually maintained).
 | Path | Type | Description |
 |------|------|-------------|
 | `.repo_dependencies.{repo}` | object | Dependencies for a repository |
-| `.repo_dependencies.{repo}.depends_on[]` | array | Repositories this repo depends on |
+| `.repo_dependencies.{repo}.depends_on[]` | array | Repositories this repo depends on — object edges (see below), or legacy strings |
 | `.repo_dependencies.{repo}.depended_by[]` | array | Repositories that depend on this repo |
 | `.repo_dependencies.{repo}.relationship_type` | string | `main`, `plugin`, `test`, `documentation` |
+
+#### depends_on edges (object shape, F5 impact audit)
+
+Each `depends_on[]` entry is normally an object edge carrying the state the
+impact audit (`impact.py`) needs to compute path-scoped integration
+currency:
+
+| Path | Type | Description |
+|------|------|-------------|
+| `.depends_on[].repo` | string | Upstream repository name |
+| `.depends_on[].watch_paths[]` | array of string | Glob paths in the upstream repo whose changes matter to this dependent; `"**"` watches the whole tree |
+| `.depends_on[].watch_branch` | string | Upstream branch to diff against (`main`, `develop`, ...) |
+| `.depends_on[].integration_tested_sha` | string | Last upstream SHA this dependent validated against — committed shared state |
+| `.depends_on[].tested_at` | string | ISO 8601 timestamp of that validation |
+| `.depends_on[].integration_workflow` | string | Optional — workflow whose success advances `integration_tested_sha` |
+
+Currency is `git diff integration_tested_sha..<watch_branch head> -- watch_paths`;
+any hit marks the edge `stale`. A missing or unreachable
+`integration_tested_sha` blocks closed (`state: unknown`), never silently
+passes as current. Local working-tree content is never a binding side —
+only the committed marker and the upstream remote head participate.
+
+**Legacy string edges.** A `depends_on[]` entry may also be a bare repository
+name (string), matching the pre-F5 shape. These remain accepted for backward
+compatibility but carry no watch metadata, so the impact audit cannot
+determine their currency; it surfaces them as `unconfigured_edge` findings
+(see `lib/patterns/headless-contract.md` § impact-result.yaml) instead of a
+current/stale verdict.
 
 ### cross_project_coordination
 
@@ -700,7 +728,14 @@ repo_dependencies:
 
   hiivmind-pulse-gh-tests:
     depends_on:
-      - hiivmind-pulse-gh
+      - repo: hiivmind-pulse-gh
+        watch_paths:
+          - "lib/patterns/headless-contract.md"
+          - "lib/pulse/scripts/validate_result.py"
+        watch_branch: develop
+        integration_tested_sha: abc1234
+        tested_at: "2026-07-01T10:00:00Z"
+        integration_workflow: ci.yml
     depended_by: []
     relationship_type: test
 
@@ -713,6 +748,8 @@ repo_dependencies:
 
   hiivmind-corpus-data:
     depends_on:
+      # Legacy string edge: accepted, but carries no watch metadata and is
+      # surfaced as an unconfigured_edge finding by the impact audit.
       - hiivmind-corpus
     depended_by: []
     relationship_type: plugin
@@ -735,7 +772,8 @@ cache:
 |------|------------|
 | Get repos for project | `yq '.project_repo_links[2].linked_repos[].name' relationships.yaml` |
 | Find projects for repo | `yq '.project_repo_links \| to_entries \| .[] \| select(.value.linked_repos[].name == "repo-name") \| .key' relationships.yaml` |
-| Get repo dependencies | `yq '.repo_dependencies["repo-name"].depends_on[]' relationships.yaml` |
+| Get repo dependencies (raw edges) | `yq '.repo_dependencies["repo-name"].depends_on[]' relationships.yaml` |
+| Get upstream repo names (object or legacy string edges) | `yq '.repo_dependencies["repo-name"].depends_on[] \| (.repo // .)' relationships.yaml` |
 | Get repo dependents | `yq '.repo_dependencies["repo-name"].depended_by[]' relationships.yaml` |
 | Get repo type | `yq '.repo_dependencies["repo-name"].relationship_type' relationships.yaml` |
 | Find coordinated projects | `yq '.cross_project_coordination[] \| select(.source_project == 2 or .target_project == 2)' relationships.yaml` |

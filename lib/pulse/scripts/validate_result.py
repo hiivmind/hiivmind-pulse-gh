@@ -5,7 +5,7 @@
 # ///
 """Validate a headless result file against the pulse result contract.
 
-Usage: validate_result.py <result.yaml> --kind status|healthcheck|refresh|workflow-run|fleet-membership
+Usage: validate_result.py <result.yaml> --kind status|healthcheck|refresh|workflow-run|fleet-membership|impact
 
 See lib/patterns/headless-contract.md for the schemas.
 
@@ -37,6 +37,7 @@ GRADES = {"A", "B", "C", "D", "F"}
 REFRESH_SECTION_STATUSES = {"refreshed", "skipped", "failed"}
 OUTCOMES = {"success", "failure", "skipped-cooldown", "aborted"}
 SEVERITIES = {"low", "medium", "high"}
+EDGE_STATES = {"current", "stale", "unknown"}
 
 
 def _err(errors, msg):
@@ -474,6 +475,45 @@ def validate(data, kind: str) -> list[str]:
         _require(data, "proposed_actions", list, errors)
         _require(data, "asks_recorded", list, errors)
 
+    elif kind == "impact":
+        edges = _require(data, "edges", list, errors)
+        seen_edges: set[tuple] = set()
+        stale_count = 0
+        for i, e in enumerate(edges or []):
+            if not isinstance(e, dict):
+                _err(errors, f"edges[{i}] is not a mapping")
+                continue
+            ctx = f"edges[{i}]."
+            dependent = _require(e, "dependent", str, errors, ctx=ctx)
+            upstream = _require(e, "upstream", str, errors, ctx=ctx)
+            watch_branch = _require(e, "watch_branch", str, errors, ctx=ctx)
+            state = _require_enum(e, "state", EDGE_STATES, errors, ctx=ctx)
+            _require_nullable(e, "tested_sha", str, errors, ctx=ctx)
+            _require_nullable(e, "remote_head", str, errors, ctx=ctx)
+            _validate_string_list(e, "changed_paths", errors, ctx=ctx)
+            if state == "stale":
+                stale_count += 1
+            if None not in (dependent, upstream, watch_branch):
+                identity = (dependent, upstream, watch_branch)
+                if identity in seen_edges:
+                    _err(
+                        errors,
+                        f"duplicate edge identity: {dependent} <- {upstream} "
+                        f"({watch_branch})",
+                    )
+                else:
+                    seen_edges.add(identity)
+        edges_checked = _require_nonnegative_integer(data, "edges_checked", errors)
+        if edges_checked is not None and edges_checked != len(edges or []):
+            _err(errors, "edges_checked does not match edges")
+        edges_stale = _require_nonnegative_integer(data, "edges_stale", errors)
+        if edges_stale is not None and edges_stale != stale_count:
+            _err(errors, "edges_stale does not match edges")
+        _require_nonnegative_integer(data, "markers_updated", errors)
+        _validate_findings(data, errors)
+        _require(data, "proposed_actions", list, errors)
+        _require(data, "asks_recorded", list, errors)
+
     return errors
 
 
@@ -482,7 +522,7 @@ def main():
     parser.add_argument("file", help="Path to result YAML file")
     parser.add_argument("--kind", required=True,
                         choices=["status", "healthcheck", "refresh", "workflow-run",
-                                 "fleet-membership"])
+                                 "fleet-membership", "impact"])
     args = parser.parse_args()
 
     path = Path(args.file)

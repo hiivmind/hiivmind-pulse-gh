@@ -1,0 +1,25 @@
+contract_version: 1
+kind: impact
+workspace: testorg
+run_at: "2026-07-10T09:15:00Z"
+actor:
+  gh_login: octocat
+  machine: mba-m4
+  mode: scheduled
+edges_checked: 5
+edges_stale: 1
+markers_updated: 0
+edges:
+  - dependent: testorg/widget
+    upstream: testorg/core
+    watch_branch: main
+    state: broken
+    tested_sha: abc123
+    remote_head: def456
+    changed_paths: [lib/api.py]
+findings:
+  - kind: integration-drift
+    repo: testorg/widget
+proposed_actions: "not-a-list"
+asks_recorded: []
+errors: []

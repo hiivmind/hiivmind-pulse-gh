@@ -15,7 +15,7 @@ from lib.pulse.scripts.evaluate_checks import (
 
 SCRIPT = "lib/pulse/scripts/validate_result.py"
 FIXTURES = Path("lib/pulse/scripts/tests/fixtures")
-KINDS = ["status", "healthcheck", "refresh", "workflow-run", "fleet-membership"]
+KINDS = ["status", "healthcheck", "refresh", "workflow-run", "fleet-membership", "impact"]
 
 
 def run_validator(path, kind):
@@ -517,3 +517,130 @@ def test_membership_explanation_requires_inferred_marker(tmp_path):
 
     assert result.returncode == 1
     assert "inferred: true" in result.stderr
+
+
+def test_impact_rejects_invalid_edge_state(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "impact-valid.yaml").read_text())
+    doc["edges"][0]["state"] = "broken"
+    path = tmp_path / "impact.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "impact")
+
+    assert result.returncode == 1
+    assert "state invalid: broken" in result.stderr
+
+
+@pytest.mark.parametrize("state", ["current", "stale", "unknown"])
+def test_impact_accepts_exact_edge_states(tmp_path, state):
+    doc = yaml.safe_load((FIXTURES / "impact-valid.yaml").read_text())
+    doc["edges"][0]["state"] = state
+    doc["edges_stale"] = sum(1 for e in doc["edges"] if e["state"] == "stale")
+    path = tmp_path / "impact.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "impact")
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_impact_rejects_edges_checked_not_derived_from_edges(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "impact-valid.yaml").read_text())
+    doc["edges_checked"] = 5
+    path = tmp_path / "impact.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "impact")
+
+    assert result.returncode == 1
+    assert "edges_checked does not match edges" in result.stderr
+
+
+def test_impact_rejects_edges_stale_not_derived_from_edges(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "impact-valid.yaml").read_text())
+    doc["edges_stale"] = 0
+    path = tmp_path / "impact.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "impact")
+
+    assert result.returncode == 1
+    assert "edges_stale does not match edges" in result.stderr
+
+
+def test_impact_rejects_negative_markers_updated(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "impact-valid.yaml").read_text())
+    doc["markers_updated"] = -1
+    path = tmp_path / "impact.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "impact")
+
+    assert result.returncode == 1
+    assert "markers_updated must be a non-negative integer" in result.stderr
+
+
+def test_impact_rejects_duplicate_edge_identity(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "impact-valid.yaml").read_text())
+    dup = copy.deepcopy(doc["edges"][0])
+    doc["edges"].append(dup)
+    doc["edges_checked"] = len(doc["edges"])
+    doc["edges_stale"] = sum(1 for e in doc["edges"] if e["state"] == "stale")
+    path = tmp_path / "impact.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "impact")
+
+    assert result.returncode == 1
+    assert "duplicate edge identity" in result.stderr
+
+
+def test_impact_requires_edge_fields(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "impact-valid.yaml").read_text())
+    edge = doc["edges"][0]
+    edge.pop("dependent")
+    edge.pop("upstream")
+    edge.pop("watch_branch")
+    edge.pop("changed_paths")
+    path = tmp_path / "impact.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "impact")
+
+    assert result.returncode == 1
+    assert "edges[0].dependent" in result.stderr
+    assert "edges[0].upstream" in result.stderr
+    assert "edges[0].watch_branch" in result.stderr
+    assert "edges[0].changed_paths" in result.stderr
+
+
+def test_impact_edge_tested_sha_and_remote_head_are_nullable(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "impact-valid.yaml").read_text())
+    doc["edges"][0]["state"] = "unknown"
+    doc["edges"][0]["tested_sha"] = None
+    doc["edges"][0]["remote_head"] = None
+    doc["edges_stale"] = sum(1 for e in doc["edges"] if e["state"] == "stale")
+    path = tmp_path / "impact.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "impact")
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_impact_legacy_string_edge_surfaces_as_unconfigured_finding(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "impact-valid.yaml").read_text())
+    doc["findings"].append(
+        {
+            "kind": "unconfigured_edge",
+            "repo": "testorg/widget",
+            "severity": "low",
+            "detail": "legacy string dependency carries no watch metadata",
+        }
+    )
+    path = tmp_path / "impact.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "impact")
+
+    assert result.returncode == 0, result.stderr

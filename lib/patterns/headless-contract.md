@@ -13,6 +13,7 @@ retained for human-readable logs only — orchestrators MUST read the file.
 | fleet-membership | fleet-membership-result.yaml | `{workspace_root}/.hiivmind/github/fleet-membership-result.yaml` |
 | refresh | refresh-result.yaml | `{workspace_root}/.hiivmind/github/refresh-result.yaml` |
 | workflow-run | workflow-run-result.yaml | `{workspace_root}/.hiivmind/github/workflow-run-result.yaml` |
+| impact | impact-result.yaml | `{workspace_root}/.hiivmind/github/impact-result.yaml` |
 
 Result files are per-machine transient run artifacts (never authority — see
 `workspace-detection.md` § Multi-machine topology). The workspace repo's
@@ -32,7 +33,7 @@ not kinds they were not asked to validate.
 
 ```yaml
 contract_version: 1                   # int, required
-kind: status | healthcheck | fleet-membership | refresh | workflow-run
+kind: status | healthcheck | fleet-membership | refresh | workflow-run | impact
 workspace: <login>                    # str, required — org/user login
 run_at: <ISO 8601 timestamp>          # str, required
 actor:                                # required on ALL kinds (I4)
@@ -53,6 +54,7 @@ profiles, and machines: identity-sensitive logic resolves against the
     uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py fleet-membership-result.yaml --kind fleet-membership
     uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py refresh-result.yaml --kind refresh
     uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py workflow-run-result.yaml --kind workflow-run
+    uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py impact-result.yaml --kind impact
 
 Orchestrators validate before consuming and treat exit 1/2 as a failed run
 (report, do not commit). Exit codes: 0 valid, 1 invalid (errors on stderr),
@@ -242,6 +244,64 @@ errors: []
 `inferred: true`, `proposed_actions`, and `asks_recorded` are the items
 needing human judgment — orchestrators surface them under a "Needs attention"
 heading (P5.4) instead of burying them in logs.
+
+### impact-result.yaml (written by the impact audit, F5)
+
+Reports path-scoped integration currency over `repo_dependencies` object
+edges (`lib/references/config-schema.md` § depends_on edges). Currency is
+`git diff integration_tested_sha..<watch_branch head> -- watch_paths`,
+computed deterministically by `impact.py`; only *severity* (breaking vs.
+additive) is LLM-judged, as an `inferred: true` finding — inference never
+changes an edge's `state`.
+
+```yaml
+contract_version: 1
+kind: impact
+workspace: <login>
+run_at: <ISO 8601>
+actor: { gh_login: <str>, machine: <str>, mode: <enum> }
+edges_checked: <int>                  # required — must equal len(edges)
+edges_stale: <int>                    # required — must equal count of edges with state: stale
+markers_updated: <int>                # required, non-negative — integration_tested_sha markers rewritten this run
+edges:                                 # list, required (may be empty) — one entry per configured object edge
+  - dependent: <owner/name>           # str, required — the repo carrying the depends_on entry
+    upstream: <owner/name>            # str, required — the repo field of the edge
+    watch_branch: <str>               # str, required
+    state: current | stale | unknown  # required enum — unknown covers missing/unreachable baseline
+    tested_sha: <str or null>         # required key, nullable — the edge's integration_tested_sha
+    remote_head: <str or null>        # required key, nullable — resolved watch_branch head, null if unreachable
+    changed_paths: [<str>, ...]       # list, required (may be empty) — watch_paths hits between tested_sha and remote_head
+findings:                             # list, required (may be empty) — typed data, not prose
+  - kind: <str>                       # required, e.g. integration-drift, unconfigured_edge
+    repo: <owner/name>                # str, required
+    severity: low | medium | high     # required enum
+    detail: <str>                     # optional human-readable
+    ref: { type: <str>, id: <any>, url: <str> }   # optional locator
+    inferred: <bool>                  # optional — true when severity was LLM-judged
+proposed_actions: [<str>, ...]        # list, required — tracking issues/dispatches a headless run declined to apply directly
+asks_recorded: [<str>, ...]           # list, required — ASKs that had no user
+errors: []
+```
+
+Duplicate `(dependent, upstream, watch_branch)` identities are rejected —
+each configured edge contributes exactly one `edges[]` entry per run.
+`edges_checked` and `edges_stale` are reconciled against the `edges` list the
+same way healthcheck reconciles repo score/grade against `checks`; a result
+cannot forge a stale count that disagrees with its own evidence.
+
+Legacy plain-string `depends_on` entries (pre-F5 shape, no watch metadata)
+are not audited for currency — they never produce an `edges[]` entry.
+Instead, each one surfaces as an `unconfigured_edge` finding on the
+dependent repo (`severity: low`) so unmigrated edges stay visible without
+blocking the audit or fabricating a current/stale verdict for data the
+edge doesn't carry.
+
+Local working-tree content is never a binding side: both `tested_sha` and
+`remote_head` are committed/remote-published refs, never uncommitted state
+on the machine running the audit. A missing or unreachable
+`integration_tested_sha` (edge points at a SHA the audit cannot resolve)
+blocks closed as `state: unknown`, not `current` — an unauditable edge is
+never silently treated as safe.
 
 ## Related patterns
 
