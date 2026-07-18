@@ -24,6 +24,11 @@ Binding rules (see F5 phase doc for the full rationale):
     metadata) produce an `unconfigured_edge` finding (severity low)
     instead of an edges[] verdict — the audit cannot determine their
     currency.
+  - An object edge with an empty or missing `watch_paths[]` is
+    misconfigured the same way: no path evidence can ever mark it stale,
+    so it must not silently classify as `current`. It still produces an
+    `edges[]` entry (state `unknown`), plus an `empty_watch_paths`
+    finding (severity low) — misconfiguration fails closed, not open.
   - Severity inference (breaking vs. additive) is out of scope for this
     module: findings default to a deterministic severity and
     `inferred: False`. An LLM-judgment pass may annotate `severity` and set
@@ -181,16 +186,31 @@ def _branch_snapshot(snapshot: dict, repo: str, branch: str) -> dict | None:
     return repo_snap.get(branch)
 
 
-def _audit_edge(dependent: str, edge_config: dict, snapshot: dict) -> EdgeResult:
+def _audit_edge(dependent: str, edge_config: dict,
+                 snapshot: dict) -> tuple[EdgeResult, Finding | None]:
     upstream = edge_config["repo"]
     watch_branch = edge_config["watch_branch"]
     watch_paths = edge_config.get("watch_paths") or []
     tested_sha = edge_config.get("integration_tested_sha")
 
+    if not watch_paths:
+        finding = Finding(
+            kind="empty_watch_paths",
+            repo=dependent,
+            severity="low",
+            detail=(
+                f"depends_on edge to '{upstream}' on branch '{watch_branch}' has no "
+                "watch_paths configured; impact audit cannot determine currency"
+            ),
+            inferred=False,
+        )
+        return EdgeResult(dependent, upstream, watch_branch, "unknown",
+                           tested_sha, None, []), finding
+
     branch_snap = _branch_snapshot(snapshot, upstream, watch_branch)
     if branch_snap is None:
         return EdgeResult(dependent, upstream, watch_branch, "unknown",
-                           tested_sha, None, [])
+                           tested_sha, None, []), None
 
     remote_head = branch_snap.get("head")
     changed_files_by_base = branch_snap.get("changed_files_by_base") or {}
@@ -203,12 +223,12 @@ def _audit_edge(dependent: str, edge_config: dict, snapshot: dict) -> EdgeResult
         or tested_sha not in changed_files_by_base
     ):
         return EdgeResult(dependent, upstream, watch_branch, "unknown",
-                           tested_sha, remote_head, [])
+                           tested_sha, remote_head, []), None
 
     changed_paths = _matched_paths(changed_files_by_base[tested_sha], watch_paths)
     state = "stale" if changed_paths else "current"
     return EdgeResult(dependent, upstream, watch_branch, state,
-                       tested_sha, remote_head, changed_paths)
+                       tested_sha, remote_head, changed_paths), None
 
 
 def audit(relationships: dict, snapshot: dict) -> ImpactReport:
@@ -235,7 +255,10 @@ def audit(relationships: dict, snapshot: dict) -> ImpactReport:
                     inferred=False,
                 ))
                 continue
-            edges.append(_audit_edge(dependent, depends_on, snapshot))
+            edge_result, empty_watch_paths_finding = _audit_edge(dependent, depends_on, snapshot)
+            edges.append(edge_result)
+            if empty_watch_paths_finding is not None:
+                findings.append(empty_watch_paths_finding)
 
     return ImpactReport(edges=edges, findings=findings)
 

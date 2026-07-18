@@ -200,6 +200,55 @@ def test_changed_paths_are_sorted_and_deduplicated():
     assert report.edges[0].changed_paths == ["lib/aaa.py", "lib/foo.py", "lib/zzz.py"]
 
 
+# --- audit(): empty/missing watch_paths fails closed ---
+
+def test_empty_watch_paths_list_is_unknown_with_finding():
+    rel = relationships([edge(watch_paths=[])])
+    snap = snapshot_for(changed_files_by_base={"base111": ["lib/foo.py"]})
+
+    report = audit(rel, snap)
+
+    assert len(report.edges) == 1
+    result = report.edges[0]
+    assert result.state == "unknown"
+    assert result.changed_paths == []
+
+    assert len(report.findings) == 1
+    finding = report.findings[0]
+    assert finding.kind == "empty_watch_paths"
+    assert finding.repo == "dependent-repo"
+    assert finding.severity == "low"
+    assert finding.inferred is False
+
+
+def test_missing_watch_paths_key_is_unknown_with_finding():
+    edge_config = edge()
+    del edge_config["watch_paths"]
+    rel = relationships([edge_config])
+    snap = snapshot_for(changed_files_by_base={"base111": ["lib/foo.py"]})
+
+    report = audit(rel, snap)
+
+    result = report.edges[0]
+    assert result.state == "unknown"
+    assert result.changed_paths == []
+    assert len(report.findings) == 1
+    assert report.findings[0].kind == "empty_watch_paths"
+
+
+def test_empty_watch_paths_never_reported_as_current_even_with_no_changes():
+    # Regression guard mirroring the missing-baseline case: an edge that can
+    # never be marked stale (no watch_paths to hit) must not default to
+    # current just because there's nothing to point to.
+    rel = relationships([edge(watch_paths=[])])
+    snap = snapshot_for(changed_files_by_base={})
+
+    report = audit(rel, snap)
+
+    assert report.edges[0].state != "current"
+    assert report.edges[0].state == "unknown"
+
+
 # --- audit(): legacy string edges ---
 
 def test_legacy_string_edge_produces_unconfigured_edge_finding():

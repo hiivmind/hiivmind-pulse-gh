@@ -272,7 +272,8 @@ edges:                                 # list, required (may be empty) — one e
     remote_head: <str or null>        # required key, nullable — resolved watch_branch head, null if unreachable
     changed_paths: [<str>, ...]       # list, required (may be empty) — watch_paths hits between tested_sha and remote_head
 findings:                             # list, required (may be empty) — typed data, not prose
-  - kind: <str>                       # required, e.g. integration-drift, unconfigured_edge
+  - kind: <str>                       # required, e.g. integration-drift, unconfigured_edge,
+                                       #   empty_watch_paths
     repo: <owner/name>                # str, required
     severity: low | medium | high     # required enum
     detail: <str>                     # optional human-readable
@@ -302,6 +303,12 @@ on the machine running the audit. A missing or unreachable
 `integration_tested_sha` (edge points at a SHA the audit cannot resolve)
 blocks closed as `state: unknown`, not `current` — an unauditable edge is
 never silently treated as safe.
+
+An object edge with an empty or missing `watch_paths[]` is the same kind of
+unauditable-by-construction edge: no path evidence can ever mark it stale,
+so it blocks closed too — `state: unknown` plus an `empty_watch_paths`
+finding (`severity: low`) — rather than defaulting to `current` for lack of
+any hits to report.
 
 ## Related patterns
 

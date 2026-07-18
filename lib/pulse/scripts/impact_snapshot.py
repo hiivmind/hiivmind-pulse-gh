@@ -24,6 +24,10 @@ Binding rules (mirrors the F5 phase doc; see impact.py for the audit side):
     may short-circuit the `git ls-remote` head-resolution round trip, but
     never substitutes for the git diff itself — changed-path evidence is
     always computed by this module, never trusted from an external source.
+    Likewise the diff endpoint itself is never taken from `known_heads`
+    directly: after fetching the branch, this module resolves the actual
+    fetched tip (`git rev-parse FETCH_HEAD`) and diffs against *that* — a
+    stale cached head must never under-report staleness.
   - A tested SHA that cannot be fetched/resolved on the remote is recorded
     in `base_missing` for that repo/branch, never guessed or omitted
     silently.
@@ -120,8 +124,28 @@ def _slug(*parts: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]", "_", "_".join(parts))
 
 
+# Config-sourced values (`watch_branch`, `integration_tested_sha`) are never
+# trusted as git argv positionals as-is — a value starting with `-` could be
+# parsed as an option by `git ls-remote`/`git fetch`/`git diff`. Strict regex
+# validation is the primary guard (see module docstring); `git diff` in
+# particular takes two bare revision positionals with no clean place for a
+# `--` separator, so regex validation is its *only* guard. Values that fail
+# validation are never passed to git — they're recorded as missing/failed
+# the same way an unresolvable remote ref would be.
+_SHA_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
+_BRANCH_RE = re.compile(r"^[^\s-][^\s]*$")
+
+
+def _valid_sha(value: str | None) -> bool:
+    return bool(value) and bool(_SHA_RE.match(value))
+
+
+def _valid_branch(value: str | None) -> bool:
+    return bool(value) and bool(_BRANCH_RE.match(value))
+
+
 def _resolve_head(run: Runner, repo: str, branch: str) -> str | None:
-    result = run(["git", "ls-remote", _repo_url(repo), f"refs/heads/{branch}"], None)
+    result = run(["git", "ls-remote", "--", _repo_url(repo), f"refs/heads/{branch}"], None)
     if _failed(result):
         return None
     lines = _lines(result)
@@ -129,6 +153,19 @@ def _resolve_head(run: Runner, repo: str, branch: str) -> str | None:
         return None
     fields = lines[0].split()
     return fields[0] if fields else None
+
+
+def _resolve_fetched_head(run: Runner, repo_dir: Path) -> str | None:
+    """Resolve the actual tip just fetched into `repo_dir`. This — never a
+    caller-supplied `known_head` — is the diff endpoint and the reported
+    `head`: `known_heads` may only skip the `git ls-remote` round trip, it
+    never substitutes for the true current remote head, which can have
+    moved since the caller's cache was populated."""
+    result = run(["git", "rev-parse", "FETCH_HEAD"], repo_dir)
+    if _failed(result):
+        return None
+    lines = _lines(result)
+    return lines[0].strip() if lines else None
 
 
 def _collect_branch(run: Runner, base_dir: Path, repo: str, branch: str,
@@ -141,21 +178,39 @@ def _collect_branch(run: Runner, base_dir: Path, repo: str, branch: str,
         return {"head": None, "changed_files_by_base": {},
                  "base_missing": sorted(tested_shas)}
 
-    head = known_head if known_head is not None else _resolve_head(run, repo, branch)
-    if head is None:
+    if not _valid_branch(branch):
         return {"head": None, "changed_files_by_base": {},
                  "base_missing": sorted(tested_shas)}
 
-    fetch_head = run(["git", "fetch", "--filter=blob:none", "-q", url, branch], repo_dir)
+    if known_head is not None:
+        head_hint = known_head
+    else:
+        head_hint = _resolve_head(run, repo, branch)
+        if head_hint is None:
+            return {"head": None, "changed_files_by_base": {},
+                     "base_missing": sorted(tested_shas)}
+
+    fetch_head = run(["git", "fetch", "--filter=blob:none", "-q", "--", url, branch], repo_dir)
     if _failed(fetch_head):
-        return {"head": head, "changed_files_by_base": {},
+        return {"head": head_hint, "changed_files_by_base": {},
+                 "base_missing": sorted(tested_shas)}
+
+    # The real diff endpoint: resolved fresh from the fetch just performed,
+    # never trusted from `known_head`/`ls-remote` alone — those may be stale
+    # relative to the tip this fetch actually retrieved.
+    head = _resolve_fetched_head(run, repo_dir)
+    if head is None:
+        return {"head": head_hint, "changed_files_by_base": {},
                  "base_missing": sorted(tested_shas)}
 
     changed_files_by_base: dict[str, list[str]] = {}
     base_missing: list[str] = []
 
     for tested_sha in sorted(tested_shas):
-        fetch_base = run(["git", "fetch", "--filter=blob:none", "-q", url, tested_sha],
+        if not _valid_sha(tested_sha):
+            base_missing.append(tested_sha)
+            continue
+        fetch_base = run(["git", "fetch", "--filter=blob:none", "-q", "--", url, tested_sha],
                           repo_dir)
         if _failed(fetch_base):
             base_missing.append(tested_sha)
@@ -204,10 +259,13 @@ def collect(relationships: dict, workdir: str | Path | None = None,
 
     `known_heads` — optional pre-resolved `{repo: {branch: head_sha}}`
     evidence (e.g. poll.py's `branch_heads` trigger state, or a cached F0
-    evidence layer). When a (repo, branch) pair is present here, its head
-    is used directly instead of running `git ls-remote` — this saves a
-    round trip only. The changed-path diff is always computed by this
-    module via git; `known_heads` never supplies path evidence.
+    evidence layer). When a (repo, branch) pair is present here, `git
+    ls-remote` is skipped — this saves a round trip only. The actual diff
+    endpoint and reported `head` are always resolved fresh from the branch
+    fetch this module performs (`git rev-parse FETCH_HEAD`), never taken
+    from `known_heads` directly: a cached head can be stale relative to the
+    remote's true current tip, and diffing against a stale head would
+    under-report staleness. `known_heads` never supplies path evidence.
     """
     run = runner or default_runner
     known_heads = known_heads or {}
@@ -230,18 +288,28 @@ def collect(relationships: dict, workdir: str | Path | None = None,
 # CLI (thin — orchestration lives in the calling skill/script)
 # --------------------------------------------------------------------------
 
+def _load_known_heads(path: Path) -> dict:
+    """Load a `--known-heads` evidence file. Accepts either YAML or JSON —
+    `yaml.safe_load` parses both (JSON is a YAML subset) — so a caller can
+    hand this a YAML section extracted from poll-state.yaml (e.g.
+    `.state.branch_heads`) or a hand-authored JSON file without caring which
+    serialization it used."""
+    return yaml.safe_load(path.read_text()) or {}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--relationships", required=True, type=Path)
     parser.add_argument("--workdir", type=Path, default=None)
     parser.add_argument("--known-heads", type=Path, default=None,
-                        help="Optional JSON {repo: {branch: head_sha}} evidence file")
+                        help="Optional YAML or JSON {repo: {branch: head_sha}} evidence "
+                             "file (e.g. poll-state.yaml's .state.branch_heads section)")
     args = parser.parse_args()
 
     relationships = yaml.safe_load(args.relationships.read_text()) or {}
     known_heads = None
     if args.known_heads is not None:
-        known_heads = json.loads(args.known_heads.read_text())
+        known_heads = _load_known_heads(args.known_heads)
 
     snapshot = collect(relationships, workdir=args.workdir, known_heads=known_heads)
     print(json.dumps(snapshot, indent=2, sort_keys=True))

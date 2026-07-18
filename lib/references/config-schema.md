@@ -675,6 +675,13 @@ any hit marks the edge `stale`. A missing or unreachable
 passes as current. Local working-tree content is never a binding side —
 only the committed marker and the upstream remote head participate.
 
+An empty or missing `watch_paths[]` is a misconfiguration, not "watch
+nothing": no path evidence can ever mark such an edge `stale`, so the audit
+classifies it `state: unknown` (with an `empty_watch_paths` finding,
+`severity: low`) rather than letting it default to `current`. To
+intentionally watch the whole upstream tree, set `watch_paths: ["**"]`
+explicitly.
+
 **Legacy string edges.** A `depends_on[]` entry may also be a bare repository
 name (string), matching the pre-F5 shape. These remain accepted for backward
 compatibility but carry no watch metadata, so the impact audit cannot

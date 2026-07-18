@@ -92,10 +92,16 @@ Collect remote branch-head and changed-path evidence for every watched object
 metadata and contribute no snapshot entries — they surface later as
 `unconfigured_edge` findings, not audit failures.
 
-When `CONFIG_DIR/poll-state.yaml` exists and has a `branch_heads` section
-(`lib/pulse/scripts/poll.py`'s `branch_heads` trigger — `{repo: {branch: head_sha}}`),
-pass it as `--known-heads` to save a redundant `git ls-remote` round trip. This never
-substitutes for the diff evidence itself, which the collector always computes fresh.
+When `CONFIG_DIR/poll-state.yaml` exists and its `.state.branch_heads` section is
+non-empty (`lib/pulse/scripts/poll.py`'s `branch_heads` trigger — `{repo: {branch:
+head_sha}}`), extract just that section — not the whole poll-state file — write it to
+`$KNOWN_HEADS_PATH`, and pass it as `--known-heads` to save a redundant `git ls-remote`
+round trip. `impact_snapshot.py --known-heads` parses YAML or JSON (`yaml.safe_load`
+accepts both), so `.state.branch_heads` can be extracted and written as either — no
+reserialization required. Skipping `ls-remote` never substitutes for the diff evidence
+itself or for the diff endpoint: the collector always fetches the branch fresh and
+resolves the actual current head from that fetch, so a stale `branch_heads` entry
+cannot under-report staleness — it only saves the redundant head-resolution round trip.
 
 ```bash
 uv run "${PLUGIN_ROOT}/lib/pulse/scripts/impact_snapshot.py" \
