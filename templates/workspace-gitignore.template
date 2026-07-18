@@ -5,6 +5,10 @@ poll-state.yaml
 project-snapshot.json
 *-result.yaml
 fleet-evidence.yaml
+# Transient F4 materialize evidence (carries raw file content) — should live
+# under a run-specific 0700 temp dir (dependency_evidence.secure_run_dir) and
+# be deleted once F4 emits its content-free snapshot; never committed.
+dependency-evidence.json
 log/
 .assignments-tmp.json
 .project-changes.json
