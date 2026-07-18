@@ -135,19 +135,30 @@ def _require_exact_keys(
         errors.append(f"missing required key: {ctx}{key}")
 
 
-def _require_nonnegative_finite_int(
-    data: dict[str, Any], key: str, errors: list[str], ctx: str
+def _require_nonnegative_finite_int_or_null(
+    data: dict[str, Any], key: str, errors: list[str], ctx: str, *, required: bool = False
 ) -> None:
+    """Validate size_bytes: int-or-null in general; `required=True` forbids null.
+
+    Nave's `size_bytes` field is `Option<u64>` in Rust and serializes as JSON
+    `null` for artifacts with no matched content (absent/unresolved). A
+    `found` artifact always has a decoded size, so callers pass
+    `required=True` for that state.
+    """
     label = f"{ctx}{key}"
     if key not in data:
         errors.append(f"missing required key: {label}")
         return
     value = data[key]
+    if value is None:
+        if required:
+            errors.append(f"{label} must be a finite non-negative integer when state is found")
+        return
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        errors.append(f"wrong type for {label}: expected int")
+        errors.append(f"wrong type for {label}: expected int or null")
         return
     if not isfinite(value) or value < 0 or (isinstance(value, float) and not value.is_integer()):
-        errors.append(f"{label} must be a finite non-negative integer")
+        errors.append(f"{label} must be a finite non-negative integer or null")
         return
 
 
@@ -173,8 +184,10 @@ def _validate_artifact(
             or not (HEX40_RE.match(blob_sha) or HEX64_RE.match(blob_sha))
         ):
             errors.append(f"{ctx}blob_sha must be a 40- or 64-char hex string or null")
-    _require_nonnegative_finite_int(artifact, "size_bytes", errors, ctx)
     state = require_enum(artifact, "state", ARTIFACT_STATES, errors, ctx)
+    _require_nonnegative_finite_int_or_null(
+        artifact, "size_bytes", errors, ctx, required=(state == "found")
+    )
     require_nullable(artifact, "encoding", str, errors, ctx)
     content_present = "content" in artifact
     if not content_present:
@@ -189,7 +202,7 @@ def _validate_artifact(
         else:
             if content is not None:
                 errors.append(f"{ctx}content must be absent/null when state is {state}")
-    require(artifact, "detail", str, errors, ctx)
+    require_nullable(artifact, "detail", str, errors, ctx)
 
     return selector_id, path
 

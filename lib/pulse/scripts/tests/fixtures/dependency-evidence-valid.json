@@ -22,17 +22,17 @@
           "state": "found",
           "encoding": "utf-8",
           "content": "[project]\nname = \"api\"\n",
-          "detail": ""
+          "detail": null
         },
         {
           "selector_id": "python.requirements",
           "path": null,
           "blob_sha": null,
-          "size_bytes": 0,
+          "size_bytes": null,
           "state": "absent",
           "encoding": null,
           "content": null,
-          "detail": ""
+          "detail": null
         }
       ]
     },
@@ -50,7 +50,7 @@
           "state": "found",
           "encoding": "utf-8",
           "content": "{\"name\": \"web\"}",
-          "detail": ""
+          "detail": null
         },
         {
           "selector_id": "node.lockfile",
@@ -76,7 +76,7 @@
           "selector_id": "node.unresolved_ref",
           "path": null,
           "blob_sha": null,
-          "size_bytes": 0,
+          "size_bytes": null,
           "state": "unresolved",
           "encoding": null,
           "content": null,

@@ -44,7 +44,7 @@ repos:
         state: found       # found | absent | unresolved | too_large | binary | unsupported | error
         encoding: utf-8     # required (and must be utf-8) when state is found; null otherwise
         content: "..."      # required string when state is found; forbidden (null/absent) otherwise
-        detail: ""
+        detail: null         # string or null; Nave's Option<String> — null on Found artifacts
 errors: []
 ```
 
@@ -65,8 +65,17 @@ matched path, and all of those artifacts share the originating selector's
 `selector_id`, distinguished from each other by `path` — this mirrors Nave's
 own `MaterializeResult` ordering, which sorts artifacts by
 `(path is None, path, selector_id)` rather than by a unique selector
-identity. `size_bytes` is always a finite non-negative integer. `blob_sha`
-and `tree_sha` are hex strings (40- or 64-char) or null.
+identity. `size_bytes` is a finite non-negative integer or null — Nave's
+`size_bytes` is `Option<u64>`, and it is null on artifacts with no matched
+content (`absent`, `unresolved`, and other no-match states); when
+`state == found`, `size_bytes` must be a non-null integer, since a found
+file always has a decoded size. `blob_sha` and `tree_sha` are hex strings
+(40- or 64-char) or null.
+
+`detail` is a string or null — Nave's `detail` is `Option<String>`, and it
+is null on `Found` artifacts (Nave builds `Found` with `detail: None`).
+Non-`found` states (error/nonmatch cases) typically carry a human-readable
+`detail` string but may also be null.
 
 `content` is present (a string) if and only if `state == found`, and in that
 case `encoding` must be `utf-8`. For every other state, `content` must be

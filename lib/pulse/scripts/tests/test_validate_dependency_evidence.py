@@ -173,6 +173,60 @@ def test_encoding_must_be_utf8_when_found():
     assert any("encoding" in e for e in errors)
 
 
+def test_found_artifact_with_null_detail_validates():
+    """Nave's `detail` is an Option<String>; Found artifacts always carry
+    `detail: null` in real output (Nave builds Found with `detail: None`)."""
+    doc = load_fixture()
+    found = next(
+        a for r in doc["repos"] for a in r["artifacts"] if a["state"] == "found"
+    )
+    assert found["detail"] is None
+    assert vde.validate(doc) == []
+
+
+def test_absent_artifact_with_null_size_bytes_validates():
+    """Nave's `size_bytes` is an Option<u64>; Absent/Unresolved artifacts
+    (no matched content) carry `size_bytes: null` in real output."""
+    doc = load_fixture()
+    absent = next(
+        a for r in doc["repos"] for a in r["artifacts"] if a["state"] == "absent"
+    )
+    assert absent["size_bytes"] is None
+    assert vde.validate(doc) == []
+
+
+def test_unresolved_artifact_with_null_size_bytes_validates():
+    doc = load_fixture()
+    unresolved = next(
+        a for r in doc["repos"] for a in r["artifacts"] if a["state"] == "unresolved"
+    )
+    assert unresolved["size_bytes"] is None
+    assert vde.validate(doc) == []
+
+
+def test_found_artifact_with_null_size_bytes_rejected():
+    """A found file always has a decoded size — size_bytes must not be null
+    when state is found, unlike absent/unresolved artifacts."""
+    doc = load_fixture()
+    found = next(
+        a for r in doc["repos"] for a in r["artifacts"] if a["state"] == "found"
+    )
+    found["size_bytes"] = None
+    errors = vde.validate(doc)
+    assert any("size_bytes" in e for e in errors)
+
+
+def test_non_found_artifact_with_non_null_detail_validates():
+    """Error/nonmatch states carry a human-readable detail string (e.g.
+    'ref not found'), which is real Nave output and must validate."""
+    doc = load_fixture()
+    non_found = next(
+        a for r in doc["repos"] for a in r["artifacts"] if a["state"] == "unresolved"
+    )
+    assert isinstance(non_found["detail"], str) and non_found["detail"]
+    assert vde.validate(doc) == []
+
+
 def test_non_finite_size_rejected():
     doc = load_fixture()
     doc["repos"][0]["artifacts"][0]["size_bytes"] = float("nan")
