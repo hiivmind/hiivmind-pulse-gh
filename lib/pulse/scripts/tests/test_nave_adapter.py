@@ -178,3 +178,120 @@ def test_cli_exposes_fixture_backed_lifecycle_and_analysis(monkeypatch, capsys):
     assert json.loads(capsys.readouterr().out)["groups"]
     assert nave_adapter.main(["check"]) == 0
     assert json.loads(capsys.readouterr().out)["totals"]["ok"] == 3
+
+
+def _write_v1_probe_dir(base):
+    probe_dir = base / "probe"
+    probe_dir.mkdir()
+    (probe_dir / "version.txt").write_text("nave 0.0.8\n")
+    (probe_dir / "help.txt").write_text(
+        "Commands:\n"
+        "  scan\n"
+        "  pull\n"
+        "  search\n"
+        "  build\n"
+        "  check\n"
+        "  pen\n"
+    )
+    for command in ("search", "build", "check"):
+        (probe_dir / f"{command}-help.txt").write_text("Options:\n  --json\n")
+    (probe_dir / "pen-help.txt").write_text("Commands:\n  list\n  show\n  status\n")
+    for action in ("list", "show", "status"):
+        (probe_dir / f"pen-{action}-help.txt").write_text("Options:\n  --json\n")
+    return probe_dir
+
+
+def test_v1_fixture_without_materialize_stays_protocol_one(tmp_path):
+    _write_v1_probe_dir(tmp_path)
+
+    result = nave_adapter.probe(nave_adapter.NaveRunner(fixtures=tmp_path))
+
+    assert result["available"] is True
+    assert result["protocol"] == 1
+    assert "materialize_json" not in result["capabilities"]
+
+
+def test_v2_fixture_with_materialize_is_protocol_two(tmp_path):
+    probe_dir = _write_v1_probe_dir(tmp_path)
+    help_path = probe_dir / "help.txt"
+    help_path.write_text(help_path.read_text() + "  materialize\n")
+    (probe_dir / "materialize-help.txt").write_text(
+        "Options:\n  --request <PATH>\n  --json\n"
+    )
+
+    result = nave_adapter.probe(nave_adapter.NaveRunner(fixtures=tmp_path))
+
+    assert result["protocol"] == 2
+    assert "materialize_json" in result["capabilities"]
+
+
+def test_materialize_listed_without_json_stays_protocol_one(tmp_path):
+    probe_dir = _write_v1_probe_dir(tmp_path)
+    help_path = probe_dir / "help.txt"
+    help_path.write_text(help_path.read_text() + "  materialize\n")
+    (probe_dir / "materialize-help.txt").write_text("Options:\n  --request <PATH>\n")
+
+    result = nave_adapter.probe(nave_adapter.NaveRunner(fixtures=tmp_path))
+
+    assert result["protocol"] == 1
+    assert "materialize_json" not in result["capabilities"]
+
+
+def test_materialize_requires_request_flag_argument():
+    runner = RecordingRunner()
+
+    nave_adapter.materialize(runner, "/tmp/request.json")
+
+    assert runner.calls == [
+        ["materialize", "--request", "/tmp/request.json", "--json"]
+    ]
+
+
+def test_fixture_materialize_decodes_json():
+    runner = nave_adapter.NaveRunner(fixtures=FIXTURES)
+
+    result = nave_adapter.materialize(runner, "anything")
+
+    assert result["contract_version"] == 1
+    assert result["repos"][0]["artifacts"][0]["state"] == "found"
+
+
+def test_materialize_invalid_json_becomes_typed_adapter_error():
+    runner = RecordingRunner(nave_adapter.Completed(0, "not json", ""))
+
+    result = nave_adapter.materialize(runner, "anything")
+
+    assert result["adapter_state"] == "error"
+    assert result["returncode"] == 0
+    assert "invalid JSON" in result["error"]
+
+
+def test_materialize_timeout_is_typed_adapter_error():
+    runner = RecordingRunner(
+        nave_adapter.Completed(124, "", "timeout after 3s", "error")
+    )
+
+    result = nave_adapter.materialize(runner, "anything")
+
+    assert result["adapter_state"] == "error"
+    assert result["returncode"] == 124
+
+
+def test_materialize_nonzero_exit_becomes_typed_adapter_error():
+    runner = RecordingRunner(
+        nave_adapter.Completed(1, "not json either", "boom", "error")
+    )
+
+    result = nave_adapter.materialize(runner, "anything")
+
+    assert result["adapter_state"] == "error"
+    assert result["returncode"] == 1
+    assert result["stderr"] == "boom"
+
+
+def test_cli_materialize_subcommand_uses_request_flag(monkeypatch, capsys):
+    monkeypatch.setenv("PULSE_NAVE_FIXTURES", str(FIXTURES))
+
+    assert nave_adapter.main(["materialize", "--request", "anything"]) == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["contract_version"] == 1
