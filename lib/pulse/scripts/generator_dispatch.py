@@ -24,7 +24,7 @@ from typing import Any
 
 import yaml
 
-from lib.pulse.scripts import impact, profile_dispatch
+from lib.pulse.scripts import impact, mutation_plan, profile_dispatch
 from lib.pulse.scripts.mutation_plan import (
     MutationPlanError,
     TransformationRegistry,
