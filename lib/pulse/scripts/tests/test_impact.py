@@ -389,6 +389,22 @@ def test_contract_block_without_reader_is_unknown_and_finding():
     assert finding.severity == "low"
 
 
+def test_empty_watch_paths_and_contract_no_reader_emits_both_findings():
+    rel = relationships([edge(watch_paths=[], contract=contract())])
+    snap = snapshot_for(changed_files_by_base={"base111": []})
+
+    report = audit(rel, snap)
+
+    result = report.edges[0]
+    assert result.state == "unknown"
+    assert result.contract_state == "unknown"
+
+    kinds = [f.kind for f in report.findings]
+    assert "empty_watch_paths" in kinds
+    assert "unevaluated_contract" in kinds
+    assert len(report.findings) == 2
+
+
 def test_non_contract_edges_unchanged():
     rel = relationships([edge()])
     snap = snapshot_for(changed_files_by_base={"base111": []})
