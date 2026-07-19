@@ -1,0 +1,14 @@
+contract_version: 1
+kind: repo-mutation
+workspace: testorg
+run_at: "2026-07-10T09:15:00Z"
+state: blocked
+transformation: bump-lockfile
+pen_name: pen-bump-lockfile-2026-07-10
+selection: [testorg/widget, testorg/core]
+nave_version: "0.9.2"
+repo_outcomes:
+  testorg/widget: blocked
+  testorg/core: exploded
+reason: null
+errors: []

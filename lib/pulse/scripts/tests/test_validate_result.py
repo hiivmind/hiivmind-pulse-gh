@@ -15,7 +15,10 @@ from lib.pulse.scripts.evaluate_checks import (
 
 SCRIPT = "lib/pulse/scripts/validate_result.py"
 FIXTURES = Path("lib/pulse/scripts/tests/fixtures")
-KINDS = ["status", "healthcheck", "refresh", "workflow-run", "fleet-membership", "impact"]
+KINDS = [
+    "status", "healthcheck", "refresh", "workflow-run", "fleet-membership",
+    "impact", "repo-mutation",
+]
 
 
 def run_validator(path, kind):
@@ -626,6 +629,140 @@ def test_impact_edge_tested_sha_and_remote_head_are_nullable(tmp_path):
     result = run_validator(path, "impact")
 
     assert result.returncode == 0, result.stderr
+
+
+def test_repo_mutation_rejects_invalid_state(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "repo-mutation-valid.yaml").read_text())
+    doc["state"] = "created"
+    path = tmp_path / "repo-mutation.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "repo-mutation")
+
+    assert result.returncode == 1
+    assert "state invalid: created" in result.stderr
+
+
+@pytest.mark.parametrize("state", ["proposed", "blocked", "failed"])
+def test_repo_mutation_accepts_exact_states(tmp_path, state):
+    doc = yaml.safe_load((FIXTURES / "repo-mutation-valid.yaml").read_text())
+    doc["state"] = state
+    if state != "proposed":
+        doc["reason"] = f"{state} for a reason"
+        doc["repo_outcomes"] = {repo: state for repo in doc["selection"]}
+    path = tmp_path / "repo-mutation.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "repo-mutation")
+
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("state", ["blocked", "failed"])
+def test_repo_mutation_requires_reason_when_blocked_or_failed(tmp_path, state):
+    doc = yaml.safe_load((FIXTURES / "repo-mutation-valid.yaml").read_text())
+    doc["state"] = state
+    doc["reason"] = None
+    path = tmp_path / "repo-mutation.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "repo-mutation")
+
+    assert result.returncode == 1
+    assert "reason must not be null when state is blocked or failed" in result.stderr
+
+
+def test_repo_mutation_allows_null_reason_when_proposed(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "repo-mutation-valid.yaml").read_text())
+    assert doc["state"] == "proposed"
+    assert doc["reason"] is None
+    path = tmp_path / "repo-mutation.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "repo-mutation")
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_repo_mutation_rejects_invalid_repo_outcome_value(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "repo-mutation-valid.yaml").read_text())
+    doc["repo_outcomes"]["testorg/core"] = "exploded"
+    path = tmp_path / "repo-mutation.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "repo-mutation")
+
+    assert result.returncode == 1
+    assert "repo_outcomes.testorg/core invalid: exploded" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "state", "proposal_id", "transformation", "pen_name", "selection",
+        "nave_version", "repo_outcomes", "reason",
+    ],
+)
+def test_repo_mutation_requires_field(tmp_path, field):
+    doc = yaml.safe_load((FIXTURES / "repo-mutation-valid.yaml").read_text())
+    doc.pop(field)
+    path = tmp_path / "repo-mutation.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "repo-mutation")
+
+    assert result.returncode == 1
+    assert f"missing required key: {field}" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("state", 1),
+        ("proposal_id", 1),
+        ("transformation", 1),
+        ("pen_name", 1),
+        ("selection", "not-a-list"),
+        ("nave_version", 1),
+        ("repo_outcomes", "not-a-mapping"),
+        ("reason", 1),
+    ],
+)
+def test_repo_mutation_rejects_wrong_type(tmp_path, field, value):
+    doc = yaml.safe_load((FIXTURES / "repo-mutation-valid.yaml").read_text())
+    doc[field] = value
+    path = tmp_path / "repo-mutation.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "repo-mutation")
+
+    assert result.returncode == 1
+
+
+def test_repo_mutation_selection_entries_must_be_strings(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "repo-mutation-valid.yaml").read_text())
+    doc["selection"] = ["testorg/widget", 42]
+    path = tmp_path / "repo-mutation.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "repo-mutation")
+
+    assert result.returncode == 1
+    assert "selection[1] is not a string" in result.stderr
+
+
+def test_repo_mutation_invalid_fixture_reports_every_violation(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "repo-mutation-invalid.yaml").read_text())
+    path = tmp_path / "repo-mutation.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "repo-mutation")
+
+    assert result.returncode == 1
+    assert "missing required key: actor" in result.stderr
+    assert "missing required key: proposal_id" in result.stderr
+    assert "reason must not be null when state is blocked or failed" in result.stderr
+    assert "repo_outcomes.testorg/core invalid: exploded" in result.stderr
 
 
 def test_impact_legacy_string_edge_surfaces_as_unconfigured_finding(tmp_path):

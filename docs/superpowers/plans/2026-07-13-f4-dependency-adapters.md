@@ -1,6 +1,10 @@
 # F4: Dependency Coherence Adapter Family Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Execution mode (revised 2026-07-19):** execute directly in a single session on the
+> main thread — no per-task subagents, no per-task reviewers. TDD per task, one commit
+> per task, one adversarial whole-branch review at the end of the phase, then PR.
+> **Status note:** F4 is NOT merged (develop's latest is PR #128 "Pre-F4"); this plan is
+> still outstanding and should be sequenced after F9 or on user request.
 
 **Goal:** Detect repository-local manifest/lock inconsistency and policy-scoped fleet version divergence through explicit Python and Node adapters while reporting unsupported ecosystems and evidence gaps as coverage debt.
 

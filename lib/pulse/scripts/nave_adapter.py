@@ -49,6 +49,37 @@ class LifecycleResult:
     stderr: str
 
 
+@dataclass(frozen=True)
+class PenQuery:
+    """Fleet-filter query used to seed `nave pen create`.
+
+    Mirrors `nave_pen::CreateOptions` (minus `name`, which is a required,
+    separately-controlled argument on `pen_create` — see the F6 design
+    decision to never let Nave derive a pen name we'd have to parse back out
+    of opaque human text).
+    """
+
+    terms: Sequence[str] = ()
+    match_preds: Sequence[str] = ()
+    ignore_case: bool = False
+
+
+@dataclass(frozen=True)
+class PenHandle:
+    """Normalized result of `pen_create`: exit status plus a resolved pen.
+
+    `pen` is the normalized `pen show --json` payload (or the typed adapter
+    error from that call) — never a parse of create's human-readable stdout.
+    """
+
+    name: str
+    state: str
+    returncode: int
+    stdout: str
+    stderr: str
+    pen: dict | None
+
+
 def _fixture_output_path(root: Path, args: Sequence[str]) -> Path:
     if list(args) == ["--version"]:
         return root / "probe" / "version.txt"
@@ -57,6 +88,14 @@ def _fixture_output_path(root: Path, args: Sequence[str]) -> Path:
     if args and args[-1] == "--help":
         command = "-".join(args[:-1])
         return root / "probe" / f"{command}-help.txt"
+    if len(args) >= 2 and args[0] == "pen":
+        # Every `pen` subcommand shares args[0]; disambiguate by action
+        # (args[1]) into its own directory instead of colliding on
+        # `pen.json`/`pen.txt`.
+        action = args[1]
+        if "--json" in args:
+            return root / "pen" / f"{action}.json"
+        return root / "pen" / f"{action}.txt"
     if args and "--json" in args:
         return root / f"{args[0]}.json"
     if args:
@@ -325,6 +364,139 @@ def materialize(runner: NaveRunner, request: str) -> dict:
     return _decode_json("materialize", runner.run(args))
 
 
+def _decode_json_list(command: str, completed: Completed) -> dict:
+    """Decode a JSON-array-rooted command, normalized into `{"repos": [...]}`.
+
+    `pen status --json` serializes `Vec<RepoState>` — an array root, unlike
+    every other adapter command's object root — so it needs its own decoder
+    rather than reusing `_decode_json`.
+    """
+    try:
+        parsed = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        return {
+            "adapter_state": "error",
+            "command": command,
+            "returncode": completed.returncode,
+            "error": f"invalid JSON from nave {command}: {exc.msg}",
+            "stderr": completed.stderr,
+        }
+    if not isinstance(parsed, list):
+        return {
+            "adapter_state": "error",
+            "command": command,
+            "returncode": completed.returncode,
+            "error": f"invalid JSON from nave {command}: root is not an array",
+            "stderr": completed.stderr,
+        }
+    return {"repos": parsed}
+
+
+def pen_show(
+    runner: NaveRunner,
+    name: str = "",
+    filter_regex: str | None = None,
+) -> dict:
+    """Show a pen's normalized definition (`nave_pen::Pen` serialization)."""
+    args = ["pen", "show"]
+    if name:
+        args.append(name)
+    if filter_regex is not None:
+        args.extend(["--filter", filter_regex])
+    args.append("--json")
+    return _decode_json("pen show", runner.run(args))
+
+
+def pen_status(runner: NaveRunner, name: str) -> dict:
+    """Per-repo pen state (`Vec<nave_pen::RepoState>`), normalized to a dict."""
+    args = ["pen", "status", name, "--json"]
+    return _decode_json_list("pen status", runner.run(args))
+
+
+def pen_create(runner: NaveRunner, query: PenQuery, name: str) -> PenHandle:
+    """Create a pen, then resolve it via `pen show --json`.
+
+    `pen create` has no `--json` flag; its stdout is opaque text and is
+    NEVER parsed for data — only its exit code is used. The caller must
+    supply `name` explicitly (rather than letting Nave derive one from the
+    first term) precisely so this function never needs to scrape a name back
+    out of that opaque text to find the pen to show.
+    """
+    args = ["pen", "create", "--name", name]
+    if query.ignore_case:
+        args.append("--ignore-case")
+    for predicate in query.match_preds:
+        args.extend(["--match", predicate])
+    args.extend(query.terms)
+
+    create_result = runner.run(args)
+    if create_result.returncode != 0:
+        return PenHandle(
+            name=name,
+            state="error",
+            returncode=create_result.returncode,
+            stdout=create_result.stdout,
+            stderr=create_result.stderr,
+            pen=None,
+        )
+
+    show_result = pen_show(runner, name=name)
+    state = "error" if show_result.get("adapter_state") == "error" else "ok"
+    return PenHandle(
+        name=name,
+        state=state,
+        returncode=create_result.returncode,
+        stdout=create_result.stdout,
+        stderr=create_result.stderr,
+        pen=show_result,
+    )
+
+
+def pen_exec(
+    runner: NaveRunner,
+    name: str,
+    command: Sequence[str],
+    only: str | None = None,
+    commit: bool = False,
+    push_changes: bool = False,
+    message: str | None = None,
+) -> dict:
+    """Run a command in each pen repo, then verify via `pen status --json`.
+
+    `pen exec` has no `--json` flag; its stdout/stderr are opaque and are
+    recorded as-is for the caller's report, never parsed. `--push-changes`
+    (which implies `--commit` on the real CLI) and `--commit` are NEVER
+    emitted unless the caller explicitly requests them — this keeps the
+    default mutation policy propose-only (create/run locally, no push).
+    `command` is passed as an argv list after `--`, never a shell string.
+    """
+    if not command:
+        raise ValueError("pen_exec requires a non-empty command argv")
+
+    args = ["pen", "exec", name]
+    if only is not None:
+        args.extend(["--only", only])
+    if push_changes:
+        args.append("--push-changes")
+    elif commit:
+        args.append("--commit")
+    if message is not None:
+        args.extend(["-m", message])
+    args.append("--")
+    args.extend(command)
+
+    exec_result = runner.run(args)
+    status = pen_status(runner, name)
+    return {
+        "adapter_state": "ok" if exec_result.returncode == 0 else "error",
+        "command": "pen exec",
+        "returncode": exec_result.returncode,
+        "stdout": exec_result.stdout,
+        "stderr": exec_result.stderr,
+        "status": status,
+    }
+
+
 def _materialize_summary(report: dict) -> dict:
     """Build a content-free per-repo, per-state artifact summary.
 
@@ -386,6 +558,27 @@ def main(argv: list[str] | None = None) -> int:
     materialize_parser = subparsers.add_parser("materialize")
     add_runner_options(materialize_parser)
     materialize_parser.add_argument("--request", required=True)
+    pen_show_parser = subparsers.add_parser("pen-show")
+    add_runner_options(pen_show_parser)
+    pen_show_parser.add_argument("--name", default="")
+    pen_show_parser.add_argument("--filter")
+    pen_status_parser = subparsers.add_parser("pen-status")
+    add_runner_options(pen_status_parser)
+    pen_status_parser.add_argument("--name", required=True)
+    pen_create_parser = subparsers.add_parser("pen-create")
+    add_runner_options(pen_create_parser)
+    pen_create_parser.add_argument("--name", required=True)
+    pen_create_parser.add_argument("--ignore-case", action="store_true")
+    pen_create_parser.add_argument("--match", dest="matches", action="append", default=[])
+    pen_create_parser.add_argument("--term", action="append", default=[])
+    pen_exec_parser = subparsers.add_parser("pen-exec")
+    add_runner_options(pen_exec_parser)
+    pen_exec_parser.add_argument("--name", required=True)
+    pen_exec_parser.add_argument("--only")
+    pen_exec_parser.add_argument("--commit", action="store_true")
+    pen_exec_parser.add_argument("--push-changes", action="store_true")
+    pen_exec_parser.add_argument("--message", "-m")
+    pen_exec_parser.add_argument("cmd", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
 
     runner = _runner_from_args(args)
@@ -427,6 +620,37 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(json.dumps(_materialize_summary(result), indent=2, sort_keys=True))
         return 0
+    if args.command == "pen-show":
+        result = pen_show(runner, name=args.name, filter_regex=args.filter)
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 1 if result.get("adapter_state") == "error" else 0
+    if args.command == "pen-status":
+        result = pen_status(runner, args.name)
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 1 if result.get("adapter_state") == "error" else 0
+    if args.command == "pen-create":
+        query = PenQuery(
+            terms=args.term, match_preds=args.matches, ignore_case=args.ignore_case
+        )
+        handle = pen_create(runner, query, args.name)
+        print(json.dumps(asdict(handle), indent=2, sort_keys=True))
+        return 1 if handle.state == "error" else 0
+    if args.command == "pen-exec":
+        cmd = args.cmd[1:] if args.cmd[:1] == ["--"] else args.cmd
+        if not cmd:
+            print("pen-exec requires a command after --", file=sys.stderr)
+            return 2
+        result = pen_exec(
+            runner,
+            args.name,
+            cmd,
+            only=args.only,
+            commit=args.commit,
+            push_changes=args.push_changes,
+            message=args.message,
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 1 if result.get("adapter_state") == "error" else 0
     return 2
 
 
