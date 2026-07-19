@@ -301,6 +301,106 @@ def test_empty_relationships_produce_empty_report():
     assert report.edges_stale == 0
 
 
+# --- audit(): contract-version composition ---
+
+def contract(**overrides):
+    c = {
+        "producer": {
+            "path": "producer.txt",
+            "parser": {"kind": "regex", "pattern": r"version:\s*(\S+)"},
+        },
+        "consumer": {
+            "path": "consumer.txt",
+            "parser": {"kind": "regex", "pattern": r"requires:\s*(\S+)"},
+        },
+        "version_scheme": "pep440",
+    }
+    c.update(overrides)
+    return c
+
+
+def fake_contract_reader(files):
+    def read(repo, path):
+        return files[(repo, path)]
+    return read
+
+
+def test_contract_state_set_when_reader_supplied():
+    rel = relationships([edge(contract=contract())])
+    snap = snapshot_for(changed_files_by_base={"base111": []})
+    files = {
+        ("upstream-repo", "producer.txt"): b"version: 1.5.0",
+        ("upstream-repo", "consumer.txt"): b"requires: >=1.0,<2.0",
+    }
+    report = audit(rel, snap, contract_reader=fake_contract_reader(files))
+
+    result = report.edges[0]
+    assert result.state == "current"
+    assert result.contract_state == "compatible"
+    assert report.findings == []
+
+
+def test_contract_state_set_to_gap_when_versions_diverge():
+    rel = relationships([edge(contract=contract())])
+    snap = snapshot_for(changed_files_by_base={"base111": []})
+    files = {
+        ("upstream-repo", "producer.txt"): b"version: 2.5.0",
+        ("upstream-repo", "consumer.txt"): b"requires: >=1.0,<2.0",
+    }
+    report = audit(rel, snap, contract_reader=fake_contract_reader(files))
+
+    assert report.edges[0].contract_state == "gap"
+
+
+def test_stale_edge_with_contract_gap_emits_one_finding():
+    rel = relationships([edge(watch_paths=["lib/foo.py"], contract=contract())])
+    snap = snapshot_for(changed_files_by_base={"base111": ["lib/foo.py"]})
+    files = {
+        ("upstream-repo", "producer.txt"): b"version: 2.5.0",
+        ("upstream-repo", "consumer.txt"): b"requires: >=1.0,<2.0",
+    }
+    report = audit(rel, snap, contract_reader=fake_contract_reader(files))
+
+    result = report.edges[0]
+    assert result.state == "stale"
+    assert result.contract_state == "gap"
+    assert len(report.findings) == 1
+    finding = report.findings[0]
+    assert finding.kind == "stale_with_contract_gap"
+    assert finding.repo == "dependent-repo"
+    assert finding.severity == "high"
+    assert "path stale" in finding.detail.lower()
+    assert "contract gap" in finding.detail.lower()
+
+
+def test_contract_block_without_reader_is_unknown_and_finding():
+    rel = relationships([edge(contract=contract())])
+    snap = snapshot_for(changed_files_by_base={"base111": []})
+
+    report = audit(rel, snap)
+
+    result = report.edges[0]
+    assert result.state == "current"
+    assert result.contract_state == "unknown"
+    assert len(report.findings) == 1
+    finding = report.findings[0]
+    assert finding.kind == "unevaluated_contract"
+    assert finding.repo == "dependent-repo"
+    assert finding.severity == "low"
+
+
+def test_non_contract_edges_unchanged():
+    rel = relationships([edge()])
+    snap = snapshot_for(changed_files_by_base={"base111": []})
+
+    report = audit(rel, snap)
+
+    result = report.edges[0]
+    assert result.state == "current"
+    assert result.contract_state is None
+    assert report.findings == []
+
+
 # --- mark(): expected-base guarded, idempotent, atomic marker patch ---
 
 def make_relationships_file(tmp_path, depends_on):

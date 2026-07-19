@@ -84,10 +84,21 @@ repo_dependencies:
 #         watch_paths:
 #           - "lib/patterns/headless-contract.md"
 #           - "lib/pulse/scripts/validate_result.py"
-#         watch_branch: develop
-#         integration_tested_sha: abc1234
-#         tested_at: "2026-07-01T10:00:00Z"
-#         integration_workflow: ci.yml
+#     watch_branch: develop
+#     integration_tested_sha: abc1234
+#     tested_at: "2026-07-01T10:00:00Z"
+#     integration_workflow: ci.yml
+#     # Optional contract-version binding: the impact audit compares the
+#     # producer version extracted from the upstream repo with the consumer
+#     # requirement extracted from the upstream repo.
+#     # contract:
+#     #   producer:
+#     #     path: "pyproject.toml"
+#     #     parser: {kind: toml, key: "project.version"}
+#     #   consumer:
+#     #     path: "requirements.txt"
+#     #     parser: {kind: regex, pattern: "upstream(>=[^\\s]+)"}
+#     #   version_scheme: pep440
 #     depended_by: []
 #     relationship_type: test
 #   hiivmind-corpus:
