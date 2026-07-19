@@ -55,6 +55,22 @@ transformations:
       kind: none
     allow_scheduled: true
 
+  # Example: a template-driven regeneration. The exact argv is fixed in the
+  # registry; a generator adapter (templates/generators.yaml.template) binds
+  # this transformation to a binding. Not allowed to run unattended because
+  # the generated files are reviewed before they are applied.
+  regenerate-from-template:
+    id: regenerate-from-template
+    command_argv:
+      - nave
+      - generate
+      - --from-template
+    applies_to:
+      - always
+    validation:
+      kind: none
+    allow_scheduled: false
+
   # Example: a dependency-lock refresh. Applies only to repos carrying a
   # capability signal (surfaced by their profile/scorecard evidence), and
   # its result is checked against a JSON Schema before it can be proposed
