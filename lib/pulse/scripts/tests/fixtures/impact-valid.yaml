@@ -1,0 +1,35 @@
+contract_version: 1
+kind: impact
+workspace: testorg
+run_at: "2026-07-10T09:15:00Z"
+actor:
+  gh_login: octocat
+  machine: mba-m4
+  mode: scheduled
+edges_checked: 2
+edges_stale: 1
+markers_updated: 0
+edges:
+  - dependent: testorg/widget
+    upstream: testorg/core
+    watch_branch: main
+    state: stale
+    tested_sha: abc123
+    remote_head: def456
+    changed_paths: [lib/api.py]
+  - dependent: testorg/widget
+    upstream: testorg/other
+    watch_branch: develop
+    state: current
+    tested_sha: aaa111
+    remote_head: aaa111
+    changed_paths: []
+findings:
+  - kind: integration-drift
+    repo: testorg/widget
+    severity: medium
+    detail: "core changed lib/api.py since abc123"
+    inferred: false
+proposed_actions: ["open tracking issue testorg/widget#42"]
+asks_recorded: []
+errors: []

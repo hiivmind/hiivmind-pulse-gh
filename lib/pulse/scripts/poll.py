@@ -198,6 +198,51 @@ def check_org_repos(config: dict, state: dict) -> bool:
     return isinstance(previous, str) and previous != signature
 
 
+def _branch_head_watches(relationships: dict) -> list[tuple[str, str]]:
+    """Unique (upstream repo, watch_branch) pairs from configured object
+    depends_on edges (F5 Task 1 shape). Legacy string edges carry no watch
+    metadata and are skipped here (they never resolve to a currency verdict,
+    see impact.py)."""
+    pairs: set[tuple[str, str]] = set()
+    repo_dependencies = (relationships or {}).get("repo_dependencies") or {}
+    for entry in repo_dependencies.values():
+        for depends_on in (entry or {}).get("depends_on") or []:
+            if not isinstance(depends_on, dict):
+                continue
+            repo = depends_on.get("repo")
+            branch = depends_on.get("watch_branch")
+            if repo and branch:
+                pairs.add((repo, branch))
+    return sorted(pairs)
+
+
+def check_branch_heads(config_dir: Path, state: dict) -> bool:
+    """Trigger-only branch-head watch for configured impact-audit edges
+    (F5 Task 3). Fetches each watched (repo, branch) head via the gh_api
+    seam and stores it as trigger state `{repo: {branch: head_sha}}` —
+    nothing else. First observation of a (repo, branch) pair baselines
+    without triggering; a later change of a previously-seen head triggers.
+    The actual diff evidence used by the impact audit is collected
+    separately by impact_snapshot.py."""
+    relationships = load_yaml(config_dir / "relationships.yaml")
+    watches = _branch_head_watches(relationships)
+    if not watches:
+        return False
+    slot = state.setdefault("branch_heads", {})
+    changed = False
+    for repo, branch in watches:
+        resp = gh_api(f"/repos/{repo}/git/ref/heads/{branch}") or {}
+        sha = ((resp.get("object") or {}).get("sha"))
+        if not sha:
+            continue
+        repo_slot = slot.setdefault(repo, {})
+        previous = repo_slot.get(branch)
+        repo_slot[branch] = sha
+        if previous is not None and previous != sha:
+            changed = True
+    return changed
+
+
 REPO_CHECKS = {
     "pull_requests": check_pull_requests,
     "issues": check_issues,
@@ -223,6 +268,8 @@ def evaluate_source(source: str, repo: str, config: dict, config_dir: Path,
         changed = check_projects(config, config_dir, state, gold)
     elif source == "org_repos":
         changed = check_org_repos(config, state)
+    elif source == "branch_heads":
+        changed = check_branch_heads(config_dir, state)
     cache[source] = changed
     return changed
 

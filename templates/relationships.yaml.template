@@ -39,9 +39,35 @@ project_repo_links:
 # Repository Dependencies
 # Documents which repositories depend on each other
 # This is typically manually maintained based on project architecture
+#
+# depends_on entries are object edges that carry integration-currency state
+# for the impact audit (impact.py, F5):
+#   - repo: {{repo_name}}                     # Upstream repository this edge watches
+#     watch_paths:                            # Glob paths in the upstream repo whose
+#       - {{glob_path}}                       # changes matter to this dependent ("**"
+#                                              # watches the whole tree). Required and
+#                                              # non-empty — an edge with no watch_paths
+#                                              # can never be marked stale, so the audit
+#                                              # treats it as unknown (misconfigured),
+#                                              # never current.
+#     watch_branch: {{branch}}                # Upstream branch to diff against (main, develop, ...)
+#     integration_tested_sha: {{sha}}         # Last upstream SHA this dependent validated against
+#     tested_at: {{timestamp}}                # ISO 8601 timestamp of that validation
+#     integration_workflow: {{workflow}}      # Optional: workflow whose success advances the marker
+#
+# Currency is computed as `git diff integration_tested_sha..<watch_branch head> -- watch_paths`;
+# any hit marks the edge stale. A missing or unreachable integration_tested_sha
+# blocks closed (state: unknown), never silently passes.
+#
+# Legacy plain-string entries (a bare repo name, no watch metadata) remain
+# accepted for backward compatibility, but the impact audit cannot determine
+# their currency — they are surfaced as `unconfigured_edge` findings instead
+# of a current/stale verdict. An object edge with empty/missing watch_paths
+# is surfaced the same way: `state: unknown` plus an `empty_watch_paths`
+# finding, never `current`.
 repo_dependencies:
   {{repo_name}}:                     # Repository name
-    depends_on: []                   # Repositories this repo depends on
+    depends_on: []                   # Repositories this repo depends on (object edges; see above)
     depended_by: []                  # Repositories that depend on this repo
     relationship_type: {{type}}      # main, plugin, test, documentation
 
@@ -54,7 +80,14 @@ repo_dependencies:
 #     relationship_type: main
 #   hiivmind-pulse-gh-tests:
 #     depends_on:
-#       - hiivmind-pulse-gh
+#       - repo: hiivmind-pulse-gh
+#         watch_paths:
+#           - "lib/patterns/headless-contract.md"
+#           - "lib/pulse/scripts/validate_result.py"
+#         watch_branch: develop
+#         integration_tested_sha: abc1234
+#         tested_at: "2026-07-01T10:00:00Z"
+#         integration_workflow: ci.yml
 #     depended_by: []
 #     relationship_type: test
 #   hiivmind-corpus:
@@ -63,6 +96,13 @@ repo_dependencies:
 #       - hiivmind-corpus-data
 #       - hiivmind-corpus-claude
 #     relationship_type: main
+#   hiivmind-corpus-data:
+#     depends_on:
+#       # Legacy string edge: accepted, but carries no watch metadata and is
+#       # surfaced as an unconfigured_edge finding by the impact audit.
+#       - hiivmind-corpus
+#     depended_by: []
+#     relationship_type: plugin
 
 # Cross-Project Coordination
 # Documents scenarios where work in one project affects another

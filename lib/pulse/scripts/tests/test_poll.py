@@ -162,3 +162,92 @@ def test_org_repos_unchanged_signature_does_not_trigger(tmp_path):
     unchanged = json.loads(run_poll(ws, fixtures=fixtures).stdout)
 
     assert unchanged["triggered_workflows"] == []
+
+
+def make_impact_relationships(cfg, dependent="testorg/downstream",
+                              upstream="testorg/upstream", branch="main"):
+    (cfg / "relationships.yaml").write_text(
+        "repo_dependencies:\n"
+        f"  {dependent}:\n"
+        "    depends_on:\n"
+        f"      - repo: {upstream}\n"
+        "        watch_paths:\n"
+        "          - \"**\"\n"
+        f"        watch_branch: {branch}\n"
+        "        integration_tested_sha: abc123\n"
+        "        tested_at: \"2026-07-01T10:00:00Z\"\n"
+        "    depended_by: []\n"
+        "    relationship_type: main\n"
+        f"  {upstream}:\n"
+        "    depends_on: []\n"
+        f"    depended_by:\n      - {dependent}\n"
+        "    relationship_type: main\n"
+    )
+
+
+def _ref_fixture_slug(repo, branch):
+    import re
+    path = f"/repos/{repo}/git/ref/heads/{branch}"
+    return re.sub(r"[^A-Za-z0-9._-]", "_", path)
+
+
+def test_branch_heads_first_sight_baselines_then_move_triggers(tmp_path):
+    ws, cfg = make_workspace(tmp_path, with_workflow=False)
+    (cfg / "workflows" / "impact-watch.yaml").write_text(
+        "name: impact-watch\nenabled: true\nauto: false\ncooldown_minutes: 0\n"
+        "trigger:\n  type: session_poll\n  source: branch_heads\n"
+    )
+    make_impact_relationships(cfg)
+    fixtures = tmp_path / "fixtures"
+    fixtures.mkdir()
+    (fixtures / "_rate_limit.json").write_text('{"rate":{"remaining":5000}}')
+    ref_fixture = fixtures / f"{_ref_fixture_slug('testorg/upstream', 'main')}.json"
+    ref_fixture.write_text(json.dumps({"object": {"sha": "sha-one"}}))
+
+    run_poll(ws, fixtures=fixtures)  # poll-state bootstrap
+    first_observation = json.loads(run_poll(ws, fixtures=fixtures).stdout)
+
+    assert first_observation["triggered_workflows"] == []
+    state = yaml.safe_load((cfg / "poll-state.yaml").read_text())
+    assert state["state"]["branch_heads"]["testorg/upstream"]["main"] == "sha-one"
+
+    ref_fixture.write_text(json.dumps({"object": {"sha": "sha-two"}}))
+    changed = json.loads(run_poll(ws, fixtures=fixtures).stdout)
+
+    assert changed["triggered_workflows"] == ["impact-watch"]
+    state = yaml.safe_load((cfg / "poll-state.yaml").read_text())
+    assert state["state"]["branch_heads"]["testorg/upstream"]["main"] == "sha-two"
+
+
+def test_branch_heads_unchanged_head_does_not_trigger(tmp_path):
+    ws, cfg = make_workspace(tmp_path, with_workflow=False)
+    (cfg / "workflows" / "impact-watch.yaml").write_text(
+        "name: impact-watch\nenabled: true\nauto: false\ncooldown_minutes: 0\n"
+        "trigger:\n  type: session_poll\n  source: branch_heads\n"
+    )
+    make_impact_relationships(cfg)
+    fixtures = tmp_path / "fixtures"
+    fixtures.mkdir()
+    (fixtures / "_rate_limit.json").write_text('{"rate":{"remaining":5000}}')
+    ref_fixture = fixtures / f"{_ref_fixture_slug('testorg/upstream', 'main')}.json"
+    ref_fixture.write_text(json.dumps({"object": {"sha": "sha-one"}}))
+
+    run_poll(ws, fixtures=fixtures)
+    run_poll(ws, fixtures=fixtures)
+    unchanged = json.loads(run_poll(ws, fixtures=fixtures).stdout)
+
+    assert unchanged["triggered_workflows"] == []
+
+
+def test_branch_heads_no_relationships_file_does_not_trigger_or_crash(tmp_path):
+    ws, cfg = make_workspace(tmp_path, with_workflow=False)
+    (cfg / "workflows" / "impact-watch.yaml").write_text(
+        "name: impact-watch\nenabled: true\nauto: false\ncooldown_minutes: 0\n"
+        "trigger:\n  type: session_poll\n  source: branch_heads\n"
+    )
+    # no relationships.yaml written at all
+    run_poll(ws)
+    r = run_poll(ws)
+    out = json.loads(r.stdout)
+    assert r.returncode == 0, r.stderr
+    assert out["triggered_workflows"] == []

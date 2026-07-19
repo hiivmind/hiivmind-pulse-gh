@@ -152,3 +152,160 @@ def test_gate_only_step_completes_on_satisfy(tmp_path):
     step = [s for s in yaml.safe_load(open(path))["steps"]
             if s["id"] == "verify-lib"][0]
     assert step["status"] == "done"
+
+
+# --------------------------------------------------------------------------
+# check-gate: binding_edges_current (F5 Task 4 release gate)
+# --------------------------------------------------------------------------
+
+GATE_STEPS = json.dumps([
+    {"id": "audit", "repo": "testorg/app"},
+    {"id": "release-gate", "repo": "testorg/app", "depends_on": ["audit"],
+     "gate": "binding edges current"},
+])
+
+
+def create_gate_run(tmp_path, run_id="2026-07-19-octocat-100000"):
+    return create(tmp_path, steps=GATE_STEPS, run_id=run_id)
+
+
+def impact_result(edges, edges_stale=None, kind="impact"):
+    stale_count = (
+        edges_stale if edges_stale is not None
+        else sum(1 for e in edges if e.get("state") == "stale")
+    )
+    return {
+        "contract_version": 1,
+        "kind": kind,
+        "workspace": "testorg",
+        "run_at": "2026-07-19T00:00:00Z",
+        "actor": {"gh_login": "octocat", "machine": "mba-m4", "mode": "scheduled"},
+        "edges_checked": len(edges),
+        "edges_stale": stale_count,
+        "markers_updated": 0,
+        "edges": edges,
+        "findings": [],
+        "proposed_actions": [],
+        "asks_recorded": [],
+        "errors": [],
+    }
+
+
+def _edge(state, dependent="testorg/app", upstream="testorg/lib"):
+    return {
+        "dependent": dependent,
+        "upstream": upstream,
+        "watch_branch": "main",
+        "state": state,
+        "tested_sha": "aaa" if state != "unknown" else None,
+        "remote_head": "bbb",
+        "changed_paths": ["lib/x.py"] if state == "stale" else [],
+    }
+
+
+def write_yaml(path, data):
+    path.write_text(yaml.safe_dump(data, sort_keys=False))
+
+
+def check_gate(path, result_path, step="release-gate", gate_type="binding_edges_current"):
+    return run("check-gate", "--file", path, "--step", step,
+               "--result", str(result_path), "--gate-type", gate_type)
+
+
+def test_check_gate_current_satisfies(tmp_path):
+    path = create_gate_run(tmp_path)
+    result_path = tmp_path / "impact-result.yaml"
+    write_yaml(result_path, impact_result([_edge("current")]))
+
+    r = check_gate(path, result_path)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["satisfied"] is True
+
+    doc = yaml.safe_load(open(path))
+    step = [s for s in doc["steps"] if s["id"] == "release-gate"][0]
+    assert step["gate_satisfied"] is True
+    assert step["status"] == "done"
+
+
+def test_check_gate_stale_edge_blocks_closed(tmp_path):
+    path = create_gate_run(tmp_path)
+    result_path = tmp_path / "impact-result.yaml"
+    write_yaml(result_path, impact_result([_edge("current"), _edge("stale")]))
+
+    r = check_gate(path, result_path)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["satisfied"] is False
+
+    doc = yaml.safe_load(open(path))
+    step = [s for s in doc["steps"] if s["id"] == "release-gate"][0]
+    assert step["gate_satisfied"] is False
+    assert step["status"] == "blocked-on-gate"
+
+
+def test_check_gate_unknown_edge_blocks_closed(tmp_path):
+    path = create_gate_run(tmp_path)
+    result_path = tmp_path / "impact-result.yaml"
+    write_yaml(result_path, impact_result([_edge("current"), _edge("unknown")]))
+
+    r = check_gate(path, result_path)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["satisfied"] is False
+
+    step = [s for s in yaml.safe_load(open(path))["steps"]
+            if s["id"] == "release-gate"][0]
+    assert step["gate_satisfied"] is False
+
+
+def test_check_gate_missing_result_blocks_closed(tmp_path):
+    path = create_gate_run(tmp_path)
+    missing_path = tmp_path / "no-such-impact-result.yaml"
+
+    r = check_gate(path, missing_path)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["satisfied"] is False
+    assert "not found" in out["detail"]
+
+    step = [s for s in yaml.safe_load(open(path))["steps"]
+            if s["id"] == "release-gate"][0]
+    assert step["gate_satisfied"] is False
+
+
+def test_check_gate_malformed_result_blocks_closed(tmp_path):
+    path = create_gate_run(tmp_path)
+    result_path = tmp_path / "impact-result.yaml"
+    result_path.write_text("not: [valid, yaml structure for this schema\n")
+
+    r = check_gate(path, result_path)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["satisfied"] is False
+
+    step = [s for s in yaml.safe_load(open(path))["steps"]
+            if s["id"] == "release-gate"][0]
+    assert step["gate_satisfied"] is False
+
+
+def test_check_gate_schema_invalid_result_blocks_closed(tmp_path):
+    # Valid YAML, but fails impact schema validation (wrong kind).
+    path = create_gate_run(tmp_path)
+    result_path = tmp_path / "impact-result.yaml"
+    write_yaml(result_path, impact_result([_edge("current")], kind="healthcheck"))
+
+    r = check_gate(path, result_path)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["satisfied"] is False
+
+
+def test_check_gate_unknown_gate_type_errors(tmp_path):
+    path = create_gate_run(tmp_path)
+    result_path = tmp_path / "impact-result.yaml"
+    write_yaml(result_path, impact_result([_edge("current")]))
+
+    r = check_gate(path, result_path, gate_type="nonsense_gate")
+    assert r.returncode == 1
+    assert "unknown gate type" in r.stderr.lower()
