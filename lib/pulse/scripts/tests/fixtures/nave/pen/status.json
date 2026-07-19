@@ -1,0 +1,22 @@
+[
+  {
+    "owner": "acme",
+    "repo": "api",
+    "working_tree": "dirty",
+    "freshness": "fresh",
+    "run_state": "run-local",
+    "divergence": "up-to-date",
+    "ahead": 0,
+    "behind": 0
+  },
+  {
+    "owner": "acme",
+    "repo": "web",
+    "working_tree": "clean",
+    "freshness": "stale",
+    "run_state": "not-run",
+    "divergence": "behind",
+    "ahead": 0,
+    "behind": 2
+  }
+]
