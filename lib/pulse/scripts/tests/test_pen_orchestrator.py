@@ -266,6 +266,75 @@ def test_json_schema_validation_fails_closed_after_successful_exec():
     assert result.repo_outcomes == {repo: "failed" for repo in SELECTION}
 
 
+# --- schema validation with an injected reader -----------------------------
+
+
+def _json_schema_plan():
+    return make_plan(
+        validation={
+            "kind": "json_schema",
+            "path": "package-lock.json",
+            "schema": {"type": "object", "required": ["lockfileVersion"]},
+        }
+    )
+
+
+def _exec_ok_sequence():
+    return [
+        *create_sequence(REPOS),
+        pen_status_completed([repo_state("acme", "api"), repo_state("acme", "web")]),
+        nave_adapter.Completed(0, "ran ok", ""),
+        pen_status_completed([repo_state("acme", "api"), repo_state("acme", "web")]),
+    ]
+
+
+def test_json_schema_with_reader_and_valid_file_proceeds_to_proposed():
+    plan = _json_schema_plan()
+    runner = QueuedRunner(_exec_ok_sequence())
+
+    def read_repo_file(repo, path):
+        assert path == "package-lock.json"
+        return b'{"lockfileVersion": 3}'
+
+    result = pen_orchestrator.execute(plan, runner, read_repo_file=read_repo_file)
+
+    assert result.state == "proposed"
+    assert result.reason is None
+    assert result.repo_outcomes == {repo: "ok" for repo in SELECTION}
+
+
+def test_json_schema_with_reader_and_invalid_file_fails_with_per_repo_attribution():
+    plan = _json_schema_plan()
+    runner = QueuedRunner(_exec_ok_sequence())
+
+    def read_repo_file(repo, path):
+        if repo == "acme/api":
+            return b'{"lockfileVersion": 3}'
+        return b"{}"  # acme/web: missing required lockfileVersion
+
+    result = pen_orchestrator.execute(plan, runner, read_repo_file=read_repo_file)
+
+    assert result.state == "failed"
+    assert result.repo_outcomes == {"acme/api": "ok", "acme/web": "failed"}
+    assert "acme/web" in result.reason
+    assert "lockfileVersion" in result.reason
+    assert "acme/api" not in result.reason
+
+
+def test_json_schema_with_reader_and_missing_file_fails():
+    plan = _json_schema_plan()
+    runner = QueuedRunner(_exec_ok_sequence())
+
+    def read_repo_file(repo, path):
+        raise FileNotFoundError(f"{repo}:{path} not found")
+
+    result = pen_orchestrator.execute(plan, runner, read_repo_file=read_repo_file)
+
+    assert result.state == "failed"
+    assert result.repo_outcomes == {repo: "failed" for repo in SELECTION}
+    assert "not found" in result.reason
+
+
 # --- propose-only success --------------------------------------------------
 
 

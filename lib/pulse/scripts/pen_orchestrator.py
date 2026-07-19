@@ -28,20 +28,25 @@ before any Nave call. See `lib/patterns/repository-mutations.md` for the
 full mutation-policy vocabulary; Task 4 (F6 plan) is where a policy other
 than `propose` gets to actually authorize a later apply step.
 
-## NEEDS_CONTEXT: `validation.kind == "json_schema"` cannot be checked
+## `validation.kind == "json_schema"`: injectable file reader
 
-`mutation_plan.ValidationSpec` declares a `json_schema` kind that is
-supposed to validate a repo-relative output file's parsed content against
-an inline JSON Schema. No Nave CLI surface exposes that content:
-`pen show`/`pen status` (`nave_pen::storage::Pen` / `state::RepoState`)
-carry no local clone path, and `pen exec`'s stdout/stderr are opaque by
+`mutation_plan.ValidationSpec` declares a `json_schema` kind that
+validates a repo-relative output file's parsed content against an inline
+JSON Schema. No Nave CLI surface exposes that content directly: `pen
+show`/`pen status` (`nave_pen::storage::Pen` / `state::RepoState`) carry
+no local clone path, and `pen exec`'s stdout/stderr are opaque by
 contract (Task 1: "never parsed as data"). `nave materialize` fetches
 committed content from the GitHub API, not a pen's local uncommitted
-working tree, so it cannot stand in either. Every transformation entry
-whose `validation.kind == "json_schema"` therefore fails closed today —
-see `_validate` below — until a future Nave/adapter capability exposes
-pen repo file content (e.g. a `pen cat`/`--json` command). This is a real
-capability gap, not a design choice this module can route around.
+working tree, so it cannot stand in either. `pen_orchestrator` therefore
+never reads a pen's working tree itself — instead `execute` accepts an
+injectable `read_repo_file: Callable[[str, str], bytes] | None` seam
+(repo `owner/name` + relative path -> bytes, raising `FileNotFoundError`
+when absent). A caller that knows its pen root (e.g. a future `pen
+cat`/`--json` adapter, or a caller with direct filesystem access to the
+pen's clones) wires a reader in; Pulse never hardcodes Nave's internal
+pen layout itself. With no reader supplied, `json_schema` validation
+still fails closed (see `_validate` below) with a message explaining
+*why* — the capability gap is real, but no longer unconditional.
 
 ## NEEDS_CONTEXT: per-repo command-failure attribution
 
@@ -60,7 +65,9 @@ false per-repo split by guessing from opaque text.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from typing import Any, Callable
 
 from lib.pulse.scripts import nave_adapter
 from lib.pulse.scripts.mutation_plan import (
@@ -165,29 +172,114 @@ def _is_stale(state: dict) -> bool:
     return state.get("freshness") == "stale" or state.get("divergence") in _STALE_DIVERGENCE
 
 
-def _validate(spec: ValidationSpec) -> str | None:
-    """Run the post-exec check `spec` declares; return an error string or
-    `None` on success. See the module-level NEEDS_CONTEXT note: `none` is
-    the only kind currently checkable — `json_schema` fails closed."""
+_SCHEMA_TYPE_CHECKS: dict[str, Callable[[Any], bool]] = {
+    "object": lambda v: isinstance(v, dict),
+    "array": lambda v: isinstance(v, list),
+    "string": lambda v: isinstance(v, str),
+    "number": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool),
+    "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
+    "boolean": lambda v: isinstance(v, bool),
+    "null": lambda v: v is None,
+}
+
+
+def _schema_errors(value: Any, schema: dict[str, Any], path: str = "$") -> list[str]:
+    """Minimal, pure structural check against a JSON Schema subset: `type`
+    (object/array/string/number/integer/boolean/null), `required` (list of
+    keys on objects), `properties` (recursive). No external `jsonschema`
+    dependency — any schema keyword outside this subset is simply ignored."""
+    errors: list[str] = []
+    expected_type = schema.get("type")
+    if expected_type is not None:
+        checker = _SCHEMA_TYPE_CHECKS.get(expected_type)
+        if checker is None or not checker(value):
+            errors.append(f"{path}: expected type {expected_type!r}, got {type(value).__name__}")
+            return errors
+    required = schema.get("required")
+    if required:
+        if not isinstance(value, dict):
+            errors.append(f"{path}: 'required' check needs an object, got {type(value).__name__}")
+        else:
+            errors.extend(
+                f"{path}: missing required property {key!r}"
+                for key in required
+                if key not in value
+            )
+    properties = schema.get("properties")
+    if properties and isinstance(value, dict):
+        for key, subschema in properties.items():
+            if key in value:
+                errors.extend(_schema_errors(value[key], subschema, f"{path}.{key}"))
+    return errors
+
+
+def _validate_repo_output(spec: ValidationSpec, read_repo_file, repo: str) -> str | None:
+    """Read and schema-check `spec.path` for one `repo` via the injected
+    `read_repo_file` seam; return an error string or `None` on success."""
+    try:
+        raw = read_repo_file(repo, spec.path)
+    except FileNotFoundError as exc:
+        return f"{repo}: validation file {spec.path!r} not found: {exc}"
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        return f"{repo}: validation file {spec.path!r} is not valid JSON: {exc}"
+    errors = _schema_errors(data, spec.schema or {})
+    if errors:
+        return f"{repo}: schema validation failed for {spec.path!r}: {'; '.join(errors)}"
+    return None
+
+
+def _validate(
+    spec: ValidationSpec, read_repo_file, selection: tuple[str, ...]
+) -> tuple[dict[str, str], str] | None:
+    """Run the post-exec check `spec` declares across `selection`; return
+    `None` on success, or `(repo_outcomes, reason)` on failure. `kind ==
+    "none"` always passes. `kind == "json_schema"` with no `read_repo_file`
+    fails closed uniformly (see module docstring); with a reader, each repo
+    is checked independently so failure is attributed per repo."""
     if spec.kind == "none":
         return None
-    return (
-        f"validation kind 'json_schema' (path={spec.path!r}) cannot be "
-        "checked: no Nave adapter capability exposes a pen repo's local "
-        "file content (pen show/status carry no clone path, pen exec "
-        "stdout/stderr are opaque by contract, and `materialize` fetches "
-        "committed GitHub content, not a pen's local working tree) — see "
-        "the NEEDS_CONTEXT note in pen_orchestrator.py / task-3-report.md"
-    )
+    if read_repo_file is None:
+        reason = (
+            f"validation kind 'json_schema' (path={spec.path!r}) requires a "
+            "read_repo_file callable to read the pen's local output file "
+            "content — none was provided to execute(); pen show/status "
+            "carry no clone path, pen exec stdout/stderr are opaque by "
+            "contract, and `materialize` fetches committed GitHub content, "
+            "not a pen's local working tree, so pen_orchestrator cannot "
+            "read repo files on its own"
+        )
+        return ({repo: "failed" for repo in selection}, reason)
+    errors = {
+        repo: error
+        for repo in selection
+        if (error := _validate_repo_output(spec, read_repo_file, repo)) is not None
+    }
+    if not errors:
+        return None
+    repo_outcomes = {repo: ("failed" if repo in errors else "ok") for repo in selection}
+    reason = "; ".join(errors[repo] for repo in selection if repo in errors)
+    return (repo_outcomes, reason)
 
 
-def execute(plan: PenPlan, nave_adapter_runner) -> PenRunResult:
+def execute(
+    plan: PenPlan,
+    nave_adapter_runner,
+    *,
+    read_repo_file: Callable[[str, str], bytes] | None = None,
+) -> PenRunResult:
     """Drive `plan` through the pen state machine using `nave_adapter_runner`.
 
     `nave_adapter_runner` is the injectable runner (`NaveRunner` /
     `RecordingRunner` / `QueuedRunner` / `NaveRunner(fixtures=...)`) passed
     to the statically-imported `nave_adapter` module's functions — this
     function never imports or calls `subprocess` itself.
+
+    `read_repo_file`, if supplied, is called as `read_repo_file(repo,
+    relative_path) -> bytes` (raising `FileNotFoundError` when the path is
+    absent) to satisfy `kind: json_schema` validation entries. It is the
+    only filesystem seam this module accepts — see the module docstring.
     """
     proposal = plan.proposal
     entry = plan.entry
@@ -305,15 +397,10 @@ def execute(plan: PenPlan, nave_adapter_runner) -> PenRunResult:
         )
 
     # --- validated -----------------------------------------------------------
-    validation_error = _validate(entry.validation)
-    if validation_error is not None:
-        return _result(
-            plan,
-            "failed",
-            version,
-            {repo: "failed" for repo in selection},
-            validation_error,
-        )
+    validation_failure = _validate(entry.validation, read_repo_file, selection)
+    if validation_failure is not None:
+        repo_outcomes, reason = validation_failure
+        return _result(plan, "failed", version, repo_outcomes, reason)
 
     # --- proposed: terminal success, propose-only, never pushed -------------
     return _result(
