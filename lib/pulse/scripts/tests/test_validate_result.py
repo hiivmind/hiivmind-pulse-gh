@@ -751,6 +751,20 @@ def test_repo_mutation_selection_entries_must_be_strings(tmp_path):
     assert "selection[1] is not a string" in result.stderr
 
 
+def test_repo_mutation_invalid_fixture_reports_every_violation(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "repo-mutation-invalid.yaml").read_text())
+    path = tmp_path / "repo-mutation.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "repo-mutation")
+
+    assert result.returncode == 1
+    assert "missing required key: actor" in result.stderr
+    assert "missing required key: proposal_id" in result.stderr
+    assert "reason must not be null when state is blocked or failed" in result.stderr
+    assert "repo_outcomes.testorg/core invalid: exploded" in result.stderr
+
+
 def test_impact_legacy_string_edge_surfaces_as_unconfigured_finding(tmp_path):
     doc = yaml.safe_load((FIXTURES / "impact-valid.yaml").read_text())
     doc["findings"].append(

@@ -154,8 +154,8 @@ A repository-file proposal is built as a typed `mutation_plan.Proposal`
 against the committed transformation registry
 (`{PLUGIN_ROOT}/templates/transformations.yaml.template`), then driven
 through `pen_orchestrator.execute()`. Arbitrary `nave pen exec` commands
-stay user-gated; only a registered transformation ID may run under
-`actor.mode: scheduled`. The run's terminal record is the `repo-mutation`
+stay user-gated; under `actor.mode: scheduled` a transformation must be
+registered **and** carry `allow_scheduled: true`. The run's terminal record is the `repo-mutation`
 result kind — see `{PLUGIN_ROOT}/lib/patterns/headless-contract.md`.
 
 ### 3. Execute with Enrichment
