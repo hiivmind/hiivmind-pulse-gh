@@ -1,5 +1,7 @@
 """Tests for the pen mutation orchestrator state machine."""
 
+import dataclasses
+
 import pytest
 
 from lib.pulse.scripts import mutation_plan, nave_adapter, pen_orchestrator
@@ -230,7 +232,7 @@ def test_expected_shas_with_no_reader_blocks_with_explicit_message():
 
     assert result.state == "blocked"
     assert "read_repo_head" in result.reason
-    assert "expected_shas" in result.reason
+    assert "expected-SHA" in result.reason
     assert result.repo_outcomes == {repo: "blocked" for repo in SELECTION}
     # Exec must never be reached: only create (2 calls) + status (1 call).
     assert len(runner.calls) == 3
@@ -289,6 +291,27 @@ def test_expected_shas_reader_raising_for_a_repo_blocks_with_attribution():
     assert result.repo_outcomes == {"acme/api": "ok", "acme/web": "blocked"}
     assert "acme/web" in result.reason
     assert "no checkout" in result.reason
+    assert len(runner.calls) == 3
+    assert not any("exec" in call for call in runner.calls)
+
+
+def test_expected_shas_missing_entry_for_selected_repo_blocks_before_exec():
+    # A hand-built Proposal (bypassing build_proposal's coverage check) with
+    # a selected repo absent from expected_shas must block, not skip the
+    # guard for that repo — an unguarded repo is exactly the stale-base
+    # mutation the guard exists to prevent.
+    plan = make_plan()
+    partial = dataclasses.replace(
+        plan.proposal, expected_shas={"acme/api": "deadbeef"}
+    )
+    plan = dataclasses.replace(plan, proposal=partial)
+    runner = QueuedRunner(_clean_preflight_sequence())
+
+    result = pen_orchestrator.execute(plan, runner, read_repo_head=matching_head)
+
+    assert result.state == "blocked"
+    assert result.repo_outcomes == {"acme/api": "ok", "acme/web": "blocked"}
+    assert "no expected_shas entry" in result.reason
     assert len(runner.calls) == 3
     assert not any("exec" in call for call in runner.calls)
 

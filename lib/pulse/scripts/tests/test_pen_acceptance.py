@@ -235,6 +235,12 @@ def test_two_repo_pen_propose_only_no_push_valid_and_attributed():
     assert result.selection == SELECTION
     assert result.repo_outcomes == {"acme/api": "ok", "acme/web": "ok"}
 
+    # The "one changes, one no-ops" scenario is load-bearing: the entire
+    # scripted sequence — including the post-exec status where acme/api is
+    # dirty and acme/web clean — was consumed, and the dirty-after-exec repo
+    # (the expected diff) still resolved to proposed/ok rather than a block.
+    assert runner._results == []
+
 
 def test_two_repo_pen_propose_only_repeat_is_idempotent():
     plan = build_plan()

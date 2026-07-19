@@ -106,13 +106,6 @@ class PenOrchestratorError(ValueError):
     `PenRunResult`, never raised."""
 
 
-# Any divergence other than "up-to-date" means the pen's local branch has
-# moved relative to its remote counterpart in some way the orchestrator
-# did not itself cause yet (it hasn't run anything at this point) — treat
-# all of them as staleness pre-flight, fail closed.
-_STALE_DIVERGENCE = {"ahead", "behind", "diverged", "unknown"}
-
-
 @dataclass(frozen=True)
 class PenPlan:
     """Everything `execute` needs to drive one pen run.
@@ -186,10 +179,6 @@ def _result(plan: PenPlan, state: str, version: str | None, repo_outcomes: dict[
         repo_outcomes=repo_outcomes,
         reason=reason,
     )
-
-
-def _is_stale(state: dict) -> bool:
-    return state.get("freshness") == "stale" or state.get("divergence") in _STALE_DIVERGENCE
 
 
 _SCHEMA_TYPE_CHECKS: dict[str, Callable[[Any], bool]] = {
@@ -374,9 +363,17 @@ def execute(
         state = preflight_by_repo.get(repo)
         if state is None:
             reasons.append(f"{repo}: missing from pen status")
-        elif state.get("working_tree") == "dirty":
-            reasons.append(f"{repo}: dirty working tree before run")
-        elif _is_stale(state):
+        elif state.get("working_tree") != "clean":
+            # Fail closed on partial/malformed status entries too: anything
+            # other than an explicit "clean" blocks, not just "dirty".
+            reasons.append(
+                f"{repo}: working tree not clean before run "
+                f"(working_tree={state.get('working_tree')!r})"
+            )
+        # Freshness must be explicitly "fresh" and divergence explicitly
+        # "up-to-date"; any other value — including a missing field on a
+        # partial status entry — is staleness, fail closed.
+        elif state.get("freshness") != "fresh" or state.get("divergence") != "up-to-date":
             reasons.append(
                 f"{repo}: stale pen (freshness={state.get('freshness')}, "
                 f"divergence={state.get('divergence')})"
@@ -396,16 +393,21 @@ def execute(
     # See module docstring "expected-SHA guard" section: Nave exposes no
     # per-repo SHA on its own, so verification requires an injected reader.
     # Runs after the pen exists and preflight passed, strictly before exec.
+    # Fail closed on coverage, not just mismatch: `execute` cannot assume the
+    # Proposal came through build_proposal, so a selected repo missing from
+    # expected_shas (or an entirely empty dict) blocks rather than skipping
+    # the guard — an unguarded repo is exactly the stale-base mutation this
+    # gate exists to prevent.
     expected_shas = proposal.expected_shas
-    if expected_shas:
+    if selection:
         if read_repo_head is None:
             return _result(
                 plan,
                 "blocked",
                 version,
                 {repo: "blocked" for repo in selection},
-                "proposal.expected_shas is non-empty but no read_repo_head "
-                "callable was provided to execute(); expected-SHA "
+                "no read_repo_head callable was provided to execute(); "
+                "expected-SHA "
                 "verification requires reading each repo's current HEAD, "
                 "and Nave's pen show/status JSON exposes no per-repo SHA "
                 "to compare against",
@@ -415,7 +417,11 @@ def execute(
         for repo in selection:
             expected = expected_shas.get(repo)
             if expected is None:
-                sha_outcomes[repo] = "ok"
+                sha_outcomes[repo] = "blocked"
+                sha_reasons.append(
+                    f"{repo}: selected but has no expected_shas entry; "
+                    "an unguarded repo cannot be mutated"
+                )
                 continue
             try:
                 actual = read_repo_head(repo)

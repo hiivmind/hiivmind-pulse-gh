@@ -58,6 +58,12 @@ mutations are not a separate policy dialect from GitHub-object mutations:
   other gate below (still requires a registered transformation; still
   blocks on a stale/dirty pen or a validation failure).
 
+> **Current implementation status:** the F6 orchestrator
+> (`pen_orchestrator.execute`) is propose-only — it blocks any policy other
+> than `propose` before making a single Nave call. `allow-listed` and
+> `allow` describe the semantics reserved for a later apply step; until that
+> lands, setting either yields a `blocked` result, never a push.
+
 ## The transformation registry
 
 `mutation_plan.load_registry(path_or_dict)` loads and cross-validates
