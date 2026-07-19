@@ -48,6 +48,26 @@ pen layout itself. With no reader supplied, `json_schema` validation
 still fails closed (see `_validate` below) with a message explaining
 *why* — the capability gap is real, but no longer unconditional.
 
+## expected-SHA guard: injectable head reader
+
+`Proposal.expected_shas` (`mutation_plan.py`) is the expected-base guard:
+each selected repo's SHA at proposal-build time, which `execute` must
+verify still matches before mutating anything (a stale base is never
+silently mutated — see `lib/patterns/repository-mutations.md`). No Nave
+CLI surface exposes a per-repo SHA either: `pen show`/`pen status`
+(verified against `crates/nave_pen/src/state.rs` fixtures) carry
+`working_tree`/`freshness`/`divergence`, never a hex SHA. So, exactly like
+`read_repo_file` above, `execute` accepts a second injectable seam:
+`read_repo_head: Callable[[str], str] | None` (repo `owner/name` -> current
+HEAD SHA as hex, raising `FileNotFoundError`/`KeyError` when the repo is
+unknown to the caller). A caller with direct filesystem/git access to the
+pen's clones (or a future Nave surface that exposes this) wires a reader
+in. With `expected_shas` non-empty and no reader supplied, verification
+fails closed — blocked, not skipped — with a message naming the gap. This
+check runs after pen creation and the freshness/cleanliness preflight
+(a pen must exist, and have a resolvable HEAD, before it can be checked)
+and strictly before `pen exec`.
+
 ## NEEDS_CONTEXT: per-repo command-failure attribution
 
 `nave_pen::ops::exec_pen` (verified against
@@ -268,6 +288,7 @@ def execute(
     nave_adapter_runner,
     *,
     read_repo_file: Callable[[str, str], bytes] | None = None,
+    read_repo_head: Callable[[str], str] | None = None,
 ) -> PenRunResult:
     """Drive `plan` through the pen state machine using `nave_adapter_runner`.
 
@@ -278,8 +299,13 @@ def execute(
 
     `read_repo_file`, if supplied, is called as `read_repo_file(repo,
     relative_path) -> bytes` (raising `FileNotFoundError` when the path is
-    absent) to satisfy `kind: json_schema` validation entries. It is the
-    only filesystem seam this module accepts — see the module docstring.
+    absent) to satisfy `kind: json_schema` validation entries.
+
+    `read_repo_head`, if supplied, is called as `read_repo_head(repo) ->
+    str` (raising `FileNotFoundError` or `KeyError` when `repo` is unknown)
+    to satisfy `proposal.expected_shas` verification — see the module
+    docstring's "expected-SHA guard" section. These two callables are the
+    only filesystem seams this module accepts.
     """
     proposal = plan.proposal
     entry = plan.entry
@@ -317,14 +343,6 @@ def execute(
         )
 
     pen_payload = handle.pen or {}
-    if pen_payload.get("adapter_state") == "error":
-        return _result(
-            plan,
-            "failed",
-            version,
-            {repo: "failed" for repo in selection},
-            f"pen show after create failed: {pen_payload.get('error')}",
-        )
     pen_repos = {
         f"{repo.get('owner')}/{repo.get('name')}" for repo in pen_payload.get("repos", [])
     }
@@ -373,6 +391,53 @@ def execute(
             {repo: "blocked" for repo in selection},
             "; ".join(reasons),
         )
+
+    # --- created -> executed: expected-SHA guard (stale-base block) ------
+    # See module docstring "expected-SHA guard" section: Nave exposes no
+    # per-repo SHA on its own, so verification requires an injected reader.
+    # Runs after the pen exists and preflight passed, strictly before exec.
+    expected_shas = proposal.expected_shas
+    if expected_shas:
+        if read_repo_head is None:
+            return _result(
+                plan,
+                "blocked",
+                version,
+                {repo: "blocked" for repo in selection},
+                "proposal.expected_shas is non-empty but no read_repo_head "
+                "callable was provided to execute(); expected-SHA "
+                "verification requires reading each repo's current HEAD, "
+                "and Nave's pen show/status JSON exposes no per-repo SHA "
+                "to compare against",
+            )
+        sha_outcomes: dict[str, str] = {}
+        sha_reasons: list[str] = []
+        for repo in selection:
+            expected = expected_shas.get(repo)
+            if expected is None:
+                sha_outcomes[repo] = "ok"
+                continue
+            try:
+                actual = read_repo_head(repo)
+            except (FileNotFoundError, KeyError) as exc:
+                sha_outcomes[repo] = "blocked"
+                sha_reasons.append(f"{repo}: could not read current HEAD: {exc}")
+                continue
+            if actual.strip().lower() != expected.strip().lower():
+                sha_outcomes[repo] = "blocked"
+                sha_reasons.append(
+                    f"{repo}: expected SHA {expected!r} but current HEAD is {actual!r}"
+                )
+            else:
+                sha_outcomes[repo] = "ok"
+        if sha_reasons:
+            return _result(
+                plan,
+                "blocked",
+                version,
+                sha_outcomes,
+                "; ".join(sha_reasons),
+            )
 
     # --- executed -----------------------------------------------------------
     argv = resolve_argv(entry)

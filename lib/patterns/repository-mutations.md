@@ -36,7 +36,7 @@ subprocess calls, no filesystem writes, no Nave interaction.
 | `id` | non-empty string | Caller-assigned identifier for this proposal/run. |
 | `selection` | list of `owner/name` strings, non-empty, no duplicates | The repositories this proposal targets. Resolving a fleet query (Nave `search`/`match` terms) into this concrete repo list is the caller's job — `mutation_plan` never talks to Nave. |
 | `transformation` | string | A registered transformation ID (`TransformationRegistry` key). |
-| `expected_shas` | dict `owner/name -> sha` | The expected-base guard: keys must be **exactly** `selection`, no more, no fewer. The orchestrator (Task 3) compares this against each repo's current SHA before executing and blocks on any mismatch — a stale base is never silently mutated. |
+| `expected_shas` | dict `owner/name -> sha` | The expected-base guard: keys must be **exactly** `selection`, no more, no fewer. The orchestrator (Task 3) compares this against each repo's current SHA before executing and blocks on any mismatch — a stale base is never silently mutated. Since no Nave surface exposes a per-repo SHA, this comparison runs through an injectable `read_repo_head` reader `execute` accepts (same seam pattern as `read_repo_file`); with `expected_shas` non-empty and no reader supplied, verification fails closed. |
 | `mutation_policy` | one of `propose`, `allow-listed`, `allow` | See below. Default: `propose`. |
 | `actor` | `{gh_login, machine, mode}` | Same shape as the headless result contract's `actor:` block (`lib/patterns/headless-contract.md`); `mode` is `interactive` or `scheduled`. |
 

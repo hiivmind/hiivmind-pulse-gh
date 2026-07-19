@@ -131,6 +131,13 @@ REPOS = [("acme", "api"), ("acme", "web")]
 SELECTION = ("acme/api", "acme/web")
 
 
+def matching_head(repo):
+    """`read_repo_head` stub returning the SHA `make_proposal` bakes into
+    every `expected_shas` entry ("deadbeef") — used by tests that must
+    clear the expected-SHA guard to reach exec/validation."""
+    return "deadbeef"
+
+
 # --- forbidden push -----------------------------------------------------
 
 
@@ -205,6 +212,87 @@ def test_dirty_working_tree_before_run_blocks_before_exec():
     assert len(runner.calls) == 3
 
 
+# --- expected-SHA guard (stale-base block) ---------------------------------
+
+
+def _clean_preflight_sequence():
+    return [
+        *create_sequence(REPOS),
+        pen_status_completed([repo_state("acme", "api"), repo_state("acme", "web")]),
+    ]
+
+
+def test_expected_shas_with_no_reader_blocks_with_explicit_message():
+    plan = make_plan()
+    runner = QueuedRunner(_clean_preflight_sequence())
+
+    result = pen_orchestrator.execute(plan, runner)
+
+    assert result.state == "blocked"
+    assert "read_repo_head" in result.reason
+    assert "expected_shas" in result.reason
+    assert result.repo_outcomes == {repo: "blocked" for repo in SELECTION}
+    # Exec must never be reached: only create (2 calls) + status (1 call).
+    assert len(runner.calls) == 3
+    assert not any("exec" in call for call in runner.calls)
+
+
+def test_expected_shas_all_matching_proceeds_to_proposed():
+    plan = make_plan()
+    runner = QueuedRunner(
+        [
+            *_clean_preflight_sequence(),
+            nave_adapter.Completed(0, "ran ok", ""),
+            pen_status_completed([repo_state("acme", "api"), repo_state("acme", "web")]),
+        ]
+    )
+
+    result = pen_orchestrator.execute(plan, runner, read_repo_head=matching_head)
+
+    assert result.state == "proposed"
+    assert result.repo_outcomes == {repo: "ok" for repo in SELECTION}
+
+
+def test_expected_shas_one_mismatch_blocks_before_exec_with_attribution():
+    plan = make_plan()
+    runner = QueuedRunner(_clean_preflight_sequence())
+
+    def read_repo_head(repo):
+        if repo == "acme/api":
+            return "deadbeef"
+        return "0000000"  # acme/web: does not match expected "deadbeef"
+
+    result = pen_orchestrator.execute(plan, runner, read_repo_head=read_repo_head)
+
+    assert result.state == "blocked"
+    assert result.repo_outcomes == {"acme/api": "ok", "acme/web": "blocked"}
+    assert "acme/web" in result.reason
+    assert "deadbeef" in result.reason
+    assert "acme/api" not in result.reason
+    # Exec must never be reached: only create (2 calls) + status (1 call).
+    assert len(runner.calls) == 3
+    assert not any("exec" in call for call in runner.calls)
+
+
+def test_expected_shas_reader_raising_for_a_repo_blocks_with_attribution():
+    plan = make_plan()
+    runner = QueuedRunner(_clean_preflight_sequence())
+
+    def read_repo_head(repo):
+        if repo == "acme/api":
+            return "deadbeef"
+        raise FileNotFoundError(f"no checkout for {repo}")
+
+    result = pen_orchestrator.execute(plan, runner, read_repo_head=read_repo_head)
+
+    assert result.state == "blocked"
+    assert result.repo_outcomes == {"acme/api": "ok", "acme/web": "blocked"}
+    assert "acme/web" in result.reason
+    assert "no checkout" in result.reason
+    assert len(runner.calls) == 3
+    assert not any("exec" in call for call in runner.calls)
+
+
 # --- command failure in one repo -------------------------------------------
 
 
@@ -219,7 +307,7 @@ def test_command_failure_fails_whole_run_and_marks_every_repo_failed():
         ]
     )
 
-    result = pen_orchestrator.execute(plan, runner)
+    result = pen_orchestrator.execute(plan, runner, read_repo_head=matching_head)
 
     assert result.state == "failed"
     assert "exec failed" in result.reason
@@ -258,7 +346,7 @@ def test_json_schema_validation_fails_closed_after_successful_exec():
         ]
     )
 
-    result = pen_orchestrator.execute(plan, runner)
+    result = pen_orchestrator.execute(plan, runner, read_repo_head=matching_head)
 
     assert result.state == "failed"
     assert "json_schema" in result.reason
@@ -296,7 +384,9 @@ def test_json_schema_with_reader_and_valid_file_proceeds_to_proposed():
         assert path == "package-lock.json"
         return b'{"lockfileVersion": 3}'
 
-    result = pen_orchestrator.execute(plan, runner, read_repo_file=read_repo_file)
+    result = pen_orchestrator.execute(
+        plan, runner, read_repo_file=read_repo_file, read_repo_head=matching_head
+    )
 
     assert result.state == "proposed"
     assert result.reason is None
@@ -312,7 +402,9 @@ def test_json_schema_with_reader_and_invalid_file_fails_with_per_repo_attributio
             return b'{"lockfileVersion": 3}'
         return b"{}"  # acme/web: missing required lockfileVersion
 
-    result = pen_orchestrator.execute(plan, runner, read_repo_file=read_repo_file)
+    result = pen_orchestrator.execute(
+        plan, runner, read_repo_file=read_repo_file, read_repo_head=matching_head
+    )
 
     assert result.state == "failed"
     assert result.repo_outcomes == {"acme/api": "ok", "acme/web": "failed"}
@@ -328,7 +420,9 @@ def test_json_schema_with_reader_and_missing_file_fails():
     def read_repo_file(repo, path):
         raise FileNotFoundError(f"{repo}:{path} not found")
 
-    result = pen_orchestrator.execute(plan, runner, read_repo_file=read_repo_file)
+    result = pen_orchestrator.execute(
+        plan, runner, read_repo_file=read_repo_file, read_repo_head=matching_head
+    )
 
     assert result.state == "failed"
     assert result.repo_outcomes == {repo: "failed" for repo in SELECTION}
@@ -354,7 +448,7 @@ def test_propose_only_success_never_passes_push_or_commit_flags():
         ]
     )
 
-    result = pen_orchestrator.execute(plan, runner)
+    result = pen_orchestrator.execute(plan, runner, read_repo_head=matching_head)
 
     assert result.state == "proposed"
     assert result.reason is None
@@ -386,7 +480,7 @@ def test_propose_only_success_records_probed_nave_version(monkeypatch):
 
     monkeypatch.setattr(pen_orchestrator.nave_adapter, "probe", fake_probe)
 
-    result = pen_orchestrator.execute(plan, runner)
+    result = pen_orchestrator.execute(plan, runner, read_repo_head=matching_head)
 
     assert result.nave_version == "0.0.9"
     assert result.state == "proposed"
