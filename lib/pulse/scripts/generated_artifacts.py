@@ -243,6 +243,35 @@ def _audit_binding(binding: dict, snapshot: dict) -> tuple[BindingResult, Findin
     trees = branch_snap.get("trees") or {}
     blobs = branch_snap.get("blobs") or {}
     snapshot_tree = trees.get(template_path)
+
+    if snapshot_tree is None or snapshot_tree == ABSENT:
+        file_results = [
+            FileResult(f["path"], f.get("blob"), None, "unknown")
+            for f in files_config
+        ]
+        finding = Finding(
+            kind="missing_template",
+            repo=source,
+            severity="high",
+            detail=(
+                f"binding {binding_id!r}: template path {template_path!r} "
+                "not resolved in snapshot"
+            ),
+            ref={"template_path": template_path},
+            inferred=False,
+        )
+        return BindingResult(
+            id=binding_id,
+            state="error",
+            source=source,
+            branch=branch,
+            template_path=template_path,
+            stored_tree=stored_tree,
+            snapshot_tree=snapshot_tree,
+            files=file_results,
+            proposal=None,
+        ), finding
+
     tree_changed = snapshot_tree != stored_tree
 
     file_results: list[FileResult] = []

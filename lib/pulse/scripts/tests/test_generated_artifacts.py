@@ -54,8 +54,8 @@ def snapshot_for(source="hiivmind/template-repo", branch="main", head="head999",
         source: {
             branch: {
                 "head": head,
-                "trees": trees or {"templates/repo-readme.md": "tree1111"},
-                "blobs": blobs or {"README.md": "blob1111"},
+                "trees": trees if trees is not None else {"templates/repo-readme.md": "tree1111"},
+                "blobs": blobs if blobs is not None else {"README.md": "blob1111"},
             }
         }
     }
@@ -198,6 +198,38 @@ def test_audit_missing_output_error():
     assert finding.kind == "missing_output"
     assert finding.severity == "high"
     assert "README.md" in (finding.detail or "")
+
+
+def test_audit_missing_template_error():
+    snap = snapshot_for(trees={"templates/repo-readme.md": ga.ABSENT})
+    report = ga.audit(manifest([binding()]), snap)
+
+    result = report.bindings[0]
+    assert result.state == "error"
+    assert result.snapshot_tree == ga.ABSENT
+    assert result.proposal is None
+    assert len(report.findings) == 1
+    finding = report.findings[0]
+    assert finding.kind == "missing_template"
+    assert finding.severity == "high"
+    assert "templates/repo-readme.md" in (finding.detail or "")
+    assert finding.ref == {"template_path": "templates/repo-readme.md"}
+
+
+def test_audit_none_template_error():
+    snap = snapshot_for(trees={})
+    report = ga.audit(manifest([binding()]), snap)
+
+    result = report.bindings[0]
+    assert result.state == "error"
+    assert result.snapshot_tree is None
+    assert result.proposal is None
+    assert len(report.findings) == 1
+    finding = report.findings[0]
+    assert finding.kind == "missing_template"
+    assert finding.severity == "high"
+    assert "templates/repo-readme.md" in (finding.detail or "")
+    assert finding.ref == {"template_path": "templates/repo-readme.md"}
 
 
 def test_audit_snapshot_gap_error():
