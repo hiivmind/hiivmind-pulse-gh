@@ -1,0 +1,22 @@
+contract_version: 1
+kind: generated-artifact
+workspace: testorg
+run_at: "2026-07-10T09:15:00Z"
+actor:
+  gh_login: octocat
+  machine: mba-m4
+  mode: scheduled
+bindings_audited: 2
+states:
+  binding-1: current
+  binding-2: template-drift
+findings:
+  - kind: template-drift
+    repo: testorg/widget
+    severity: medium
+    detail: "generated file README.md drifted from template"
+proposals:
+  - binding: binding-2
+    transformation: bump-template
+    proposal_id: proposal-binding-2-001
+errors: []

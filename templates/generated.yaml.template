@@ -1,0 +1,86 @@
+# hiivmind-pulse-gh - Generated Artifact Bindings
+# This file declares artifact bindings: repo files that are produced from a
+# committed template and are guarded against template drift.
+#
+# Generated/Updated by gh-refresh on {{synced_at}}
+
+# Workspace identification
+workspace:
+  type: {{workspace_type}}           # organization or user
+  login: {{workspace_login}}         # Workspace login
+
+# Generated artifact bindings
+# Each entry describes one binding: a set of output files in one repository
+# generated from one template source.
+#
+# A binding is invalid when:
+#   - files[] contains duplicate path values within the same binding
+#     (a path can only be guarded once per binding);
+#   - files[] is empty (the binding has nothing to guard);
+#   - template_tree is missing (the tree SHA that produced the files is required
+#     to detect template changes);
+#   - any files[].blob is missing (the generated blob SHA is required to detect
+#     local customizations).
+# These rules are enforced by the loader/audit engine, not by this template.
+#
+# Validity is computed per binding, so one repository may have multiple
+# bindings (e.g. one per generator or template source).
+bindings:
+  - id: {{binding_id}}               # Required stable binding identifier
+    source: {{owner/repo}}           # Repository that owns the template source
+    branch: {{branch}}               # Branch in the source repo where the
+                                     # template is resolved (main, develop, ...)
+    template_path: {{template_path}} # Repo-relative path to the template file
+    template_tree: {{tree_sha}}      # Git tree SHA of the source repo at the
+                                     # point the files were generated; used to
+                                     # detect template drift
+    generator: {{generator_id}}      # Registered generator id that produced
+                                     # the files (enforced by the loader)
+    files:                           # Required, non-empty list of output files
+      - path: {{output_path}}        # Repo-relative output path in the target
+                                     # repository (not the source repository)
+        blob: {{blob_sha}}           # Blob SHA of the generated file at
+                                     # generation time; used to detect local
+                                     # customization
+    generated_at: {{timestamp}}      # ISO 8601 timestamp of last generation
+
+# Example:
+# bindings:
+#   - id: widget-readme
+#     source: hiivmind/template-repo
+#     branch: main
+#     template_path: templates/repo-readme.md
+#     template_tree: abc1234
+#     generator: readme-from-template
+#     files:
+#       - path: README.md
+#         blob: def5678
+#     generated_at: "2026-07-10T09:15:00Z"
+#   - id: widget-ci
+#     source: hiivmind/template-repo
+#     branch: main
+#     template_path: templates/ci.yml
+#     template_tree: abc1234
+#     generator: workflow-from-template
+#     files:
+#       - path: .github/workflows/ci.yml
+#         blob: aaa1111
+#       - path: .github/workflows/release.yml
+#         blob: bbb2222
+#     generated_at: "2026-07-10T09:15:00Z"
+
+# Metadata
+cache:
+  synced_at: {{synced_at}}           # ISO timestamp of last update
+  schema_version: "1.0"
+  source: "manual"                   # "manual" or "api"
+
+# Notes:
+# - The target repository is implicit from the binding id / workspace context
+#   (the loader matches bindings against repository catalog entries).
+# - template_tree is the source tree SHA, not the target tree SHA.
+# - files[].blob is the generated blob SHA at the time of generation; drift is
+#   detected by comparing the current target blob against this stored value.
+# - A template-drift finding produces a proposal entry in the generated-artifact
+#   result kind; local-customization and conflict findings are surfaced without
+#   a proposal.

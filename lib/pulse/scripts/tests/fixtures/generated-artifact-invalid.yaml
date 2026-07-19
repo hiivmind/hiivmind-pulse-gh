@@ -1,0 +1,15 @@
+contract_version: 1
+kind: generated-artifact
+workspace: testorg
+run_at: "2026-07-10T09:15:00Z"
+states:
+  binding-1: current
+  binding-2: exploded
+findings:
+  - kind: template-drift
+    repo: testorg/widget
+    detail: "missing severity"
+proposals:
+  - binding: binding-2
+    transformation: bump-template
+errors: []

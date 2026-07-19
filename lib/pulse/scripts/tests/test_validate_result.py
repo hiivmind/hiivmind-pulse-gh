@@ -17,7 +17,7 @@ SCRIPT = "lib/pulse/scripts/validate_result.py"
 FIXTURES = Path("lib/pulse/scripts/tests/fixtures")
 KINDS = [
     "status", "healthcheck", "refresh", "workflow-run", "fleet-membership",
-    "impact", "repo-mutation",
+    "impact", "repo-mutation", "generated-artifact",
 ]
 
 
@@ -781,3 +781,149 @@ def test_impact_legacy_string_edge_surfaces_as_unconfigured_finding(tmp_path):
     result = run_validator(path, "impact")
 
     assert result.returncode == 0, result.stderr
+
+
+def test_generated_artifact_rejects_invalid_state(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "generated-artifact-valid.yaml").read_text())
+    doc["states"]["binding-1"] = "broken"
+    path = tmp_path / "generated-artifact.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "generated-artifact")
+
+    assert result.returncode == 1
+    assert "states.binding-1 invalid: broken" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "state",
+    ["current", "template-drift", "local-customization", "conflict", "error"],
+)
+def test_generated_artifact_accepts_exact_states(tmp_path, state):
+    doc = yaml.safe_load((FIXTURES / "generated-artifact-valid.yaml").read_text())
+    doc["states"]["binding-1"] = state
+    if state == "template-drift":
+        doc["proposals"] = [
+            {"binding": "binding-1", "transformation": "t", "proposal_id": "p"}
+        ]
+    path = tmp_path / "generated-artifact.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "generated-artifact")
+
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "bindings_audited", "states", "findings", "proposals",
+    ],
+)
+def test_generated_artifact_requires_field(tmp_path, field):
+    doc = yaml.safe_load((FIXTURES / "generated-artifact-valid.yaml").read_text())
+    doc.pop(field)
+    path = tmp_path / "generated-artifact.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "generated-artifact")
+
+    assert result.returncode == 1
+    assert f"missing required key: {field}" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("bindings_audited", "not-an-int"),
+        ("states", "not-a-mapping"),
+        ("findings", "not-a-list"),
+        ("proposals", "not-a-list"),
+    ],
+)
+def test_generated_artifact_rejects_wrong_type(tmp_path, field, value):
+    doc = yaml.safe_load((FIXTURES / "generated-artifact-valid.yaml").read_text())
+    doc[field] = value
+    path = tmp_path / "generated-artifact.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "generated-artifact")
+
+    assert result.returncode == 1
+
+
+@pytest.mark.parametrize(
+    ("index", "mutation"),
+    [
+        (0, {"binding": 1, "transformation": "t", "proposal_id": "p"}),
+        (0, {"binding": "b", "transformation": 1, "proposal_id": "p"}),
+        (0, {"binding": "b", "transformation": "t", "proposal_id": 1}),
+    ],
+)
+def test_generated_artifact_proposals_require_string_fields(tmp_path, index, mutation):
+    doc = yaml.safe_load((FIXTURES / "generated-artifact-valid.yaml").read_text())
+    doc["proposals"][index] = mutation
+    path = tmp_path / "generated-artifact.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "generated-artifact")
+
+    assert result.returncode == 1
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        {"binding": "b", "transformation": "t"},
+        {"binding": "b", "proposal_id": "p"},
+        {"transformation": "t", "proposal_id": "p"},
+    ],
+)
+def test_generated_artifact_proposals_require_all_keys(tmp_path, mutation):
+    doc = yaml.safe_load((FIXTURES / "generated-artifact-valid.yaml").read_text())
+    doc["proposals"] = [mutation]
+    path = tmp_path / "generated-artifact.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "generated-artifact")
+
+    assert result.returncode == 1
+
+
+def test_generated_artifact_rejects_negative_bindings_audited(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "generated-artifact-valid.yaml").read_text())
+    doc["bindings_audited"] = -1
+    path = tmp_path / "generated-artifact.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "generated-artifact")
+
+    assert result.returncode == 1
+    assert "bindings_audited must be a non-negative integer" in result.stderr
+
+
+def test_generated_artifact_rejects_non_string_state_keys(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "generated-artifact-valid.yaml").read_text())
+    doc["states"] = {1: "current"}
+    path = tmp_path / "generated-artifact.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "generated-artifact")
+
+    assert result.returncode == 1
+    assert "states keys must be strings" in result.stderr
+
+
+def test_generated_artifact_invalid_fixture_reports_every_violation(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "generated-artifact-invalid.yaml").read_text())
+    path = tmp_path / "generated-artifact.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "generated-artifact")
+
+    assert result.returncode == 1
+    assert "missing required key: actor" in result.stderr
+    assert "missing required key: bindings_audited" in result.stderr
+    assert "states.binding-2 invalid: exploded" in result.stderr
+    assert "findings[0].severity" in result.stderr
+    assert "missing required key: proposals[0].proposal_id" in result.stderr

@@ -15,6 +15,7 @@ retained for human-readable logs only — orchestrators MUST read the file.
 | workflow-run | workflow-run-result.yaml | `{workspace_root}/.hiivmind/github/workflow-run-result.yaml` |
 | impact | impact-result.yaml | `{workspace_root}/.hiivmind/github/impact-result.yaml` |
 | repo-mutation | repo-mutation-result.yaml | `{workspace_root}/.hiivmind/github/repo-mutation-result.yaml` |
+| generated-artifact | generated-artifact-result.yaml | `{workspace_root}/.hiivmind/github/generated-artifact-result.yaml` |
 
 Result files are per-machine transient run artifacts (never authority — see
 `workspace-detection.md` § Multi-machine topology). The workspace repo's
@@ -34,7 +35,7 @@ not kinds they were not asked to validate.
 
 ```yaml
 contract_version: 1                   # int, required
-kind: status | healthcheck | fleet-membership | refresh | workflow-run | impact | repo-mutation
+kind: status | healthcheck | fleet-membership | refresh | workflow-run | impact | repo-mutation | generated-artifact
 workspace: <login>                    # str, required — org/user login
 run_at: <ISO 8601 timestamp>          # str, required
 actor:                                # required on ALL kinds (I4)
@@ -57,6 +58,7 @@ profiles, and machines: identity-sensitive logic resolves against the
     uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py workflow-run-result.yaml --kind workflow-run
     uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py impact-result.yaml --kind impact
     uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py repo-mutation-result.yaml --kind repo-mutation
+    uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py generated-artifact-result.yaml --kind generated-artifact
 
 Orchestrators validate before consuming and treat exit 1/2 as a failed run
 (report, do not commit). Exit codes: 0 valid, 1 invalid (errors on stderr),
@@ -343,6 +345,45 @@ success, meaning a commit/push/PR action is proposed for something else to
 apply later, never performed by the run itself. `reason` is required
 (non-null) whenever `state` is `blocked` or `failed`, and optional (may be
 null) when `state` is `proposed`.
+
+### generated-artifact-result.yaml (written by the generation audit, F7)
+
+Reports the drift state of committed generated-artifact bindings
+(`templates/generated.yaml.template`). For each binding the audit compares the
+source template tree SHA, the target file blobs recorded at generation time,
+and the current state of the target repository. The manifest format and audit
+rules are documented in `lib/patterns/generation-manifest.md`; this section only
+covers the result shape.
+
+```yaml
+contract_version: 1
+kind: generated-artifact
+workspace: <login>
+run_at: <ISO 8601>
+actor: { gh_login: <str>, machine: <str>, mode: <enum> }
+bindings_audited: <int>                # required, non-negative — total bindings audited
+states:                                # required: binding id -> state
+  <binding id>: current | template-drift | local-customization | conflict | error
+findings:                              # list, required (may be empty) — typed data
+  - kind: <str>                        # required, e.g. template-drift, local-customization,
+                                       #   conflict, unresolvable_source
+    repo: <owner/name>                 # str, required — target repository
+    severity: low | medium | high        # required enum
+    detail: <str>                      # optional human-readable
+    ref: { type: <str>, id: <any>, url: <str> }   # optional locator
+    inferred: <bool>                  # optional — true when LLM judgment produced it
+proposals:                             # list, required (may be empty)
+  - binding: <binding id>              # str, required — binding in template-drift state
+    transformation: <generator id>     # str, required — registered generator to re-run
+    proposal_id: <str>                 # str, required — stable proposal identifier
+errors: []
+```
+
+`states` keys must be strings and values must be one of the five allowed
+states. `proposals` are emitted only for `template-drift` bindings, because only
+template drift can be resolved by re-running a registered generator. Findings
+for `local-customization`, `conflict`, and `error` states are surfaced without a
+proposal.
 
 ## Related patterns
 
