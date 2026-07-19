@@ -5,7 +5,7 @@
 # ///
 """Validate a headless result file against the pulse result contract.
 
-Usage: validate_result.py <result.yaml> --kind status|healthcheck|refresh|workflow-run|fleet-membership|impact
+Usage: validate_result.py <result.yaml> --kind status|healthcheck|refresh|workflow-run|fleet-membership|impact|repo-mutation
 
 See lib/patterns/headless-contract.md for the schemas.
 
@@ -38,6 +38,8 @@ REFRESH_SECTION_STATUSES = {"refreshed", "skipped", "failed"}
 OUTCOMES = {"success", "failure", "skipped-cooldown", "aborted"}
 SEVERITIES = {"low", "medium", "high"}
 EDGE_STATES = {"current", "stale", "unknown"}
+REPO_MUTATION_STATES = {"proposed", "blocked", "failed"}
+REPO_OUTCOME_STATES = {"ok", "failed", "blocked"}
 
 
 def _err(errors, msg):
@@ -514,6 +516,23 @@ def validate(data, kind: str) -> list[str]:
         _require(data, "proposed_actions", list, errors)
         _require(data, "asks_recorded", list, errors)
 
+    elif kind == "repo-mutation":
+        state = _require_enum(data, "state", REPO_MUTATION_STATES, errors)
+        _require(data, "proposal_id", str, errors)
+        _require(data, "transformation", str, errors)
+        _require(data, "pen_name", str, errors)
+        _validate_string_list(data, "selection", errors)
+        _require_nullable(data, "nave_version", str, errors)
+        repo_outcomes = _require(data, "repo_outcomes", dict, errors)
+        for repo, outcome in (repo_outcomes or {}).items():
+            if not isinstance(repo, str):
+                _err(errors, "repo_outcomes keys must be strings")
+            if outcome not in REPO_OUTCOME_STATES:
+                _err(errors, f"repo_outcomes.{repo} invalid: {outcome}")
+        _require_nullable(data, "reason", str, errors)
+        if state in {"blocked", "failed"} and data.get("reason") is None:
+            _err(errors, "reason must not be null when state is blocked or failed")
+
     return errors
 
 
@@ -522,7 +541,7 @@ def main():
     parser.add_argument("file", help="Path to result YAML file")
     parser.add_argument("--kind", required=True,
                         choices=["status", "healthcheck", "refresh", "workflow-run",
-                                 "fleet-membership", "impact"])
+                                 "fleet-membership", "impact", "repo-mutation"])
     args = parser.parse_args()
 
     path = Path(args.file)

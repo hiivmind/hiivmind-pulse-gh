@@ -14,6 +14,7 @@ retained for human-readable logs only — orchestrators MUST read the file.
 | refresh | refresh-result.yaml | `{workspace_root}/.hiivmind/github/refresh-result.yaml` |
 | workflow-run | workflow-run-result.yaml | `{workspace_root}/.hiivmind/github/workflow-run-result.yaml` |
 | impact | impact-result.yaml | `{workspace_root}/.hiivmind/github/impact-result.yaml` |
+| repo-mutation | repo-mutation-result.yaml | `{workspace_root}/.hiivmind/github/repo-mutation-result.yaml` |
 
 Result files are per-machine transient run artifacts (never authority — see
 `workspace-detection.md` § Multi-machine topology). The workspace repo's
@@ -33,7 +34,7 @@ not kinds they were not asked to validate.
 
 ```yaml
 contract_version: 1                   # int, required
-kind: status | healthcheck | fleet-membership | refresh | workflow-run | impact
+kind: status | healthcheck | fleet-membership | refresh | workflow-run | impact | repo-mutation
 workspace: <login>                    # str, required — org/user login
 run_at: <ISO 8601 timestamp>          # str, required
 actor:                                # required on ALL kinds (I4)
@@ -55,6 +56,7 @@ profiles, and machines: identity-sensitive logic resolves against the
     uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py refresh-result.yaml --kind refresh
     uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py workflow-run-result.yaml --kind workflow-run
     uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py impact-result.yaml --kind impact
+    uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py repo-mutation-result.yaml --kind repo-mutation
 
 Orchestrators validate before consuming and treat exit 1/2 as a failed run
 (report, do not commit). Exit codes: 0 valid, 1 invalid (errors on stderr),
@@ -309,6 +311,38 @@ unauditable-by-construction edge: no path evidence can ever mark it stale,
 so it blocks closed too — `state: unknown` plus an `empty_watch_paths`
 finding (`severity: low`) — rather than defaulting to `current` for lack of
 any hits to report.
+
+### repo-mutation-result.yaml (written by the pen orchestrator, F6)
+
+Carries the `PenRunResult` attribution record (`lib/pulse/scripts/pen_orchestrator.py`)
+for one repository-file mutation run driven through a Nave pen. See
+`lib/patterns/repository-mutations.md` for the mutation-policy vocabulary and
+the pen state machine this result is the terminal record of.
+
+```yaml
+contract_version: 1
+kind: repo-mutation
+workspace: <login>
+run_at: <ISO 8601>
+actor: { gh_login: <str>, machine: <str>, mode: <enum> }
+state: proposed | blocked | failed  # required enum — the run's terminal state
+proposal_id: <str>                  # required — the mutation_plan.Proposal id
+transformation: <str>               # required — registered transformation id
+pen_name: <str>                     # required — the Nave pen this run used
+selection: [<owner/name>, ...]      # list of str, required — repos targeted
+nave_version: <str or null>         # required key, nullable — probed `nave --version`
+repo_outcomes:                      # dict, required: owner/name -> outcome
+  <owner/name>: ok | failed | blocked
+reason: <str or null>               # required key, nullable — non-null when state
+                                     #   is blocked or failed
+errors: []
+```
+
+This orchestrator is propose-only: `state: proposed` is its only terminal
+success, meaning a commit/push/PR action is proposed for something else to
+apply later, never performed by the run itself. `reason` is required
+(non-null) whenever `state` is `blocked` or `failed`, and optional (may be
+null) when `state` is `proposed`.
 
 ## Related patterns
 

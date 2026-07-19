@@ -143,6 +143,21 @@ Proceeding with fallback methods...
 
 **Fast path:** For common operations listed below, proceed directly to execution.
 
+### 2.5. Route by Mutation Target
+
+| Mutation targets | Route |
+|---|---|
+| A GitHub **object** (issue, PR, label, milestone, project item, branch protection, etc.) | Continue below — CLI/GraphQL/REST via this skill's normal enrichment flow. |
+| Repository **file content** (committing changes across one or more repos) | The Nave pen orchestrator, never a raw shell checkout/edit/push. See `{PLUGIN_ROOT}/lib/patterns/repository-mutations.md` and `{PLUGIN_ROOT}/lib/pulse/scripts/pen_orchestrator.py`. |
+
+A repository-file proposal is built as a typed `mutation_plan.Proposal`
+against the committed transformation registry
+(`{PLUGIN_ROOT}/templates/transformations.yaml.template`), then driven
+through `pen_orchestrator.execute()`. Arbitrary `nave pen exec` commands
+stay user-gated; only a registered transformation ID may run under
+`actor.mode: scheduled`. The run's terminal record is the `repo-mutation`
+result kind — see `{PLUGIN_ROOT}/lib/patterns/headless-contract.md`.
+
 ### 3. Execute with Enrichment
 
 1. **Resolve IDs** from cached config (project ID, field IDs, milestone ID)
@@ -291,6 +306,7 @@ For domains not in the routing guide:
 | `{PLUGIN_ROOT}/lib/patterns/graphql-execution.md` | Execute queries via temp file |
 | `{PLUGIN_ROOT}/lib/patterns/error-handling.md` | Handle API errors |
 | `{PLUGIN_ROOT}/lib/patterns/corpus-lookup.md` | Look up API syntax when uncertain |
+| `{PLUGIN_ROOT}/lib/patterns/repository-mutations.md` | Repository-file mutations via Nave pens |
 
 ### References (WHAT exists)
 
