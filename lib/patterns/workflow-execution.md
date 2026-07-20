@@ -400,6 +400,15 @@ Severity inference (breaking vs. additive, `lib/patterns/headless-contract.md`
 edge's findings but never changes `state`, and has no bearing on whether a
 marker advances.
 
+> **Split-repo binding is configuration, not a new workflow.** A test repository
+> that lives in its own repo (e.g. `hiivmind-pulse-gh-tests`) and validates its
+> upstream source repo (`hiivmind-pulse-gh`) is expressed as a standard object
+> edge with `watch_paths: ["**"]` and a configured `integration_workflow`. The
+> existing F5 object-edge audit and marker-advancement machinery covers it
+> completely — no new workflow kind, no new result kind, and no new Python is
+> required. See `templates/relationships/split-repo-tests.yaml` for a reusable
+> overlay fragment.
+
 ---
 
 ## Cooldown Check

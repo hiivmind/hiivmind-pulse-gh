@@ -1,0 +1,30 @@
+# hiivmind-pulse-gh - Split Repository Impact Binding Overlay
+#
+# This is a concrete, copy-ready overlay fragment meant to be MERGED into the
+# workspace's `.hiivmind/github/relationships.yaml` (under `repo_dependencies:`).
+# It proves that the F5 object-edge machinery in `lib/pulse/scripts/impact.py`
+# already covers the "split test repository depends on its source repository"
+# case with NO new workflow, NO new result kind, and NO new Python — only
+# configuration.
+#
+# The dependent test repo (`hiivmind-pulse-gh-tests`) binds to its upstream
+# source repo (`hiivmind-pulse-gh`) with a full-tree `watch_paths: ["**"]`.
+# Because `**` crosses `/` (see `_glob_to_regex` in `impact.py`), ANY change in
+# the upstream tree makes this edge stale, so the test repo must re-validate.
+#
+# Marker advancement is still handled by the existing F5 machinery:
+# `propose_marks()` joins successful `integration_workflow` run evidence against
+# this edge and `apply_proposals()` writes the updated `integration_tested_sha`.
+
+repo_dependencies:
+  hiivmind-pulse-gh-tests:
+    depends_on:
+      - repo: hiivmind-pulse-gh
+        watch_paths:
+          - "**"          # full tree — ** crosses / (see impact.py _glob_to_regex)
+        watch_branch: develop
+        integration_tested_sha: "0000000000000000000000000000000000000000"
+        tested_at: "2026-07-20T00:00:00Z"
+        integration_workflow: ci.yml
+    depended_by: []
+    relationship_type: test

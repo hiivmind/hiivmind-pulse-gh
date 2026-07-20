@@ -1,9 +1,15 @@
 """Tests for impact.py — pure path-scoped integration-currency audit."""
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
 import yaml
 
 from lib.pulse.scripts.impact import audit, apply_proposals, mark, propose_marks
+
+
+SPLIT_REPO_OVERLAY = Path("templates/relationships/split-repo-tests.yaml")
 
 
 def relationships(depends_on):
@@ -658,3 +664,79 @@ def test_mark_preserves_other_edges_and_sections(tmp_path):
     edges = on_disk["repo_dependencies"]["dependent-repo"]["depends_on"]
     other = next(e for e in edges if e["repo"] == "other-upstream")
     assert other["integration_tested_sha"] == "untouched"
+
+
+# --- Split-repo binding (configuration over existing F5 machinery) ---
+
+@pytest.fixture
+def split_repo_overlay():
+    return yaml.safe_load(SPLIT_REPO_OVERLAY.read_text())
+
+
+def test_split_repo_full_tree_edge_goes_stale_on_any_change(split_repo_overlay):
+    base_sha = "0000000000000000000000000000000000000000"
+    snap = {
+        "hiivmind-pulse-gh": {
+            "develop": {
+                "head": "head999",
+                "changed_files_by_base": {
+                    base_sha: [
+                        "lib/pulse/scripts/impact.py",
+                        "docs/readme.md",
+                    ],
+                },
+                "base_missing": [],
+            }
+        }
+    }
+
+    report = audit(split_repo_overlay, snap)
+
+    assert len(report.edges) == 1
+    result = report.edges[0]
+    assert result.dependent == "hiivmind-pulse-gh-tests"
+    assert result.upstream == "hiivmind-pulse-gh"
+    assert result.watch_branch == "develop"
+    assert result.state == "stale"
+    assert result.tested_sha == base_sha
+    assert result.remote_head == "head999"
+    # Full-tree "**" watch matches arbitrary paths in any part of the tree.
+    assert "lib/pulse/scripts/impact.py" in result.changed_paths
+    assert "docs/readme.md" in result.changed_paths
+
+
+def test_split_repo_successful_workflow_advances_marker(split_repo_overlay, tmp_path):
+    base_sha = "0000000000000000000000000000000000000000"
+    new_sha = "abc1234def5678abc1234def5678abc1234def56"
+    tested_at = "2026-07-20T12:00:00Z"
+
+    proposals = propose_marks(split_repo_overlay, [
+        run_evidence(
+            workflow="ci.yml",
+            repo="hiivmind-pulse-gh",
+            outcome="success",
+            head_sha=new_sha,
+            tested_at=tested_at,
+        )
+    ])
+
+    assert len(proposals) == 1
+    proposal = proposals[0]
+    assert proposal.dependent == "hiivmind-pulse-gh-tests"
+    assert proposal.upstream == "hiivmind-pulse-gh"
+    assert proposal.expected_sha == base_sha
+    assert proposal.new_sha == new_sha
+    assert proposal.tested_at == tested_at
+
+    path = tmp_path / "relationships.yaml"
+    path.write_text(yaml.safe_dump(split_repo_overlay, sort_keys=False))
+    results = apply_proposals(path, proposals)
+
+    assert len(results) == 1
+    assert results[0].status == "updated"
+    assert results[0].new_sha == new_sha
+
+    on_disk = yaml.safe_load(path.read_text())
+    written_edge = on_disk["repo_dependencies"]["hiivmind-pulse-gh-tests"]["depends_on"][0]
+    assert written_edge["integration_tested_sha"] == new_sha
+    assert written_edge["tested_at"] == tested_at
