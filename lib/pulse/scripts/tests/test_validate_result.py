@@ -817,7 +817,7 @@ def test_generated_artifact_accepts_exact_states(tmp_path, state):
 @pytest.mark.parametrize(
     "field",
     [
-        "bindings_audited", "states", "findings", "proposals",
+        "bindings_audited", "states", "findings", "proposals", "proposed_actions",
     ],
 )
 def test_generated_artifact_requires_field(tmp_path, field):
@@ -839,6 +839,7 @@ def test_generated_artifact_requires_field(tmp_path, field):
         ("states", "not-a-mapping"),
         ("findings", "not-a-list"),
         ("proposals", "not-a-list"),
+        ("proposed_actions", "not-a-list"),
     ],
 )
 def test_generated_artifact_rejects_wrong_type(tmp_path, field, value):

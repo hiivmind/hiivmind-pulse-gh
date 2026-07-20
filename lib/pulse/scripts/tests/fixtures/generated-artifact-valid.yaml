@@ -19,4 +19,5 @@ proposals:
   - binding: binding-2
     transformation: bump-template
     proposal_id: proposal-binding-2-001
+proposed_actions: []
 errors: []

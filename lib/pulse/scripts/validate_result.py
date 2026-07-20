@@ -558,6 +558,7 @@ def validate(data, kind: str) -> list[str]:
             _require(proposal, "binding", str, errors, ctx=ctx)
             _require(proposal, "transformation", str, errors, ctx=ctx)
             _require(proposal, "proposal_id", str, errors, ctx=ctx)
+        _require(data, "proposed_actions", list, errors)
 
     return errors
 

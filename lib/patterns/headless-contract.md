@@ -376,6 +376,7 @@ proposals:                             # list, required (may be empty)
   - binding: <binding id>              # str, required — binding in template-drift state
     transformation: <generator id>     # str, required — registered generator to re-run
     proposal_id: <str>                 # str, required — stable proposal identifier
+proposed_actions: [<str>, ...]        # list, required (may be empty) — withheld mutations, e.g. scheduled-gated regenerations awaiting human approval
 errors: []
 ```
 
