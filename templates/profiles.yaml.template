@@ -15,10 +15,32 @@ scorecards:
         applicability: capability:ci
         weight: 1
 
+  claude-plugin-v1:
+    extends: generic-v1
+    checks:
+      - id: plugin-manifest
+        adapter: claude.plugin_manifest
+        applicability: profile:claude-plugin
+        weight: 1
+      - id: plugin-skills
+        adapter: claude.skills
+        applicability: profile:claude-plugin
+        weight: 1
+      - id: claude-context
+        adapter: claude.context
+        applicability: profile:claude-plugin
+        weight: 1
+
 adapters:
   generic.docs:
     state: available
   github.actions:
+    state: available
+  claude.plugin_manifest:
+    state: available
+  claude.skills:
+    state: available
+  claude.context:
     state: available
 
 # Non-authoritative detection policy. Matching rules create review proposals only.

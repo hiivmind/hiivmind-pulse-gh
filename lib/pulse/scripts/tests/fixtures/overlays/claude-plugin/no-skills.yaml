@@ -1,0 +1,14 @@
+files:
+  - .claude-plugin/plugin.json
+  - CLAUDE.md
+  - README.md
+file_contents:
+  .claude-plugin/plugin.json: |
+    {
+      "name": "plugin-without-skills",
+      "version": "0.0.1"
+    }
+  CLAUDE.md: |
+    # context
+  README.md: |
+    # readme
