@@ -1,9 +1,15 @@
 """Tests for impact.py — pure path-scoped integration-currency audit."""
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
 import yaml
 
 from lib.pulse.scripts.impact import audit, apply_proposals, mark, propose_marks
+
+
+SPLIT_REPO_OVERLAY = Path("templates/relationships/split-repo-tests.yaml")
 
 
 def relationships(depends_on):
@@ -301,6 +307,122 @@ def test_empty_relationships_produce_empty_report():
     assert report.edges_stale == 0
 
 
+# --- audit(): contract-version composition ---
+
+def contract(**overrides):
+    c = {
+        "producer": {
+            "path": "producer.txt",
+            "parser": {"kind": "regex", "pattern": r"version:\s*(\S+)"},
+        },
+        "consumer": {
+            "path": "consumer.txt",
+            "parser": {"kind": "regex", "pattern": r"requires:\s*(\S+)"},
+        },
+        "version_scheme": "pep440",
+    }
+    c.update(overrides)
+    return c
+
+
+def fake_contract_reader(files):
+    def read(repo, path):
+        return files[(repo, path)]
+    return read
+
+
+def test_contract_state_set_when_reader_supplied():
+    rel = relationships([edge(contract=contract())])
+    snap = snapshot_for(changed_files_by_base={"base111": []})
+    files = {
+        ("upstream-repo", "producer.txt"): b"version: 1.5.0",
+        ("upstream-repo", "consumer.txt"): b"requires: >=1.0,<2.0",
+    }
+    report = audit(rel, snap, contract_reader=fake_contract_reader(files))
+
+    result = report.edges[0]
+    assert result.state == "current"
+    assert result.contract_state == "compatible"
+    assert report.findings == []
+
+
+def test_contract_state_set_to_gap_when_versions_diverge():
+    rel = relationships([edge(contract=contract())])
+    snap = snapshot_for(changed_files_by_base={"base111": []})
+    files = {
+        ("upstream-repo", "producer.txt"): b"version: 2.5.0",
+        ("upstream-repo", "consumer.txt"): b"requires: >=1.0,<2.0",
+    }
+    report = audit(rel, snap, contract_reader=fake_contract_reader(files))
+
+    assert report.edges[0].contract_state == "gap"
+
+
+def test_stale_edge_with_contract_gap_emits_one_finding():
+    rel = relationships([edge(watch_paths=["lib/foo.py"], contract=contract())])
+    snap = snapshot_for(changed_files_by_base={"base111": ["lib/foo.py"]})
+    files = {
+        ("upstream-repo", "producer.txt"): b"version: 2.5.0",
+        ("upstream-repo", "consumer.txt"): b"requires: >=1.0,<2.0",
+    }
+    report = audit(rel, snap, contract_reader=fake_contract_reader(files))
+
+    result = report.edges[0]
+    assert result.state == "stale"
+    assert result.contract_state == "gap"
+    assert len(report.findings) == 1
+    finding = report.findings[0]
+    assert finding.kind == "stale_with_contract_gap"
+    assert finding.repo == "dependent-repo"
+    assert finding.severity == "high"
+    assert "path stale" in finding.detail.lower()
+    assert "contract gap" in finding.detail.lower()
+
+
+def test_contract_block_without_reader_is_unknown_and_finding():
+    rel = relationships([edge(contract=contract())])
+    snap = snapshot_for(changed_files_by_base={"base111": []})
+
+    report = audit(rel, snap)
+
+    result = report.edges[0]
+    assert result.state == "current"
+    assert result.contract_state == "unknown"
+    assert len(report.findings) == 1
+    finding = report.findings[0]
+    assert finding.kind == "unevaluated_contract"
+    assert finding.repo == "dependent-repo"
+    assert finding.severity == "low"
+
+
+def test_empty_watch_paths_and_contract_no_reader_emits_both_findings():
+    rel = relationships([edge(watch_paths=[], contract=contract())])
+    snap = snapshot_for(changed_files_by_base={"base111": []})
+
+    report = audit(rel, snap)
+
+    result = report.edges[0]
+    assert result.state == "unknown"
+    assert result.contract_state == "unknown"
+
+    kinds = [f.kind for f in report.findings]
+    assert "empty_watch_paths" in kinds
+    assert "unevaluated_contract" in kinds
+    assert len(report.findings) == 2
+
+
+def test_non_contract_edges_unchanged():
+    rel = relationships([edge()])
+    snap = snapshot_for(changed_files_by_base={"base111": []})
+
+    report = audit(rel, snap)
+
+    result = report.edges[0]
+    assert result.state == "current"
+    assert result.contract_state is None
+    assert report.findings == []
+
+
 # --- mark(): expected-base guarded, idempotent, atomic marker patch ---
 
 def make_relationships_file(tmp_path, depends_on):
@@ -542,3 +664,79 @@ def test_mark_preserves_other_edges_and_sections(tmp_path):
     edges = on_disk["repo_dependencies"]["dependent-repo"]["depends_on"]
     other = next(e for e in edges if e["repo"] == "other-upstream")
     assert other["integration_tested_sha"] == "untouched"
+
+
+# --- Split-repo binding (configuration over existing F5 machinery) ---
+
+@pytest.fixture
+def split_repo_overlay():
+    return yaml.safe_load(SPLIT_REPO_OVERLAY.read_text())
+
+
+def test_split_repo_full_tree_edge_goes_stale_on_any_change(split_repo_overlay):
+    base_sha = "0000000000000000000000000000000000000000"
+    snap = {
+        "hiivmind-pulse-gh": {
+            "develop": {
+                "head": "head999",
+                "changed_files_by_base": {
+                    base_sha: [
+                        "lib/pulse/scripts/impact.py",
+                        "docs/readme.md",
+                    ],
+                },
+                "base_missing": [],
+            }
+        }
+    }
+
+    report = audit(split_repo_overlay, snap)
+
+    assert len(report.edges) == 1
+    result = report.edges[0]
+    assert result.dependent == "hiivmind-pulse-gh-tests"
+    assert result.upstream == "hiivmind-pulse-gh"
+    assert result.watch_branch == "develop"
+    assert result.state == "stale"
+    assert result.tested_sha == base_sha
+    assert result.remote_head == "head999"
+    # Full-tree "**" watch matches arbitrary paths in any part of the tree.
+    assert "lib/pulse/scripts/impact.py" in result.changed_paths
+    assert "docs/readme.md" in result.changed_paths
+
+
+def test_split_repo_successful_workflow_advances_marker(split_repo_overlay, tmp_path):
+    base_sha = "0000000000000000000000000000000000000000"
+    new_sha = "abc1234def5678abc1234def5678abc1234def56"
+    tested_at = "2026-07-20T12:00:00Z"
+
+    proposals = propose_marks(split_repo_overlay, [
+        run_evidence(
+            workflow="ci.yml",
+            repo="hiivmind-pulse-gh",
+            outcome="success",
+            head_sha=new_sha,
+            tested_at=tested_at,
+        )
+    ])
+
+    assert len(proposals) == 1
+    proposal = proposals[0]
+    assert proposal.dependent == "hiivmind-pulse-gh-tests"
+    assert proposal.upstream == "hiivmind-pulse-gh"
+    assert proposal.expected_sha == base_sha
+    assert proposal.new_sha == new_sha
+    assert proposal.tested_at == tested_at
+
+    path = tmp_path / "relationships.yaml"
+    path.write_text(yaml.safe_dump(split_repo_overlay, sort_keys=False))
+    results = apply_proposals(path, proposals)
+
+    assert len(results) == 1
+    assert results[0].status == "updated"
+    assert results[0].new_sha == new_sha
+
+    on_disk = yaml.safe_load(path.read_text())
+    written_edge = on_disk["repo_dependencies"]["hiivmind-pulse-gh-tests"]["depends_on"][0]
+    assert written_edge["integration_tested_sha"] == new_sha
+    assert written_edge["tested_at"] == tested_at

@@ -40,6 +40,13 @@ SEVERITIES = {"low", "medium", "high"}
 EDGE_STATES = {"current", "stale", "unknown"}
 REPO_MUTATION_STATES = {"proposed", "blocked", "failed"}
 REPO_OUTCOME_STATES = {"ok", "failed", "blocked"}
+GENERATED_ARTIFACT_STATES = {
+    "current",
+    "template-drift",
+    "local-customization",
+    "conflict",
+    "error",
+}
 
 
 def _err(errors, msg):
@@ -533,6 +540,26 @@ def validate(data, kind: str) -> list[str]:
         if state in {"blocked", "failed"} and data.get("reason") is None:
             _err(errors, "reason must not be null when state is blocked or failed")
 
+    elif kind == "generated-artifact":
+        _require_nonnegative_integer(data, "bindings_audited", errors)
+        states = _require(data, "states", dict, errors)
+        for binding_id, state in (states or {}).items():
+            if not isinstance(binding_id, str):
+                _err(errors, "states keys must be strings")
+            if state not in GENERATED_ARTIFACT_STATES:
+                _err(errors, f"states.{binding_id} invalid: {state}")
+        _validate_findings(data, errors)
+        proposals = _require(data, "proposals", list, errors)
+        for index, proposal in enumerate(proposals or []):
+            if not isinstance(proposal, dict):
+                _err(errors, f"proposals[{index}] is not a mapping")
+                continue
+            ctx = f"proposals[{index}]."
+            _require(proposal, "binding", str, errors, ctx=ctx)
+            _require(proposal, "transformation", str, errors, ctx=ctx)
+            _require(proposal, "proposal_id", str, errors, ctx=ctx)
+        _require(data, "proposed_actions", list, errors)
+
     return errors
 
 
@@ -541,7 +568,8 @@ def main():
     parser.add_argument("file", help="Path to result YAML file")
     parser.add_argument("--kind", required=True,
                         choices=["status", "healthcheck", "refresh", "workflow-run",
-                                 "fleet-membership", "impact", "repo-mutation"])
+                                 "fleet-membership", "impact", "repo-mutation",
+                                 "generated-artifact"])
     args = parser.parse_args()
 
     path = Path(args.file)

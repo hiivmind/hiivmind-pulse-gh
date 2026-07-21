@@ -1,0 +1,80 @@
+# hiivmind-pulse-gh - Generator adapter registry
+# Loaded by lib/pulse/scripts/generator_dispatch.py (load_generators).
+# See lib/patterns/repository-mutations.md for the full mutation contract this
+# file participates in — expected-SHA guarding, policy vocabulary, and
+# scheduled-mode gating.
+#
+# A generator is an adapter that turns a drifted generated-artifact binding
+# (see templates/generated.yaml.template) into a Nave mutation Proposal. It
+# does NOT define its own command line: the exact argv is taken verbatim from
+# the registered transformation named by `transformation` (see
+# templates/transformations.yaml.template). Generators only declare where they
+# apply, which source template paths they consume, and the output-path
+# allowlist that constrains where generated files may be written.
+#
+# Fail-closed load rules (enforced by load_generators):
+#   - `transformation` must name a registered transformation id.
+#   - `output_paths` must be non-empty (a generator with no allowed outputs
+#     cannot produce anything).
+#   - `source_paths` must be non-empty (a generator must know which template
+#     source it consumes).
+#   - `command` and `command_argv` are rejected outright. The transformation
+#     registry is the ONLY source of argv; generators are not a back-door for
+#     free-form shell commands.
+#   - `applies_to` predicates use the same grammar as scorecard checks
+#     (always | profile:<id> | capability:<id> | evidence_path:<glob>).
+#
+# Glob semantics for `source_paths`/`output_paths` (via impact._glob_to_regex):
+#   - `*` matches zero or more characters within a single path segment and
+#     never crosses a `/`.
+#   - `**` matches zero or more whole path segments, so `docs/**/*.md` matches
+#     both `docs/top.md` and `docs/nested/deep.md`.
+#   - `?` matches exactly one non-separator character.
+#   - All other characters match literally.
+
+# generators:
+#
+#   {{generator_id}}:                     # Registry key; must equal `id` below.
+#     id: {{generator_id}}                # Required, must match the key exactly.
+#     applies_to:                         # Required, non-empty list of OR-matched
+#       - {{predicate}}                  # eligibility predicates:
+#                                        #   always
+#                                        #   profile:<profile id>
+#                                        #   capability:<capability id>
+#                                        #   evidence_path:<glob>
+#                                        # Same grammar as scorecard checks
+#                                        # (profile_dispatch.py).
+#     transformation: {{transformation_id}} # Required, registered transformation
+#                                        # id. The registry's command_argv is
+#                                        # the ONLY source of argv.
+#     source_paths:                       # Required, non-empty list of globs
+#       - {{glob}}                         # describing the template source path(s)
+#                                        # in the source repository.
+#     output_paths:                       # Required, non-empty allowlist. Every
+#       - {{glob}}                         # file the binding asks this generator to
+#                                        # produce must match at least one glob.
+#     validation:                         # ValidationSpec shape (same as
+#       kind: none | json_schema          # transformations). `none` takes no
+#                                        # other keys. `json_schema` requires:
+#                                        #   path: {{repo_relative_path}}
+#                                        #   schema: {{inline_json_schema}}
+
+# Example: a README generator bound to the `regenerate-from-template`
+# transformation. It applies to repos whose profile includes `nodejs`, and
+# generated files are constrained to README.md and any markdown file under docs/.
+# The actual argv (["nave", "generate", "--from-template"]) comes from the
+# transformation registry, not this generator entry.
+# readme-from-template:
+#   id: readme-from-template
+#   applies_to:
+#     - profile:nodejs
+#   transformation: regenerate-from-template
+#   source_paths:
+#     - templates/repo-readme.md
+#   output_paths:
+#     - README.md
+#     - docs/**/*.md
+#   validation:
+#     kind: none
+
+generators: {}

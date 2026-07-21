@@ -1,0 +1,39 @@
+# hiivmind-pulse-gh - Generated Artifact Audit Workflow
+# Audit committed generated-artifact bindings for template drift, local
+# customization, conflict, or error states, and record regeneration proposals
+# for template-drift bindings. Never applies generated files itself.
+# Copy to: .hiivmind/github/workflows/generated-artifact-audit.yaml
+
+name: "generated-artifact-audit"
+description: "Audit generated-artifact bindings and propose regenerations for drifted templates"
+enabled: true
+auto: false  # Must be explicitly requested — never runs automatically
+
+# Reference headless annotation: the audit is read-only against GitHub and the
+# generation manifest; INVOKE maps to the gh-generated-artifact-headless sibling
+# when present (see workflow-execution.md).
+headless:
+  enabled: true
+  on_ask: record
+  on_mutation: propose   # regenerated files are proposed, never applied unattended
+
+trigger:
+  type: on_demand
+  condition: user_requested
+
+params:
+  repo:
+    description: "Optional repo (full or short name) to scope the audit to; empty audits every configured binding"
+    type: string
+    default: ""
+
+state: {}
+
+workflow: |
+  EXECUTE:
+    INVOKE skill hiivmind-pulse-gh:gh-generated-artifact-headless
+      WITH workspace_path=workspace_root,
+           repo=params.repo,
+           mode=scheduled
+
+cooldown_minutes: 1440  # 24 hours
