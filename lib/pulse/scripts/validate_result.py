@@ -5,7 +5,7 @@
 # ///
 """Validate a headless result file against the pulse result contract.
 
-Usage: validate_result.py <result.yaml> --kind status|healthcheck|refresh|workflow-run|fleet-membership|impact|repo-mutation
+Usage: validate_result.py <result.yaml> --kind status|healthcheck|refresh|workflow-run|fleet-membership|impact|repo-mutation|generated-artifact|plan-sync|marketplace-sync
 
 See lib/patterns/headless-contract.md for the schemas.
 
@@ -629,6 +629,25 @@ def validate(data, kind: str) -> list[str]:
             _require(proposal, "proposal_id", str, errors, ctx=ctx)
         _validate_string_list(data, "proposed_actions", errors)
 
+    elif kind == "marketplace-sync":
+        _require_nonnegative_integer(data, "bindings_scanned", errors)
+        _require_nonnegative_integer(data, "in_sync", errors)
+        _require_nonnegative_integer(data, "drift", errors)
+        _require_nonnegative_integer(data, "missing_entry", errors)
+        _require_nonnegative_integer(data, "unknown", errors)
+        _require_nonnegative_integer(data, "not_applicable", errors)
+        _validate_findings(data, errors)
+        proposals = _require(data, "proposals", list, errors)
+        for index, proposal in enumerate(proposals or []):
+            if not isinstance(proposal, dict):
+                _err(errors, f"proposals[{index}] is not a mapping")
+                continue
+            ctx = f"proposals[{index}]."
+            _require(proposal, "binding", str, errors, ctx=ctx)
+            _require(proposal, "transformation", str, errors, ctx=ctx)
+            _require(proposal, "proposal_id", str, errors, ctx=ctx)
+        _validate_string_list(data, "proposed_actions", errors)
+
     return errors
 
 
@@ -638,7 +657,8 @@ def main():
     parser.add_argument("--kind", required=True,
                         choices=["status", "healthcheck", "refresh", "workflow-run",
                                  "fleet-membership", "impact", "repo-mutation",
-                                 "generated-artifact", "plan-sync"])
+                                 "generated-artifact", "plan-sync",
+                                 "marketplace-sync"])
     args = parser.parse_args()
 
     path = Path(args.file)

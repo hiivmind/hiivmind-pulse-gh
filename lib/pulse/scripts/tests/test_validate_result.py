@@ -19,6 +19,7 @@ FIXTURES = Path("lib/pulse/scripts/tests/fixtures")
 KINDS = [
     "status", "healthcheck", "refresh", "workflow-run", "fleet-membership",
     "impact", "repo-mutation", "generated-artifact", "plan-sync",
+    "marketplace-sync",
 ]
 
 
@@ -1005,6 +1006,87 @@ def test_plan_sync_requires_actionable_proposal_fields(tmp_path, field):
 
     assert result.returncode == 1
     assert f"missing required key: {field}" in result.stderr
+
+
+MARKETPLACE_SYNC_COUNTS = [
+    "bindings_scanned", "in_sync", "drift", "missing_entry", "unknown",
+    "not_applicable",
+]
+
+
+@pytest.mark.parametrize("field", MARKETPLACE_SYNC_COUNTS)
+def test_marketplace_sync_requires_count(tmp_path, field):
+    doc = yaml.safe_load((FIXTURES / "marketplace-sync-valid.yaml").read_text())
+    doc.pop(field)
+    path = tmp_path / "marketplace-sync.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "marketplace-sync")
+
+    assert result.returncode == 1
+    assert f"missing required key: {field}" in result.stderr
+
+
+@pytest.mark.parametrize("field", MARKETPLACE_SYNC_COUNTS)
+def test_marketplace_sync_rejects_mistyped_count(tmp_path, field):
+    doc = yaml.safe_load((FIXTURES / "marketplace-sync-valid.yaml").read_text())
+    doc[field] = "not-an-int"
+    path = tmp_path / "marketplace-sync.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "marketplace-sync")
+
+    assert result.returncode == 1
+    assert f"wrong type for {field}" in result.stderr
+
+
+def test_marketplace_sync_rejects_negative_count(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "marketplace-sync-valid.yaml").read_text())
+    doc["drift"] = -1
+    path = tmp_path / "marketplace-sync.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "marketplace-sync")
+
+    assert result.returncode == 1
+    assert "drift must be a non-negative integer" in result.stderr
+
+
+@pytest.mark.parametrize("field", ["proposals", "proposed_actions"])
+def test_marketplace_sync_requires_actionable_proposal_fields(tmp_path, field):
+    doc = yaml.safe_load((FIXTURES / "marketplace-sync-valid.yaml").read_text())
+    doc.pop(field, None)
+    path = tmp_path / "marketplace-sync.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "marketplace-sync")
+
+    assert result.returncode == 1
+    assert f"missing required key: {field}" in result.stderr
+
+
+def test_marketplace_sync_requires_string_proposed_actions(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "marketplace-sync-valid.yaml").read_text())
+    doc["proposed_actions"] = [42]
+    path = tmp_path / "marketplace-sync.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "marketplace-sync")
+
+    assert result.returncode == 1
+    assert "proposed_actions[0] is not a string" in result.stderr
+
+
+def test_marketplace_sync_requires_proposal_id(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "marketplace-sync-valid.yaml").read_text())
+    doc["proposals"][0].pop("proposal_id")
+    path = tmp_path / "marketplace-sync.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "marketplace-sync")
+
+    assert result.returncode == 1
+    assert "proposals[0].proposal_id" in result.stderr
 
 
 def test_validate_sync_binding_accepts_valid_fixture():

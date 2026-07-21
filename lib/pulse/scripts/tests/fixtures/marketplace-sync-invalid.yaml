@@ -1,0 +1,23 @@
+contract_version: 1
+kind: marketplace-sync
+workspace: testorg
+run_at: "2026-07-21T09:15:00Z"
+# actor intentionally omitted -> missing required key: actor
+# bindings_scanned intentionally omitted -> missing required key: bindings_scanned
+in_sync: 1
+drift: -1            # negative -> must be a non-negative integer
+missing_entry: 0
+unknown: 0
+not_applicable: 0
+findings:
+  - kind: unreadable_head
+    repo: testorg/marketplace
+    severity: catastrophic   # not in SEVERITIES -> findings[0].severity invalid
+    detail: "bad severity value"
+proposals:
+  - binding: widget
+    transformation: marketplace-entry-update
+    # proposal_id omitted -> proposals[0].proposal_id missing
+proposed_actions:
+  - 42                 # not a string -> proposed_actions[0] is not a string
+errors: []
