@@ -44,6 +44,7 @@ CHANGED_BLOB = "c" * 40
 
 def binding(**overrides):
     value = {
+        "id": "release-plan",
         "repo": REPO,
         "branch": BRANCH,
         "path": PATH,
@@ -444,3 +445,21 @@ def test_branch_refspec_destination_is_rejected_and_valid_fetch_is_explicit(tmp_
     snap.collect([binding()], workdir=tmp_path, runner=good_runner)
     fetch = next(call[0] for call in good_runner.calls if call[0][1] == "fetch")
     assert fetch[-1] == "refs/heads/main"
+
+
+def test_missing_locator_id_is_a_fail_closed_error_not_a_crash(tmp_path):
+    """An id-less binding must bucket as error, never reach fetch or crash RECORD.
+
+    build_apply_plans/build_result hard-require binding.id; without in-collect
+    enforcement an id-less binding would raise deep in RECORD and leave no
+    result file. collect must reject it as a clean error-state document.
+    """
+    bad = binding()
+    del bad["id"]
+    runner = RecordingRunner()
+
+    snapshot = snap.collect([bad], workdir=tmp_path, runner=runner)
+
+    assert snapshot.documents[0].state == "error"
+    assert snapshot.findings[0].kind == "snapshot_error"
+    assert not any(call[0][1] == "fetch" for call in runner.calls)

@@ -239,9 +239,16 @@ def collect(bindings, workdir=None, runner=default_runner, gh_api=None) -> SyncS
     pending: list[dict[str, Any]] = []
     for binding in raw_bindings:
         repo, branch, path, _ = _binding_values(binding)
-        if not (_valid_repo(repo) and _valid_branch(branch) and _valid_path(path)):
+        locator_id = binding.get("id")
+        if not (
+            isinstance(locator_id, str)
+            and bool(locator_id)
+            and _valid_repo(repo)
+            and _valid_branch(branch)
+            and _valid_path(path)
+        ):
             doc, finding = _error(binding, str(repo or ""), str(branch or ""), str(path or ""), None,
-                                  "invalid document repository, branch, or path")
+                                  "invalid document id, repository, branch, or path")
             documents.append(doc)
             findings.append(finding)
         elif local_dir is not None and _local_dirty(run, local_dir, path):
