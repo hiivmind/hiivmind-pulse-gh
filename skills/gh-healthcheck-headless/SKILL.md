@@ -167,7 +167,24 @@ coverage: <DISPATCH_JSON.coverage>
 errors: <ERRORS>
 ```
 
-There is no top-level mixed-scorecard score, total, or grade. Validate:
+There is no top-level mixed-scorecard score, total, or grade.
+
+### Overlay scorecards (dogfood)
+
+Some scorecards are **dogfood overlays** — plugin-specific scorecards that extend
+the neutral set (e.g. `claude-plugin-v1`, which adds the `claude.plugin_manifest`,
+`claude.skills`, and `claude.context` checks) and apply only to repositories whose
+reviewed F1 profile opts in (`profile:claude-plugin`). Grades in
+`aggregate.by_scorecard` are already scorecard-specific, so an overlay scorecard's
+subtotal is presented under its own key exactly like any neutral scorecard and is
+**never merged into a neutral scorecard's `score`/`total` denominator or into fleet
+`coverage`**. When rendering or grouping this result, mark each overlay scorecard's
+subtotal `overlay: true` and keep it in its own block; a repository graded under an
+overlay scorecard contributes only to that overlay's subtotal. The overlay scorecard
+set is documented in `README.md` § Dogfood overlays; neutral fleet behavior is
+provably independent of the overlays (`lib/pulse/scripts/tests/test_dogfood_isolation.py`).
+
+Validate:
 
 ```bash
 uv run "${PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py" \

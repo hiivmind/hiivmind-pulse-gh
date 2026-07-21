@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from lib.pulse.scripts.adapters import claude_plugin, generic
+from lib.pulse.scripts.adapters import generic
 from lib.pulse.scripts.check_adapters import AdapterRegistry
 
 
@@ -24,7 +24,14 @@ def register_claude_adapters(registry: AdapterRegistry) -> None:
     These adapters are intentionally opt-in — they read overlay-scoped
     file contents that the neutral evidence snapshot does not carry.
     Callers wire them only when the Claude plugin overlay is enabled.
+
+    The overlay module is imported LAZILY here (not at module level) so that
+    importing this package for the neutral ``register_universal_adapters``
+    entry point never pulls the overlay — and its transitive dependencies —
+    into the process. The dogfood-isolation test enforces this.
     """
+    from lib.pulse.scripts.adapters import claude_plugin
+
     registry.register("claude.plugin_manifest", claude_plugin.plugin_manifest)
     registry.register("claude.skills", claude_plugin.skills)
     registry.register("claude.context", claude_plugin.context)
