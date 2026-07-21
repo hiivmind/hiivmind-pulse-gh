@@ -243,6 +243,45 @@ def check_branch_heads(config_dir: Path, state: dict) -> bool:
     return changed
 
 
+def _doc_watches(config_dir: Path) -> list[tuple[str, str]]:
+    """Unique pushed repo/branch pairs for locally configured bound docs."""
+    config = load_yaml(config_dir / "plan-sync.yaml")
+    pairs: set[tuple[str, str]] = set()
+    for doc in (config.get("docs") or []):
+        if not isinstance(doc, dict):
+            continue
+        repo = doc.get("repo")
+        branch = doc.get("branch")
+        if repo and branch:
+            pairs.add((repo, branch))
+    return sorted(pairs)
+
+
+def check_docs(config_dir: Path, state: dict) -> bool:
+    """Trigger-only pushed-head watch for configured plan documents.
+
+    This deliberately mirrors ``check_branch_heads``: first observations
+    baseline, later pushed-head movement triggers, and document content is
+    never fetched or diffed by the poller.
+    """
+    watches = _doc_watches(config_dir)
+    if not watches:
+        return False
+    slot = state.setdefault("docs", {})
+    changed = False
+    for repo, branch in watches:
+        resp = gh_api(f"/repos/{repo}/git/ref/heads/{branch}") or {}
+        sha = ((resp.get("object") or {}).get("sha"))
+        if not sha:
+            continue
+        repo_slot = slot.setdefault(repo, {})
+        previous = repo_slot.get(branch)
+        repo_slot[branch] = sha
+        if previous is not None and previous != sha:
+            changed = True
+    return changed
+
+
 REPO_CHECKS = {
     "pull_requests": check_pull_requests,
     "issues": check_issues,
@@ -270,6 +309,8 @@ def evaluate_source(source: str, repo: str, config: dict, config_dir: Path,
         changed = check_org_repos(config, state)
     elif source == "branch_heads":
         changed = check_branch_heads(config_dir, state)
+    elif source == "docs":
+        changed = check_docs(config_dir, state)
     cache[source] = changed
     return changed
 
