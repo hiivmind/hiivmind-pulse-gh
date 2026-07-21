@@ -251,3 +251,33 @@ def test_branch_heads_no_relationships_file_does_not_trigger_or_crash(tmp_path):
     out = json.loads(r.stdout)
     assert r.returncode == 0, r.stderr
     assert out["triggered_workflows"] == []
+
+
+def test_docs_first_sight_baselines_then_pushed_head_move_triggers(tmp_path):
+    ws, cfg = make_workspace(tmp_path, with_workflow=False)
+    (cfg / "workflows" / "plan-watch.yaml").write_text(
+        "name: plan-watch\nenabled: true\nauto: false\ncooldown_minutes: 0\n"
+        "trigger:\n  type: session_poll\n  source: docs\n"
+    )
+    (cfg / "plan-sync.yaml").write_text(
+        "docs:\n  - repo: testorg/docs\n    branch: main\n    path: plans/release.md\n"
+    )
+    fixtures = tmp_path / "fixtures"
+    fixtures.mkdir()
+    (fixtures / "_rate_limit.json").write_text('{"rate":{"remaining":5000}}')
+    ref_fixture = fixtures / f"{_ref_fixture_slug('testorg/docs', 'main')}.json"
+    ref_fixture.write_text(json.dumps({"object": {"sha": "sha-one"}}))
+
+    run_poll(ws, fixtures=fixtures)
+    first_observation = json.loads(run_poll(ws, fixtures=fixtures).stdout)
+
+    assert first_observation["triggered_workflows"] == []
+    state = yaml.safe_load((cfg / "poll-state.yaml").read_text())
+    assert state["state"]["docs"]["testorg/docs"]["main"] == "sha-one"
+
+    ref_fixture.write_text(json.dumps({"object": {"sha": "sha-two"}}))
+    changed = json.loads(run_poll(ws, fixtures=fixtures).stdout)
+
+    assert changed["triggered_workflows"] == ["plan-watch"]
+    state = yaml.safe_load((cfg / "poll-state.yaml").read_text())
+    assert state["state"]["docs"]["testorg/docs"]["main"] == "sha-two"
