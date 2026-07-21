@@ -8,11 +8,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from io import StringIO
+import json
 import re
 from typing import Any, Mapping
 
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
+
+from lib.pulse.scripts.mutation_plan import Proposal, build_proposal
 
 
 _YAML = YAML(typ="rt")
@@ -57,6 +60,38 @@ class ReconciliationPlan:
     def conflicted(self) -> bool:
         """Whether any field requires manual reconciliation."""
         return bool(self.conflicts)
+
+
+@dataclass(frozen=True)
+class ApplyPlans:
+    """Independent, propose-only plans for one reconciliation.
+
+    ``repo_mutation`` is an F6 proposal for the document checkout.  Its
+    companion ``doc_patch`` is the caller-owned content for the well-known
+    pen-checkout patch file; it is deliberately data, never command argv.
+    ``github_mutation`` is a Pulse proposed action, not an API invocation.
+    """
+
+    repo_mutation: Proposal | None
+    github_mutation: dict[str, Any] | None
+    doc_patch: dict[str, Any] | None
+
+
+@dataclass(frozen=True)
+class FinalizeFinding:
+    """A typed finalization finding suitable for a plan-sync result."""
+
+    kind: str
+    severity: str
+    detail: str
+
+
+@dataclass(frozen=True)
+class FinalizeDecision:
+    """The bases safe to persist after the two independent apply paths."""
+
+    base_patch: dict[str, Any]
+    findings: tuple[FinalizeFinding, ...]
 
 
 _SYNC_FIELDS = ("title", "state", "assignees", "milestone", "body")
@@ -145,6 +180,120 @@ def compute(
             base_patch[field] = outcome.value
 
     return ReconciliationPlan(doc_patch, github_patch, base_patch, tuple(conflicts))
+
+
+def _snapshot_value(snapshot: Any, name: str) -> Any:
+    if isinstance(snapshot, Mapping):
+        return snapshot.get(name)
+    return getattr(snapshot, name, None)
+
+
+def _sync_binding(binding: Mapping[str, Any]) -> Mapping[str, Any]:
+    sync = binding.get("sync")
+    return sync if isinstance(sync, Mapping) else binding
+
+
+def _required_string(value: Any, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{label} must be a non-empty string")
+    return value
+
+
+def build_apply_plans(
+    reconciliation: ReconciliationPlan,
+    binding: Mapping[str, Any],
+    snapshot: Any,
+    actor: Mapping[str, Any] | Any,
+) -> ApplyPlans:
+    """Build separate propose-only document and GitHub patch proposals.
+
+    This function has no side effects.  The caller writes ``doc_patch`` to
+    ``.hiivmind/plan-sync-patch.yaml`` in the pen checkout only when it is
+    ready to execute the already-proposed F6 document path.  GitHub receives
+    a parallel proposed action and is never folded into that proposal.
+    """
+    repo = _required_string(binding.get("repo"), "binding.repo")
+    path = _required_string(binding.get("path"), "binding.path")
+    binding_id = _required_string(binding.get("id"), "binding.id")
+    snapshot_repo = _snapshot_value(snapshot, "repo")
+    if snapshot_repo is not None and snapshot_repo != repo:
+        raise ValueError("snapshot.repo must match binding.repo")
+
+    repo_mutation: Proposal | None = None
+    doc_patch: dict[str, Any] | None = None
+    if reconciliation.doc_patch:
+        head = _required_string(_snapshot_value(snapshot, "head"), "snapshot.head")
+        blob = _required_string(_snapshot_value(snapshot, "blob"), "snapshot.blob")
+        repo_mutation = build_proposal(
+            id=f"plan-sync-doc-{binding_id}",
+            selection=[repo],
+            transformation="plan-sync-doc-patch",
+            expected_shas={repo: head},
+            actor=actor,
+            mutation_policy="propose",
+        )
+        doc_patch = {
+            "path": path,
+            "base_blob": blob,
+            "doc_patch": dict(reconciliation.doc_patch),
+            # Base advancement belongs to finalize, after confirmation from
+            # both paths.  Never advance it speculatively in the doc pen.
+            "sync_patch": {},
+            "output_paths": [path],
+        }
+
+    github_mutation: dict[str, Any] | None = None
+    if reconciliation.github_patch:
+        issue = _sync_binding(binding).get("issue")
+        if not isinstance(issue, Mapping):
+            raise ValueError("binding.sync.issue must be a mapping")
+        issue_repo = _required_string(issue.get("repo"), "binding.sync.issue.repo")
+        issue_number = issue.get("number")
+        if isinstance(issue_number, bool) or not isinstance(issue_number, int) or issue_number <= 0:
+            raise ValueError("binding.sync.issue.number must be a positive integer")
+        patch = dict(reconciliation.github_patch)
+        github_mutation = {
+            "repo": issue_repo,
+            "number": issue_number,
+            "patch": patch,
+            "mutation_policy": "propose",
+            "proposed_actions": [
+                f"propose GitHub issue patch for {issue_repo}#{issue_number}: "
+                f"{json.dumps(patch, sort_keys=True)}"
+            ],
+        }
+
+    return ApplyPlans(repo_mutation, github_mutation, doc_patch)
+
+
+def finalize(
+    reconciliation: ReconciliationPlan,
+    doc_applied: bool,
+    github_applied: bool,
+) -> FinalizeDecision:
+    """Advance bases only where the corresponding two-way value is confirmed."""
+    base_patch: dict[str, Any] = {}
+    for field, value in reconciliation.base_patch.items():
+        if field in reconciliation.doc_patch and not doc_applied:
+            continue
+        if field in reconciliation.github_patch and not github_applied:
+            continue
+        base_patch[field] = value
+
+    findings: tuple[FinalizeFinding, ...] = ()
+    # Only a genuine partial application is notable: both sides had a patch to
+    # apply and exactly one succeeded. A one-sided reconciliation (only the doc
+    # or only GitHub changed) is a complete application, not a partial one.
+    both_had_work = bool(reconciliation.doc_patch) and bool(reconciliation.github_patch)
+    if both_had_work and doc_applied != github_applied:
+        findings = (
+            FinalizeFinding(
+                "partial_application",
+                "medium",
+                "document and GitHub proposals must be finalized independently",
+            ),
+        )
+    return FinalizeDecision(base_patch, findings)
 
 
 def _split_frontmatter(text: str) -> tuple[re.Match[str] | None, str]:

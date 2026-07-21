@@ -1,8 +1,11 @@
 """Round-trip and reconciliation tests for plan-document synchronization."""
 
+import json
+from pathlib import Path
+
 import pytest
 
-from lib.pulse.scripts import plan_sync
+from lib.pulse.scripts import mutation_plan, nave_adapter, pen_orchestrator, plan_sync
 from lib.pulse.scripts.plan_sync import parse_document, patch_document
 
 
@@ -178,3 +181,188 @@ def test_compute_keeps_non_conflicting_field_applies_when_another_field_conflict
     assert plan.base_patch == {"assignees": ["ada", "zoe"]}
     assert plan.conflicts == ("title",)
     assert plan.conflicted is True
+
+
+def _pen_show(repo):
+    owner, name = repo.split("/", 1)
+    return nave_adapter.Completed(
+        0,
+        json.dumps(
+            {
+                "name": "nave/plan-sync",
+                "created_at": "2026-07-21T00:00:00Z",
+                "branch": "nave/plan-sync",
+                "filter": {"terms": []},
+                "repos": [
+                    {
+                        "owner": owner,
+                        "name": name,
+                        "default_branch": "main",
+                        "clone_url": "x",
+                        "synced_at": "2026-07-21T00:00:00Z",
+                    }
+                ],
+                "ops": [],
+            }
+        ),
+        "",
+    )
+
+
+def _clean_pen_status(repo):
+    owner, name = repo.split("/", 1)
+    return nave_adapter.Completed(
+        0,
+        json.dumps(
+            [
+                {
+                    "owner": owner,
+                    "repo": name,
+                    "working_tree": "clean",
+                    "freshness": "fresh",
+                    "run_state": "not-run",
+                    "divergence": "up-to-date",
+                    "ahead": 0,
+                    "behind": 0,
+                }
+            ]
+        ),
+        "",
+    )
+
+
+class _QueuedRunner:
+    def __init__(self, results):
+        self.calls = []
+        self.results = list(results)
+
+    def run(self, args):
+        self.calls.append(args)
+        return self.results.pop(0)
+
+
+def _binding():
+    return {
+        "id": "widget-plan",
+        "repo": "acme/docs",
+        "branch": "main",
+        "path": "plans/widget.md",
+        "sync": {"issue": {"repo": "acme/widgets", "number": 42}},
+    }
+
+
+def _snapshot():
+    return {"repo": "acme/docs", "head": "head-at-snapshot", "blob": "blob-at-snapshot"}
+
+
+def _actor():
+    return {"gh_login": "octocat", "machine": "test-mac", "mode": "interactive"}
+
+
+def test_build_apply_plans_keeps_document_and_github_proposals_separate_and_propose_only():
+    reconciliation = plan_sync.ReconciliationPlan(
+        {"state": "closed"},
+        {"title": "Document title"},
+        {"state": "closed", "title": "Document title"},
+        (),
+    )
+
+    plans = plan_sync.build_apply_plans(reconciliation, _binding(), _snapshot(), _actor())
+
+    assert isinstance(plans.repo_mutation, mutation_plan.Proposal)
+    assert plans.repo_mutation.selection == ("acme/docs",)
+    assert plans.repo_mutation.expected_shas == {"acme/docs": "head-at-snapshot"}
+    assert plans.repo_mutation.transformation == "plan-sync-doc-patch"
+    assert plans.repo_mutation.mutation_policy == "propose"
+    assert plans.doc_patch == {
+        "path": "plans/widget.md",
+        "base_blob": "blob-at-snapshot",
+        "doc_patch": {"state": "closed"},
+        "sync_patch": {},
+        "output_paths": ["plans/widget.md"],
+    }
+    assert plans.github_mutation == {
+        "repo": "acme/widgets",
+        "number": 42,
+        "patch": {"title": "Document title"},
+        "mutation_policy": "propose",
+        "proposed_actions": [
+            "propose GitHub issue patch for acme/widgets#42: {\"title\": \"Document title\"}"
+        ],
+    }
+
+
+def test_expected_blob_mismatch_blocks_the_separate_document_proposal_before_exec(monkeypatch):
+    reconciliation = plan_sync.ReconciliationPlan(
+        {"title": "Current GitHub title"}, {}, {"title": "Current GitHub title"}, ()
+    )
+    plans = plan_sync.build_apply_plans(reconciliation, _binding(), _snapshot(), _actor())
+    registry = mutation_plan.load_registry(Path("templates/transformations.yaml.template"))
+    entry = registry.get(plans.repo_mutation.transformation)
+    pen_plan = pen_orchestrator.PenPlan(
+        proposal=plans.repo_mutation,
+        entry=entry,
+        pen_name="nave/plan-sync",
+        query=nave_adapter.PenQuery(terms=["repo:acme/docs"]),
+    )
+    runner = _QueuedRunner(
+        [
+            nave_adapter.Completed(0, "created\n", ""),
+            _pen_show("acme/docs"),
+            _clean_pen_status("acme/docs"),
+        ]
+    )
+    monkeypatch.setattr(
+        pen_orchestrator.nave_adapter,
+        "probe",
+        lambda _runner: {"available": True, "version": "0.0.9", "protocol": 1},
+    )
+
+    result = pen_orchestrator.execute(
+        pen_plan, runner, read_repo_head=lambda _repo: "different-current-blob"
+    )
+
+    assert result.state == "blocked"
+    assert result.repo_outcomes == {"acme/docs": "blocked"}
+    assert result.reason is not None
+    assert "acme/docs" in result.reason
+    assert not any("exec" in call for call in runner.calls)
+
+
+@pytest.mark.parametrize(
+    ("doc_applied", "github_applied", "expected_base"),
+    [
+        (True, False, {"state": "closed"}),
+        (False, True, {"title": "Document title"}),
+    ],
+)
+def test_finalize_advances_only_the_confirmed_side_and_reports_partial_application(
+    doc_applied, github_applied, expected_base
+):
+    reconciliation = plan_sync.ReconciliationPlan(
+        {"state": "closed"},
+        {"title": "Document title"},
+        {"state": "closed", "title": "Document title"},
+        (),
+    )
+
+    decision = plan_sync.finalize(reconciliation, doc_applied, github_applied)
+
+    assert decision.base_patch == expected_base
+    assert [finding.kind for finding in decision.findings] == ["partial_application"]
+
+
+def test_finalize_one_sided_reconciliation_is_not_a_partial_application():
+    # Only the document changed; there is no GitHub patch. Applying the single
+    # side is a COMPLETE reconciliation, not a partial one — no finding.
+    reconciliation = plan_sync.ReconciliationPlan(
+        {"state": "closed"},
+        {},
+        {"state": "closed"},
+        (),
+    )
+
+    decision = plan_sync.finalize(reconciliation, doc_applied=True, github_applied=False)
+
+    assert decision.base_patch == {"state": "closed"}
+    assert decision.findings == ()

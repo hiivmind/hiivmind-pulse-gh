@@ -71,6 +71,33 @@ transformations:
       kind: none
     allow_scheduled: false
 
+  # Plan synchronization carries variable patch data in this well-known file,
+  # never through argv interpolation.  The caller constrains its declared
+  # output to the binding's document path before writing it into the pen.
+  #
+  # PROPOSE-ONLY (F8 v1): this transformation is only ever *proposed*; F8 never
+  # executes it. Two things must be closed before any apply-mode consumer runs
+  # it (see lib/patterns/plan-sync-binding.md § V1 limitation):
+  #   1. Executor path — the argv below names a plugin-repo-relative script that
+  #      does not resolve inside a doc-repo pen checkout; apply mode needs the
+  #      applier on PATH (installed entry point / nave subcommand).
+  #   2. validation is `none` and the bound output path is self-attested by the
+  #      patch descriptor; apply mode needs the bound path as immutable proposal
+  #      metadata + an F6 "path changed" validation kind.
+  plan-sync-doc-patch:
+    id: plan-sync-doc-patch
+    command_argv:
+      - uv
+      - run
+      - lib/pulse/scripts/apply_doc_patch.py
+      - --patch
+      - .hiivmind/plan-sync-patch.yaml
+    applies_to:
+      - always
+    validation:
+      kind: none
+    allow_scheduled: false
+
   # Example: a dependency-lock refresh. Applies only to repos carrying a
   # capability signal (surfaced by their profile/scorecard evidence), and
   # its result is checked against a JSON Schema before it can be proposed
