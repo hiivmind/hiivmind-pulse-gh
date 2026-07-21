@@ -6,7 +6,7 @@
 """Lossless parsing and patching for GitHub-bound Markdown plans."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from io import StringIO
 import json
 import re
@@ -55,6 +55,8 @@ class ReconciliationPlan:
     github_patch: dict[str, Any]
     base_patch: dict[str, Any]
     conflicts: tuple[str, ...]
+    doc_base_patch: dict[str, Any] = field(default_factory=dict)
+    requires_final_blob: bool = False
 
     @property
     def conflicted(self) -> bool:
@@ -95,6 +97,7 @@ class FinalizeDecision:
 
 
 _SYNC_FIELDS = ("title", "state", "assignees", "milestone", "body")
+_GITHUB_ONLY_FIELDS = {"state", "assignees", "milestone"}
 
 
 def _normalise(field: str, value: Any) -> Any:
@@ -149,6 +152,7 @@ def compute(
     github: Mapping[str, Any],
     binding: Mapping[str, Any],
     base_body: Any,
+    document_blob: str | None = None,
 ) -> ReconciliationPlan:
     """Reconcile V1 plan fields into independent document, GitHub, and base patches."""
     base = binding.get("base", {})
@@ -156,30 +160,66 @@ def compute(
     doc_patch: dict[str, Any] = {}
     github_patch: dict[str, Any] = {}
     base_patch: dict[str, Any] = {}
+    doc_base_patch: dict[str, Any] = {}
     conflicts: list[str] = []
+    requires_final_blob = False
 
     for field in _SYNC_FIELDS:
         base_value = base_body if field == "body" else base.get(field)
         policy = policies.get(field) if isinstance(policies, Mapping) else None
+        # V1 has no document representation for these GitHub-only scalars.
+        # Their document-side value is therefore the recorded base; a GitHub
+        # delta advances sync.base rather than inventing a body/frontmatter key.
+        doc_value = (
+            base_value
+            if isinstance(doc, BoundDocument) and field in _GITHUB_ONLY_FIELDS
+            else _field_value(doc, field)
+        )
         outcome = merge_field(
             field,
             base_value,
-            _field_value(doc, field),
+            doc_value,
             github.get(field),
             policy,
         )
         if outcome.decision == "conflict":
             conflicts.append(field)
         elif outcome.decision == "apply_to_doc":
-            doc_patch[field] = outcome.value
-            base_patch[field] = outcome.value
+            if field in _GITHUB_ONLY_FIELDS:
+                base_patch[field] = outcome.value
+                doc_base_patch[field] = outcome.value
+            else:
+                doc_patch[field] = outcome.value
+                if field == "body":
+                    requires_final_blob = True
+                else:
+                    base_patch[field] = outcome.value
+                    doc_base_patch[field] = outcome.value
         elif outcome.decision == "apply_to_github":
             github_patch[field] = outcome.value
-            base_patch[field] = outcome.value
+            if field == "body":
+                if document_blob:
+                    base_patch["blob"] = document_blob
+            else:
+                base_patch[field] = outcome.value
         elif outcome.decision == "agree":
-            base_patch[field] = outcome.value
+            if field == "body":
+                if document_blob:
+                    base_patch["blob"] = document_blob
+                    doc_base_patch["blob"] = document_blob
+            else:
+                base_patch[field] = outcome.value
+                if isinstance(doc, BoundDocument):
+                    doc_base_patch[field] = outcome.value
 
-    return ReconciliationPlan(doc_patch, github_patch, base_patch, tuple(conflicts))
+    return ReconciliationPlan(
+        doc_patch,
+        github_patch,
+        base_patch,
+        tuple(conflicts),
+        doc_base_patch,
+        requires_final_blob,
+    )
 
 
 def _snapshot_value(snapshot: Any, name: str) -> Any:
@@ -221,7 +261,7 @@ def build_apply_plans(
 
     repo_mutation: Proposal | None = None
     doc_patch: dict[str, Any] | None = None
-    if reconciliation.doc_patch:
+    if reconciliation.doc_patch or reconciliation.doc_base_patch:
         head = _required_string(_snapshot_value(snapshot, "head"), "snapshot.head")
         blob = _required_string(_snapshot_value(snapshot, "blob"), "snapshot.blob")
         repo_mutation = build_proposal(
@@ -236,9 +276,11 @@ def build_apply_plans(
             "path": path,
             "base_blob": blob,
             "doc_patch": dict(reconciliation.doc_patch),
-            # Base advancement belongs to finalize, after confirmation from
-            # both paths.  Never advance it speculatively in the doc pen.
-            "sync_patch": {},
+            "sync_patch": (
+                {"base": dict(reconciliation.doc_base_patch)}
+                if reconciliation.doc_base_patch
+                else {}
+            ),
             "output_paths": [path],
         }
 
@@ -270,21 +312,31 @@ def finalize(
     reconciliation: ReconciliationPlan,
     doc_applied: bool,
     github_applied: bool,
+    confirmed_document_blob: str | None = None,
 ) -> FinalizeDecision:
     """Advance bases only where the corresponding two-way value is confirmed."""
     base_patch: dict[str, Any] = {}
     for field, value in reconciliation.base_patch.items():
-        if field in reconciliation.doc_patch and not doc_applied:
+        if (
+            field in reconciliation.doc_patch
+            or field in reconciliation.doc_base_patch
+        ) and not doc_applied:
+            continue
+        if field == "blob" and "body" in reconciliation.github_patch and not github_applied:
             continue
         if field in reconciliation.github_patch and not github_applied:
             continue
         base_patch[field] = value
+    if reconciliation.requires_final_blob and doc_applied and confirmed_document_blob:
+        base_patch["blob"] = confirmed_document_blob
 
     findings: tuple[FinalizeFinding, ...] = ()
     # Only a genuine partial application is notable: both sides had a patch to
     # apply and exactly one succeeded. A one-sided reconciliation (only the doc
     # or only GitHub changed) is a complete application, not a partial one.
-    both_had_work = bool(reconciliation.doc_patch) and bool(reconciliation.github_patch)
+    both_had_work = bool(
+        reconciliation.doc_patch or reconciliation.doc_base_patch
+    ) and bool(reconciliation.github_patch)
     if both_had_work and doc_applied != github_applied:
         findings = (
             FinalizeFinding(
@@ -294,6 +346,110 @@ def finalize(
             ),
         )
     return FinalizeDecision(base_patch, findings)
+
+
+def _finding_dict(finding: Any, *, repo: str | None = None) -> dict[str, Any]:
+    result = {
+        "kind": getattr(finding, "kind"),
+        "repo": getattr(finding, "repo", None) or repo or "",
+        "severity": getattr(finding, "severity"),
+    }
+    for key in ("detail", "path", "new_path"):
+        value = getattr(finding, key, None)
+        if value is not None:
+            result[key] = value
+    result["inferred"] = False
+    return result
+
+
+def build_result(
+    snapshot: Any,
+    *,
+    workspace: str,
+    run_at: str,
+    actor: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Build the production plan-sync result from collected evidence.
+
+    The builder composes the public merge and proposal paths used by the
+    headless workflow.  It is deliberately propose-only and performs no I/O.
+    """
+    result: dict[str, Any] = {
+        "contract_version": 1,
+        "kind": "plan-sync",
+        "workspace": workspace,
+        "run_at": run_at,
+        "actor": dict(actor),
+        "docs_scanned": 0,
+        "in_sync": 0,
+        "doc_patches": 0,
+        "github_patches": 0,
+        "conflicts": 0,
+        "excluded": 0,
+        "findings": [_finding_dict(f) for f in getattr(snapshot, "findings", ())],
+        "proposals": [],
+        "proposed_actions": [],
+        "errors": [],
+    }
+
+    for document in getattr(snapshot, "documents", ()):
+        result["docs_scanned"] += 1
+        if document.state in {"excluded", "error"}:
+            result["excluded"] += 1
+            continue
+        if document.state == "in_sync":
+            result["in_sync"] += 1
+            continue
+        if not document.document or not document.github or document.base_body is None:
+            result["excluded"] += 1
+            continue
+
+        reconciliation = compute(
+            document.document,
+            document.github,
+            document.document.binding,
+            document.base_body,
+            document_blob=document.blob,
+        )
+        if reconciliation.conflicted:
+            result["conflicts"] += 1
+            for conflict in reconciliation.conflicts:
+                result["findings"].append({
+                    "kind": "base_conflict",
+                    "repo": document.repo,
+                    "severity": "high",
+                    "detail": f"{conflict} changed differently in the document and GitHub",
+                    "inferred": False,
+                })
+            continue
+
+        plans = build_apply_plans(reconciliation, document.binding, document, actor)
+        if plans.repo_mutation is not None:
+            result["doc_patches"] += 1
+            result["proposals"].append({
+                "binding": document.binding["id"],
+                "transformation": plans.repo_mutation.transformation,
+                "proposal_id": plans.repo_mutation.id,
+            })
+            result["proposed_actions"].append(
+                f"propose document patch {plans.repo_mutation.id} for "
+                f"{document.path} at {document.head}"
+            )
+        if plans.github_mutation is not None:
+            result["github_patches"] += 1
+            result["proposed_actions"].extend(
+                plans.github_mutation.get("proposed_actions", [])
+            )
+        if plans.repo_mutation is None and plans.github_mutation is None:
+            result["in_sync"] += 1
+
+        # Propose-only: neither path is confirmed, so no base is persisted.
+        final = finalize(reconciliation, doc_applied=False, github_applied=False)
+        result["findings"].extend(
+            _finding_dict(finding, repo=document.repo) for finding in final.findings
+        )
+
+    return result
 
 
 def _split_frontmatter(text: str) -> tuple[re.Match[str] | None, str]:

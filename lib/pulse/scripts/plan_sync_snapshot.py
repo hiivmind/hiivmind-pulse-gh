@@ -14,19 +14,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
-from lib.pulse.scripts.impact_snapshot import (
-    _slug,
-    _valid_branch,
-    _valid_sha,
-    default_runner,
-)
-from lib.pulse.scripts.plan_sync import BoundDocument, parse_document
+from lib.pulse.scripts.impact_snapshot import _slug, _valid_sha, default_runner
+from lib.pulse.scripts.plan_sync import BoundDocument, compute, parse_document
+from lib.pulse.scripts.validate_result import validate_sync_binding
 
 
 Runner = Callable[..., object]
 GhApi = Callable[[str], Any]
 
 _REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+_INVALID_REF_CHARS = re.compile(r"[\x00-\x20\x7f ~^:?*\[\\]")
 
 
 @dataclass(frozen=True)
@@ -90,6 +87,17 @@ def _valid_path(value: Any) -> bool:
     )
 
 
+def _valid_branch(value: Any) -> bool:
+    """Validate a branch name as one refs/heads component, never a refspec."""
+    if not isinstance(value, str) or not value or value == "@":
+        return False
+    if value.startswith(("-", ".", "/")) or value.endswith((".", "/")):
+        return False
+    if ".." in value or "@{" in value or "//" in value or _INVALID_REF_CHARS.search(value):
+        return False
+    return all(part and not part.startswith(".") and not part.endswith(".lock") for part in value.split("/"))
+
+
 def _repo_url(repo: str) -> str:
     return f"https://github.com/{repo}.git"
 
@@ -112,13 +120,7 @@ def _is_local_checkout(run: Runner, workdir: str | Path | None) -> bool:
 
 @contextlib.contextmanager
 def _bare_workdir(workdir: str | Path | None, local_checkout: bool) -> Iterator[Path]:
-    """Use a supplied non-repository directory, or an isolated temp bare repo.
-
-    A local checkout is never repurposed as the fetch destination.
-    """
-    if workdir is not None and not local_checkout:
-        yield Path(workdir)
-        return
+    """Always use an isolated, automatically removed bare-fetch directory."""
     with tempfile.TemporaryDirectory(prefix="pulse-plan-sync-") as temp:
         yield Path(temp)
 
@@ -146,14 +148,20 @@ def _read_blob(run: Runner, repo_dir: Path, blob: str) -> str | None:
 
 def _rename_target(run: Runner, repo_dir: Path, path: str) -> str | None:
     result = run(
-        ["git", "log", "--follow", "--format=%H", "--name-only", "--", path], repo_dir
+        [
+            "git", "log", "FETCH_HEAD", "--format=%H", "--name-status",
+            "--find-renames", "--diff-filter=R",
+        ],
+        repo_dir,
     )
     if _failed(result):
         return None
     for line in _stdout(result).splitlines():
-        candidate = line.strip()
-        if candidate != path and not _valid_sha(candidate) and _valid_path(candidate):
-            return candidate
+        fields = line.strip().split("\t")
+        if len(fields) == 3 and fields[0].startswith("R") and fields[1] == path:
+            candidate = fields[2]
+            if _valid_path(candidate):
+                return candidate
     return None
 
 
@@ -172,19 +180,26 @@ def _local_ahead(run: Runner, workdir: Path, head: str) -> bool:
         return False
 
 
-def _github_snapshot(sync: dict[str, Any], gh_api: GhApi | None) -> tuple[dict[str, Any] | None, tuple[str, ...]]:
+def _github_snapshot(
+    sync: dict[str, Any], gh_api: GhApi | None
+) -> tuple[dict[str, Any] | None, tuple[str, ...], str | None]:
     """Read and normalize the V1 issue state exclusively through ``gh_api``."""
     if gh_api is None:
-        return None, ()
+        return None, (), "GitHub API reader is unavailable"
     issue_ref = sync.get("issue") or {}
     issue_repo = issue_ref.get("repo") if isinstance(issue_ref, dict) else None
     number = issue_ref.get("number") if isinstance(issue_ref, dict) else None
     if not _valid_repo(issue_repo) or isinstance(number, bool) or not isinstance(number, int) or number <= 0:
-        return None, ()
-    issue = gh_api(f"/repos/{issue_repo}/issues/{number}") or {}
-    catalog = gh_api(f"/repos/{issue_repo}/milestones?state=all&per_page=100") or []
+        return None, (), "pushed sync.issue reference is invalid"
+    try:
+        issue = gh_api(f"/repos/{issue_repo}/issues/{number}")
+        catalog = gh_api(f"/repos/{issue_repo}/milestones?state=all&per_page=100")
+    except Exception as exc:
+        return None, (), f"GitHub evidence read failed: {exc}"
     if not isinstance(issue, dict):
-        return None, ()
+        return None, (), "GitHub issue evidence is missing or invalid"
+    if not isinstance(catalog, list):
+        return None, (), "GitHub milestone evidence is missing or invalid"
     assignees = sorted({a.get("login") for a in issue.get("assignees") or [] if isinstance(a, dict) and a.get("login")})
     milestone = issue.get("milestone") or {}
     github = {
@@ -194,8 +209,8 @@ def _github_snapshot(sync: dict[str, Any], gh_api: GhApi | None) -> tuple[dict[s
         "assignees": assignees,
         "milestone": milestone.get("title") if isinstance(milestone, dict) else None,
     }
-    milestones = tuple(sorted({m.get("title") for m in catalog if isinstance(m, dict) and m.get("title")})) if isinstance(catalog, list) else ()
-    return github, milestones
+    milestones = tuple(sorted({m.get("title") for m in catalog if isinstance(m, dict) and m.get("title")}))
+    return github, milestones, None
 
 
 def _error(binding: dict[str, Any], repo: str, branch: str, path: str, head: str | None,
@@ -246,7 +261,8 @@ def collect(bindings, workdir=None, runner=default_runner, gh_api=None) -> SyncS
                 documents.append(doc)
                 findings.append(finding)
                 continue
-            if _failed(run(["git", "fetch", "--filter=blob:none", "-q", "--", _repo_url(repo), branch], repo_dir)):
+            branch_ref = f"refs/heads/{branch}"
+            if _failed(run(["git", "fetch", "--filter=blob:none", "-q", "--", _repo_url(repo), branch_ref], repo_dir)):
                 doc, finding = _error(binding, repo, branch, path, None, "could not fetch pushed branch")
                 documents.append(doc)
                 findings.append(finding)
@@ -273,15 +289,31 @@ def collect(bindings, workdir=None, runner=default_runner, gh_api=None) -> SyncS
                             else "document path is absent from pushed head"),
                 ))
                 continue
-            base = sync.get("base") if isinstance(sync, dict) else None
-            base_blob = base.get("blob") if isinstance(base, dict) else None
-            if blob == base_blob:
-                documents.append(DocumentSnapshot(binding, repo, branch, path, head, blob, "in_sync"))
-                continue
             document_text = _read_blob(run, repo_dir, blob)
-            base_text = _read_blob(run, repo_dir, base_blob) if isinstance(base_blob, str) else None
-            if document_text is None or base_text is None:
-                doc, finding = _error(binding, repo, branch, path, head, "document or body-base blob is unavailable")
+            if document_text is None:
+                doc, finding = _error(binding, repo, branch, path, head, "pushed document blob is unavailable")
+                documents.append(doc)
+                findings.append(finding)
+                continue
+            document = parse_document(document_text)
+            binding_errors = validate_sync_binding(document.binding)
+            if binding_errors:
+                doc, finding = _error(
+                    binding, repo, branch, path, head,
+                    "invalid pushed sync binding: " + "; ".join(binding_errors),
+                )
+                documents.append(doc)
+                findings.append(finding)
+                continue
+            authoritative = {
+                key: binding[key] for key in ("id", "repo", "branch", "path") if key in binding
+            }
+            authoritative["sync"] = document.binding
+            base = document.binding.get("base")
+            base_blob = base.get("blob") if isinstance(base, dict) else None
+            base_text = document_text if base_blob == blob else _read_blob(run, repo_dir, base_blob)
+            if base_text is None:
+                doc, finding = _error(authoritative, repo, branch, path, head, "body-base blob is unavailable")
                 documents.append(doc)
                 findings.append(finding)
                 continue
@@ -289,9 +321,25 @@ def collect(bindings, workdir=None, runner=default_runner, gh_api=None) -> SyncS
             # its raw blob — compute() compares it against the current doc's body
             # (frontmatter-stripped), so the base must be stripped identically.
             base_body = parse_document(base_text).body
-            github, milestones = _github_snapshot(sync, gh_api)
+            github, milestones, github_error = _github_snapshot(document.binding, gh_api)
+            if github_error is not None:
+                doc, finding = _error(authoritative, repo, branch, path, head, github_error)
+                documents.append(doc)
+                findings.append(finding)
+                continue
+            reconciliation = compute(
+                document, github, document.binding, base_body, document_blob=blob
+            )
+            state = "in_sync" if not (
+                reconciliation.conflicted
+                or reconciliation.doc_patch
+                or reconciliation.github_patch
+                or reconciliation.base_patch
+                or reconciliation.doc_base_patch
+                or reconciliation.requires_final_blob
+            ) else "changed"
             documents.append(DocumentSnapshot(
-                binding, repo, branch, path, head, blob, "changed", parse_document(document_text),
+                authoritative, repo, branch, path, head, blob, state, document,
                 base_body, github, milestones,
             ))
 

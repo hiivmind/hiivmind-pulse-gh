@@ -994,6 +994,19 @@ def test_plan_sync_invalid_fixture_reports_every_violation(tmp_path):
     assert "findings[0].severity" in result.stderr
 
 
+@pytest.mark.parametrize("field", ["proposals", "proposed_actions"])
+def test_plan_sync_requires_actionable_proposal_fields(tmp_path, field):
+    doc = yaml.safe_load((FIXTURES / "plan-sync-valid.yaml").read_text())
+    doc.pop(field, None)
+    path = tmp_path / "plan-sync.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "plan-sync")
+
+    assert result.returncode == 1
+    assert f"missing required key: {field}" in result.stderr
+
+
 def test_validate_sync_binding_accepts_valid_fixture():
     doc = yaml.safe_load((FIXTURES / "plan-sync-binding-valid.yaml").read_text())
 
@@ -1047,3 +1060,19 @@ def test_validate_sync_binding_rejects_unknown_base_key():
     errors = validate_result.validate_sync_binding(block)
 
     assert "unknown base key: labels" in errors
+
+
+@pytest.mark.parametrize(
+    ("issue", "expected"),
+    [
+        (None, "missing required key: sync.issue"),
+        ({"repo": "testorg/widget"}, "missing required key: issue.number"),
+        ({"repo": "testorg/widget", "number": 0}, "issue.number must be a positive integer"),
+    ],
+)
+def test_validate_sync_binding_rejects_invalid_issue_reference(issue, expected):
+    block = {"base": {"blob": "abc123"}}
+    if issue is not None:
+        block["issue"] = issue
+
+    assert expected in validate_result.validate_sync_binding(block)

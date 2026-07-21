@@ -183,6 +183,106 @@ def test_compute_keeps_non_conflicting_field_applies_when_another_field_conflict
     assert plan.conflicted is True
 
 
+def test_body_base_advances_as_blob_and_validates_as_sync_binding():
+    current_blob = "c" * 40
+    base = {field: values[0] for field, values in FIELD_VALUES.items() if field != "body"}
+    binding = {"issue": {"repo": "acme/widgets", "number": 42}, "base": base | {"blob": "b" * 40}}
+
+    plan = plan_sync.compute(
+        {**base, "body": "Document body\n"},
+        {**base, "body": FIELD_VALUES["body"][0]},
+        binding,
+        FIELD_VALUES["body"][0],
+        document_blob=current_blob,
+    )
+    finalized = plan_sync.finalize(plan, doc_applied=False, github_applied=True)
+
+    assert plan.base_patch == {"blob": current_blob}
+    assert "body" not in plan.base_patch
+    merged_binding = {**binding, "base": binding["base"] | finalized.base_patch}
+    from lib.pulse.scripts.validate_result import validate_sync_binding
+    assert validate_sync_binding(merged_binding) == []
+
+
+def test_body_blob_base_waits_for_the_github_patch_confirmation():
+    current_blob = "c" * 40
+    base = {field: values[0] for field, values in FIELD_VALUES.items() if field != "body"}
+    binding = {"issue": {"repo": "acme/widgets", "number": 42}, "base": base | {"blob": "b" * 40}}
+    plan = plan_sync.compute(
+        {**base, "body": "Document body\n"},
+        {**base, "body": FIELD_VALUES["body"][0]},
+        binding,
+        FIELD_VALUES["body"][0],
+        document_blob=current_blob,
+    )
+
+    assert plan_sync.finalize(plan, doc_applied=False, github_applied=False).base_patch == {}
+    assert plan_sync.finalize(plan, doc_applied=False, github_applied=True).base_patch == {
+        "blob": current_blob
+    }
+
+
+def test_github_body_change_uses_confirmed_applied_document_blob_as_base():
+    base = {field: values[0] for field, values in FIELD_VALUES.items() if field != "body"}
+    binding = {"issue": {"repo": "acme/widgets", "number": 42}, "base": base | {"blob": "b" * 40}}
+    plan = plan_sync.compute(
+        {**base, "body": FIELD_VALUES["body"][0]},
+        {**base, "body": "GitHub body\n"},
+        binding,
+        FIELD_VALUES["body"][0],
+        document_blob="c" * 40,
+    )
+
+    assert "body" not in plan.base_patch
+    assert plan_sync.finalize(
+        plan,
+        doc_applied=True,
+        github_applied=False,
+        confirmed_document_blob="d" * 40,
+    ).base_patch == {"blob": "d" * 40}
+
+
+@pytest.mark.parametrize(
+    ("field", "base_value", "github_value"),
+    [
+        ("state", "open", "closed"),
+        ("assignees", ["ada"], ["ada", "zoe"]),
+        ("milestone", None, "M2"),
+    ],
+)
+def test_github_only_scalar_change_is_a_frontmatter_base_patch_not_a_body_edit(
+    field, base_value, github_value
+):
+    base = {
+        "blob": "b" * 40,
+        "title": "Release plan",
+        "state": "open",
+        "assignees": ["ada"],
+        "milestone": None,
+    }
+    binding = {"issue": {"repo": "acme/widgets", "number": 42}, "base": base}
+    source = (
+        "---\nsync:\n"
+        "  issue: {repo: acme/widgets, number: 42}\n"
+        f"  base: {{blob: {'b' * 40}, title: Release plan, state: open, assignees: [ada], milestone: null}}\n"
+        "---\n# Release plan\n"
+    )
+    github = {"title": "Release plan", "body": "# Release plan\n", **{k: base[k] for k in ("state", "assignees", "milestone")}}
+    github[field] = github_value
+
+    reconciliation = plan_sync.compute(parse_document(source), github, binding, "# Release plan\n")
+    plans = plan_sync.build_apply_plans(reconciliation, _binding(), _snapshot(), _actor())
+    patched = patch_document(source, plans.doc_patch["doc_patch"], plans.doc_patch["sync_patch"])
+
+    assert reconciliation.doc_patch == {}
+    assert reconciliation.base_patch == {field: sorted(set(github_value)) if field == "assignees" else github_value}
+    assert plans.repo_mutation is not None
+    assert plans.doc_patch["doc_patch"] == {}
+    assert plans.doc_patch["sync_patch"] == {"base": reconciliation.base_patch}
+    assert parse_document(patched).binding["base"][field] == reconciliation.base_patch[field]
+    assert parse_document(patched).body == "# Release plan\n"
+
+
 def _pen_show(repo):
     owner, name = repo.split("/", 1)
     return nave_adapter.Completed(

@@ -35,9 +35,11 @@ issues an issue mutation, or advances a stored base.
 ## Contract
 
 - Zero prompts. Explicit inputs only. Every exit writes a result file.
-- The binding source is `CONFIG_DIR/plan-sync.yaml`, whose `docs[]` records carry
-  `id`, `repo`, `branch`, `path`, and `sync` data. A plan document remains the source
-  of its own frontmatter, while the configuration supplies the discovery scope.
+- The discovery source is `CONFIG_DIR/plan-sync.yaml`, whose `docs[]` records carry
+  only the binding locator (`id`, `repo`, `branch`, and `path`). The pushed plan
+  document's parsed `sync:` frontmatter is the sole source of issue, policy, and
+  base reconciliation state; similarly named configuration data is never passed to
+  the merge engine.
 - Only `plan_sync_snapshot.collect`, `plan_sync.compute`,
   `plan_sync.build_apply_plans`, and `plan_sync.finalize` determine the sync
   evidence, merge, proposals, and safe base advancement candidates. Do not re-create
@@ -70,8 +72,10 @@ RUN_AT           = current UTC timestamp
 MODE             = {mode, default scheduled}
 MUTATION_POLICY  = {mutation_policy, default propose}
 BINDINGS         = []
+BINDING_CHECKOUTS = {}
 SNAPSHOT         = empty
 FINDINGS         = []
+PROPOSALS        = []
 PROPOSED_ACTIONS = []
 ERRORS           = []
 COUNTS           = {docs_scanned: 0, in_sync: 0, doc_patches: 0, github_patches: 0, conflicts: 0, excluded: 0}
@@ -86,13 +90,18 @@ COUNTS           = {docs_scanned: 0, in_sync: 0, doc_patches: 0, github_patches:
    `LOGIN`.
 4. Ensure `*-result.yaml` is present in `CONFIG_DIR/.gitignore`.
 5. Missing `SYNC_CONFIG` → ABORT `"plan-sync.yaml not found: {SYNC_CONFIG}"`.
-6. Load `SYNC_CONFIG.docs[]`. Validate every selected `sync:` mapping with
-   `validate_result.validate_sync_binding`; invalid bindings append deterministic
-   `snapshot_error` findings and are excluded from collection.
+6. Load `SYNC_CONFIG.docs[]` and validate only each discovery locator (`id`, `repo`,
+   `branch`, and `path`). Do not use or validate configuration `sync:` data as
+   reconciliation authority. The collector parses and validates the pushed
+   document's `sync:` mapping with `validate_result.validate_sync_binding`.
 7. When `repo` is present, resolve it against configured document repository names.
    An unresolvable value → ABORT `"unknown repo: {repo}"`. Otherwise narrow
    `BINDINGS` to the matching records.
 8. A valid empty selected set is a successful no-op, not an ABORT.
+9. For each selected binding, resolve a local checkout only when its repository
+   identity is verified to match that binding. Store that explicit per-binding path
+   in `BINDING_CHECKOUTS`; absence of a verified checkout stores no path. Never use
+   the workspace root itself as a document checkout.
 
 **See:** `lib/patterns/config-parsing.md`, `lib/patterns/plan-sync-binding.md`,
 `lib/pulse/scripts/validate_result.py`.
@@ -102,14 +111,19 @@ COUNTS           = {docs_scanned: 0, in_sync: 0, doc_patches: 0, github_patches:
 Collect remote evidence for `BINDINGS`. The collector reads only pushed document
 content; a local checkout contributes only dirty/ahead exclusion metadata.
 
-Call `plan_sync_snapshot.collect(BINDINGS, workdir=workspace_path)` once and retain
-its documents and findings unchanged. Collection gaps produce explicit `error`
-documents and findings; do not assume a failed read is a no-op.
+For each binding call `plan_sync_snapshot.collect([binding], workdir=checkout_path)`
+with its verified `BINDING_CHECKOUTS` value, or `workdir=None` when no matching
+checkout exists, then combine the returned documents and findings. The collector
+always fetches remote evidence into an isolated temporary bare repository; the
+checkout is consulted only for dirty/ahead metadata. Collection gaps produce
+explicit `error` documents and findings; do not assume a failed read is a no-op.
 
 For every snapshot finding, append its typed form to `FINDINGS`. Increment
-`docs_scanned` for every returned document. Documents whose state is `excluded` add
-one to `excluded`; documents whose state is `in_sync` add one to `in_sync` and do not
-enter COMPUTE.
+`docs_scanned` for every returned document. Documents whose state is `excluded` or
+`error` add one to `excluded`; documents whose state is `in_sync` add one to
+`in_sync` and do not enter COMPUTE. The collector snapshots GitHub even when the
+document blob equals `sync.base.blob`; it labels `in_sync` only after both peers
+equal their bases.
 
 **See:** `lib/pulse/scripts/plan_sync_snapshot.py`,
 `lib/patterns/plan-sync-binding.md`.
@@ -119,16 +133,18 @@ enter COMPUTE.
 For every changed snapshot document with complete document, GitHub, and body-base
 evidence, call:
 
-`plan_sync.compute(document.document, document.github, document.binding.sync, document.base_body)`.
+`plan_sync.compute(document.document, document.github,`
+`document.document.binding, document.base_body, document_blob=document.blob)`.
 
 Keep each returned reconciliation and its snapshot together for subsequent phases.
 
 1. A reconciliation with conflicts increments `conflicts`; add a deterministic
    `base_conflict` finding for every conflicted field. It produces no apply proposal.
-2. A reconciliation with no document patch and no GitHub patch increments `in_sync`.
-   This covers both unchanged fields and concurrent equal edits.
-3. Otherwise retain its independent document and GitHub patches. Do not count a
-   patch until the corresponding APPLY phase builds its proposal.
+2. A reconciliation with no document patch, GitHub patch, or base-advance proposal
+   increments `in_sync`. Concurrent equal edits require a frontmatter base proposal
+   and are not `in_sync` until that proposal is confirmed.
+3. Otherwise retain its independent document, GitHub, and frontmatter-base patches.
+   Do not count a patch until the corresponding APPLY phase builds its proposal.
 
 **See:** `lib/pulse/scripts/plan_sync.py`.
 
@@ -146,15 +162,21 @@ its `github_mutation` output.
 
 ## Phase 5: APPLY_DOC
 
-For every non-conflicted reconciliation with a document patch, use the same
-`plan_sync.build_apply_plans` result and retain only `repo_mutation` and `doc_patch`.
+For every non-conflicted reconciliation with a document or frontmatter-base patch,
+use the same `plan_sync.build_apply_plans` result and retain only `repo_mutation`
+and `doc_patch`.
 
 1. Verify that the repository mutation policy is `propose` and its expected head
    comes from the snapshot.
 2. Increment `doc_patches` once for the F6 document proposal.
 3. Append a proposed-action record that carries the proposal ID, document path, and
    expected head guard.
-4. Never write `.hiivmind/plan-sync-patch.yaml`, run a pen, or apply a document
+4. Append a `PROPOSALS` record carrying `binding`, `transformation`, and
+   `proposal_id` from the built repository proposal. A GitHub-only
+   state/assignees/milestone delta still enters this phase because its document
+   proposal advances the corresponding `sync.base` scalar without changing the
+   Markdown body.
+5. Never write `.hiivmind/plan-sync-patch.yaml`, run a pen, or apply a document
    patch. With `mutation_policy: apply`, append a deferred-action note naming the
    V1 limitation instead.
 
@@ -189,6 +211,8 @@ github_patches: {COUNTS.github_patches}
 conflicts: {COUNTS.conflicts}
 excluded: {COUNTS.excluded}
 findings: {FINDINGS}
+proposals: {PROPOSALS}
+proposed_actions: {PROPOSED_ACTIONS}
 errors: {ERRORS}
 ```
 
@@ -201,8 +225,9 @@ Print one line: `plan-sync: docs={docs_scanned} in_sync={in_sync} doc={doc_patch
 ## ABORT semantics
 
 Every ABORT appends its reason to `ERRORS` and falls through to Phase 7 with zeroed
-counts and empty findings. If `CONFIG_DIR` is unusable, write to the explicit
-`result_path`, otherwise `plan-sync-result.yaml` in the current directory, and say so.
+counts and empty findings, proposals, and proposed actions. If `CONFIG_DIR` is
+unusable, write to the explicit `result_path`, otherwise `plan-sync-result.yaml` in
+the current directory, and say so.
 
 ## Related
 

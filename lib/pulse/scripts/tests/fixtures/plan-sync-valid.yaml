@@ -17,4 +17,10 @@ findings:
     repo: testorg/widget
     severity: high
     detail: "The title changed in both the document and GitHub."
+proposals:
+  - binding: release-plan
+    transformation: plan-sync-doc-patch
+    proposal_id: plan-sync-doc-release-plan
+proposed_actions:
+  - propose document patch for release-plan
 errors: []

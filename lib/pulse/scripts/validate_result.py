@@ -177,6 +177,17 @@ def validate_sync_binding(block: dict) -> list[str]:
         if key not in SYNC_KEYS:
             _err(errors, f"unknown sync key: {key}")
 
+    issue = _require(block, "issue", dict, errors, ctx="sync.")
+    if issue is not None:
+        issue_repo = _require(issue, "repo", str, errors, ctx="issue.")
+        if issue_repo is not None and not issue_repo:
+            _err(errors, "issue.repo must be a non-empty string")
+        issue_number = _require(issue, "number", int, errors, ctx="issue.")
+        if issue_number is not None and (
+            isinstance(issue_number, bool) or issue_number <= 0
+        ):
+            _err(errors, "issue.number must be a positive integer")
+
     base = _require(block, "base", dict, errors, ctx="sync.")
     if base is not None:
         blob = _require(base, "blob", str, errors, ctx="base.")
@@ -607,6 +618,16 @@ def validate(data, kind: str) -> list[str]:
         _require_nonnegative_integer(data, "conflicts", errors)
         _require_nonnegative_integer(data, "excluded", errors)
         _validate_findings(data, errors)
+        proposals = _require(data, "proposals", list, errors)
+        for index, proposal in enumerate(proposals or []):
+            if not isinstance(proposal, dict):
+                _err(errors, f"proposals[{index}] is not a mapping")
+                continue
+            ctx = f"proposals[{index}]."
+            _require(proposal, "binding", str, errors, ctx=ctx)
+            _require(proposal, "transformation", str, errors, ctx=ctx)
+            _require(proposal, "proposal_id", str, errors, ctx=ctx)
+        _validate_string_list(data, "proposed_actions", errors)
 
     return errors
 

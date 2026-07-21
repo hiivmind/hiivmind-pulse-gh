@@ -390,9 +390,9 @@ proposal.
 
 ### plan-sync-result.yaml (written by the plan synchronization audit, F8)
 
-Reports one generic plan synchronization run. It records only counts and
-typed findings; reconciliation mutations are accounted for as document or
-GitHub patches rather than embedded in this result file.
+Reports one generic plan synchronization run. It records counts, typed findings,
+and the deferred proposals/actions needed to perform reconciliation; the audit
+itself remains propose-only.
 
 ```yaml
 contract_version: 1
@@ -413,6 +413,11 @@ findings:                             # list, required (may be empty)
     detail: <str>                     # optional
     ref: { type: <str>, id: <any>, url: <str> }   # optional locator
     inferred: <bool>                  # optional
+proposals:                            # list, required (may be empty)
+  - binding: <binding id>             # str, required
+    transformation: plan-sync-doc-patch # str, required
+    proposal_id: <str>                # str, required
+proposed_actions: [<str>, ...]        # list, required (may be empty)
 errors: []
 ```
 
