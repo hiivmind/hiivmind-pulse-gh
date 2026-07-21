@@ -1,5 +1,8 @@
-"""Round-trip tests for lossless plan-document synchronization."""
+"""Round-trip and reconciliation tests for plan-document synchronization."""
 
+import pytest
+
+from lib.pulse.scripts import plan_sync
 from lib.pulse.scripts.plan_sync import parse_document, patch_document
 
 
@@ -60,3 +63,118 @@ def test_body_patch_uses_the_replacement_verbatim():
     patched = patch_document(DOCUMENT, {"body": replacement}, {})
 
     assert patched == DOCUMENT[:DOCUMENT.index("# Original title")] + replacement
+
+
+FIELD_VALUES = {
+    "title": ("Base title", "Document title", "GitHub title"),
+    "state": ("open", "closed", "in progress"),
+    "assignees": (["ada"], ["zoe", "ada", "zoe"], ["bea"]),
+    "milestone": ("M1", "M2", "M3"),
+    "body": ("Base body\n", "Document body\n", "GitHub body\n"),
+}
+
+
+@pytest.mark.parametrize("field", FIELD_VALUES)
+@pytest.mark.parametrize(
+    ("scenario", "doc_source", "github_source", "policy", "expected"),
+    [
+        ("neither", "base", "base", None, ("noop", None)),
+        (
+            "document only",
+            "doc",
+            "base",
+            None,
+            ("apply_to_github", "doc"),
+        ),
+        (
+            "github only",
+            "base",
+            "github",
+            None,
+            ("apply_to_doc", "github"),
+        ),
+        ("both agree", "doc", "doc", None, ("agree", "doc")),
+        ("conflict", "doc", "github", None, ("conflict", None)),
+        (
+            "prefer document",
+            "doc",
+            "github",
+            "prefer-doc",
+            ("apply_to_github", "doc"),
+        ),
+        (
+            "prefer github",
+            "doc",
+            "github",
+            "prefer-github",
+            ("apply_to_doc", "github"),
+        ),
+    ],
+)
+def test_merge_field_full_three_way_matrix(
+    field, scenario, doc_source, github_source, policy, expected
+):
+    base, document_change, github_change = FIELD_VALUES[field]
+    values = {"base": base, "doc": document_change, "github": github_change}
+    expected_decision, expected_value_source = expected
+    expected_value = values[expected_value_source] if expected_value_source else None
+    if field == "assignees" and expected_value is not None:
+        expected_value = sorted(set(expected_value))
+
+    assert callable(getattr(plan_sync, "merge_field", None))
+
+    decision = plan_sync.merge_field(
+        field, base, values[doc_source], values[github_source], policy=policy
+    )
+
+    assert decision == plan_sync.FieldDecision(expected_decision, expected_value)
+
+
+def test_merge_field_normalizes_assignee_order_and_duplicates_before_comparison():
+    assert callable(getattr(plan_sync, "merge_field", None))
+
+    decision = plan_sync.merge_field(
+        "assignees",
+        ["ada"],
+        ["zoe", "ada", "zoe"],
+        ["ada"],
+    )
+
+    assert decision == plan_sync.FieldDecision("apply_to_github", ["ada", "zoe"])
+
+
+def test_compute_treats_missing_and_null_milestones_as_the_same_value():
+    assert callable(getattr(plan_sync, "compute", None))
+
+    plan = plan_sync.compute(
+        {field: base for field, (base, _, _) in FIELD_VALUES.items() if field != "milestone"},
+        {
+            field: base
+            for field, (base, _, _) in FIELD_VALUES.items()
+            if field != "milestone"
+        }
+        | {"milestone": None},
+        {"base": {field: base for field, (base, _, _) in FIELD_VALUES.items()}},
+        FIELD_VALUES["body"][0],
+    )
+
+    assert plan == plan_sync.ReconciliationPlan({}, {}, {"milestone": None}, ())
+    assert plan.conflicted is False
+
+
+def test_compute_keeps_non_conflicting_field_applies_when_another_field_conflicts():
+    base = {field: values[0] for field, values in FIELD_VALUES.items()}
+    assert callable(getattr(plan_sync, "compute", None))
+
+    plan = plan_sync.compute(
+        base | {"title": "Document title", "assignees": ["zoe", "ada", "zoe"]},
+        base | {"title": "GitHub title"},
+        {"base": base},
+        base["body"],
+    )
+
+    assert plan.doc_patch == {}
+    assert plan.github_patch == {"assignees": ["ada", "zoe"]}
+    assert plan.base_patch == {"assignees": ["ada", "zoe"]}
+    assert plan.conflicts == ("title",)
+    assert plan.conflicted is True
