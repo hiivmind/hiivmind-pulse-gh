@@ -11,11 +11,13 @@ adapters stay inert on repositories that have no overlay enabled.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+import dataclasses
 import json
 from typing import Any
 
 import yaml
 
+from lib.pulse.scripts import repo_claims
 from lib.pulse.scripts.adapters import generic
 from lib.pulse.scripts.check_adapters import CheckContext
 
@@ -238,26 +240,96 @@ def skills(context: CheckContext) -> dict[str, Any]:
 
 
 def context(context: CheckContext) -> dict[str, Any]:  # noqa: A002
-    """Evaluate the presence of a ``CLAUDE.md`` context document.
+    """Audit ``CLAUDE.md`` for claim currency.
 
-    Task 3 extends this to claim-currency: a presence-only check today,
-    the follow-up will grade the document against the claim-currency
-    contract.
+    The audit runs in three stages, each one early-returning on the
+    smallest decisive signal:
+
+    1. **Evidence gate** — without ``files`` or ``file_contents`` there
+       is nothing to grade, so the adapter reports an evidence gap.
+    2. **Inference guard** — when an external agent has supplied
+       candidate findings under ``evidence['inferred_claims']``, they
+       must pass :func:`repo_claims.validate_inferred_findings` or the
+       whole audit downgrades to ``unknown`` (we never synthesize a
+       pass/fail from malformed input).
+    3. **Deterministic check** — the textual claims in ``CLAUDE.md`` are
+       cross-referenced against :func:`repo_claims.facts` (the
+       repository's current ground truth). Findings from the
+       deterministic pass and the (validated) inferred pass are merged
+       and graded together.
     """
     files = _files(context)
     if files is None:
         return _evidence_gap("contents unavailable")
 
-    if CLAUDE_CONTEXT_PATH in files:
+    if CLAUDE_CONTEXT_PATH not in files:
         return _result(
-            "pass",
-            "CLAUDE.md present",
+            "fail",
+            "CLAUDE.md absent",
             paths=(CLAUDE_CONTEXT_PATH,),
             refs=(F0_FILES_REF,),
         )
-    return _result(
-        "fail",
-        "CLAUDE.md absent",
-        paths=(CLAUDE_CONTEXT_PATH,),
+
+    text = _file_content(context, CLAUDE_CONTEXT_PATH)
+    if text is None:
+        return _evidence_gap(
+            "CLAUDE.md content unavailable",
+            paths=(CLAUDE_CONTEXT_PATH,),
+        )
+
+    raw_inferred = context.evidence.get("inferred_claims")
+    if raw_inferred is not None:
+        try:
+            inferred = repo_claims.validate_inferred_findings(raw_inferred)
+        except repo_claims.InferenceValidationError as exc:
+            return _result(
+                "unknown",
+                f"inferred claim validation failed: {exc}",
+                paths=(CLAUDE_CONTEXT_PATH,),
+                refs=(F0_FILES_REF,),
+            )
+    else:
+        inferred = []
+
+    facts = repo_claims.facts(context.evidence)
+    deterministic = repo_claims.check_claims(text, facts)
+    merged = sorted(
+        (*deterministic, *inferred),
+        key=lambda finding: (finding.kind, finding.subject),
+    )
+
+    stale_count = sum(
+        1
+        for finding in merged
+        if finding.kind in {"missing_claimed_skill", "stale_command"}
+    )
+    unsupported_count = sum(
+        1 for finding in merged if finding.kind == "unsupported_evidence"
+    )
+
+    if stale_count:
+        detail = f"{stale_count} stale CLAUDE.md claim(s)"
+        status = "fail"
+    else:
+        detail = "CLAUDE.md claims current"
+        if unsupported_count:
+            detail += f"; {unsupported_count} unsupported claim(s) surfaced"
+        status = "pass"
+
+    cited_paths = (CLAUDE_CONTEXT_PATH,) + tuple(
+        sorted(
+            finding.subject
+            for finding in merged
+            if "/" in finding.subject
+        )
+    )
+    result = _result(
+        status,
+        detail,
+        paths=cited_paths,
         refs=(F0_FILES_REF,),
     )
+    result["data"]["claim_findings"] = [
+        dataclasses.asdict(finding) for finding in merged
+    ]
+    return result

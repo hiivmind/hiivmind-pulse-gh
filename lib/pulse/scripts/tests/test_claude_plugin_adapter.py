@@ -183,3 +183,85 @@ def test_unregistered_claude_adapters_are_unsupported_when_dispatched():
 
     assert out["status"] == "unsupported"
     assert "no adapter registered" in out["detail"].lower()
+
+
+# --- claim-currency audit (Task 3) ---------------------------------------
+
+
+def test_stale_claim_fails_and_attach_claim_findings():
+    out = _evaluate("claude.context", _load_evidence("stale-claim"))
+
+    assert out["status"] == "fail"
+    assert "2 stale CLAUDE.md claim(s)" in out["detail"]
+
+    findings = out["data"]["claim_findings"]
+    assert {f["kind"] for f in findings} == {
+        "missing_claimed_skill",
+        "stale_command",
+    }
+    assert out["data"]["evidence"]["paths"] == [
+        "CLAUDE.md",
+        "skills/ghost/SKILL.md",
+    ]
+    assert out["data"]["evidence"]["refs"] == ["f0:files"]
+
+
+def test_stale_claim_reports_correct_subjects_sorted():
+    out = _evaluate("claude.context", _load_evidence("stale-claim"))
+
+    findings = out["data"]["claim_findings"]
+    assert findings == sorted(findings, key=lambda f: (f["kind"], f["subject"]))
+
+    by_kind = {f["kind"]: f for f in findings}
+    assert by_kind["missing_claimed_skill"]["subject"] == "skills/ghost/SKILL.md"
+    assert by_kind["stale_command"]["subject"] == "deprecated"
+    assert by_kind["missing_claimed_skill"]["inferred"] is False
+    assert by_kind["stale_command"]["inferred"] is False
+
+
+def test_unsupported_claim_passes_and_surfaces_hooks_finding():
+    out = _evaluate("claude.context", _load_evidence("unsupported-claim"))
+
+    assert out["status"] == "pass"
+    assert "CLAUDE.md claims current" in out["detail"]
+    assert "1 unsupported claim(s) surfaced" in out["detail"]
+
+    findings = out["data"]["claim_findings"]
+    assert len(findings) == 1
+    assert findings[0]["kind"] == "unsupported_evidence"
+    assert findings[0]["subject"] == "hooks/heartbeat.sh"
+    assert findings[0]["inferred"] is False
+    assert out["data"]["evidence"]["paths"] == ["CLAUDE.md", "hooks/heartbeat.sh"]
+
+
+def test_inference_invalid_payload_yields_unknown_status():
+    out = _evaluate("claude.context", _load_evidence("inference-invalid"))
+
+    assert out["status"] == "unknown"
+    assert "inferred claim validation failed" in out["detail"].lower()
+    assert out["data"]["evidence"]["paths"] == ["CLAUDE.md"]
+
+
+def test_inference_valid_payload_folds_into_findings_with_inferred_flag():
+    out = _evaluate("claude.context", _load_evidence("inference-valid"))
+
+    assert out["status"] == "fail"
+    assert "1 stale CLAUDE.md claim(s)" in out["detail"]
+
+    findings = out["data"]["claim_findings"]
+    assert len(findings) == 1
+    assert findings[0]["kind"] == "missing_claimed_skill"
+    assert findings[0]["subject"] == "skills/inferred-only/SKILL.md"
+    assert findings[0]["inferred"] is True
+    assert out["data"]["evidence"]["paths"] == [
+        "CLAUDE.md",
+        "skills/inferred-only/SKILL.md",
+    ]
+
+
+def test_valid_plugin_context_still_passes_with_no_claim_findings():
+    out = _evaluate("claude.context", _load_evidence("valid-plugin"))
+
+    assert out["status"] == "pass"
+    assert out["data"]["evidence"]["paths"] == ["CLAUDE.md"]
+    assert out["data"]["claim_findings"] == []
