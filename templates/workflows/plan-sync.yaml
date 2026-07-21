@@ -1,0 +1,37 @@
+# hiivmind-pulse-gh - Plan Synchronization Workflow
+# Reconcile configured plan-document bindings with GitHub issues and record
+# propose-only document and issue actions. Copy to:
+# .hiivmind/github/workflows/plan-sync.yaml
+
+name: "plan-sync"
+description: "Audit bound plan documents and record propose-only reconciliation actions"
+enabled: true
+auto: false  # Runs only when requested or when a caller selects the docs trigger
+
+# INVOKE routes to the sibling headless orchestrator when available.
+headless:
+  enabled: true
+  on_ask: record
+  on_mutation: propose
+
+trigger:
+  type: on_demand
+  condition: user_requested
+
+params:
+  repo:
+    description: "Optional document repository (full or short name); empty syncs every configured document"
+    type: string
+    default: ""
+
+state: {}
+
+workflow: |
+  EXECUTE:
+    INVOKE skill hiivmind-pulse-gh:gh-plan-sync-headless
+      WITH workspace_path=workspace_root,
+           repo=params.repo,
+           mode=scheduled,
+           mutation_policy=propose
+
+cooldown_minutes: 1440  # 24 hours
