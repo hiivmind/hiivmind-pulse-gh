@@ -16,6 +16,7 @@ retained for human-readable logs only — orchestrators MUST read the file.
 | impact | impact-result.yaml | `{workspace_root}/.hiivmind/github/impact-result.yaml` |
 | repo-mutation | repo-mutation-result.yaml | `{workspace_root}/.hiivmind/github/repo-mutation-result.yaml` |
 | generated-artifact | generated-artifact-result.yaml | `{workspace_root}/.hiivmind/github/generated-artifact-result.yaml` |
+| plan-sync | plan-sync-result.yaml | `{workspace_root}/.hiivmind/github/plan-sync-result.yaml` |
 
 Result files are per-machine transient run artifacts (never authority — see
 `workspace-detection.md` § Multi-machine topology). The workspace repo's
@@ -35,7 +36,7 @@ not kinds they were not asked to validate.
 
 ```yaml
 contract_version: 1                   # int, required
-kind: status | healthcheck | fleet-membership | refresh | workflow-run | impact | repo-mutation | generated-artifact
+kind: status | healthcheck | fleet-membership | refresh | workflow-run | impact | repo-mutation | generated-artifact | plan-sync
 workspace: <login>                    # str, required — org/user login
 run_at: <ISO 8601 timestamp>          # str, required
 actor:                                # required on ALL kinds (I4)
@@ -59,6 +60,7 @@ profiles, and machines: identity-sensitive logic resolves against the
     uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py impact-result.yaml --kind impact
     uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py repo-mutation-result.yaml --kind repo-mutation
     uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py generated-artifact-result.yaml --kind generated-artifact
+    uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py plan-sync-result.yaml --kind plan-sync
 
 Orchestrators validate before consuming and treat exit 1/2 as a failed run
 (report, do not commit). Exit codes: 0 valid, 1 invalid (errors on stderr),
@@ -385,6 +387,34 @@ states. `proposals` are emitted only for `template-drift` bindings, because only
 template drift can be resolved by re-running a registered generator. Findings
 for `local-customization`, `conflict`, and `error` states are surfaced without a
 proposal.
+
+### plan-sync-result.yaml (written by the plan synchronization audit, F8)
+
+Reports one generic plan synchronization run. It records only counts and
+typed findings; reconciliation mutations are accounted for as document or
+GitHub patches rather than embedded in this result file.
+
+```yaml
+contract_version: 1
+kind: plan-sync
+workspace: <login>
+run_at: <ISO 8601>
+actor: { gh_login: <str>, machine: <str>, mode: <enum> }
+docs_scanned: <int>                   # required, non-negative
+in_sync: <int>                        # required, non-negative
+doc_patches: <int>                    # required, non-negative
+github_patches: <int>                 # required, non-negative
+conflicts: <int>                      # required, non-negative
+excluded: <int>                       # required, non-negative
+findings:                             # list, required (may be empty)
+  - kind: dirty_doc | local_ahead | rename_detected | base_conflict | <str>
+    repo: <owner/name>                # str, required
+    severity: low | medium | high     # required enum
+    detail: <str>                     # optional
+    ref: { type: <str>, id: <any>, url: <str> }   # optional locator
+    inferred: <bool>                  # optional
+errors: []
+```
 
 ## Related patterns
 

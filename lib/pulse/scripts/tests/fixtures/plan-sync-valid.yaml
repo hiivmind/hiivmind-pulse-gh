@@ -1,0 +1,20 @@
+contract_version: 1
+kind: plan-sync
+workspace: testorg
+run_at: "2026-07-21T09:15:00Z"
+actor:
+  gh_login: octocat
+  machine: mba-m4
+  mode: scheduled
+docs_scanned: 6
+in_sync: 2
+doc_patches: 1
+github_patches: 1
+conflicts: 1
+excluded: 1
+findings:
+  - kind: base_conflict
+    repo: testorg/widget
+    severity: high
+    detail: "The title changed in both the document and GitHub."
+errors: []

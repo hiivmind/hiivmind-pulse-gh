@@ -1,0 +1,13 @@
+contract_version: 1
+kind: plan-sync
+workspace: testorg
+run_at: "2026-07-21T09:15:00Z"
+in_sync: 2
+doc_patches: 1
+github_patches: 1
+conflicts: 1
+excluded: 1
+findings:
+  - kind: base_conflict
+    repo: testorg/widget
+errors: []

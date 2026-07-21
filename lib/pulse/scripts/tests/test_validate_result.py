@@ -12,12 +12,13 @@ from lib.pulse.scripts.evaluate_checks import (
     fleet_coverage,
     score_checks,
 )
+from lib.pulse.scripts import validate_result
 
 SCRIPT = "lib/pulse/scripts/validate_result.py"
 FIXTURES = Path("lib/pulse/scripts/tests/fixtures")
 KINDS = [
     "status", "healthcheck", "refresh", "workflow-run", "fleet-membership",
-    "impact", "repo-mutation", "generated-artifact",
+    "impact", "repo-mutation", "generated-artifact", "plan-sync",
 ]
 
 
@@ -928,3 +929,121 @@ def test_generated_artifact_invalid_fixture_reports_every_violation(tmp_path):
     assert "states.binding-2 invalid: exploded" in result.stderr
     assert "findings[0].severity" in result.stderr
     assert "missing required key: proposals[0].proposal_id" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "docs_scanned", "in_sync", "doc_patches", "github_patches", "conflicts",
+        "excluded",
+    ],
+)
+def test_plan_sync_requires_count(tmp_path, field):
+    doc = yaml.safe_load((FIXTURES / "plan-sync-valid.yaml").read_text())
+    doc.pop(field)
+    path = tmp_path / "plan-sync.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "plan-sync")
+
+    assert result.returncode == 1
+    assert f"missing required key: {field}" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "docs_scanned", "in_sync", "doc_patches", "github_patches", "conflicts",
+        "excluded",
+    ],
+)
+def test_plan_sync_rejects_mistyped_count(tmp_path, field):
+    doc = yaml.safe_load((FIXTURES / "plan-sync-valid.yaml").read_text())
+    doc[field] = "not-an-int"
+    path = tmp_path / "plan-sync.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "plan-sync")
+
+    assert result.returncode == 1
+    assert f"wrong type for {field}" in result.stderr
+
+
+def test_plan_sync_rejects_negative_count(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "plan-sync-valid.yaml").read_text())
+    doc["conflicts"] = -1
+    path = tmp_path / "plan-sync.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "plan-sync")
+
+    assert result.returncode == 1
+    assert "conflicts must be a non-negative integer" in result.stderr
+
+
+def test_plan_sync_invalid_fixture_reports_every_violation(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "plan-sync-invalid.yaml").read_text())
+    path = tmp_path / "plan-sync.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "plan-sync")
+
+    assert result.returncode == 1
+    assert "missing required key: actor" in result.stderr
+    assert "missing required key: docs_scanned" in result.stderr
+    assert "findings[0].severity" in result.stderr
+
+
+def test_validate_sync_binding_accepts_valid_fixture():
+    doc = yaml.safe_load((FIXTURES / "plan-sync-binding-valid.yaml").read_text())
+
+    errors = validate_result.validate_sync_binding(doc["sync"])
+
+    assert errors == []
+
+
+def test_validate_sync_binding_rejects_bad_policy_enum():
+    doc = yaml.safe_load((FIXTURES / "plan-sync-binding-invalid.yaml").read_text())
+
+    errors = validate_result.validate_sync_binding(doc["sync"])
+
+    assert "policy.title invalid: merge" in errors
+
+
+def test_validate_sync_binding_rejects_missing_base_blob():
+    doc = yaml.safe_load((FIXTURES / "plan-sync-binding-invalid.yaml").read_text())
+
+    errors = validate_result.validate_sync_binding(doc["sync"])
+
+    assert "missing required key: base.blob" in errors
+
+
+def test_validate_sync_binding_rejects_unknown_sync_key():
+    doc = yaml.safe_load((FIXTURES / "plan-sync-binding-invalid.yaml").read_text())
+
+    errors = validate_result.validate_sync_binding(doc["sync"])
+
+    assert "unknown sync key: labels" in errors
+
+
+def test_validate_sync_binding_rejects_unknown_policy_field():
+    block = {
+        "issue": {"repo": "testorg/widget", "number": 42},
+        "policy": {"labels": "conflict"},
+        "base": {"blob": "abc123"},
+    }
+
+    errors = validate_result.validate_sync_binding(block)
+
+    assert "unknown policy field: labels" in errors
+
+
+def test_validate_sync_binding_rejects_unknown_base_key():
+    block = {
+        "issue": {"repo": "testorg/widget", "number": 42},
+        "base": {"blob": "abc123", "labels": ["bug"]},
+    }
+
+    errors = validate_result.validate_sync_binding(block)
+
+    assert "unknown base key: labels" in errors

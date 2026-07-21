@@ -1,0 +1,17 @@
+title: Synchronize widget planning
+sync:
+  issue:
+    repo: testorg/widget
+    number: 42
+  policy:
+    title: conflict
+    state: conflict
+    assignees: prefer-doc
+    milestone: prefer-github
+    body: conflict
+  base:
+    blob: 0123456789abcdef0123456789abcdef01234567
+    title: "Synchronize widget planning"
+    state: open
+    assignees: [octocat]
+    milestone: "v2.0"

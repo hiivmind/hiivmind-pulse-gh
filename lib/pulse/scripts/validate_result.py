@@ -47,6 +47,13 @@ GENERATED_ARTIFACT_STATES = {
     "conflict",
     "error",
 }
+SYNC_POLICIES = {"conflict", "prefer-doc", "prefer-github"}
+SYNC_KEYS = {"issue", "policy", "base"}
+# Policy may target any of the 5 V1 fields (including body). The base carries
+# the scalar bases blob + title + state + assignees + milestone — body's base is
+# the reconciled blob SHA, so "body" is not a valid base key.
+SYNC_POLICY_FIELDS = {"title", "state", "assignees", "milestone", "body"}
+SYNC_BASE_KEYS = {"blob", "title", "state", "assignees", "milestone"}
 
 
 def _err(errors, msg):
@@ -157,6 +164,38 @@ def _validate_findings(data, errors):
         if "ref" in finding and not isinstance(finding["ref"], dict):
             _err(errors, f"wrong type for {ctx}ref: expected mapping")
     return findings
+
+
+def validate_sync_binding(block: dict) -> list[str]:
+    """Validate the ``sync:`` frontmatter binding for a plan document."""
+    errors = []
+    if not isinstance(block, dict):
+        _err(errors, "sync must be a mapping")
+        return errors
+
+    for key in block:
+        if key not in SYNC_KEYS:
+            _err(errors, f"unknown sync key: {key}")
+
+    base = _require(block, "base", dict, errors, ctx="sync.")
+    if base is not None:
+        blob = _require(base, "blob", str, errors, ctx="base.")
+        if blob is not None and not blob:
+            _err(errors, "base.blob must be a non-empty string")
+        for key in base:
+            if key not in SYNC_BASE_KEYS:
+                _err(errors, f"unknown base key: {key}")
+
+    policy = None
+    if "policy" in block:
+        policy = _require(block, "policy", dict, errors)
+    for key in (policy or {}):
+        if key not in SYNC_POLICY_FIELDS:
+            _err(errors, f"unknown policy field: {key}")
+        else:
+            _require_enum(policy, key, SYNC_POLICIES, errors, ctx="policy.")
+
+    return errors
 
 
 def _same_number(actual, expected) -> bool:
@@ -560,6 +599,15 @@ def validate(data, kind: str) -> list[str]:
             _require(proposal, "proposal_id", str, errors, ctx=ctx)
         _require(data, "proposed_actions", list, errors)
 
+    elif kind == "plan-sync":
+        _require_nonnegative_integer(data, "docs_scanned", errors)
+        _require_nonnegative_integer(data, "in_sync", errors)
+        _require_nonnegative_integer(data, "doc_patches", errors)
+        _require_nonnegative_integer(data, "github_patches", errors)
+        _require_nonnegative_integer(data, "conflicts", errors)
+        _require_nonnegative_integer(data, "excluded", errors)
+        _validate_findings(data, errors)
+
     return errors
 
 
@@ -569,7 +617,7 @@ def main():
     parser.add_argument("--kind", required=True,
                         choices=["status", "healthcheck", "refresh", "workflow-run",
                                  "fleet-membership", "impact", "repo-mutation",
-                                 "generated-artifact"])
+                                 "generated-artifact", "plan-sync"])
     args = parser.parse_args()
 
     path = Path(args.file)

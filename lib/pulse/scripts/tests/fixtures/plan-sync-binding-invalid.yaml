@@ -1,0 +1,9 @@
+sync:
+  issue:
+    repo: testorg/widget
+    number: 42
+  policy:
+    title: merge
+  base:
+    title: "Synchronize widget planning"
+  labels: [bug]
