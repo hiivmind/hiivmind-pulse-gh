@@ -293,8 +293,14 @@ def context(context: CheckContext) -> dict[str, Any]:  # noqa: A002
 
     facts = repo_claims.facts(context.evidence)
     deterministic = repo_claims.check_claims(text, facts)
+    # Dedupe across the two sources by (kind, subject); a deterministic finding
+    # wins over an inferred one for the same claim (it carries direct evidence),
+    # so one underlying problem is never double-counted in the grade or citation.
+    by_key: dict[tuple[str, str], Any] = {}
+    for finding in (*inferred, *deterministic):
+        by_key[(finding.kind, finding.subject)] = finding
     merged = sorted(
-        (*deterministic, *inferred),
+        by_key.values(),
         key=lambda finding: (finding.kind, finding.subject),
     )
 

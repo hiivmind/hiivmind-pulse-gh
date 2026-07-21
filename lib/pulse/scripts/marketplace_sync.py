@@ -114,9 +114,10 @@ def _find_plugin_entry(marketplace_doc: Any, plugin_id: Any) -> tuple[str | None
     - `found=True, version=<str>` when the entry exists with a non-empty
       string `version`.
     - `found=True, version=None` when the entry exists but has no usable
-      version (the doc is structurally valid; the entry is malformed —
-      handled by `compare` as `missing_entry` so the proposal adds a
-      well-formed entry).
+      version (non-string or empty). The doc is structurally valid and the
+      entry is present, so `compare` classifies it as `drift` (with
+      `current_version=None`) — an UPDATE of the existing entry, not an
+      `missing_entry` add that would duplicate it.
     - `found=False, version=None` when no entry's `name` matches
       `plugin_id` (or the doc is structurally unparseable).
     """

@@ -483,10 +483,31 @@ def test_validate_inferred_findings_claim_kinds_contains_required_keys():
 
 
 def test_module_does_not_import_claude_plugin():
-    """One-way dependency: repo_claims never imports claude_plugin."""
-    import sys
+    """One-way dependency: repo_claims never imports claude_plugin.
 
-    module = sys.modules[repo_claims.__name__]
-    for name in sys.modules:
-        if name.endswith("claude_plugin"):
-            assert module is not sys.modules[name]
+    A real static scan of repo_claims' MODULE-LEVEL imports (not a module-object
+    identity check, which would pass whether or not the import existed). If a
+    maintainer adds a top-level `from ...adapters import claude_plugin`, this
+    fails loudly.
+    """
+    import ast
+    from pathlib import Path
+
+    forbidden = "lib.pulse.scripts.adapters.claude_plugin"
+    tree = ast.parse(Path(repo_claims.__file__).read_text())
+    imported: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                imported.add(alias.name)
+        elif isinstance(node, ast.ImportFrom) and not node.level:
+            module = node.module or ""
+            if module:
+                imported.add(module)
+            for alias in node.names:
+                imported.add(f"{module}.{alias.name}" if module else alias.name)
+
+    leaked = [n for n in imported if n == forbidden or n.startswith(forbidden + ".")]
+    assert leaked == [], (
+        f"repo_claims imports claude_plugin at module level: {leaked}"
+    )

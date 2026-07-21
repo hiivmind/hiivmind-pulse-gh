@@ -36,9 +36,8 @@ end to end.
   and the V1 limitation; it never grants this orchestrator authority to
   mutate.
 - Result: `marketplace-sync-result.yaml` envelope (`lib/patterns/headless-contract.md`
-  § plan-sync-result.yaml shape, mirrored). No result-validator kind is
-  registered for `marketplace-sync` in F9 v1; the controller decides when
-  to validate and what to do with the envelope.
+  § plan-sync-result.yaml shape, mirrored). It is validated by the
+  `marketplace-sync` kind in `lib/pulse/scripts/validate_result.py` (see Phase 5).
 
 ## Contract
 
@@ -147,7 +146,11 @@ For each selected binding, call
 the returned `MarketplaceDrift` keyed by binding.
 
 1. A `not_applicable` drift means the binding was not configured for the
-   target repo. Increment `not_applicable`; do not enter Phase 4.
+   target repo (`compare` returns it only for a `None` binding). Phase 1
+   iterates configured bindings, so this arm is unreachable on the normal
+   path; the counter is retained for envelope symmetry and a future
+   single-binding/repo-filtered entry point. Increment `not_applicable`; do
+   not enter Phase 4.
 2. An `unknown` drift (no stable release, or unparseable
    `marketplace_doc`) increments `unknown`; record a typed finding with
    `drift.reason` in the finding's `detail`. Do not enter Phase 4.

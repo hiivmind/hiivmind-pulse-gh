@@ -177,3 +177,30 @@ def test_dispatch_rejects_binding_file_outside_allowlist(registry_and_generators
 
     assert "README.md" in str(exc.value)
     assert "allowlist" in str(exc.value).lower() or "output_paths" in str(exc.value)
+
+
+# 6. scheduled-actor gate (parity with the marketplace overlay) --------------
+
+
+def test_corpus_transformation_rejects_scheduled_actor(registry_and_generators):
+    """The corpus transformation is allow_scheduled: false, so a proposal built
+    for a scheduled actor must be rejected by validate_proposal — parity with
+    marketplace-entry-update. (generator_dispatch.dispatch does not itself gate
+    on the registry; the scheduled gate lives in validate_proposal, enforced by
+    pen_orchestrator at execution.)"""
+    registry, generators = registry_and_generators
+    gen = generators[CORPUS_ID]
+
+    binding = {
+        "id": "corpus-navigate-skill",
+        "source": SOURCE,
+        "branch": BRANCH,
+        "files": [{"path": CORPUS_OUTPUT_PATH}],
+    }
+    snapshot = {SOURCE: {BRANCH: {"head": "headsha"}}}
+    scheduled_actor = {"gh_login": "bot", "machine": "ci", "mode": "scheduled"}
+
+    proposal = generator_dispatch.dispatch(gen, binding, snapshot, scheduled_actor)
+
+    with pytest.raises(mutation_plan.MutationPlanError):
+        mutation_plan.validate_proposal(proposal, registry)

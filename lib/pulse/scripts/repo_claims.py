@@ -49,9 +49,11 @@ COMMAND_FILENAME_SUFFIX = ".md"
 HOOKS_PATH_PREFIX = "hooks/"
 
 
-_SKILL_RE = re.compile(r"skills/([^/\s]+)/SKILL\.md")
-_COMMAND_RE = re.compile(r"commands/([^/\s]+)\.md")
-_HOOKS_RE = re.compile(r"hooks/([\w\-]+(?:\.[\w\-]+)*)")
+# A left word-boundary lookbehind keeps a reference from matching mid-word, so
+# prose like "subskills/x/SKILL.md" or "ghooks/y.sh" is NOT read as a claim.
+_SKILL_RE = re.compile(r"(?<![\w-])skills/([^/\s]+)/SKILL\.md")
+_COMMAND_RE = re.compile(r"(?<![\w-])commands/([^/\s]+)\.md")
+_HOOKS_RE = re.compile(r"(?<![\w-])hooks/([\w\-]+(?:\.[\w\-]+)*)")
 
 
 UNSUPPORTED_EVIDENCE_DETAIL = (
@@ -67,9 +69,9 @@ class ClaimFinding:
     ``inferred`` distinguishes deterministic findings (extracted by
     :func:`check_claims` from the text) from inferred findings (produced
     by an external inference step and validated by
-    :func:`validate_inferred_findings`). Downstream consumers treat
-    inferred findings as advisory unless paired with deterministic
-    evidence.
+    :func:`validate_inferred_findings`). Once an inferred finding passes
+    schema validation it contributes to the grade on equal footing with a
+    deterministic finding; the flag records provenance, not lower weight.
     """
 
     kind: str
