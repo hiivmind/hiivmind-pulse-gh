@@ -98,6 +98,32 @@ transformations:
       kind: none
     allow_scheduled: false
 
+  # F9 v1 dogfood overlay: regenerate the corpus-navigation skill under the
+  # Claude plugin profile. The generator that names this transformation
+  # (`hiivmind.corpus-navigate-skill`) is the ONE configured F9 overlay in
+  # templates/generators.yaml.template — it is CONFIGURATION of the
+  # generic F7 engine, not engine code. The `--generator <id>` argv is
+  # fixed here; the engine's fail-closed checks still apply.
+  #
+  # PROPOSE-ONLY (F9 v1): only ever *proposed*, never executed by F9 — same
+  # apply-mode deferral as the other overlay transformations. Until the
+  # apply-mode limitations noted on `plan-sync-doc-patch` and
+  # `marketplace-entry-update` are closed, this transformation is
+  # intentionally a "propose-only" dead end rather than a working pipeline.
+  regenerate-corpus-navigate-skill:
+    id: regenerate-corpus-navigate-skill
+    command_argv:
+      - nave
+      - generate
+      - --from-template
+      - --generator
+      - hiivmind.corpus-navigate-skill
+    applies_to:
+      - profile:claude-plugin
+    validation:
+      kind: none
+    allow_scheduled: false
+
   # Marketplace entry update carries variable patch data in this well-known file,
   # never through argv interpolation. The caller constrains its declared output
   # to the binding's marketplace_file path before writing it into the pen.
