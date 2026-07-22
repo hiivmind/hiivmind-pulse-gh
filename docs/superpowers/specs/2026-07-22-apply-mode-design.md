@@ -3,7 +3,7 @@
 **Date:** 2026-07-22
 **Status:** design / scoping — pre-plan; one open decision flagged in § Design forks.
 **Scope:** The deferred "apply-mode" that F6–F9 (and F10's drivers) all stop short of. What it is, why it is blocked, and — the load-bearing question — whether it is a plugin feature or a general one.
-**Related:** `docs/superpowers/audits/2026-07-22-f-series-runnable-spine-audit.md` (the driver-layer gap), `docs/superpowers/plans/2026-07-22-f10-runnable-spine.md` (makes phases *run*; this makes them *land*), `docs/superpowers/audits/2026-07-13-fleet-scope-audit.md` (the neutral-control-plane mandate this design honors).
+**Related:** `docs/backlogs/2026-07-22-f1-f8-phase-deferrals.md` § 1 (the deferrals **index** that first captured apply-mode; this doc is the design that entry points to), `docs/superpowers/audits/2026-07-22-f-series-runnable-spine-audit.md` (the driver-layer gap), `docs/superpowers/plans/2026-07-22-f10-runnable-spine.md` (makes phases *run*; this makes them *land*), `docs/superpowers/audits/2026-07-13-fleet-scope-audit.md` (the neutral-control-plane mandate this design honors).
 
 ---
 
