@@ -1,0 +1,18 @@
+files:
+  - .claude-plugin/plugin.json
+  - skills/example/SKILL.md
+  - README.md
+file_contents:
+  .claude-plugin/plugin.json: |
+    {
+      "name": "plugin-without-claude-md",
+      "version": "0.0.1"
+    }
+  skills/example/SKILL.md: |
+    ---
+    name: example-skill
+    description: A skill in a repository that omits CLAUDE.md.
+    ---
+    # example
+  README.md: |
+    # readme

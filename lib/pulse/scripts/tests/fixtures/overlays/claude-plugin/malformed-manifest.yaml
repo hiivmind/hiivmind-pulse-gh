@@ -1,0 +1,20 @@
+files:
+  - .claude-plugin/plugin.json
+  - skills/example/SKILL.md
+  - CLAUDE.md
+  - README.md
+file_contents:
+  .claude-plugin/plugin.json: |
+    {
+      "name": "missing-version"
+    }
+  skills/example/SKILL.md: |
+    ---
+    name: example-skill
+    description: A skill living alongside a manifest missing the version field.
+    ---
+    # example
+  CLAUDE.md: |
+    # context
+  README.md: |
+    # readme

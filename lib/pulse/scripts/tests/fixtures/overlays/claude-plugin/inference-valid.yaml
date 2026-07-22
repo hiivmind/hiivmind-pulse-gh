@@ -1,0 +1,28 @@
+files:
+  - .claude-plugin/plugin.json
+  - skills/example/SKILL.md
+  - commands/gh.md
+  - CLAUDE.md
+  - README.md
+file_contents:
+  .claude-plugin/plugin.json: |
+    {
+      "name": "plugin-with-valid-inference",
+      "version": "0.1.0"
+    }
+  skills/example/SKILL.md: |
+    ---
+    name: example-skill
+    description: A skill living alongside a well-formed inferred-claim payload.
+    ---
+    # example
+  CLAUDE.md: |
+    # Project context for Claude
+
+    Use skills/example/SKILL.md and run commands/gh.md.
+  README.md: |
+    # readme
+inferred_claims:
+  - kind: missing_claimed_skill
+    subject: skills/inferred-only/SKILL.md
+    detail: the agent inferred a skill reference from prose not yet in CLAUDE.md

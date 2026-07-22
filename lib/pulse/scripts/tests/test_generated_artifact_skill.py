@@ -20,7 +20,8 @@ def read_workflow() -> str:
 def test_neutrality_forbidden_strings_absent():
     for path in (GENERATED_ARTIFACTS, GENERATOR_DISPATCH, SKILL, WORKFLOW):
         content = path.read_text().lower()
-        for forbidden in ("claude", "corpus", "plugin manifest", "skill.md"):
+        for forbidden in ("claude", "corpus", "plugin manifest", "skill.md",
+                          "hiivmind.corpus-navigate-skill"):
             assert forbidden not in content, f"{forbidden!r} found in {path}"
 
 

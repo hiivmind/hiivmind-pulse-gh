@@ -1,0 +1,26 @@
+contract_version: 1
+kind: marketplace-sync
+workspace: testorg
+run_at: "2026-07-21T09:15:00Z"
+actor:
+  gh_login: octocat
+  machine: mba-m4
+  mode: scheduled
+bindings_scanned: 3
+in_sync: 1
+drift: 1
+missing_entry: 1
+unknown: 0
+not_applicable: 0
+findings:
+  - kind: unreadable_head
+    repo: testorg/marketplace
+    severity: high
+    detail: "Could not resolve marketplace repo HEAD for the widget plugin."
+proposals:
+  - binding: widget
+    transformation: marketplace-entry-update
+    proposal_id: marketplace-widget
+proposed_actions:
+  - propose marketplace entry update for widget to v2.1.0
+errors: []

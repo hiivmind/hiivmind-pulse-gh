@@ -77,4 +77,21 @@
 #   validation:
 #     kind: none
 
-generators: {}
+generators:
+
+  # F9 v1 dogfood overlay: this is the ONE configured F9 dogfood generator,
+  # not a generic default. It applies only under `profile:claude-plugin` and
+  # is CONFIGURATION of the generic F7 engine — no engine code is
+  # corpus-aware. The argv is fixed in
+  # templates/transformations.yaml.template (`regenerate-corpus-navigate-skill`).
+  hiivmind.corpus-navigate-skill:
+    id: hiivmind.corpus-navigate-skill
+    applies_to:
+      - profile:claude-plugin
+    transformation: regenerate-corpus-navigate-skill
+    source_paths:
+      - templates/corpus/navigate-skill.md.tmpl
+    output_paths:
+      - skills/hiivmind-corpus-navigate/SKILL.md
+    validation:
+      kind: none

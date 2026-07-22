@@ -1,0 +1,29 @@
+files:
+  - .claude-plugin/plugin.json
+  - skills/example/SKILL.md
+  - skills/audit/SKILL.md
+  - CLAUDE.md
+  - README.md
+file_contents:
+  .claude-plugin/plugin.json: |
+    {
+      "name": "example-plugin",
+      "version": "1.2.3"
+    }
+  skills/example/SKILL.md: |
+    ---
+    name: example-skill
+    description: An example skill demonstrating valid frontmatter.
+    ---
+    # example skill body
+  skills/audit/SKILL.md: |
+    ---
+    name: audit-skill
+    description: Audits configuration drift across workspace repositories.
+    ---
+    # audit skill body
+  CLAUDE.md: |
+    # Project context for Claude
+    This is the project context.
+  README.md: |
+    # example plugin

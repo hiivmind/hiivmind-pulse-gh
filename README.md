@@ -225,6 +225,39 @@ Deterministic, mechanical work lives in self-contained PEP 723 scripts
 | `resolve_run.py` | Deterministic run-ledger operations (create/advance/gate/lease) |
 | `workflow_lint.py` | Workflow YAML lint (v1/v2/v3 schema, FSM refs, headless policy, DAG acyclicity) |
 
+## Dogfood overlays
+
+The neutral fleet path is repository-type-agnostic: every profile is scored against
+its authoritative scorecard, and nothing in the neutral engine knows about any
+specific ecosystem. **Dogfood overlays** are opt-in extensions that let this plugin
+govern *itself* (and other Claude Code plugins) without leaking plugin-specific
+concerns into the neutral path:
+
+| Overlay | What it adds | Opt-in via |
+|---------|--------------|------------|
+| **Claude plugin scorecard** (`claude-plugin-v1`) | `claude.plugin_manifest`, `claude.skills`, `claude.context` checks | `profile:claude-plugin` |
+| **Claude context currency** (`repo_claims.py`) | Audits `CLAUDE.md` claims against actual skills/commands/manifest; the one inferred step is schema-guarded and fails to `unknown`, never a fabricated verdict | the `claude.context` check |
+| **Marketplace sync** (`marketplace_sync.py`) | Compares a plugin's newest stable release to its `marketplace.json` entry; drift → propose-only F6 mutation | a configured marketplace binding |
+| **Corpus skill generation** | One configured F7 generator (`hiivmind.corpus-navigate-skill`) — pure configuration of the generic engine | `profile:claude-plugin` |
+
+**Isolation guarantees (enforced by tests):**
+
+- **No overlay runs without an explicit profile/capability.** A plain repository is
+  never dispatched a `claude.*` check.
+- **Nothing in the neutral path imports an overlay module.** The neutral engine
+  (`profile_dispatch`, `check_adapters`, `adapters/generic`, `evaluate_checks`,
+  `generated_artifacts`, `generator_dispatch`, and the adapter registration surface)
+  imports none of `adapters.claude_plugin`, `marketplace_sync`, or `repo_claims` at
+  module level — the overlay adapters register through a separate, lazily-imported
+  `register_claude_adapters` entry point.
+- **Overlay scorecards are never merged into a neutral denominator.** Healthcheck
+  grades are scorecard-specific; an overlay scorecard's subtotal is reported on its
+  own (`overlay: true`) and never dilutes a neutral fleet grade or coverage figure.
+
+`lib/pulse/scripts/tests/test_dogfood_isolation.py` proves both the module-level
+import independence and that the neutral acceptance suite passes with the overlay
+fixtures physically absent.
+
 ## Scheduled fleet maintenance
 
 Unattended maintenance lives in a separate repo,

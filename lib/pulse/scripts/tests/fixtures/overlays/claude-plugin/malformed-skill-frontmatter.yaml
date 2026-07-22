@@ -1,0 +1,24 @@
+files:
+  - .claude-plugin/plugin.json
+  - skills/good/SKILL.md
+  - skills/broken/SKILL.md
+  - CLAUDE.md
+  - README.md
+file_contents:
+  .claude-plugin/plugin.json: |
+    {
+      "name": "plugin-with-broken-skill",
+      "version": "0.1.0"
+    }
+  skills/good/SKILL.md: |
+    ---
+    name: good-skill
+    description: A well-formed skill proving the other one is the offender.
+    ---
+    # good
+  skills/broken/SKILL.md: |
+    This file has no frontmatter at all and is therefore malformed.
+  CLAUDE.md: |
+    # context
+  README.md: |
+    # readme

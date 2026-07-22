@@ -1,0 +1,16 @@
+files:
+  - .claude-plugin/plugin.json
+  - skills/example/SKILL.md
+  - CLAUDE.md
+  - README.md
+file_contents:
+  skills/example/SKILL.md: |
+    ---
+    name: example-skill
+    description: A skill whose sibling manifest has no content available.
+    ---
+    # example
+  CLAUDE.md: |
+    # context
+  README.md: |
+    # readme

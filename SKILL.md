@@ -127,6 +127,18 @@ For unlisted domains, the operations skill uses corpus lookup to find the correc
 | `lib/references/domains/*.md` | Per-domain detailed syntax (25 files) |
 | `lib/references/token-permissions.md` | Required token scopes |
 
+## Dogfood overlays
+
+Opt-in extensions let this plugin govern itself and other Claude Code plugins
+without leaking plugin-specific concerns into the neutral fleet path: the
+`claude-plugin-v1` scorecard (manifest/skills/context checks), `CLAUDE.md` claim
+currency, marketplace-release sync, and one configured corpus skill generator.
+Overlays run only under an explicit `profile:claude-plugin` (or a configured
+binding); the neutral engine imports no overlay module, and overlay scorecards are
+subtotaled separately (`overlay: true`), never merged into a neutral grade. See
+`README.md` § Dogfood overlays; isolation is enforced by
+`lib/pulse/scripts/tests/test_dogfood_isolation.py`.
+
 ## Execution Flow
 
 For any GitHub operation:
