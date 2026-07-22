@@ -1,7 +1,7 @@
 # Apply-Mode Design: A Repository-Neutral Landing Path
 
 **Date:** 2026-07-22
-**Status:** design / scoping — pre-plan; one open decision flagged in § Design forks.
+**Status:** design — scoped and settled. The v1 boundary decision (§ Design forks) is resolved: **PR-first, human/CI merges, scheduled auto-apply + `allow` direct-push deferred**. Implementation plan: `docs/superpowers/plans/2026-07-22-f11-apply-mode.md`.
 **Scope:** The deferred "apply-mode" that F6–F9 (and F10's drivers) all stop short of. What it is, why it is blocked, and — the load-bearing question — whether it is a plugin feature or a general one.
 **Related:** `docs/backlogs/2026-07-22-f1-f8-phase-deferrals.md` § 1 (the deferrals **index** that first captured apply-mode; this doc is the design that entry points to), `docs/superpowers/audits/2026-07-22-f-series-runnable-spine-audit.md` (the driver-layer gap), `docs/superpowers/plans/2026-07-22-f10-runnable-spine.md` (makes phases *run*; this makes them *land*), `docs/superpowers/audits/2026-07-13-fleet-scope-audit.md` (the neutral-control-plane mandate this design honors).
 
@@ -60,7 +60,7 @@ Both share one **trust model**: registered transformation + `expected_shas`/prec
 | **Scheduled auto-apply** | in v1 · deferred | **Defer** — v1 apply is interactive / PR-gated; `allow` (unattended direct push) is a bounded v2 behind `allow_scheduled: true` + a workspace apply policy. |
 | **Executor delivery** | plugin console entry points · `nave` subcommands · Nave injects the applier | **Console entry points**, preferring a `nave` subcommand where one exists (as `regenerate-from-template` already does); each ecosystem tool must be present in the pen or the run is `blocked`. |
 
-> **Open decision (flagged for the author):** the v1 boundary above assumes **PR-first, human-merges, scheduled auto-apply deferred**. That is the recommendation; if you want v1 to push directly or to include scheduled auto-apply, the confirmation model (B3) and the authority model change accordingly, and the phase below re-shapes.
+> **Decision (settled 2026-07-22):** the v1 boundary is **PR-first, human/CI merges, scheduled auto-apply + `allow` direct-push deferred to v2** — the recommendation above, confirmed by the author. The F11 plan (`docs/superpowers/plans/2026-07-22-f11-apply-mode.md`) is built to this boundary.
 
 ---
 
