@@ -35,6 +35,13 @@ Both are documented in `lib/patterns/plan-sync-binding.md`. **Recommendation:**
 this is its own phase after F9, not a bolt-on — it touches F6 (orchestrator +
 registry), the transformation packaging, and every propose-only consumer.
 
+> **Design (2026-07-22):** this item is now fully scoped in
+> `docs/superpowers/specs/2026-07-22-apply-mode-design.md` — proposed as an **F11**
+> phase, established as **repository-neutral** (not a plugin feature), PR-first v1.
+> It closes the *lands-the-change* gap; the companion
+> `docs/superpowers/plans/2026-07-22-f10-runnable-spine.md` closes the earlier
+> *runs-at-all* gap (see `docs/superpowers/audits/2026-07-22-f-series-runnable-spine-audit.md`).
+
 ---
 
 ## 2. Nave release pinning — Pre-F4 (#128)
