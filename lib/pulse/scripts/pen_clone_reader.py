@@ -150,9 +150,12 @@ def make_pen_clone_reader(
             rel_path = part[3:].decode("utf-8", errors="replace")
             changed_paths.add(rel_path)
 
-            if status_code.startswith(("R", "C")):
+            if "R" in status_code or "C" in status_code:
                 if idx < len(parts):
+                    orig_path = parts[idx].decode("utf-8", errors="replace")
                     idx += 1
+                    if orig_path:
+                        changed_paths.add(orig_path)
 
         return tuple(sorted(changed_paths))
 

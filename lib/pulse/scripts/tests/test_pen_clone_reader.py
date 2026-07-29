@@ -105,3 +105,33 @@ def test_make_pen_clone_reader_env_var_fallback(tmp_path, monkeypatch):
     monkeypatch.setenv("PULSE_PEN_ROOT", str(tmp_path))
     readers = make_pen_clone_reader(selection=("org/project",))
     assert readers.read_repo_head("org/project") is not None
+
+
+def test_read_repo_changed_paths_renames_and_deletions(tmp_path):
+    repo_dir = tmp_path / "acme" / "widget"
+    _init_git_repo(repo_dir)
+
+    (repo_dir / "old.txt").write_text("old content\n")
+    (repo_dir / "to_delete.txt").write_text("will be deleted\n")
+    subprocess.run(["git", "add", "old.txt", "to_delete.txt"], cwd=repo_dir, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "add old and to_delete"], cwd=repo_dir, check=True, capture_output=True)
+
+    readers = make_pen_clone_reader(clone_root=tmp_path, selection=("acme/widget",))
+
+    # 1. Test deletion via git rm
+    subprocess.run(["git", "rm", "to_delete.txt"], cwd=repo_dir, check=True, capture_output=True)
+    changed = readers.read_repo_changed_paths("acme/widget")
+    assert "to_delete.txt" in changed
+
+    # 2. Test staged rename via git mv
+    subprocess.run(["git", "mv", "old.txt", "new.txt"], cwd=repo_dir, check=True, capture_output=True)
+    changed = readers.read_repo_changed_paths("acme/widget")
+    assert "old.txt" in changed
+    assert "new.txt" in changed
+
+    # 3. Test rename + subsequent edit (status 'RM')
+    (repo_dir / "new.txt").write_text("modified after rename\n")
+    changed_after_edit = readers.read_repo_changed_paths("acme/widget")
+    assert "old.txt" in changed_after_edit
+    assert "new.txt" in changed_after_edit
+
