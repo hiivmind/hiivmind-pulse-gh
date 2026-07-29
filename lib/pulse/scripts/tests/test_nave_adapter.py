@@ -1,6 +1,7 @@
 """Tests for the external Nave CLI adapter."""
 
 import json
+import subprocess
 from pathlib import Path
 
 from lib.pulse.scripts import nave_adapter
@@ -673,3 +674,86 @@ def test_cli_pen_show_and_status_use_fixtures(monkeypatch, capsys):
 
     assert nave_adapter.main(["pen-status", "--name", "nave/api-audit"]) == 0
     assert json.loads(capsys.readouterr().out)["repos"][0]["owner"] == "acme"
+
+
+def _init_git_repo_for_adapter(path: Path) -> str:
+    path.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init"], cwd=path, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=path, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=path, check=True, capture_output=True)
+    (path / "init.txt").write_text("initial content\n")
+    subprocess.run(["git", "add", "init.txt"], cwd=path, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "initial commit"], cwd=path, check=True, capture_output=True)
+    res = subprocess.run(["git", "rev-parse", "HEAD"], cwd=path, check=True, capture_output=True, text=True)
+    return res.stdout.strip()
+
+
+def test_provision_apply_branch_success(tmp_path):
+    repo_path = tmp_path / "acme" / "widget"
+    base_sha = _init_git_repo_for_adapter(repo_path)
+
+    branch_name = "pulse/apply/prop-100"
+    results = nave_adapter.provision_apply_branch(
+        clone_paths={"acme/widget": repo_path},
+        branch=branch_name,
+        base_shas={"acme/widget": base_sha},
+    )
+
+    assert results == {"acme/widget": {"state": "ok"}}
+
+    # Verify symbolic ref (current branch) and commit SHA
+    branch_ref = subprocess.run(
+        ["git", "symbolic-ref", "--short", "HEAD"],
+        cwd=repo_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert branch_ref == branch_name
+
+    current_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repo_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert current_sha == base_sha
+
+
+def test_provision_apply_branch_already_exists(tmp_path):
+    repo_path = tmp_path / "acme" / "widget"
+    base_sha = _init_git_repo_for_adapter(repo_path)
+    branch_name = "pulse/apply/prop-100"
+
+    # Provision first time
+    nave_adapter.provision_apply_branch(
+        clone_paths={"acme/widget": repo_path},
+        branch=branch_name,
+        base_shas={"acme/widget": base_sha},
+    )
+
+    # Provision second time -> failure
+    results = nave_adapter.provision_apply_branch(
+        clone_paths={"acme/widget": repo_path},
+        branch=branch_name,
+        base_shas={"acme/widget": base_sha},
+    )
+
+    assert results["acme/widget"]["state"] == "failed"
+    assert "already exists" in results["acme/widget"]["reason"]
+
+
+def test_provision_apply_branch_missing_base_sha(tmp_path):
+    repo_path = tmp_path / "acme" / "widget"
+    _init_git_repo_for_adapter(repo_path)
+
+    results = nave_adapter.provision_apply_branch(
+        clone_paths={"acme/widget": repo_path},
+        branch="pulse/apply/prop-100",
+        base_shas={},
+    )
+
+    assert results["acme/widget"]["state"] == "failed"
+    assert "missing base SHA" in results["acme/widget"]["reason"]
+

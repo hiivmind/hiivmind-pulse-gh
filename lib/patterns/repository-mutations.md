@@ -133,6 +133,39 @@ and each repo's exec outcome (from `pen_status --json`) into the
 Nothing in that attribution record is inferred or reconstructed after the
 fact — it is built from the same `Proposal` that gated execution.
 
+## Per-proposal branch targeting invariant (C1)
+
+Before any apply step commits or pushes changes, each selected repo clone is
+provisioned onto a dedicated per-proposal branch named `pulse/apply/{proposal_id}`,
+created off its guarded base SHA (`expected_shas[repo]`).
+
+- **Implementation:** `nave_adapter.provision_apply_branch(clone_paths, branch, base_shas)`
+  executes `git -C <clone> checkout -b pulse/apply/{proposal_id} <base_sha>` for each
+  selected repo clone.
+- **Invariant:** Every apply push targets `pulse/apply/{proposal_id}`, never a default
+  or base branch.
+- **Fail-closed:** If branch provisioning fails on any selected repo (e.g. if the branch
+  already exists locally from a previous run or a base SHA is missing), the per-repo status
+  reports `"failed"` with the explicit reason so execution blocks before any push.
+
+## Pen clone reader & clone-root contract (C2)
+
+The `pen_clone_reader` module (`lib/pulse/scripts/pen_clone_reader.py`) exposes real git and
+filesystem readers over local pen clones to satisfy `pen_orchestrator`'s injectable seams:
+- `read_repo_head(repo)` -> SHA string via `git rev-parse HEAD`
+- `read_repo_file(repo, path)` -> file content bytes
+- `read_repo_changed_paths(repo)` -> repo-relative changed paths tuple (modified, added, deleted, untracked)
+
+### Clone-root contract
+- **Source Resolution:** Resolved in priority order via explicit `clone_root` factory argument
+  or the `PULSE_PEN_ROOT` environment variable.
+- **Per-repo Layout:** Selected repo `owner/name` lives at `{clone_root}/{owner}/{name}`.
+- **Fail-closed:** `make_pen_clone_reader(clone_root, selection)` validates the clone root
+  and every selected repo's checkout up front. If `clone_root` is unset or missing, or if any
+  selected repo's checkout path is absent or not a git worktree, `make_pen_clone_reader`
+  raises `PenCloneReaderError` immediately.
+
+
 ## Validation
 
 ```text

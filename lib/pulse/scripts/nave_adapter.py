@@ -497,6 +497,44 @@ def pen_exec(
     }
 
 
+def provision_apply_branch(
+    clone_paths: dict[str, str | Path],
+    branch: str,
+    base_shas: dict[str, str],
+) -> dict[str, dict[str, str]]:
+    """Provision a per-proposal branch off the guarded base SHA in each repo clone.
+
+    Operates directly on local repository clones via `git checkout -b <branch> <base_sha>`.
+    This is a git operation on local clones, not a Nave CLI subcommand.
+
+    Returns a dict mapping repo identifier (`owner/name`) to a result dict:
+      `{"state": "ok"}` or `{"state": "failed", "reason": "..."}`.
+    """
+    results: dict[str, dict[str, str]] = {}
+    for repo, clone_path in clone_paths.items():
+        base_sha = base_shas.get(repo)
+        if not base_sha:
+            results[repo] = {
+                "state": "failed",
+                "reason": f"missing base SHA for repo {repo}",
+            }
+            continue
+
+        res = subprocess.run(
+            ["git", "-C", str(clone_path), "checkout", "-b", branch, base_sha],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if res.returncode == 0:
+            results[repo] = {"state": "ok"}
+        else:
+            reason = res.stderr.strip() or res.stdout.strip() or "git checkout -b failed"
+            results[repo] = {"state": "failed", "reason": reason}
+
+    return results
+
+
 def _materialize_summary(report: dict) -> dict:
     """Build a content-free per-repo, per-state artifact summary.
 
