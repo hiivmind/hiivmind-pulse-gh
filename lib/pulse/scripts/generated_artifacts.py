@@ -34,8 +34,9 @@ import os
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import yaml
 
@@ -48,6 +49,8 @@ from lib.pulse.scripts.impact_snapshot import (
     _resolve_fetched_head,
     _workdir_ctx,
 )
+from lib.pulse.scripts.mutation_plan import MutationPlanError, TransformationRegistry
+from lib.pulse.scripts.profile_dispatch import RepositoryProfile
 
 # Sentinel for a path that does not exist at the fetched head.
 ABSENT = "ABSENT"
@@ -375,6 +378,275 @@ def audit(manifest: dict, snapshot: dict) -> GeneratedReport:
             findings.append(finding)
 
     return GeneratedReport(bindings=bindings, findings=findings)
+
+
+# --------------------------------------------------------------------------
+# Manifest validation + pure build_result (F10 Task 3)
+# --------------------------------------------------------------------------
+
+# Keys required on every binding so audit never KeyError-indexes.
+_REQUIRED_BINDING_KEYS = (
+    "id",
+    "source",
+    "branch",
+    "template_path",
+    "template_tree",
+    "generator",
+    "files",
+)
+
+
+def validate_manifest(manifest: dict | None) -> list[str]:
+    """Return human-readable errors for a malformed generated-artifact manifest.
+
+    Closes the crash path where ``audit`` indexes required keys / ``files[].path``
+    on unvalidated YAML. Empty list means the manifest is safe to audit.
+    """
+    errors: list[str] = []
+    if not isinstance(manifest, dict):
+        return ["manifest must be a mapping"]
+
+    bindings = manifest.get("bindings")
+    if bindings is None:
+        return ["manifest.bindings is required"]
+    if not isinstance(bindings, list):
+        return ["manifest.bindings must be a list"]
+
+    for index, binding in enumerate(bindings):
+        ctx = f"bindings[{index}]"
+        if not isinstance(binding, dict):
+            errors.append(f"{ctx} must be a mapping")
+            continue
+
+        for key in _REQUIRED_BINDING_KEYS:
+            if key not in binding:
+                errors.append(f"{ctx} missing required key: {key}")
+            elif key != "files" and (
+                not isinstance(binding[key], str) or not str(binding[key]).strip()
+            ):
+                errors.append(f"{ctx}.{key} must be a non-empty string")
+
+        files = binding.get("files")
+        if "files" not in binding:
+            continue
+        if not isinstance(files, list):
+            errors.append(f"{ctx}.files must be a list")
+            continue
+        if len(files) == 0:
+            errors.append(f"{ctx}.files must be non-empty")
+            continue
+
+        seen_paths: set[str] = set()
+        for f_index, file_entry in enumerate(files):
+            fctx = f"{ctx}.files[{f_index}]"
+            if not isinstance(file_entry, dict):
+                errors.append(f"{fctx} must be a mapping")
+                continue
+            path = file_entry.get("path")
+            if not isinstance(path, str) or not path.strip():
+                errors.append(f"{fctx}.path must be a non-empty string")
+                continue
+            if path in seen_paths:
+                errors.append(f"{ctx}.files duplicate path: {path}")
+            seen_paths.add(path)
+            blob = file_entry.get("blob")
+            if blob is None or (isinstance(blob, str) and not blob.strip()):
+                errors.append(f"{fctx}.blob is required")
+
+    return errors
+
+
+def _finding_to_dict(finding: Finding) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "kind": finding.kind,
+        "repo": finding.repo,
+        "severity": finding.severity,
+        "inferred": finding.inferred,
+    }
+    if finding.detail is not None:
+        result["detail"] = finding.detail
+    if finding.ref is not None:
+        result["ref"] = finding.ref
+    return result
+
+
+def _empty_result(
+    *,
+    workspace: str,
+    run_at: str,
+    actor: dict[str, Any],
+    errors: list[str],
+) -> dict[str, Any]:
+    return {
+        "contract_version": 1,
+        "kind": "generated-artifact",
+        "workspace": workspace,
+        "run_at": run_at,
+        "actor": actor,
+        "bindings_audited": 0,
+        "states": {},
+        "findings": [],
+        "proposals": [],
+        "proposed_actions": [],
+        "errors": list(errors),
+    }
+
+
+def build_result(
+    manifest: dict,
+    snapshot: dict,
+    *,
+    generators: dict[str, Any],
+    registry: TransformationRegistry | None,
+    actor: dict[str, Any],
+    mode: str = "interactive",
+) -> dict[str, Any]:
+    """Pure envelope owner for generated-artifact results.
+
+    Owns the audit → propose loop: validates the manifest (ABORT body on
+    malformation), classifies every binding via ``audit``, and for
+    ``template-drift`` bindings checks ``generator_applies`` then calls
+    ``generator_dispatch.dispatch(..., registry=registry)`` so scheduled
+    gating fires. Out-of-allowlist and other dispatch errors become findings
+    (no proposal). ``local-customization`` / ``conflict`` / ``error`` emit
+    findings only. No I/O, no pen execution.
+    """
+    # Lazy import keeps module-level graph free of a hard cycle risk and
+    # matches the sibling drivers' registry-threading style.
+    from lib.pulse.scripts import generator_dispatch
+
+    actor_dict = dict(actor)
+    actor_dict["mode"] = mode
+    workspace = str(actor_dict.get("gh_login") or "unknown")
+    run_at = datetime.now(timezone.utc).isoformat()
+
+    manifest_errors = validate_manifest(manifest)
+    if manifest_errors:
+        return _empty_result(
+            workspace=workspace,
+            run_at=run_at,
+            actor=actor_dict,
+            errors=manifest_errors,
+        )
+
+    report = audit(manifest, snapshot or {})
+    bindings_by_id: dict[str, dict] = {}
+    for raw in (manifest or {}).get("bindings") or []:
+        if isinstance(raw, dict) and isinstance(raw.get("id"), str):
+            bindings_by_id[raw["id"]] = raw
+
+    findings: list[dict[str, Any]] = [
+        _finding_to_dict(f) for f in report.findings
+    ]
+    proposals: list[dict[str, str]] = []
+    proposed_actions: list[str] = []
+    states: dict[str, str] = {}
+
+    # Empty profile/evidence: only `always` generators apply. Profile-scoped
+    # generators are configuration-level filters; the driver may later inject
+    # richer profiles without changing this pure loop's signature.
+    empty_repo = RepositoryProfile(profiles=(), scorecard="")
+    empty_evidence: dict[str, Any] = {}
+
+    for result in report.bindings:
+        states[result.id] = result.state
+        if result.state != "template-drift":
+            continue
+
+        raw_binding = bindings_by_id.get(result.id)
+        if raw_binding is None:
+            findings.append({
+                "kind": "dispatch_error",
+                "repo": result.source,
+                "severity": "high",
+                "detail": f"binding {result.id!r}: raw manifest entry missing",
+                "inferred": False,
+            })
+            continue
+
+        generator_id = raw_binding.get("generator") or ""
+        generator = generators.get(generator_id) if generators else None
+        if generator is None:
+            findings.append({
+                "kind": "generator_not_found",
+                "repo": result.source,
+                "severity": "high",
+                "detail": (
+                    f"binding {result.id!r}: generator {generator_id!r} "
+                    "not found in generator registry"
+                ),
+                "inferred": False,
+            })
+            continue
+
+        if not generator_dispatch.generator_applies(
+            generator, empty_repo, empty_evidence
+        ):
+            findings.append({
+                "kind": "generator_not_applicable",
+                "repo": result.source,
+                "severity": "medium",
+                "detail": (
+                    f"binding {result.id!r}: generator {generator.id!r} "
+                    "does not apply to the repository"
+                ),
+                "inferred": False,
+            })
+            continue
+
+        try:
+            proposal = generator_dispatch.dispatch(
+                generator,
+                raw_binding,
+                snapshot or {},
+                actor_dict,
+                mutation_policy="propose",
+                registry=registry,
+            )
+        except MutationPlanError as exc:
+            detail = str(exc)
+            lower = detail.lower()
+            if "allowlist" in lower or "output_paths" in lower:
+                kind = "allowlist_violation"
+            elif "scheduled mode" in lower or "allow_scheduled" in lower:
+                kind = "gated_transformation"
+            else:
+                kind = "dispatch_error"
+            findings.append({
+                "kind": kind,
+                "repo": result.source,
+                "severity": "medium",
+                "detail": detail,
+                "inferred": False,
+            })
+            proposed_actions.append(
+                f"propose regenerate {result.id} via {generator.transformation}"
+            )
+            continue
+
+        proposals.append({
+            "binding": result.id,
+            "transformation": proposal.transformation,
+            "proposal_id": proposal.id,
+        })
+        proposed_actions.append(
+            f"propose regenerate {result.id} via {proposal.transformation} "
+            f"({proposal.id})"
+        )
+
+    return {
+        "contract_version": 1,
+        "kind": "generated-artifact",
+        "workspace": workspace,
+        "run_at": run_at,
+        "actor": actor_dict,
+        "bindings_audited": report.bindings_checked,
+        "states": states,
+        "findings": findings,
+        "proposals": proposals,
+        "proposed_actions": proposed_actions,
+        "errors": [],
+    }
 
 
 # --------------------------------------------------------------------------
