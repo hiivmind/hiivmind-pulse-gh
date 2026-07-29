@@ -144,16 +144,21 @@ def run_driver(
 
     actor["gh_login"] = login
 
-    # Read bindings
+    # Read bindings — missing plan-sync.yaml is a hard abort (skill Phase 1 step 5)
     sync_config_path = config_dir / "plan-sync.yaml"
+    if not sync_config_path.exists():
+        err_msg = f"plan-sync.yaml not found: {sync_config_path}"
+        abort_data = _build_abort_result(login, actor, err_msg)
+        _write_and_validate_result(target_result_path, abort_data)
+        return 1
+
     bindings: list[dict[str, Any]] = []
-    if sync_config_path.exists():
-        try:
-            sync_data = yaml.safe_load(sync_config_path.read_text()) or {}
-            if isinstance(sync_data, dict) and isinstance(sync_data.get("docs"), list):
-                bindings = sync_data["docs"]
-        except Exception:
-            bindings = []
+    try:
+        sync_data = yaml.safe_load(sync_config_path.read_text()) or {}
+        if isinstance(sync_data, dict) and isinstance(sync_data.get("docs"), list):
+            bindings = sync_data["docs"]
+    except Exception:
+        bindings = []
 
     # Filter bindings if --repo passed
     if repo_filter:

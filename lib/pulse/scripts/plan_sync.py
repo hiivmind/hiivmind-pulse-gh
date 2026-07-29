@@ -73,11 +73,17 @@ class ApplyPlans:
     companion ``doc_patch`` is the caller-owned content for the well-known
     pen-checkout patch file; it is deliberately data, never command argv.
     ``github_mutation`` is a Pulse proposed action, not an API invocation.
+
+    When the document-side transformation is gated (e.g. ``allow_scheduled:
+    false`` in scheduled mode), ``repo_mutation`` and ``doc_patch`` are
+    suppressed and ``gated_transformation`` carries the gate detail while
+    ``github_mutation`` is still built through the normal validated path.
     """
 
     repo_mutation: Proposal | None
     github_mutation: dict[str, Any] | None
     doc_patch: dict[str, Any] | None
+    gated_transformation: str | None = None
 
 
 @dataclass(frozen=True)
@@ -263,30 +269,38 @@ def build_apply_plans(
 
     repo_mutation: Proposal | None = None
     doc_patch: dict[str, Any] | None = None
+    gated_transformation: str | None = None
     if reconciliation.doc_patch or reconciliation.doc_base_patch:
         head = _required_string(_snapshot_value(snapshot, "head"), "snapshot.head")
         blob = _required_string(_snapshot_value(snapshot, "blob"), "snapshot.blob")
-        repo_mutation = build_proposal(
-            id=f"plan-sync-doc-{binding_id}",
-            selection=[repo],
-            transformation="plan-sync-doc-patch",
-            expected_shas={repo: head},
-            actor=actor,
-            mutation_policy="propose",
-            bound_paths={repo: [path]},
-            registry=registry,
-        )
-        doc_patch = {
-            "path": path,
-            "base_blob": blob,
-            "doc_patch": dict(reconciliation.doc_patch),
-            "sync_patch": (
-                {"base": dict(reconciliation.doc_base_patch)}
-                if reconciliation.doc_base_patch
-                else {}
-            ),
-            "output_paths": [path],
-        }
+        try:
+            repo_mutation = build_proposal(
+                id=f"plan-sync-doc-{binding_id}",
+                selection=[repo],
+                transformation="plan-sync-doc-patch",
+                expected_shas={repo: head},
+                actor=actor,
+                mutation_policy="propose",
+                bound_paths={repo: [path]},
+                registry=registry,
+            )
+            doc_patch = {
+                "path": path,
+                "base_blob": blob,
+                "doc_patch": dict(reconciliation.doc_patch),
+                "sync_patch": (
+                    {"base": dict(reconciliation.doc_base_patch)}
+                    if reconciliation.doc_base_patch
+                    else {}
+                ),
+                "output_paths": [path],
+            }
+        except mutation_plan.MutationPlanError as exc:
+            # Gate only the document component; GitHub mutation still builds
+            # through the validated path below.
+            gated_transformation = str(exc)
+            repo_mutation = None
+            doc_patch = None
 
     github_mutation: dict[str, Any] | None = None
     if reconciliation.github_patch:
@@ -309,7 +323,7 @@ def build_apply_plans(
             ],
         }
 
-    return ApplyPlans(repo_mutation, github_mutation, doc_patch)
+    return ApplyPlans(repo_mutation, github_mutation, doc_patch, gated_transformation)
 
 
 def finalize(
@@ -432,41 +446,20 @@ def build_result(
                 })
             continue
 
-        try:
-            plans = build_apply_plans(
-                reconciliation, document.binding, document, actor_dict, registry=registry
-            )
-        except mutation_plan.MutationPlanError as exc:
+        plans = build_apply_plans(
+            reconciliation, document.binding, document, actor_dict, registry=registry
+        )
+        # Per-document gate signal from build_apply_plans — never query the
+        # cumulative result["findings"] list (that leaks across documents).
+        document_gated = plans.gated_transformation is not None
+        if document_gated:
             result["findings"].append({
                 "kind": "gated_transformation",
                 "repo": document.repo,
                 "severity": "medium",
-                "detail": str(exc),
+                "detail": plans.gated_transformation,
                 "inferred": False,
             })
-            plans = ApplyPlans(None, None, None)
-            # Re-evaluate github mutation manually if repo proposal was gated
-            if reconciliation.github_patch:
-                issue = _sync_binding(document.binding).get("issue")
-                if isinstance(issue, Mapping):
-                    issue_repo = issue.get("repo")
-                    issue_number = issue.get("number")
-                    if issue_repo and issue_number:
-                        patch = dict(reconciliation.github_patch)
-                        plans = ApplyPlans(
-                            None,
-                            {
-                                "repo": issue_repo,
-                                "number": issue_number,
-                                "patch": patch,
-                                "mutation_policy": "propose",
-                                "proposed_actions": [
-                                    f"propose GitHub issue patch for {issue_repo}#{issue_number}: "
-                                    f"{json.dumps(patch, sort_keys=True)}"
-                                ],
-                            },
-                            None,
-                        )
 
         if plans.repo_mutation is not None:
             result["doc_patches"] += 1
@@ -485,8 +478,8 @@ def build_result(
                 plans.github_mutation.get("proposed_actions", [])
             )
         if plans.repo_mutation is None and plans.github_mutation is None:
-            # Only count as in_sync if there was no gated finding or conflict
-            if not any(f.get("kind") == "gated_transformation" for f in result["findings"]):
+            # Gated docs are not in-sync; the flag is per-document only.
+            if not document_gated:
                 result["in_sync"] += 1
 
         # Propose-only: neither path is confirmed, so no base is persisted.
