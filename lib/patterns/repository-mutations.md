@@ -59,11 +59,11 @@ mutations are not a separate policy dialect from GitHub-object mutations:
   other gate below (still requires a registered transformation; still
   blocks on a stale/dirty pen or a validation failure).
 
-> **Current implementation status:** the F6 orchestrator
-> (`pen_orchestrator.execute`) is propose-only — it blocks any policy other
-> than `propose` before making a single Nave call. `allow-listed` and
-> `allow` describe the semantics reserved for a later apply step; until that
-> lands, setting either yields a `blocked` result, never a push.
+> **Current implementation status:** `pen_orchestrator.execute` supports `propose`
+> (propose-only, terminal state `proposed`) and `allow-listed` (Path A apply mode:
+> provision per-proposal branch `pulse/apply/{id}` -> exec -> validate -> commit-all -> push-all ->
+> terminal state `pushed`). `allow` policy remains reserved and blocked in v1.
+
 
 ## The transformation registry
 

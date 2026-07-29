@@ -757,3 +757,108 @@ def test_provision_apply_branch_missing_base_sha(tmp_path):
     assert results["acme/widget"]["state"] == "failed"
     assert "missing base SHA" in results["acme/widget"]["reason"]
 
+
+def test_commit_apply_clones_success(tmp_path):
+    repo_path = tmp_path / "acme" / "widget"
+    base_sha = _init_git_repo_for_adapter(repo_path)
+
+    # Provision branch first
+    nave_adapter.provision_apply_branch(
+        clone_paths={"acme/widget": repo_path},
+        branch="pulse/apply/prop-100",
+        base_shas={"acme/widget": base_sha},
+    )
+
+    # Make working tree change
+    (repo_path / "file.txt").write_text("change\n")
+
+    message = "pulse-apply prop-100 by octocat@laptop"
+    results = nave_adapter.commit_apply_clones(
+        clone_paths={"acme/widget": repo_path},
+        message=message,
+    )
+
+    assert results == {"acme/widget": {"state": "ok"}}
+
+    # Verify commit log
+    log = subprocess.run(
+        ["git", "log", "-1", "--pretty=%s"],
+        cwd=repo_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert log == message
+
+
+def test_commit_apply_clones_nothing_to_commit(tmp_path):
+    repo_path = tmp_path / "acme" / "widget"
+    _init_git_repo_for_adapter(repo_path)
+
+    # Clean working tree -> nothing to commit
+    results = nave_adapter.commit_apply_clones(
+        clone_paths={"acme/widget": repo_path},
+        message="pulse-apply prop-100 by octocat@laptop",
+    )
+
+    assert results["acme/widget"]["state"] == "failed"
+    assert "nothing to commit" in results["acme/widget"]["reason"].lower()
+
+
+def test_push_apply_clones_success(tmp_path):
+    bare_remote = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "--bare", str(bare_remote)], check=True, capture_output=True)
+
+    repo_path = tmp_path / "acme" / "widget"
+    base_sha = _init_git_repo_for_adapter(repo_path)
+    subprocess.run(
+        ["git", "remote", "add", "origin", str(bare_remote)],
+        cwd=repo_path,
+        check=True,
+        capture_output=True,
+    )
+
+    branch_name = "pulse/apply/prop-100"
+    nave_adapter.provision_apply_branch(
+        clone_paths={"acme/widget": repo_path},
+        branch=branch_name,
+        base_shas={"acme/widget": base_sha},
+    )
+    (repo_path / "file.txt").write_text("change\n")
+    nave_adapter.commit_apply_clones(
+        clone_paths={"acme/widget": repo_path},
+        message="pulse-apply prop-100 by octocat@laptop",
+    )
+
+    results = nave_adapter.push_apply_clones(
+        clone_paths={"acme/widget": repo_path},
+        branch=branch_name,
+    )
+
+    assert results == {"acme/widget": {"state": "ok"}}
+
+    # Verify branch exists on remote
+    remote_branches = subprocess.run(
+        ["git", "branch", "-a"],
+        cwd=repo_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert f"remotes/origin/{branch_name}" in remote_branches
+
+
+def test_push_apply_clones_failure(tmp_path):
+    repo_path = tmp_path / "acme" / "widget"
+    _init_git_repo_for_adapter(repo_path)
+
+    # No origin remote configured
+    results = nave_adapter.push_apply_clones(
+        clone_paths={"acme/widget": repo_path},
+        branch="pulse/apply/prop-100",
+    )
+
+    assert results["acme/widget"]["state"] == "failed"
+    assert results["acme/widget"]["reason"]
+
+

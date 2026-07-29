@@ -98,7 +98,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
-from typing import Any, Callable
+from typing import Any, Callable, Protocol
 
 from lib.pulse.scripts import nave_adapter
 from lib.pulse.scripts.mutation_plan import (
@@ -110,7 +110,23 @@ from lib.pulse.scripts.mutation_plan import (
 )
 
 
+class ApplyOps(Protocol):
+    """Abstract protocol for git-on-clones operations during allow-listed apply mode."""
+
+    def provision_branch(
+        self, branch: str, base_shas: dict[str, str]
+    ) -> dict[str, dict[str, str]]:
+        ...
+
+    def commit_repos(self, message: str) -> dict[str, dict[str, str]]:
+        ...
+
+    def push_repos(self, branch: str) -> dict[str, dict[str, str]]:
+        ...
+
+
 class PenOrchestratorError(ValueError):
+
     """Raised for a structurally invalid `PenPlan` — a caller/programmer
     bug (e.g. a mismatched resolved transformation), never a runtime
     gating outcome. Runtime gating outcomes are always reported via a
@@ -361,6 +377,7 @@ def execute(
     read_repo_file: Callable[[str, str], bytes] | None = None,
     read_repo_head: Callable[[str], str] | None = None,
     read_repo_changed_paths: Callable[[str], tuple[str, ...]] | None = None,
+    apply_ops: ApplyOps | Any | None = None,
 ) -> PenRunResult:
     """Drive `plan` through the pen state machine using `nave_adapter_runner`.
 
@@ -376,8 +393,11 @@ def execute(
     `read_repo_head`, if supplied, is called as `read_repo_head(repo) ->
     str` (raising `FileNotFoundError` or `KeyError` when `repo` is unknown)
     to satisfy `proposal.expected_shas` verification — see the module
-    docstring's "expected-SHA guard" section. These two callables are the
-    only filesystem seams this module accepts.
+    docstring's "expected-SHA guard" section.
+
+    `apply_ops`, if supplied, is an object/dataclass exposing
+    `provision_branch(branch, base_shas)`, `commit_repos(message)`, and
+    `push_repos(branch)` for allow-listed apply mode.
     """
     proposal = plan.proposal
     entry = plan.entry
@@ -391,16 +411,42 @@ def execute(
     version = _probe_version(runner)
     selection = proposal.selection
 
-    # --- forbidden push: checked before any Nave call --------------------
-    if plan.request_push or proposal.mutation_policy != "propose":
+    # --- policy gating check ----------------------------------------------
+    if proposal.mutation_policy == "propose":
+        if plan.request_push:
+            return _result(
+                plan,
+                "blocked",
+                version,
+                {repo: "blocked" for repo in selection},
+                "push forbidden: pen_orchestrator is propose-only and never "
+                f"commits or pushes; got mutation_policy={proposal.mutation_policy!r} "
+                f"request_push={plan.request_push!r}",
+            )
+    elif proposal.mutation_policy == "allow-listed":
+        if apply_ops is None:
+            return _result(
+                plan,
+                "blocked",
+                version,
+                {repo: "blocked" for repo in selection},
+                "mutation_policy 'allow-listed' requires apply_ops to be supplied to execute()",
+            )
+    elif proposal.mutation_policy == "allow":
         return _result(
             plan,
             "blocked",
             version,
             {repo: "blocked" for repo in selection},
-            "push forbidden: pen_orchestrator is propose-only and never "
-            f"commits or pushes; got mutation_policy={proposal.mutation_policy!r} "
-            f"request_push={plan.request_push!r}",
+            "push forbidden: mutation policy 'allow' is reserved and blocked in v1",
+        )
+    else:
+        return _result(
+            plan,
+            "blocked",
+            version,
+            {repo: "blocked" for repo in selection},
+            f"push forbidden: unsupported mutation_policy={proposal.mutation_policy!r}",
         )
 
     # --- planned -> created ------------------------------------------------
@@ -447,23 +493,16 @@ def execute(
         if state is None:
             reasons.append(f"{repo}: missing from pen status")
         elif state.get("working_tree") != "clean":
-            # Fail closed on partial/malformed status entries too: anything
-            # other than an explicit "clean" blocks, not just "dirty".
             reasons.append(
                 f"{repo}: working tree not clean before run "
                 f"(working_tree={state.get('working_tree')!r})"
             )
-        # Freshness must be explicitly "fresh" and divergence explicitly
-        # "up-to-date"; any other value — including a missing field on a
-        # partial status entry — is staleness, fail closed.
         elif state.get("freshness") != "fresh" or state.get("divergence") != "up-to-date":
             reasons.append(
                 f"{repo}: stale pen (freshness={state.get('freshness')}, "
                 f"divergence={state.get('divergence')})"
             )
     if reasons:
-        # Fail closed: a stale or dirty repo blocks the *whole* run, never
-        # just itself — nothing gets executed anywhere.
         return _result(
             plan,
             "blocked",
@@ -473,14 +512,6 @@ def execute(
         )
 
     # --- created -> executed: expected-SHA guard (stale-base block) ------
-    # See module docstring "expected-SHA guard" section: Nave exposes no
-    # per-repo SHA on its own, so verification requires an injected reader.
-    # Runs after the pen exists and preflight passed, strictly before exec.
-    # Fail closed on coverage, not just mismatch: `execute` cannot assume the
-    # Proposal came through build_proposal, so a selected repo missing from
-    # expected_shas (or an entirely empty dict) blocks rather than skipping
-    # the guard — an unguarded repo is exactly the stale-base mutation this
-    # gate exists to prevent.
     expected_shas = proposal.expected_shas
     if selection:
         if read_repo_head is None:
@@ -520,12 +551,37 @@ def execute(
             else:
                 sha_outcomes[repo] = "ok"
         if sha_reasons:
+            reason = "; ".join(sha_reasons)
+            if proposal.mutation_policy == "allow-listed":
+                reason += " (stale base: recovery is rebuild expected_shas off current HEAD and re-propose)"
             return _result(
                 plan,
                 "blocked",
                 version,
                 sha_outcomes,
-                "; ".join(sha_reasons),
+                reason,
+            )
+
+    # --- provision apply branch (allow-listed mode) -----------------------
+    apply_branch = f"pulse/apply/{proposal.id}"
+    if proposal.mutation_policy == "allow-listed":
+        prov_results = apply_ops.provision_branch(apply_branch, expected_shas)
+        prov_failures = [
+            f"{repo}: {res.get('reason', 'provision failed')}"
+            for repo, res in prov_results.items()
+            if res.get("state") != "ok"
+        ]
+        if prov_failures:
+            prov_outcomes = {
+                repo: ("blocked" if prov_results.get(repo, {}).get("state") != "ok" else "ok")
+                for repo in selection
+            }
+            return _result(
+                plan,
+                "blocked",
+                version,
+                prov_outcomes,
+                f"provision apply branch failed: {'; '.join(prov_failures)}",
             )
 
     # --- executed -----------------------------------------------------------
@@ -540,8 +596,6 @@ def execute(
         message=None,
     )
     if exec_result.get("adapter_state") == "error":
-        # See module NEEDS_CONTEXT note: no per-repo attribution is
-        # possible, so the whole run fails and every repo is "failed".
         return _result(
             plan,
             "failed",
@@ -562,6 +616,55 @@ def execute(
         repo_outcomes, reason, state = validation_failure
         return _result(plan, state, version, repo_outcomes, reason)
 
+    # --- landing (allow-listed mode: commit-all then push-all) --------------
+    if proposal.mutation_policy == "allow-listed":
+        message = f"pulse-apply {proposal.id} by {proposal.actor.gh_login}@{proposal.actor.machine}"
+        commit_results = apply_ops.commit_repos(message)
+        commit_failures = [
+            f"{repo}: {res.get('reason', 'commit failed')}"
+            for repo, res in commit_results.items()
+            if res.get("state") != "ok"
+        ]
+        if commit_failures:
+            commit_outcomes = {
+                repo: ("failed" if commit_results.get(repo, {}).get("state") != "ok" else "ok")
+                for repo in selection
+            }
+            return _result(
+                plan,
+                "failed",
+                version,
+                commit_outcomes,
+                f"commit failed: {'; '.join(commit_failures)}",
+            )
+
+        push_results = apply_ops.push_repos(apply_branch)
+        push_failures = [
+            f"{repo}: {res.get('reason', 'push failed')}"
+            for repo, res in push_results.items()
+            if res.get("state") != "ok"
+        ]
+        if push_failures:
+            push_outcomes = {
+                repo: ("failed" if push_results.get(repo, {}).get("state") != "ok" else "ok")
+                for repo in selection
+            }
+            return _result(
+                plan,
+                "failed",
+                version,
+                push_outcomes,
+                f"push failed: {'; '.join(push_failures)}",
+            )
+
+        return _result(
+            plan,
+            "pushed",
+            version,
+            {repo: "ok" for repo in selection},
+            None,
+        )
+
     # --- proposed: terminal success, propose-only, never pushed -------------
     return _result(
         plan,
@@ -570,3 +673,4 @@ def execute(
         {repo: "ok" for repo in selection},
         None,
     )
+

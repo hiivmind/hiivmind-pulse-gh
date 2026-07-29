@@ -535,6 +535,88 @@ def provision_apply_branch(
     return results
 
 
+def commit_apply_clones(
+    clone_paths: dict[str, str | Path],
+    message: str,
+) -> dict[str, dict[str, str]]:
+    """Commit uncommitted changes in each repo clone with the attributed message.
+
+    Operates directly on local repository clones via `git -C <clone> add -A` then
+    `git -C <clone> commit -m <message>`. A repo with nothing to commit fails.
+
+    Returns a dict mapping repo identifier (`owner/name`) to a result dict:
+      `{"state": "ok"}` or `{"state": "failed", "reason": "..."}`.
+    """
+    results: dict[str, dict[str, str]] = {}
+    for repo, clone_path in clone_paths.items():
+        add_res = subprocess.run(
+            ["git", "-C", str(clone_path), "add", "-A"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if add_res.returncode != 0:
+            reason = add_res.stderr.strip() or add_res.stdout.strip() or "git add failed"
+            results[repo] = {"state": "failed", "reason": reason}
+            continue
+
+        status_res = subprocess.run(
+            ["git", "-C", str(clone_path), "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if status_res.returncode == 0 and not status_res.stdout.strip():
+            results[repo] = {
+                "state": "failed",
+                "reason": f"nothing to commit in {repo}",
+            }
+            continue
+
+        res = subprocess.run(
+            ["git", "-C", str(clone_path), "commit", "-m", message],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if res.returncode == 0:
+            results[repo] = {"state": "ok"}
+        else:
+            reason = res.stderr.strip() or res.stdout.strip() or "git commit failed"
+            results[repo] = {"state": "failed", "reason": reason}
+
+    return results
+
+
+def push_apply_clones(
+    clone_paths: dict[str, str | Path],
+    branch: str,
+) -> dict[str, dict[str, str]]:
+    """Push each clone's apply branch to origin.
+
+    Operates directly on local repository clones via `git -C <clone> push origin <branch>`.
+
+    Returns a dict mapping repo identifier (`owner/name`) to a result dict:
+      `{"state": "ok"}` or `{"state": "failed", "reason": "..."}`.
+    """
+    results: dict[str, dict[str, str]] = {}
+    for repo, clone_path in clone_paths.items():
+        res = subprocess.run(
+            ["git", "-C", str(clone_path), "push", "origin", branch],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if res.returncode == 0:
+            results[repo] = {"state": "ok"}
+        else:
+            reason = res.stderr.strip() or res.stdout.strip() or "git push failed"
+            results[repo] = {"state": "failed", "reason": reason}
+
+    return results
+
+
+
 def _materialize_summary(report: dict) -> dict:
     """Build a content-free per-repo, per-state artifact summary.
 
