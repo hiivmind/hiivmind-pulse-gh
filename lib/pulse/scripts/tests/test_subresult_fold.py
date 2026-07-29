@@ -105,6 +105,23 @@ def test_fold_rejects_non_list_field():
         fold_subresult({"kind": "plan-sync", "findings": "oops"})
 
 
+def test_fold_rejects_malformed_finding_element():
+    # A non-mapping in findings must raise here (recorded as a fold error), not
+    # pass through and fail the outer workflow-run schema validation later.
+    with pytest.raises(SubresultFoldError):
+        fold_subresult({"kind": "plan-sync", "findings": ["oops"]})
+
+
+def test_fold_rejects_non_string_action_element():
+    with pytest.raises(SubresultFoldError):
+        fold_subresult({"kind": "plan-sync", "proposed_actions": [{"not": "a string"}]})
+
+
+def test_fold_rejects_non_string_ask_element():
+    with pytest.raises(SubresultFoldError):
+        fold_subresult({"kind": "plan-sync", "asks_recorded": [123]})
+
+
 # --------------------------------------------------------------------------- #
 # CLI
 # --------------------------------------------------------------------------- #
@@ -136,6 +153,24 @@ def test_cli_non_foldable_exit_3(tmp_path):
     bad = tmp_path / "bad.yaml"
     bad.write_text("- just\n- a\n- list\n", encoding="utf-8")
     proc = _run_cli(bad)
+    assert proc.returncode == 3
+
+
+def test_cli_invalid_utf8_exit_2(tmp_path):
+    # Invalid UTF-8 bytes must map to the documented "unparseable" exit 2, not an
+    # uncaught UnicodeDecodeError traceback (exit 1).
+    bad = tmp_path / "bad-bytes.yaml"
+    bad.write_bytes(b"\xff\xfe not utf-8")
+    proc = _run_cli(bad)
+    assert proc.returncode == 2
+
+
+def test_cli_malformed_finding_exit_3(tmp_path):
+    inner = tmp_path / "marketplace-sync-result.yaml"
+    payload = _marketplace_result()
+    payload["findings"] = ["not-a-mapping"]
+    inner.write_text(yaml.safe_dump(payload), encoding="utf-8")
+    proc = _run_cli(inner)
     assert proc.returncode == 3
 
 

@@ -70,19 +70,35 @@ def fold_subresult(inner: Any) -> dict[str, list]:
     if not isinstance(inner, Mapping):
         raise SubresultFoldError("inner result must be a mapping")
 
+    kind = inner.get("kind", "<unknown>")
     folded: dict[str, list] = {}
     for field in FOLDED_FIELDS:
         value = inner.get(field, [])
         if value is None:
             value = []
         if not isinstance(value, list):
-            kind = inner.get("kind", "<unknown>")
             raise SubresultFoldError(
                 f"{kind} result field {field!r} must be a list, got {type(value).__name__}"
             )
+        # Validate element shapes at this trust boundary — the sibling file is a
+        # separate, gitignored artifact. A malformed element must raise here (→
+        # recorded as a fold error) rather than pass through and blow up the
+        # OUTER workflow-run schema validation, which reads as a skill bug.
         if field == "findings":
-            folded[field] = [dict(item) if isinstance(item, Mapping) else item for item in value]
+            for i, item in enumerate(value):
+                if not isinstance(item, Mapping):
+                    raise SubresultFoldError(
+                        f"{kind} result findings[{i}] must be a mapping, "
+                        f"got {type(item).__name__}"
+                    )
+            folded[field] = [dict(item) for item in value]
         else:
+            for i, item in enumerate(value):
+                if not isinstance(item, str):
+                    raise SubresultFoldError(
+                        f"{kind} result {field}[{i}] must be a string, "
+                        f"got {type(item).__name__}"
+                    )
             folded[field] = list(value)
     return folded
 
@@ -98,7 +114,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         inner = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError) as exc:
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
         print(f"error: could not read {path}: {exc}", file=sys.stderr)
         return 2
 
