@@ -918,3 +918,66 @@ def test_propose_policy_still_proposed_and_never_provisions_or_pushes():
     assert apply_ops.calls == []
 
 
+def test_allow_listed_provision_missing_repo_fails_closed_as_blocked():
+    plan = make_plan(mutation_policy="allow-listed")
+    # acme/web omitted from provision_branch results
+    apply_ops = RecordingApplyOps(
+        prov_results={"acme/api": {"state": "ok"}}
+    )
+    runner = QueuedRunner(_clean_preflight_sequence())
+
+    result = pen_orchestrator.execute(
+        plan, runner, read_repo_head=matching_head, apply_ops=apply_ops
+    )
+
+    assert result.state == "blocked"
+    assert result.repo_outcomes == {"acme/api": "ok", "acme/web": "blocked"}
+    assert "acme/web" in result.reason
+    assert "missing provision result" in result.reason
+    assert not any("exec" in call for call in runner.calls)
+
+
+def test_allow_listed_commit_missing_repo_fails_closed_without_push():
+    plan = make_plan(mutation_policy="allow-listed")
+    # acme/web omitted from commit_repos results
+    apply_ops = RecordingApplyOps(
+        commit_results={"acme/api": {"state": "ok"}}
+    )
+    runner = QueuedRunner(_exec_ok_sequence())
+
+    result = pen_orchestrator.execute(
+        plan, runner, read_repo_head=matching_head, apply_ops=apply_ops
+    )
+
+    assert result.state == "failed"
+    assert result.repo_outcomes == {"acme/api": "ok", "acme/web": "failed"}
+    assert "acme/web" in result.reason
+    assert "missing commit result" in result.reason
+    # Ensure NO push call was made
+    assert [c[0] for c in apply_ops.calls] == ["provision_branch", "commit_repos"]
+
+
+def test_allow_listed_push_missing_repo_fails_closed():
+    plan = make_plan(mutation_policy="allow-listed")
+    # acme/web omitted from push_repos results
+    apply_ops = RecordingApplyOps(
+        push_results={"acme/api": {"state": "ok"}}
+    )
+    runner = QueuedRunner(_exec_ok_sequence())
+
+    result = pen_orchestrator.execute(
+        plan, runner, read_repo_head=matching_head, apply_ops=apply_ops
+    )
+
+    assert result.state == "failed"
+    assert result.repo_outcomes == {"acme/api": "ok", "acme/web": "failed"}
+    assert "acme/web" in result.reason
+    assert "missing push result" in result.reason
+    assert [c[0] for c in apply_ops.calls] == [
+        "provision_branch",
+        "commit_repos",
+        "push_repos",
+    ]
+
+
+

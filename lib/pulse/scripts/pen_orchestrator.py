@@ -493,16 +493,23 @@ def execute(
         if state is None:
             reasons.append(f"{repo}: missing from pen status")
         elif state.get("working_tree") != "clean":
+            # Fail closed on partial/malformed status entries too: anything
+            # other than an explicit "clean" blocks, not just "dirty".
             reasons.append(
                 f"{repo}: working tree not clean before run "
                 f"(working_tree={state.get('working_tree')!r})"
             )
+        # Freshness must be explicitly "fresh" and divergence explicitly
+        # "up-to-date"; any other value — including a missing field on a
+        # partial status entry — is staleness, fail closed.
         elif state.get("freshness") != "fresh" or state.get("divergence") != "up-to-date":
             reasons.append(
                 f"{repo}: stale pen (freshness={state.get('freshness')}, "
                 f"divergence={state.get('divergence')})"
             )
     if reasons:
+        # Fail closed: a stale or dirty repo blocks the *whole* run, never
+        # just itself — nothing gets executed anywhere.
         return _result(
             plan,
             "blocked",
@@ -512,6 +519,14 @@ def execute(
         )
 
     # --- created -> executed: expected-SHA guard (stale-base block) ------
+    # See module docstring "expected-SHA guard" section: Nave exposes no
+    # per-repo SHA on its own, so verification requires an injected reader.
+    # Runs after the pen exists and preflight passed, strictly before exec.
+    # Fail closed on coverage, not just mismatch: `execute` cannot assume the
+    # Proposal came through build_proposal, so a selected repo missing from
+    # expected_shas (or an entirely empty dict) blocks rather than skipping
+    # the guard — an unguarded repo is exactly the stale-base mutation this
+    # gate exists to prevent.
     expected_shas = proposal.expected_shas
     if selection:
         if read_repo_head is None:
@@ -566,16 +581,23 @@ def execute(
     apply_branch = f"pulse/apply/{proposal.id}"
     if proposal.mutation_policy == "allow-listed":
         prov_results = apply_ops.provision_branch(apply_branch, expected_shas)
-        prov_failures = [
-            f"{repo}: {res.get('reason', 'provision failed')}"
-            for repo, res in prov_results.items()
-            if res.get("state") != "ok"
-        ]
+        if not isinstance(prov_results, dict):
+            prov_results = {}
+        prov_failures: list[str] = []
+        prov_outcomes: dict[str, str] = {}
+        for repo in selection:
+            res = prov_results.get(repo)
+            if not isinstance(res, dict) or res.get("state") != "ok":
+                reason = (
+                    res.get("reason", "provision failed")
+                    if isinstance(res, dict)
+                    else "missing provision result"
+                )
+                prov_failures.append(f"{repo}: {reason}")
+                prov_outcomes[repo] = "blocked"
+            else:
+                prov_outcomes[repo] = "ok"
         if prov_failures:
-            prov_outcomes = {
-                repo: ("blocked" if prov_results.get(repo, {}).get("state") != "ok" else "ok")
-                for repo in selection
-            }
             return _result(
                 plan,
                 "blocked",
@@ -620,16 +642,23 @@ def execute(
     if proposal.mutation_policy == "allow-listed":
         message = f"pulse-apply {proposal.id} by {proposal.actor.gh_login}@{proposal.actor.machine}"
         commit_results = apply_ops.commit_repos(message)
-        commit_failures = [
-            f"{repo}: {res.get('reason', 'commit failed')}"
-            for repo, res in commit_results.items()
-            if res.get("state") != "ok"
-        ]
+        if not isinstance(commit_results, dict):
+            commit_results = {}
+        commit_failures: list[str] = []
+        commit_outcomes: dict[str, str] = {}
+        for repo in selection:
+            res = commit_results.get(repo)
+            if not isinstance(res, dict) or res.get("state") != "ok":
+                reason = (
+                    res.get("reason", "commit failed")
+                    if isinstance(res, dict)
+                    else "missing commit result"
+                )
+                commit_failures.append(f"{repo}: {reason}")
+                commit_outcomes[repo] = "failed"
+            else:
+                commit_outcomes[repo] = "ok"
         if commit_failures:
-            commit_outcomes = {
-                repo: ("failed" if commit_results.get(repo, {}).get("state") != "ok" else "ok")
-                for repo in selection
-            }
             return _result(
                 plan,
                 "failed",
@@ -639,16 +668,23 @@ def execute(
             )
 
         push_results = apply_ops.push_repos(apply_branch)
-        push_failures = [
-            f"{repo}: {res.get('reason', 'push failed')}"
-            for repo, res in push_results.items()
-            if res.get("state") != "ok"
-        ]
+        if not isinstance(push_results, dict):
+            push_results = {}
+        push_failures: list[str] = []
+        push_outcomes: dict[str, str] = {}
+        for repo in selection:
+            res = push_results.get(repo)
+            if not isinstance(res, dict) or res.get("state") != "ok":
+                reason = (
+                    res.get("reason", "push failed")
+                    if isinstance(res, dict)
+                    else "missing push result"
+                )
+                push_failures.append(f"{repo}: {reason}")
+                push_outcomes[repo] = "failed"
+            else:
+                push_outcomes[repo] = "ok"
         if push_failures:
-            push_outcomes = {
-                repo: ("failed" if push_results.get(repo, {}).get("state") != "ok" else "ok")
-                for repo in selection
-            }
             return _result(
                 plan,
                 "failed",
@@ -673,4 +709,5 @@ def execute(
         {repo: "ok" for repo in selection},
         None,
     )
+
 
