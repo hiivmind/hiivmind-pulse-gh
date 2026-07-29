@@ -17,7 +17,8 @@ from pathlib import Path
 
 import yaml
 
-TRIGGER_TYPES = {"session_poll", "post_operation", "freshness", "on_demand"}
+TRIGGER_TYPES = {"session_poll", "post_operation", "freshness", "on_demand",
+                 "periodic"}
 ON_ASK = {"record", "default", "abort"}
 ON_MUTATION = {"propose", "allow-listed", "allow"}
 PHASE_RE = re.compile(r"^([A-Z][A-Z_]*)(\([^)]*\))?:\s*$")

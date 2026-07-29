@@ -587,6 +587,15 @@ def main() -> int:
                                      state, source_cache, gold)
         elif ttype == "freshness":
             should = bool(stale_sections)
+        elif ttype == "periodic":
+            # Due when never run, or interval_minutes have elapsed since last_run_at.
+            # Poll does not advance last_run_at (executor owns that seam).
+            # cooldown_minutes above remains the floor. Not repo-scoped.
+            interval = int(trigger.get("interval_minutes") or 0)
+            if last_dt is None:
+                should = True
+            else:
+                should = (now - last_dt).total_seconds() / 60 >= interval
 
         if should:
             triggered.append(name)
