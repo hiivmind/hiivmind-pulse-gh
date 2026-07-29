@@ -19,8 +19,9 @@ FIXTURES = Path("lib/pulse/scripts/tests/fixtures")
 KINDS = [
     "status", "healthcheck", "refresh", "workflow-run", "fleet-membership",
     "impact", "repo-mutation", "generated-artifact", "plan-sync",
-    "marketplace-sync",
+    "marketplace-sync", "apply-status",
 ]
+
 
 
 def run_validator(path, kind):
@@ -1158,3 +1159,102 @@ def test_validate_sync_binding_rejects_invalid_issue_reference(issue, expected):
         block["issue"] = issue
 
     assert expected in validate_result.validate_sync_binding(block)
+
+
+@pytest.mark.parametrize("state", ["pushed", "pr_opened", "applied", "rejected"])
+def test_apply_status_accepts_valid_states(tmp_path, state):
+    doc = yaml.safe_load((FIXTURES / "apply-status-valid.yaml").read_text())
+    doc["state"] = state
+    if state == "pushed":
+        doc["pr_url"] = None
+        doc["merged_sha"] = None
+        doc["reason"] = None
+    elif state == "pr_opened":
+        doc["pr_url"] = "https://github.com/testorg/widget/pull/42"
+        doc["merged_sha"] = None
+        doc["reason"] = None
+    elif state == "applied":
+        doc["pr_url"] = "https://github.com/testorg/widget/pull/42"
+        doc["merged_sha"] = "fedcba9876543210fedcba9876543210fedcba98"
+        doc["reason"] = None
+    elif state == "rejected":
+        doc["pr_url"] = "https://github.com/testorg/widget/pull/42"
+        doc["merged_sha"] = None
+        doc["reason"] = "Closed without merging"
+    path = tmp_path / "apply-status.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    assert validate_result.validate(doc, "apply-status") == []
+    result = run_validator(path, "apply-status")
+    assert result.returncode == 0, result.stderr
+
+
+def test_apply_status_pushed_missing_pushed_sha(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "apply-status-valid.yaml").read_text())
+    doc["state"] = "pushed"
+    doc["pushed_sha"] = None
+    doc["pr_url"] = None
+    path = tmp_path / "apply-status.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "apply-status")
+    assert result.returncode == 1
+    assert "pushed_sha must not be null when state is pushed" in result.stderr
+
+
+def test_apply_status_pr_opened_missing_pr_url(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "apply-status-valid.yaml").read_text())
+    doc["state"] = "pr_opened"
+    doc["pr_url"] = None
+    path = tmp_path / "apply-status.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "apply-status")
+    assert result.returncode == 1
+    assert "pr_url must not be null when state is pr_opened" in result.stderr
+
+
+def test_apply_status_applied_missing_merged_sha(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "apply-status-valid.yaml").read_text())
+    doc["state"] = "applied"
+    doc["merged_sha"] = None
+    path = tmp_path / "apply-status.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "apply-status")
+    assert result.returncode == 1
+    assert "merged_sha must not be null when state is applied" in result.stderr
+
+
+def test_apply_status_rejected_null_reason(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "apply-status-valid.yaml").read_text())
+    doc["state"] = "rejected"
+    doc["reason"] = None
+    path = tmp_path / "apply-status.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "apply-status")
+    assert result.returncode == 1
+    assert "reason must not be null when state is rejected" in result.stderr
+
+
+def test_apply_status_rejects_invalid_state(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "apply-status-valid.yaml").read_text())
+    doc["state"] = "unknown_state"
+    path = tmp_path / "apply-status.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "apply-status")
+    assert result.returncode == 1
+    assert "state invalid: unknown_state" in result.stderr
+
+
+def test_apply_status_kind_mismatch(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "apply-status-valid.yaml").read_text())
+    path = tmp_path / "apply-status.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "repo-mutation")
+    assert result.returncode == 1
+    assert "kind mismatch" in result.stderr
+

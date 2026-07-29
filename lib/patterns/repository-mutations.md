@@ -28,7 +28,7 @@ subprocess calls, no filesystem writes, no Nave interaction.
 `mutation_plan.build_proposal(...)` constructs and validates a `Proposal`:
 
 ```text
-{id, selection, transformation, expected_shas, mutation_policy, actor}
+{id, selection, transformation, expected_shas, mutation_policy, actor, bound_paths}
 ```
 
 | Field | Shape | Meaning |
@@ -39,6 +39,7 @@ subprocess calls, no filesystem writes, no Nave interaction.
 | `expected_shas` | dict `owner/name -> sha` | The expected-base guard: keys must be **exactly** `selection`, no more, no fewer. The orchestrator (Task 3) compares this against each repo's current SHA before executing and blocks on any mismatch — a stale base is never silently mutated. Since no Nave surface exposes a per-repo SHA, this comparison runs through an injectable `read_repo_head` reader `execute` accepts (same seam pattern as `read_repo_file`); with `expected_shas` non-empty and no reader supplied, verification fails closed. |
 | `mutation_policy` | one of `propose`, `allow-listed`, `allow` | See below. Default: `propose`. |
 | `actor` | `{gh_login, machine, mode}` | Same shape as the headless result contract's `actor:` block (`lib/patterns/headless-contract.md`); `mode` is `interactive` or `scheduled`. |
+| `bound_paths` | dict `owner/name -> tuple[str, ...]` | Immutable proposal metadata: per-repo allowlist of exact repo-relative paths or globs (`*`, `**`) this proposal is permitted to change. When the transformation's validation kind is `paths_changed`, keys must cover `selection` exactly (no uncovered repo, no extra repo). |
 
 ### `mutation_policy` values
 
@@ -58,11 +59,11 @@ mutations are not a separate policy dialect from GitHub-object mutations:
   other gate below (still requires a registered transformation; still
   blocks on a stale/dirty pen or a validation failure).
 
-> **Current implementation status:** the F6 orchestrator
-> (`pen_orchestrator.execute`) is propose-only — it blocks any policy other
-> than `propose` before making a single Nave call. `allow-listed` and
-> `allow` describe the semantics reserved for a later apply step; until that
-> lands, setting either yields a `blocked` result, never a push.
+> **Current implementation status:** `pen_orchestrator.execute` supports `propose`
+> (propose-only, terminal state `proposed`) and `allow-listed` (Path A apply mode:
+> provision per-proposal branch `pulse/apply/{id}` -> exec -> validate -> commit-all -> push-all ->
+> terminal state `pushed`). `allow` policy remains reserved and blocked in v1.
+
 
 ## The transformation registry
 
@@ -79,7 +80,7 @@ mutations are not a separate policy dialect from GitHub-object mutations:
 | `id` | string, must match its registry key | The transformation ID proposals reference. |
 | `command_argv` | non-empty list of plain strings | The **exact** argv passed to `nave_adapter.pen_exec` after `--`. No nested structures (lists/dicts as elements are rejected), no booleans. |
 | `applies_to` | non-empty list of predicates | OR-matched repository eligibility, in the same grammar `profile_dispatch.py` uses for scorecard-check applicability: `always`, `profile:<id>`, `capability:<id>`, `evidence_path:<glob>`. `mutation_plan.transformation_applies(entry, profiles, capabilities, evidence_paths)` evaluates it. |
-| `validation` | `{kind: none \| json_schema, ...}` | Post-execution check the orchestrator runs after `pen_exec` succeeds. `kind: none` takes no extra fields. `kind: json_schema` requires `path` (repo-relative file the transformation is expected to produce/modify) and `schema` (inline JSON Schema mapping the file's parsed content must satisfy). A validation failure is a `blocked`/`failed` outcome, never a silent pass. |
+| `validation` | `{kind: none \| json_schema \| paths_changed, ...}` | Post-execution check the orchestrator runs after `pen_exec` succeeds. `kind: none` and `kind: paths_changed` take no extra fields in the registry (`paths_changed` bounds live on the proposal's `bound_paths`). `kind: json_schema` requires `path` and `schema`. `kind: paths_changed` asserts post-exec that the set of changed paths in each repo matches that repo's `bound_paths` (every changed path must match an exact/glob bound entry, every exact bound entry must change, and changed set must be non-empty). |
 | `allow_scheduled` | boolean | Whether this transformation may run under `actor.mode: scheduled`. Interactive-only transformations (destructive, judgment-requiring, or simply not yet trusted unattended) set this `false`. |
 
 ### No shell strings, ever
@@ -131,6 +132,39 @@ and each repo's exec outcome (from `pen_status --json`) into the
 `repo-mutation` result kind (F6 Task 4, `lib/patterns/headless-contract.md`).
 Nothing in that attribution record is inferred or reconstructed after the
 fact — it is built from the same `Proposal` that gated execution.
+
+## Per-proposal branch targeting invariant (C1)
+
+Before any apply step commits or pushes changes, each selected repo clone is
+provisioned onto a dedicated per-proposal branch named `pulse/apply/{proposal_id}`,
+created off its guarded base SHA (`expected_shas[repo]`).
+
+- **Implementation:** `nave_adapter.provision_apply_branch(clone_paths, branch, base_shas)`
+  executes `git -C <clone> checkout -b pulse/apply/{proposal_id} <base_sha>` for each
+  selected repo clone.
+- **Invariant:** Every apply push targets `pulse/apply/{proposal_id}`, never a default
+  or base branch.
+- **Fail-closed:** If branch provisioning fails on any selected repo (e.g. if the branch
+  already exists locally from a previous run or a base SHA is missing), the per-repo status
+  reports `"failed"` with the explicit reason so execution blocks before any push.
+
+## Pen clone reader & clone-root contract (C2)
+
+The `pen_clone_reader` module (`lib/pulse/scripts/pen_clone_reader.py`) exposes real git and
+filesystem readers over local pen clones to satisfy `pen_orchestrator`'s injectable seams:
+- `read_repo_head(repo)` -> SHA string via `git rev-parse HEAD`
+- `read_repo_file(repo, path)` -> file content bytes
+- `read_repo_changed_paths(repo)` -> repo-relative changed paths tuple (modified, added, deleted, untracked)
+
+### Clone-root contract
+- **Source Resolution:** Resolved in priority order via explicit `clone_root` factory argument
+  or the `PULSE_PEN_ROOT` environment variable.
+- **Per-repo Layout:** Selected repo `owner/name` lives at `{clone_root}/{owner}/{name}`.
+- **Fail-closed:** `make_pen_clone_reader(clone_root, selection)` validates the clone root
+  and every selected repo's checkout up front. If `clone_root` is unset or missing, or if any
+  selected repo's checkout path is absent or not a git worktree, `make_pen_clone_reader`
+  raises `PenCloneReaderError` immediately.
+
 
 ## Validation
 

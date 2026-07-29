@@ -160,6 +160,8 @@ its `github_mutation` output.
 4. Never call GitHub to apply the patch. With `mutation_policy: apply`, append a
    deferred-action note naming the V1 limitation instead of applying it.
 
+Under `on_mutation: allow-listed`, GitHub object-side writes (issue/milestone field patches) are executed through `lib/pulse/scripts/object_apply.py` (`apply_object_write` / `apply_issue_field_patch`). The write is guarded by a typed `Precondition` descriptor matching expected live state, checked for verb `mutation_allowlist` membership, and evaluated for idempotency before writing. Path B operates independently of Path A.
+
 ## Phase 5: APPLY_DOC
 
 For every non-conflicted reconciliation with a document or frontmatter-base patch,
@@ -192,7 +194,11 @@ neither path, so it never persists `base_patch` or advances `sync.base.blob`.
 Copy any returned finalization findings into `FINDINGS`. A later apply-capable
 consumer must re-snapshot and pass confirmed outcomes before it may persist bases.
 
-**See:** `lib/pulse/scripts/plan_sync.py`, `lib/patterns/plan-sync-binding.md` § V1 limitation.
+Under allow-listed apply mode, `apply_reconcile.py` drives the resumable two-phase loop per repo:
+1. `open_apply_pr`: Opens a PR (`create_or_get_pr`), writes `apply-status` at state `pr_opened`, and updates the run ledger step to `blocked-on-gate`.
+2. `reconcile_apply`: Checks PR state via `view_pr`. On `MERGED`, writes `apply-status` state `applied` with `merged_sha`, clears the `merge_detected` gate, and advances base off `merged_sha`. On `CLOSED` unmerged, writes `state: rejected`, deletes the remote branch, and marks the ledger step `failed` (terminal).
+
+**See:** `lib/pulse/scripts/plan_sync.py`, `lib/pulse/scripts/apply_reconcile.py`, `lib/patterns/plan-sync-binding.md` § V1 limitation.
 
 ## Phase 7: RECORD
 

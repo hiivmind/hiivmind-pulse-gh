@@ -466,3 +466,94 @@ def test_interactive_actor_allowed_for_non_scheduled_transformation():
         registry=registry,
     )
     assert proposal.transformation == "interactive-only"
+
+
+# --- bound_paths & paths_changed validation -------------------------------
+
+
+def test_registry_paths_changed_validation_loads_kind():
+    data = minimal_registry_data()
+    data["transformations"]["format-python"]["validation"] = {"kind": "paths_changed"}
+    registry = mutation_plan.load_registry(data)
+    validation = registry.get("format-python").validation
+    assert validation.kind == "paths_changed"
+    assert validation.path is None
+    assert validation.schema is None
+
+
+def test_registry_paths_changed_validation_rejects_extra_fields():
+    data = minimal_registry_data()
+    data["transformations"]["format-python"]["validation"] = {
+        "kind": "paths_changed",
+        "path": "some/path",
+    }
+    with pytest.raises(mutation_plan.MutationPlanError, match="takes no path/schema"):
+        mutation_plan.load_registry(data)
+
+
+def test_build_proposal_accepts_and_normalizes_bound_paths():
+    proposal = mutation_plan.build_proposal(
+        id="run-1",
+        selection=["acme/api"],
+        transformation="format-python",
+        expected_shas={"acme/api": "abc123"},
+        actor=minimal_actor(),
+        bound_paths={"acme/api": ["docs/a.md", ".generated/docs/**"]},
+    )
+    assert proposal.bound_paths == {"acme/api": ("docs/a.md", ".generated/docs/**")}
+
+
+def test_build_proposal_rejects_bound_paths_key_outside_selection():
+    with pytest.raises(mutation_plan.MutationPlanError, match="entry outside selection"):
+        mutation_plan.build_proposal(
+            id="run-1",
+            selection=["acme/api"],
+            transformation="format-python",
+            expected_shas={"acme/api": "abc123"},
+            actor=minimal_actor(),
+            bound_paths={"acme/api": ["docs/a.md"], "acme/other": ["x"]},
+        )
+
+
+def test_validate_proposal_enforces_bound_paths_covers_selection_for_paths_changed():
+    data = minimal_registry_data()
+    data["transformations"]["format-python"]["validation"] = {"kind": "paths_changed"}
+    registry = mutation_plan.load_registry(data)
+
+    # Missing bound_paths entry for selected repo acme/api
+    with pytest.raises(mutation_plan.MutationPlanError, match="missing entry for"):
+        mutation_plan.build_proposal(
+            id="run-1",
+            selection=["acme/api"],
+            transformation="format-python",
+            expected_shas={"acme/api": "abc123"},
+            actor=minimal_actor(),
+            registry=registry,
+        )
+
+    # Valid when bound_paths covers selection
+    proposal = mutation_plan.build_proposal(
+        id="run-1",
+        selection=["acme/api"],
+        transformation="format-python",
+        expected_shas={"acme/api": "abc123"},
+        actor=minimal_actor(),
+        bound_paths={"acme/api": ["docs/a.md"]},
+        registry=registry,
+    )
+    assert proposal.bound_paths == {"acme/api": ("docs/a.md",)}
+
+
+def test_validate_proposal_allows_absent_bound_paths_for_none_kind():
+    data = minimal_registry_data()
+    registry = mutation_plan.load_registry(data)
+    proposal = mutation_plan.build_proposal(
+        id="run-1",
+        selection=["acme/api"],
+        transformation="format-python",
+        expected_shas={"acme/api": "abc123"},
+        actor=minimal_actor(),
+        registry=registry,
+    )
+    assert proposal.bound_paths == {}
+

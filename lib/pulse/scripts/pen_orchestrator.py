@@ -68,6 +68,16 @@ check runs after pen creation and the freshness/cleanliness preflight
 (a pen must exist, and have a resolvable HEAD, before it can be checked)
 and strictly before `pen exec`.
 
+## `validation.kind == "paths_changed"`: injectable changed-paths reader
+
+`mutation_plan.ValidationSpec` declares a `paths_changed` kind that asserts
+the set of changed paths in each repo matches exactly that repo's `bound_paths`
+on the `Proposal`. `execute` accepts an injectable
+`read_repo_changed_paths: Callable[[str], tuple[str, ...]] | None` seam (repo
+`owner/name` -> repo-relative paths that changed in that repo's pen clone).
+With no reader supplied and `kind == "paths_changed"`, validation fails closed
+as `blocked` with a message explaining that a reader is required.
+
 ## NEEDS_CONTEXT: per-repo command-failure attribution
 
 `nave_pen::ops::exec_pen` (verified against
@@ -87,7 +97,8 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Callable
+from fnmatch import fnmatchcase
+from typing import Any, Callable, Protocol
 
 from lib.pulse.scripts import nave_adapter
 from lib.pulse.scripts.mutation_plan import (
@@ -99,7 +110,23 @@ from lib.pulse.scripts.mutation_plan import (
 )
 
 
+class ApplyOps(Protocol):
+    """Abstract protocol for git-on-clones operations during allow-listed apply mode."""
+
+    def provision_branch(
+        self, branch: str, base_shas: dict[str, str]
+    ) -> dict[str, dict[str, str]]:
+        ...
+
+    def commit_repos(self, message: str) -> dict[str, dict[str, str]]:
+        ...
+
+    def push_repos(self, branch: str) -> dict[str, dict[str, str]]:
+        ...
+
+
 class PenOrchestratorError(ValueError):
+
     """Raised for a structurally invalid `PenPlan` — a caller/programmer
     bug (e.g. a mismatched resolved transformation), never a runtime
     gating outcome. Runtime gating outcomes are always reported via a
@@ -239,37 +266,108 @@ def _validate_repo_output(spec: ValidationSpec, read_repo_file, repo: str) -> st
     return None
 
 
+def _match_bound_path(pattern: str, path: str) -> bool:
+    if "*" in pattern:
+        return fnmatchcase(path, pattern)
+    return path == pattern
+
+
+def _validate_repo_paths_changed(
+    bound_patterns: tuple[str, ...],
+    read_repo_changed_paths: Callable[[str], tuple[str, ...]],
+    repo: str,
+) -> str | None:
+    try:
+        changed_raw = read_repo_changed_paths(repo)
+    except Exception as exc:
+        return f"{repo}: could not read changed paths: {exc}"
+
+    changed = set(changed_raw)
+    if not changed:
+        return f"{repo}: no paths changed (expected changes in bound_paths)"
+
+    unmatched = [
+        p for p in sorted(changed) if not any(_match_bound_path(pat, p) for pat in bound_patterns)
+    ]
+    if unmatched:
+        return f"{repo}: path changed outside bound_paths allowlist: {', '.join(unmatched)}"
+
+    missing_exact = [
+        pat for pat in bound_patterns if "*" not in pat and pat not in changed
+    ]
+    if missing_exact:
+        return f"{repo}: bound_paths exact path did not change: {', '.join(sorted(missing_exact))}"
+
+    return None
+
+
 def _validate(
-    spec: ValidationSpec, read_repo_file, selection: tuple[str, ...]
-) -> tuple[dict[str, str], str] | None:
+    spec: ValidationSpec,
+    read_repo_file: Callable[[str, str], bytes] | None,
+    read_repo_changed_paths: Callable[[str], tuple[str, ...]] | None,
+    bound_paths: dict[str, tuple[str, ...]],
+    selection: tuple[str, ...],
+) -> tuple[dict[str, str], str, str] | None:
     """Run the post-exec check `spec` declares across `selection`; return
-    `None` on success, or `(repo_outcomes, reason)` on failure. `kind ==
-    "none"` always passes. `kind == "json_schema"` with no `read_repo_file`
-    fails closed uniformly (see module docstring); with a reader, each repo
+    `None` on success, or `(repo_outcomes, reason, state)` on failure. `kind ==
+    "none"` always passes. `kind == "json_schema"` or `"paths_changed"` with no
+    reader fails closed uniformly (see module docstring); with a reader, each repo
     is checked independently so failure is attributed per repo."""
     if spec.kind == "none":
         return None
-    if read_repo_file is None:
-        reason = (
-            f"validation kind 'json_schema' (path={spec.path!r}) requires a "
-            "read_repo_file callable to read the pen's local output file "
-            "content — none was provided to execute(); pen show/status "
-            "carry no clone path, pen exec stdout/stderr are opaque by "
-            "contract, and `materialize` fetches committed GitHub content, "
-            "not a pen's local working tree, so pen_orchestrator cannot "
-            "read repo files on its own"
-        )
-        return ({repo: "failed" for repo in selection}, reason)
-    errors = {
-        repo: error
-        for repo in selection
-        if (error := _validate_repo_output(spec, read_repo_file, repo)) is not None
-    }
-    if not errors:
-        return None
-    repo_outcomes = {repo: ("failed" if repo in errors else "ok") for repo in selection}
-    reason = "; ".join(errors[repo] for repo in selection if repo in errors)
-    return (repo_outcomes, reason)
+
+    if spec.kind == "json_schema":
+        if read_repo_file is None:
+            reason = (
+                f"validation kind 'json_schema' (path={spec.path!r}) requires a "
+                "read_repo_file callable to read the pen's local output file "
+                "content — none was provided to execute(); pen show/status "
+                "carry no clone path, pen exec stdout/stderr are opaque by "
+                "contract, and `materialize` fetches committed GitHub content, "
+                "not a pen's local working tree, so pen_orchestrator cannot "
+                "read repo files on its own"
+            )
+            return ({repo: "failed" for repo in selection}, reason, "failed")
+        errors = {
+            repo: error
+            for repo in selection
+            if (error := _validate_repo_output(spec, read_repo_file, repo)) is not None
+        }
+        if not errors:
+            return None
+        repo_outcomes = {repo: ("failed" if repo in errors else "ok") for repo in selection}
+        reason = "; ".join(errors[repo] for repo in selection if repo in errors)
+        return (repo_outcomes, reason, "failed")
+
+    if spec.kind == "paths_changed":
+        if read_repo_changed_paths is None:
+            reason = (
+                "validation kind 'paths_changed' requires a "
+                "read_repo_changed_paths callable to read the pen's changed "
+                "paths — none was provided to execute(); pen show/status "
+                "carry no clone path, pen exec stdout/stderr are opaque by "
+                "contract, and `materialize` fetches committed GitHub content, "
+                "not a pen's local working tree, so pen_orchestrator cannot "
+                "read repo changed paths on its own"
+            )
+            return ({repo: "blocked" for repo in selection}, reason, "blocked")
+        errors = {
+            repo: error
+            for repo in selection
+            if (
+                error := _validate_repo_paths_changed(
+                    bound_paths.get(repo, ()), read_repo_changed_paths, repo
+                )
+            )
+            is not None
+        }
+        if not errors:
+            return None
+        repo_outcomes = {repo: ("failed" if repo in errors else "ok") for repo in selection}
+        reason = "; ".join(errors[repo] for repo in selection if repo in errors)
+        return (repo_outcomes, reason, "failed")
+
+    return None
 
 
 def execute(
@@ -278,6 +376,8 @@ def execute(
     *,
     read_repo_file: Callable[[str, str], bytes] | None = None,
     read_repo_head: Callable[[str], str] | None = None,
+    read_repo_changed_paths: Callable[[str], tuple[str, ...]] | None = None,
+    apply_ops: ApplyOps | Any | None = None,
 ) -> PenRunResult:
     """Drive `plan` through the pen state machine using `nave_adapter_runner`.
 
@@ -293,8 +393,11 @@ def execute(
     `read_repo_head`, if supplied, is called as `read_repo_head(repo) ->
     str` (raising `FileNotFoundError` or `KeyError` when `repo` is unknown)
     to satisfy `proposal.expected_shas` verification — see the module
-    docstring's "expected-SHA guard" section. These two callables are the
-    only filesystem seams this module accepts.
+    docstring's "expected-SHA guard" section.
+
+    `apply_ops`, if supplied, is an object/dataclass exposing
+    `provision_branch(branch, base_shas)`, `commit_repos(message)`, and
+    `push_repos(branch)` for allow-listed apply mode.
     """
     proposal = plan.proposal
     entry = plan.entry
@@ -308,16 +411,42 @@ def execute(
     version = _probe_version(runner)
     selection = proposal.selection
 
-    # --- forbidden push: checked before any Nave call --------------------
-    if plan.request_push or proposal.mutation_policy != "propose":
+    # --- policy gating check ----------------------------------------------
+    if proposal.mutation_policy == "propose":
+        if plan.request_push:
+            return _result(
+                plan,
+                "blocked",
+                version,
+                {repo: "blocked" for repo in selection},
+                "push forbidden: pen_orchestrator is propose-only and never "
+                f"commits or pushes; got mutation_policy={proposal.mutation_policy!r} "
+                f"request_push={plan.request_push!r}",
+            )
+    elif proposal.mutation_policy == "allow-listed":
+        if apply_ops is None:
+            return _result(
+                plan,
+                "blocked",
+                version,
+                {repo: "blocked" for repo in selection},
+                "mutation_policy 'allow-listed' requires apply_ops to be supplied to execute()",
+            )
+    elif proposal.mutation_policy == "allow":
         return _result(
             plan,
             "blocked",
             version,
             {repo: "blocked" for repo in selection},
-            "push forbidden: pen_orchestrator is propose-only and never "
-            f"commits or pushes; got mutation_policy={proposal.mutation_policy!r} "
-            f"request_push={plan.request_push!r}",
+            "push forbidden: mutation policy 'allow' is reserved and blocked in v1",
+        )
+    else:
+        return _result(
+            plan,
+            "blocked",
+            version,
+            {repo: "blocked" for repo in selection},
+            f"push forbidden: unsupported mutation_policy={proposal.mutation_policy!r}",
         )
 
     # --- planned -> created ------------------------------------------------
@@ -437,12 +566,44 @@ def execute(
             else:
                 sha_outcomes[repo] = "ok"
         if sha_reasons:
+            reason = "; ".join(sha_reasons)
+            if proposal.mutation_policy == "allow-listed":
+                reason += " (stale base: recovery is rebuild expected_shas off current HEAD and re-propose)"
             return _result(
                 plan,
                 "blocked",
                 version,
                 sha_outcomes,
-                "; ".join(sha_reasons),
+                reason,
+            )
+
+    # --- provision apply branch (allow-listed mode) -----------------------
+    apply_branch = f"pulse/apply/{proposal.id}"
+    if proposal.mutation_policy == "allow-listed":
+        prov_results = apply_ops.provision_branch(apply_branch, expected_shas)
+        if not isinstance(prov_results, dict):
+            prov_results = {}
+        prov_failures: list[str] = []
+        prov_outcomes: dict[str, str] = {}
+        for repo in selection:
+            res = prov_results.get(repo)
+            if not isinstance(res, dict) or res.get("state") != "ok":
+                reason = (
+                    res.get("reason", "provision failed")
+                    if isinstance(res, dict)
+                    else "missing provision result"
+                )
+                prov_failures.append(f"{repo}: {reason}")
+                prov_outcomes[repo] = "blocked"
+            else:
+                prov_outcomes[repo] = "ok"
+        if prov_failures:
+            return _result(
+                plan,
+                "blocked",
+                version,
+                prov_outcomes,
+                f"provision apply branch failed: {'; '.join(prov_failures)}",
             )
 
     # --- executed -----------------------------------------------------------
@@ -457,8 +618,6 @@ def execute(
         message=None,
     )
     if exec_result.get("adapter_state") == "error":
-        # See module NEEDS_CONTEXT note: no per-repo attribution is
-        # possible, so the whole run fails and every repo is "failed".
         return _result(
             plan,
             "failed",
@@ -468,10 +627,79 @@ def execute(
         )
 
     # --- validated -----------------------------------------------------------
-    validation_failure = _validate(entry.validation, read_repo_file, selection)
+    validation_failure = _validate(
+        entry.validation,
+        read_repo_file,
+        read_repo_changed_paths,
+        proposal.bound_paths,
+        selection,
+    )
     if validation_failure is not None:
-        repo_outcomes, reason = validation_failure
-        return _result(plan, "failed", version, repo_outcomes, reason)
+        repo_outcomes, reason, state = validation_failure
+        return _result(plan, state, version, repo_outcomes, reason)
+
+    # --- landing (allow-listed mode: commit-all then push-all) --------------
+    if proposal.mutation_policy == "allow-listed":
+        message = f"pulse-apply {proposal.id} by {proposal.actor.gh_login}@{proposal.actor.machine}"
+        commit_results = apply_ops.commit_repos(message)
+        if not isinstance(commit_results, dict):
+            commit_results = {}
+        commit_failures: list[str] = []
+        commit_outcomes: dict[str, str] = {}
+        for repo in selection:
+            res = commit_results.get(repo)
+            if not isinstance(res, dict) or res.get("state") != "ok":
+                reason = (
+                    res.get("reason", "commit failed")
+                    if isinstance(res, dict)
+                    else "missing commit result"
+                )
+                commit_failures.append(f"{repo}: {reason}")
+                commit_outcomes[repo] = "failed"
+            else:
+                commit_outcomes[repo] = "ok"
+        if commit_failures:
+            return _result(
+                plan,
+                "failed",
+                version,
+                commit_outcomes,
+                f"commit failed: {'; '.join(commit_failures)}",
+            )
+
+        push_results = apply_ops.push_repos(apply_branch)
+        if not isinstance(push_results, dict):
+            push_results = {}
+        push_failures: list[str] = []
+        push_outcomes: dict[str, str] = {}
+        for repo in selection:
+            res = push_results.get(repo)
+            if not isinstance(res, dict) or res.get("state") != "ok":
+                reason = (
+                    res.get("reason", "push failed")
+                    if isinstance(res, dict)
+                    else "missing push result"
+                )
+                push_failures.append(f"{repo}: {reason}")
+                push_outcomes[repo] = "failed"
+            else:
+                push_outcomes[repo] = "ok"
+        if push_failures:
+            return _result(
+                plan,
+                "failed",
+                version,
+                push_outcomes,
+                f"push failed: {'; '.join(push_failures)}",
+            )
+
+        return _result(
+            plan,
+            "pushed",
+            version,
+            {repo: "ok" for repo in selection},
+            None,
+        )
 
     # --- proposed: terminal success, propose-only, never pushed -------------
     return _result(
@@ -481,3 +709,5 @@ def execute(
         {repo: "ok" for repo in selection},
         None,
     )
+
+

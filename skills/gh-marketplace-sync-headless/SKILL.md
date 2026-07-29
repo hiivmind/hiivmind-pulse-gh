@@ -184,6 +184,8 @@ For every non-`in_sync` / non-`not_applicable` / non-`unknown` drift (so
    or run a pen. With `mutation_policy: apply`, append a deferred-action
    note naming the F9 v1 limitation instead of applying.
 
+Under `on_mutation: allow-listed`, marketplace entry writes land on GitHub via `lib/pulse/scripts/object_apply.py` (`apply_object_write`). The write is guarded by a typed `Precondition` (target file/version expected state) and verb `mutation_allowlist` check. Path B operates independently of Path A.
+
 **See:** `lib/pulse/scripts/marketplace_sync.py`,
 `lib/pulse/scripts/mutation_plan.py`,
 `lib/patterns/repository-mutations.md`.

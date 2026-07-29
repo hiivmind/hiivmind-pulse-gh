@@ -1,0 +1,17 @@
+contract_version: 1
+kind: apply-status
+workspace: testorg
+run_at: "2026-07-29T15:00:00Z"
+actor:
+  gh_login: octocat
+  machine: mba-m4
+  mode: scheduled
+state: pr_opened
+proposal_id: bump-lockfile-2026-07-10
+selection: [testorg/widget, testorg/core]
+branch: pulse/apply/bump-lockfile-2026-07-10
+pushed_sha: "1234567890abcdef1234567890abcdef12345678"
+pr_url: "https://github.com/testorg/widget/pull/42"
+merged_sha: null
+reason: null
+errors: []

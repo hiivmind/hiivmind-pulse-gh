@@ -47,24 +47,9 @@ V1 does not synchronize GitHub Projects custom fields, labels, or comments.
 
 F8 is **propose-only** end to end (see the plan's Global Constraints): the doc
 path is proposed as an F6 `plan-sync-doc-patch` repo mutation and the GitHub
-path as a Pulse proposed action, and **neither is ever applied**. Two aspects of
-the doc transformation are therefore defined but not yet execution-safe, and
-must be closed before any apply-mode consumer runs `plan-sync-doc-patch`:
+path as a Pulse proposed action, and **neither is ever applied**.
 
-- **Executor path.** The registered argv runs `apply_doc_patch.py` by a
-  plugin-repo-relative path, which does not resolve inside a doc-repo pen
-  checkout (unlike F7's `regenerate-from-template`, which calls the installed
-  `nave` CLI). Apply mode needs the patch applier reachable on `PATH` in the
-  checkout (an installed console entry point or a `nave` subcommand).
-- **Bound-path enforcement.** The transformation's output allowlist is the
-  *per-binding dynamic* document path, but the F6 registry allowlist and
-  `validation` are static — the entry carries `validation: {kind: none}`, and
-  the bound path is currently self-attested by the (caller-authored) patch
-  descriptor. Apply mode needs the bound path carried as immutable proposal
-  metadata that the F6 orchestrator enforces, plus a "this exact path changed"
-  validation kind. `apply_doc_patch.py` already verifies the base-blob match and
-  rejects path escapes, but that is script-level, not orchestrator-level.
-
-These are backlogged as an F6/apply-mode enhancement; they do not affect
-propose-mode correctness (the argv is recorded, never executed; no validation
-runs).
+- **Bound-path enforcement (closed in F11 Task 2).** `plan-sync-doc-patch`
+  proposals carry `bound_paths: {repo: [doc_path]}` as immutable proposal
+  metadata, enforced by `pen_orchestrator.py` via `validation: {kind: paths_changed}`.
+  `apply_doc_patch.py` also verifies base-blob match and rejects path escapes.

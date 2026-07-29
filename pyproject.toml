@@ -5,6 +5,10 @@ description = "Dev/test environment for hiivmind-pulse-gh plugin scripts (the sc
 requires-python = ">=3.10"
 dependencies = []
 
+[project.scripts]
+pulse-apply-doc-patch = "lib.pulse.scripts.apply_doc_patch_entry:main"
+pulse-apply-marketplace-entry = "lib.pulse.scripts.apply_marketplace_entry:main"
+
 [dependency-groups]
 dev = [
     "pytest>=8.0",

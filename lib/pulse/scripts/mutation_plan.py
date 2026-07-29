@@ -14,17 +14,19 @@ for the normative contract this module implements.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from lib.pulse.scripts.executor_probe import validate_command_argv
+
 
 ACTOR_MODES = {"interactive", "scheduled"}
 MUTATION_POLICIES = {"propose", "allow-listed", "allow"}
-VALIDATION_KINDS = {"none", "json_schema"}
+VALIDATION_KINDS = {"none", "json_schema", "paths_changed"}
 
 
 class MutationPlanError(ValueError):
@@ -119,12 +121,12 @@ def _load_validation(raw: Any, entry_id: str) -> ValidationSpec:
         raise MutationPlanError(
             f"transformation {entry_id}.validation.kind invalid: {kind}"
         )
-    if kind == "none":
+    if kind in ("none", "paths_changed"):
         if "path" in item or "schema" in item:
             raise MutationPlanError(
-                f"transformation {entry_id}.validation: kind 'none' takes no path/schema"
+                f"transformation {entry_id}.validation: kind '{kind}' takes no path/schema"
             )
-        return ValidationSpec(kind="none")
+        return ValidationSpec(kind=kind)
     # kind == "json_schema"
     path = _string(item.get("path"), f"transformation {entry_id}.validation.path")
     schema = _mapping(item.get("schema"), f"transformation {entry_id}.validation.schema")
@@ -167,6 +169,10 @@ def _load_transformation(raw: Any, entry_id: str) -> TransformationEntry:
             f"transformation {entry_id}.id must match its registry key: {declared_id}"
         )
     command_argv = _argv(item.get("command_argv"), f"transformation {entry_id}.command_argv")
+    try:
+        validate_command_argv(command_argv, entry_id)
+    except ValueError as exc:
+        raise MutationPlanError(str(exc)) from exc
     applies_to_raw = _list(item.get("applies_to"), f"transformation {entry_id}.applies_to")
     if not applies_to_raw:
         raise MutationPlanError(f"transformation {entry_id}.applies_to must be non-empty")
@@ -287,6 +293,7 @@ class Proposal:
     expected_shas: dict[str, str]
     mutation_policy: str
     actor: Actor
+    bound_paths: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 def _repo_name(value: Any, label: str) -> str:
@@ -315,6 +322,7 @@ def build_proposal(
     expected_shas: dict[str, str],
     actor: dict[str, Any] | Actor,
     mutation_policy: str = "propose",
+    bound_paths: dict[str, list[str] | tuple[str, ...]] | None = None,
     registry: TransformationRegistry | None = None,
 ) -> Proposal:
     """Construct and validate a `Proposal`.
@@ -356,6 +364,20 @@ def build_proposal(
 
     actor_block = actor if isinstance(actor, Actor) else _load_actor(actor)
 
+    normalized_bound_paths: dict[str, tuple[str, ...]] = {}
+    if bound_paths is not None:
+        b_map = _mapping(bound_paths, "proposal.bound_paths")
+        for repo, paths in b_map.items():
+            repo_key = _repo_name(repo, "proposal.bound_paths key")
+            if repo_key not in repos:
+                raise MutationPlanError(
+                    f"proposal.bound_paths has entry outside selection: {repo_key}"
+                )
+            path_list = _list(list(paths), f"proposal.bound_paths[{repo_key}]")
+            normalized_bound_paths[repo_key] = tuple(
+                _string(p, f"proposal.bound_paths[{repo_key}] entry") for p in path_list
+            )
+
     proposal = Proposal(
         id=proposal_id,
         selection=repos,
@@ -363,6 +385,7 @@ def build_proposal(
         expected_shas=normalized_shas,
         mutation_policy=policy,
         actor=actor_block,
+        bound_paths=normalized_bound_paths,
     )
 
     if registry is not None:
@@ -383,3 +406,14 @@ def validate_proposal(proposal: Proposal, registry: TransformationRegistry) -> N
         raise MutationPlanError(
             f"transformation not allowed in scheduled mode: {proposal.transformation}"
         )
+    if entry.validation.kind == "paths_changed":
+        missing = set(proposal.selection) - set(proposal.bound_paths)
+        if missing:
+            raise MutationPlanError(
+                f"proposal.bound_paths missing entry for: {sorted(missing)[0]}"
+            )
+        extra = set(proposal.bound_paths) - set(proposal.selection)
+        if extra:
+            raise MutationPlanError(
+                f"proposal.bound_paths has entry outside selection: {sorted(extra)[0]}"
+            )
