@@ -162,9 +162,7 @@ engine:
   **Scheduled gating:** Under mode: scheduled, a generator whose transformation
   has allow_scheduled: false MUST NOT be dispatched — record the drift as a
   `proposed_action`/finding requiring human approval. Only allow_scheduled: true
-  transformations may be dispatched unattended. `generator_dispatch.dispatch`
-  does not check the registry's scheduled flag; the skill enforces it by reading
-  `allow_scheduled` from the transformation registry before dispatch.
+  transformations may be dispatched unattended.
 
   (F10: gating is enforced by threading the transformation registry into
   `dispatch`→`build_proposal`→`validate_proposal`. The driver never executes a

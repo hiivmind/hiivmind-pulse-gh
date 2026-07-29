@@ -128,10 +128,11 @@ def test_build_result_current_produces_no_proposal():
     assert validate_result.validate(res, "generated-artifact") == []
 
 
-def test_build_result_template_drift_interactive_proposal_summary_and_expected_shas():
+def test_build_result_template_drift_interactive_proposal_summary_and_expected_shas(
+    monkeypatch,
+):
     registry = load_test_registry()
     generators = load_test_generators(registry)
-    gen = generators["readme-from-template"]
     b = binding()
     snap = snapshot_for(
         trees={"templates/repo-readme.md": "tree2222"},
@@ -140,12 +141,17 @@ def test_build_result_template_drift_interactive_proposal_summary_and_expected_s
     # Snapshot must carry head for dispatch expected_shas
     snap["hiivmind/template-repo"]["main"]["head"] = "head999"
 
-    # Ephemeral full Proposal carries expected_shas (would pass execute guard)
-    full = generator_dispatch.dispatch(
-        gen, b, snap, dict(ACTOR, mode="interactive"), registry=registry
-    )
-    assert full.expected_shas == {"hiivmind/template-repo": "head999"}
-    assert full.mutation_policy == "propose"
+    # Spy: assert the Proposal that build_result actually creates carries
+    # expected_shas (would pass execute's guard) without calling execute.
+    captured: list = []
+    real_dispatch = generator_dispatch.dispatch
+
+    def spy_dispatch(*args, **kwargs):
+        proposal = real_dispatch(*args, **kwargs)
+        captured.append(proposal)
+        return proposal
+
+    monkeypatch.setattr(generator_dispatch, "dispatch", spy_dispatch)
 
     res = ga.build_result(
         manifest([b]),
@@ -155,6 +161,11 @@ def test_build_result_template_drift_interactive_proposal_summary_and_expected_s
         actor=ACTOR,
         mode="interactive",
     )
+
+    assert len(captured) == 1
+    full = captured[0]
+    assert full.expected_shas == {"hiivmind/template-repo": "head999"}
+    assert full.mutation_policy == "propose"
 
     assert res["states"]["widget-readme"] == "template-drift"
     assert len(res["proposals"]) == 1
@@ -167,6 +178,135 @@ def test_build_result_template_drift_interactive_proposal_summary_and_expected_s
     assert "expected_shas" not in summary
     assert "selection" not in summary
     assert validate_result.validate(res, "generated-artifact") == []
+
+
+def test_build_result_profile_scoped_generator_proposes_when_profile_matches():
+    """Neutral: profile-scoped generator + matching profiles_by_repo → proposal."""
+    from lib.pulse.scripts.profile_dispatch import RepositoryProfile
+
+    registry = load_test_registry()
+    generators = generator_dispatch.load_generators(
+        {
+            "docs-from-template": {
+                "id": "docs-from-template",
+                "applies_to": ["profile:documentation"],
+                "transformation": "regenerate-from-template",
+                "source_paths": ["templates/repo-readme.md"],
+                "output_paths": ["README.md", "docs/**/*.md"],
+                "validation": {"kind": "none"},
+            }
+        },
+        registry,
+    )
+    b = binding(generator="docs-from-template")
+    snap = snapshot_for(trees={"templates/repo-readme.md": "tree2222"})
+    snap["hiivmind/template-repo"]["main"]["head"] = "head999"
+    profiles = {
+        "hiivmind/template-repo": RepositoryProfile(
+            profiles=("documentation",),
+            scorecard="docs-v1",
+        )
+    }
+
+    res = ga.build_result(
+        manifest([b]),
+        snap,
+        generators=generators,
+        registry=registry,
+        actor=ACTOR,
+        mode="interactive",
+        profiles_by_repo=profiles,
+    )
+
+    assert res["states"]["widget-readme"] == "template-drift"
+    assert len(res["proposals"]) == 1
+    assert res["proposals"][0]["binding"] == "widget-readme"
+    assert res["proposals"][0]["transformation"] == "regenerate-from-template"
+    assert not any(f["kind"] == "profile_unavailable" for f in res["findings"])
+    assert not any(f["kind"] == "generator_not_applicable" for f in res["findings"])
+    assert validate_result.validate(res, "generated-artifact") == []
+
+
+def test_build_result_profile_scoped_generator_profile_unavailable_without_data():
+    """Profile-scoped generator with no profiles_by_repo → profile_unavailable."""
+    registry = load_test_registry()
+    generators = generator_dispatch.load_generators(
+        {
+            "docs-from-template": {
+                "id": "docs-from-template",
+                "applies_to": ["profile:documentation"],
+                "transformation": "regenerate-from-template",
+                "source_paths": ["templates/repo-readme.md"],
+                "output_paths": ["README.md", "docs/**/*.md"],
+                "validation": {"kind": "none"},
+            }
+        },
+        registry,
+    )
+    b = binding(generator="docs-from-template")
+    snap = snapshot_for(trees={"templates/repo-readme.md": "tree2222"})
+    snap["hiivmind/template-repo"]["main"]["head"] = "head999"
+
+    res = ga.build_result(
+        manifest([b]),
+        snap,
+        generators=generators,
+        registry=registry,
+        actor=ACTOR,
+        mode="interactive",
+        profiles_by_repo=None,
+    )
+
+    assert res["states"]["widget-readme"] == "template-drift"
+    assert res["proposals"] == []
+    kinds = [f["kind"] for f in res["findings"]]
+    assert "profile_unavailable" in kinds
+    assert "generator_not_applicable" not in kinds
+    assert validate_result.validate(res, "generated-artifact") == []
+
+
+def test_build_result_profile_scoped_generator_not_applicable_when_profile_mismatches():
+    """Profile present but does not match → generator_not_applicable (confident)."""
+    from lib.pulse.scripts.profile_dispatch import RepositoryProfile
+
+    registry = load_test_registry()
+    generators = generator_dispatch.load_generators(
+        {
+            "docs-from-template": {
+                "id": "docs-from-template",
+                "applies_to": ["profile:documentation"],
+                "transformation": "regenerate-from-template",
+                "source_paths": ["templates/repo-readme.md"],
+                "output_paths": ["README.md", "docs/**/*.md"],
+                "validation": {"kind": "none"},
+            }
+        },
+        registry,
+    )
+    b = binding(generator="docs-from-template")
+    snap = snapshot_for(trees={"templates/repo-readme.md": "tree2222"})
+    snap["hiivmind/template-repo"]["main"]["head"] = "head999"
+    profiles = {
+        "hiivmind/template-repo": RepositoryProfile(
+            profiles=("python",),
+            scorecard="python-library-v1",
+        )
+    }
+
+    res = ga.build_result(
+        manifest([b]),
+        snap,
+        generators=generators,
+        registry=registry,
+        actor=ACTOR,
+        mode="interactive",
+        profiles_by_repo=profiles,
+    )
+
+    assert res["proposals"] == []
+    kinds = [f["kind"] for f in res["findings"]]
+    assert "generator_not_applicable" in kinds
+    assert "profile_unavailable" not in kinds
 
 
 def test_build_result_scheduled_gates_allow_scheduled_false():

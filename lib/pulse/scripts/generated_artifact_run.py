@@ -26,8 +26,10 @@ from lib.pulse.scripts import (
     generated_artifacts,
     generator_dispatch,
     mutation_plan,
+    profile_dispatch,
     validate_result,
 )
+from lib.pulse.scripts.profile_dispatch import RepositoryProfile
 
 Collector = Callable[..., Any]
 
@@ -101,6 +103,23 @@ def load_generators(
         return generator_dispatch.load_generators(template_gens, registry)
 
     return {}
+
+
+def load_profiles_by_repo(workspace: Path) -> dict[str, RepositoryProfile] | None:
+    """Load CONFIG_DIR/profiles.yaml when present (healthcheck-compatible).
+
+    Returns None when the file is absent or unreadable so profile-scoped
+    generators can emit ``profile_unavailable`` rather than a false
+    ``generator_not_applicable``.
+    """
+    path = workspace / ".hiivmind" / "github" / "profiles.yaml"
+    if not path.exists():
+        return None
+    try:
+        config = profile_dispatch.load_profiles(path)
+    except (profile_dispatch.ConfigError, OSError, UnicodeError):
+        return None
+    return dict(config.repositories)
 
 
 def run_driver(
@@ -194,6 +213,7 @@ def run_driver(
     snapshot = collect(prepared_manifest, workdir=workspace)
     registry = load_transformation_registry(workspace)
     generators = load_generators(workspace, registry)
+    profiles_by_repo = load_profiles_by_repo(workspace)
 
     result_data = generated_artifacts.build_result(
         prepared_manifest,
@@ -202,6 +222,7 @@ def run_driver(
         registry=registry,
         actor=actor,
         mode=mode,
+        profiles_by_repo=profiles_by_repo,
     )
     # Authoritative workspace login from config, not actor default.
     result_data["workspace"] = login

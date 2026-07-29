@@ -492,6 +492,15 @@ def _empty_result(
     }
 
 
+def _generator_requires_profile(generator: Any) -> bool:
+    """True when any applies_to predicate needs repository profile metadata."""
+    applies = getattr(generator, "applies_to", ()) or ()
+    return any(
+        isinstance(p, str) and p.startswith("profile:")
+        for p in applies
+    )
+
+
 def build_result(
     manifest: dict,
     snapshot: dict,
@@ -500,6 +509,8 @@ def build_result(
     registry: TransformationRegistry | None,
     actor: dict[str, Any],
     mode: str = "interactive",
+    profiles_by_repo: dict[str, RepositoryProfile] | None = None,
+    evidence_by_repo: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Pure envelope owner for generated-artifact results.
 
@@ -510,6 +521,11 @@ def build_result(
     gating fires. Out-of-allowlist and other dispatch errors become findings
     (no proposal). ``local-customization`` / ``conflict`` / ``error`` emit
     findings only. No I/O, no pen execution.
+
+    ``profiles_by_repo`` / ``evidence_by_repo`` are optional. When a generator
+    is profile-scoped (``applies_to`` contains ``profile:...``) and no profile
+    is available for the binding's source repo, emit ``profile_unavailable``
+    rather than a confident ``generator_not_applicable``.
     """
     # Lazy import keeps module-level graph free of a hard cycle risk and
     # matches the sibling drivers' registry-threading style.
@@ -542,11 +558,8 @@ def build_result(
     proposed_actions: list[str] = []
     states: dict[str, str] = {}
 
-    # Empty profile/evidence: only `always` generators apply. Profile-scoped
-    # generators are configuration-level filters; the driver may later inject
-    # richer profiles without changing this pure loop's signature.
     empty_repo = RepositoryProfile(profiles=(), scorecard="")
-    empty_evidence: dict[str, Any] = {}
+    evidence_map = evidence_by_repo or {}
 
     for result in report.bindings:
         states[result.id] = result.state
@@ -579,8 +592,29 @@ def build_result(
             })
             continue
 
+        repo_profile: RepositoryProfile | None = None
+        if profiles_by_repo is not None:
+            repo_profile = profiles_by_repo.get(result.source)
+
+        if _generator_requires_profile(generator) and repo_profile is None:
+            findings.append({
+                "kind": "profile_unavailable",
+                "repo": result.source,
+                "severity": "medium",
+                "detail": (
+                    f"binding {result.id!r}: generator {generator.id!r} is "
+                    "profile-scoped but no repository profile is available "
+                    f"for {result.source!r}"
+                ),
+                "inferred": False,
+            })
+            continue
+
+        repository = repo_profile if repo_profile is not None else empty_repo
+        evidence = evidence_map.get(result.source) or {}
+
         if not generator_dispatch.generator_applies(
-            generator, empty_repo, empty_evidence
+            generator, repository, evidence
         ):
             findings.append({
                 "kind": "generator_not_applicable",
