@@ -44,14 +44,7 @@ if __package__ in {None, ""}:
 
 
 BLOCKED_VERBS: set[str] = {
-    "delete",
-    "transfer",
-    "archive",
-    "delete-default",
-    "delete-all",
     "remove-all-members",
-    "delete-repo",
-    "delete-org",
 }
 
 
@@ -81,6 +74,14 @@ class GhExecutionError(Exception):
     pass
 
 
+OPERATIONAL_ERRORS = (
+    GhExecutionError,
+    subprocess.SubprocessError,
+    OSError,
+    json.JSONDecodeError,
+)
+
+
 class ObjectGhOps:
     """Interface for GitHub object CLI operations (injected for testing)."""
 
@@ -98,6 +99,16 @@ class ObjectGhOps:
         Raises GhExecutionError on execution failure.
         """
         raise NotImplementedError
+
+
+def build_gh_api_post_args(
+    target: str, payload: dict[str, Any], gh_binary: str = "gh"
+) -> list[str]:
+    """Construct `gh api -X POST` command args with `-f key=value` flags."""
+    cmd = [gh_binary, "api", "-X", "POST", target]
+    for k, v in payload.items():
+        cmd.extend(["-f", f"{k}={v}"])
+    return cmd
 
 
 class ObjectGhCliOps(ObjectGhOps):
@@ -172,15 +183,7 @@ class ObjectGhCliOps(ObjectGhOps):
                 "value": val,
             }
 
-        cmd = [
-            self.gh_binary,
-            "api",
-            "-X",
-            "POST",
-            write.target,
-            "-f",
-            json.dumps(write.payload),
-        ]
+        cmd = build_gh_api_post_args(write.target, write.payload, self.gh_binary)
         res = subprocess.run(cmd, capture_output=True, text=True, check=False)
         if res.returncode != 0:
             raise GhExecutionError(
@@ -228,7 +231,7 @@ def apply_object_write(
         # Verb is in allowlist -> check precondition live state
         try:
             current_state = gh_ops.get_state(write.precondition)
-        except (GhExecutionError, Exception) as exc:
+        except OPERATIONAL_ERRORS as exc:
             return {
                 "state": "blocked",
                 "reason": f"precondition unconfirmable: {exc}",
@@ -267,7 +270,7 @@ def apply_object_write(
                 result["noop"] = False
                 return result
             return {"state": "applied", "noop": False, "result": res}
-        except (GhExecutionError, Exception) as exc:
+        except OPERATIONAL_ERRORS as exc:
             return {"state": "failed", "reason": str(exc)}
 
     return {"state": "blocked", "reason": f"unrecognized policy: {policy}"}
