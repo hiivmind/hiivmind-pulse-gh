@@ -88,6 +88,15 @@ workspace_root: {workspace_path}, repo: {repo input}}`, applying the Headless Ex
 projection with the workflow's `headless:` policy. Accumulate FINDINGS,
 PROPOSED_ACTIONS, ASKS_RECORDED per the projection table.
 
+- **Driver-backed workflows** (whose pseudocode is `INVOKE skill X-headless`, e.g. the
+  F6–F9 marketplace-sync / plan-sync / generated-artifact workflows) produce their
+  proposals in the sibling's own `{kind}-result.yaml`. Per the executor's "Folding a
+  headless sibling's result" rule, run
+  `uv run "${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/subresult_fold.py" <sibling result>`
+  and extend FINDINGS / PROPOSED_ACTIONS / ASKS_RECORDED with its output — otherwise this
+  run's result carries none of the sibling's proposals and the scheduled PR body shows
+  nothing. A fold error (`exit 3`) is appended to ERRORS.
+
 - Pseudocode completed (end or `STOP`) → OUTCOME = `success`.
 - Unrecoverable error → OUTCOME = `failure`, append to ERRORS, proceed to Phase 4.
 - `on_ask: abort` triggered → OUTCOME = `aborted`, proceed to Phase 4.

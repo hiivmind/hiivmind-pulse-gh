@@ -102,12 +102,18 @@ The scheduler-repo PR lands these tests:
 4. **Compatibility:** an empty/absent `automation.scheduled_workflows` runs the maintenance
    flow unchanged (status → refresh → healthcheck → PR) with no Workflow-runs section.
 
-## Open follow-up (tracked, not blocking this spec)
+## Open follow-up — ✅ RESOLVED
 
-- Verify/implement `gh-workflow-run-headless` folding of inner driver `proposals[]` →
-  `workflow-run-result.yaml` `proposed_actions`. If absent, it is a small **plugin-repo**
-  task (not scheduler), because the projection surface (`proposed_actions`) already exists in
-  Phase 6. Capture in the F10 backlog / `docs/backlogs/` if deferred.
+- ~~Verify/implement `gh-workflow-run-headless` folding of inner driver `proposals[]` →
+  `workflow-run-result.yaml` `proposed_actions`.~~ **Confirmed absent and implemented in
+  hiivmind-pulse-gh PR #140.** The executor's `INVOKE skill X` projection previously invoked
+  the sibling driver and discarded its result envelope; `lib/pulse/scripts/subresult_fold.py`
+  now folds the sibling's `findings` / `proposed_actions` / `asks_recorded` into the
+  workflow-run result (a deterministic pass-through — `proposals[]` is the F11 re-derivation
+  channel and is intentionally not re-rendered). Wired into `workflow-execution.md` and
+  `gh-workflow-run-headless`. Workspace enrollment of the four `periodic` workflows is
+  `hiivmind/hiivmind-workspace` PR #2. **With both merged, F10's "triggered end-to-end" gate
+  closes** — the scheduler template itself needed no functional change.
 
 ## Provenance
 
