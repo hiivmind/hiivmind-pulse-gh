@@ -69,120 +69,20 @@ end to end.
 - Severity is deterministic and copied from `compare` evidence; no LLM
   judgment is involved at this layer.
 
-## State
+## Execution
 
-Determine `RESULT_PATH` before validating the workspace: explicit
-`result_path`; otherwise the workspace default when `workspace_path` is
-non-empty and usable; otherwise `./marketplace-sync-result.yaml` in the
-current directory. This fallback must be available for every early ABORT
-to write its result.
+Execute the marketplace entry version drift audit by invoking the CLI driver:
 
-```text
-CONFIG_DIR         = {workspace_path}/.hiivmind/github
-SYNC_CONFIG        = CONFIG_DIR/marketplace-sync.yaml
-RESULT_PATH        = {explicit result_path, workspace default, or current-directory fallback}
-LOGIN              = unknown
-RUN_AT             = current UTC timestamp
-MODE               = {mode, default scheduled}
-MUTATION_POLICY    = {mutation_policy, default propose}
-BINDINGS           = []
-SNAPSHOT           = empty    # releases + marketplace_doc per binding
-FINDINGS           = []
-PROPOSALS          = []
-PROPOSED_ACTIONS   = []
-ERRORS             = []
-COUNTS             = {bindings_scanned: 0, in_sync: 0, drift: 0, missing_entry: 0, unknown: 0, not_applicable: 0}
+```bash
+uv run lib/pulse/scripts/marketplace_sync_run.py --workspace <workspace_path> [--repo <repo>] [--result <result_path>] [--mode scheduled|interactive]
 ```
 
-## Phase 1: CONTEXT
+The driver CLI handles workspace validation, binding loading, evidence collection via `gh`, delegation to `marketplace_sync.build_result`, writing the result YAML file, and self-validation via `validate_result.py`.
 
-1. Missing `workspace_path` → ABORT `"missing required input: workspace_path"`.
-2. Missing `CONFIG_DIR/config.yaml` or its top-level `workspace` → ABORT
-   `"not a workspace root: {workspace_path}"`.
-3. Read the authoritative `.workspace.login` from `CONFIG_DIR/config.yaml`
-   into `LOGIN`.
-4. Ensure `*-result.yaml` is present in `CONFIG_DIR/.gitignore`.
-5. Read the marketplace-sync bindings list from `SYNC_CONFIG.bindings[]`
-   and validate each binding's locator (`plugin_id`, `repo`,
-   `marketplace_repo`, `marketplace_file`). Do not use configuration
-   `metadata` blocks as decision authority.
-6. When `repo` is present, resolve it against configured binding `repo`
-   values. An unresolvable value → ABORT `"unknown repo: {repo}"`.
-   Otherwise narrow `BINDINGS` to the matching records.
-7. A valid empty selected set is a successful no-op, not an ABORT.
-8. For each binding, if the binding locator is malformed (missing required
-   fields, non-string `repo` / `marketplace_repo`, etc.) → append a typed
-   `invalid_binding` finding (`severity: medium`) and skip the binding;
-   do not count it as scanned.
-
-**See:** `lib/patterns/config-parsing.md`,
-`lib/patterns/headless-contract.md`.
-
-## Phase 2: DISCOVER
-
-For each selected binding, fetch the remote evidence into `SNAPSHOT[binding]`.
-
-1. Resolve the binding's `marketplace_repo` and `marketplace_file`. Use the
-   `gh api` REST surface to read the file at the binding's default branch
-   HEAD; parse the response body as JSON. A fetch or parse failure → set
-   `marketplace_doc = None` and record a typed `unreadable_marketplace_file`
-   finding (`severity: medium`) on the binding. The discoverer never
-   fabricates a `marketplace_doc` from cached bytes.
-2. Resolve the binding's `repo` and run
-   `gh release list --json tagName,isPrerelease,isDraft --limit 100 --repo
-   {owner}/{name}` (or the equivalent `gh api` route) to fetch the release
-   list. A fetch failure → set `releases = []` and record a typed
-   `unreadable_release_list` finding (`severity: medium`) on the binding.
-3. Increment `bindings_scanned` once per binding whose `DISCOVER` step
-   returned (any outcome). Bindings with a malformed locator counted in
-   Phase 1 do not enter `DISCOVER` and do not increment `bindings_scanned`.
-
-**See:** `lib/references/api-routing.md`, `lib/patterns/id-resolution.md`.
-
-## Phase 3: COMPARE
-
-For each selected binding, call
-`marketplace_sync.compare(binding, releases, marketplace_doc)` and store
-the returned `MarketplaceDrift` keyed by binding.
-
-1. A `not_applicable` drift means the binding was not configured for the
-   target repo (`compare` returns it only for a `None` binding). Phase 1
-   iterates configured bindings, so this arm is unreachable on the normal
-   path; the counter is retained for envelope symmetry and a future
-   single-binding/repo-filtered entry point. Increment `not_applicable`; do
-   not enter Phase 4.
-2. An `unknown` drift (no stable release, or unparseable
-   `marketplace_doc`) increments `unknown`; record a typed finding with
-   `drift.reason` in the finding's `detail`. Do not enter Phase 4.
-3. An `in_sync` drift increments `in_sync`; do not enter Phase 4.
-4. A `drift` or `missing_entry` drift increments the matching counter and
-   enters Phase 4.
-
-**See:** `lib/pulse/scripts/marketplace_sync.py`.
-
-## Phase 4: PROPOSE
-
-For every non-`in_sync` / non-`not_applicable` / non-`unknown` drift (so
-`drift` or `missing_entry` only):
-
-1. Resolve the binding's `marketplace_repo` HEAD SHA via
-   `gh api repos/{owner}/{repo}/commits/HEAD --jq .sha`. A failure →
-   append a typed `unreadable_head` finding (`severity: high`) and skip
-   the binding; do not build a proposal without an `expected_shas`
-   entry — the F6 guard requires it.
-2. Call
-   `marketplace_sync.build_marketplace_proposal(drift, head_sha, actor,
-   registry=...)`. The proposal selects `drift.marketplace_repo` and
-   carries `expected_shas={marketplace_repo: head_sha}`. `mutation_policy`
-   is always `propose` (this orchestrator is propose-only).
-3. Append a `PROPOSALS` record carrying `binding` (the binding's
-   `plugin_id`), `transformation` (`marketplace-entry-update`), and
-   `proposal_id` from the built proposal.
-4. Append a `PROPOSED_ACTIONS` record naming the proposal ID, the
-   marketplace repo, and the planned target version.
-5. Never call `gh api` to apply the patch, write the marketplace document,
-   or run a pen. With `mutation_policy: apply`, append a deferred-action
-   note naming the F9 v1 limitation instead of applying.
+- If `--repo` is provided, it narrows the audit to matching configured bindings.
+- If `--result` is provided, output is written to that path; otherwise to `.hiivmind/github/marketplace-sync-result.yaml` or `./marketplace-sync-result.yaml`.
+- `--mode` controls scheduled vs interactive gating (`allow_scheduled: false` gated in scheduled mode).
+- On any ABORT (e.g. invalid workspace or unknown repo), a valid `marketplace-sync` result file is written with the error recorded in `errors[]`.
 
 Under `on_mutation: allow-listed`, marketplace entry writes land on GitHub via `lib/pulse/scripts/object_apply.py` (`apply_object_write`). The write is guarded by a typed `Precondition` (target file/version expected state) and verb `mutation_allowlist` check. Path B operates independently of Path A.
 

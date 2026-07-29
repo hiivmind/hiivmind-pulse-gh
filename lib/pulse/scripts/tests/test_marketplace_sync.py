@@ -529,3 +529,149 @@ def test_marketplace_drift_proposal_is_blocked_by_stale_head_sha():
     # Exec must never be reached: only create (2 calls) + status (1 call).
     assert len(runner.calls) == 3
     assert not any("exec" in call for call in runner.calls)
+
+
+# --- build_result unit tests -------------------------------------------
+
+
+def test_build_result_in_sync_returns_zero_proposals():
+    registry = mutation_plan.load_registry(TEMPLATE_PATH)
+    b = binding()
+    releases_by_repo = {
+        PLUGIN_REPO: [{"tagName": "v2.0.0", "isPrerelease": False, "isDraft": False}]
+    }
+    docs_by_repo = {MARKETPLACE_REPO: marketplace_doc(PLUGIN_ID, "v2.0.0")}
+    head_shas = {MARKETPLACE_REPO: "deadbeef0001"}
+
+    res = marketplace_sync.build_result(
+        [b],
+        releases_by_repo=releases_by_repo,
+        docs_by_repo=docs_by_repo,
+        head_shas=head_shas,
+        actor=ACTOR,
+        registry=registry,
+        mode="interactive",
+    )
+
+    assert res["kind"] == "marketplace-sync"
+    assert res["bindings_scanned"] == 1
+    assert res["in_sync"] == 1
+    assert res["drift"] == 0
+    assert res["proposals"] == []
+
+
+def test_build_result_drift_interactive_emits_summary_and_carries_expected_shas_in_proposal():
+    registry = mutation_plan.load_registry(TEMPLATE_PATH)
+    # Neutral fixture
+    b = {
+        "plugin_id": "acme-widget",
+        "repo": "acme/acme-widget",
+        "marketplace_repo": "acme/marketplace",
+        "marketplace_file": ".claude-plugin/marketplace.json",
+    }
+    doc = {
+        "plugins": [
+            {"name": "acme-widget", "version": "1.0.0"}
+        ]
+    }
+    releases = [{"tagName": "v2.0.0", "isPrerelease": False, "isDraft": False}]
+    head_shas = {"acme/marketplace": "sha123456"}
+
+    # Ephemeral full Proposal check via build_marketplace_proposal directly
+    drift = marketplace_sync.compare(b, releases, doc)
+    full_proposal = marketplace_sync.build_marketplace_proposal(
+        drift, "sha123456", ACTOR, registry=registry
+    )
+    assert full_proposal.expected_shas == {"acme/marketplace": "sha123456"}
+
+    # Persisted result envelope check via build_result
+    res = marketplace_sync.build_result(
+        [b],
+        releases_by_repo={"acme/acme-widget": releases},
+        docs_by_repo={"acme/marketplace": doc},
+        head_shas=head_shas,
+        actor=ACTOR,
+        registry=registry,
+        mode="interactive",
+    )
+
+    assert res["bindings_scanned"] == 1
+    assert res["drift"] == 1
+    assert len(res["proposals"]) == 1
+    summary = res["proposals"][0]
+    # Persisted summary contains ONLY {binding, transformation, proposal_id}
+    assert summary == {
+        "binding": "acme-widget",
+        "transformation": "marketplace-entry-update",
+        "proposal_id": "marketplace-acme-widget",
+    }
+    assert "expected_shas" not in summary
+    assert "selection" not in summary
+
+
+def test_build_result_scheduled_mode_gates_allow_scheduled_false_transformation():
+    registry = mutation_plan.load_registry(TEMPLATE_PATH)
+    b = binding()
+    doc = marketplace_doc(PLUGIN_ID, "1.0.0")
+    releases = [{"tagName": "v2.0.0", "isPrerelease": False, "isDraft": False}]
+    head_shas = {MARKETPLACE_REPO: "deadbeef0001"}
+    scheduled_actor = dict(ACTOR, mode="scheduled")
+
+    res = marketplace_sync.build_result(
+        [b],
+        releases_by_repo={PLUGIN_REPO: releases},
+        docs_by_repo={MARKETPLACE_REPO: doc},
+        head_shas=head_shas,
+        actor=scheduled_actor,
+        registry=registry,
+        mode="scheduled",
+    )
+
+    assert res["bindings_scanned"] == 1
+    assert res["drift"] == 1
+    # Runnable proposals must be empty in scheduled mode for allow_scheduled: false
+    assert res["proposals"] == []
+    # Proposed action finding must be present
+    assert any(f.get("kind") == "gated_transformation" for f in res["findings"])
+    assert len(res["proposed_actions"]) == 1
+
+
+def test_build_result_no_stable_release_produces_unknown_finding():
+    registry = mutation_plan.load_registry(TEMPLATE_PATH)
+    b = binding()
+    doc = marketplace_doc(PLUGIN_ID, "1.0.0")
+    releases = [{"tagName": "v2.0.0-rc1", "isPrerelease": True, "isDraft": False}]
+    head_shas = {MARKETPLACE_REPO: "deadbeef0001"}
+
+    res = marketplace_sync.build_result(
+        [b],
+        releases_by_repo={PLUGIN_REPO: releases},
+        docs_by_repo={MARKETPLACE_REPO: doc},
+        head_shas=head_shas,
+        actor=ACTOR,
+        registry=registry,
+        mode="interactive",
+    )
+
+    assert res["bindings_scanned"] == 1
+    assert res["unknown"] == 1
+    assert res["proposals"] == []
+    assert any(f.get("kind") == "no_stable_release" for f in res["findings"])
+
+
+def test_build_result_malformed_binding_produces_invalid_binding_finding_not_scanned():
+    registry = mutation_plan.load_registry(TEMPLATE_PATH)
+    malformed_b = {"plugin_id": "bad", "repo": "incomplete"}  # missing marketplace_repo / file
+
+    res = marketplace_sync.build_result(
+        [malformed_b],
+        releases_by_repo={},
+        docs_by_repo={},
+        head_shas={},
+        actor=ACTOR,
+        registry=registry,
+        mode="interactive",
+    )
+
+    assert res["bindings_scanned"] == 0
+    assert any(f.get("kind") == "invalid_binding" for f in res["findings"])
