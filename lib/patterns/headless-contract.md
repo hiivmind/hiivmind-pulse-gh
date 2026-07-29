@@ -17,6 +17,7 @@ retained for human-readable logs only — orchestrators MUST read the file.
 | repo-mutation | repo-mutation-result.yaml | `{workspace_root}/.hiivmind/github/repo-mutation-result.yaml` |
 | generated-artifact | generated-artifact-result.yaml | `{workspace_root}/.hiivmind/github/generated-artifact-result.yaml` |
 | plan-sync | plan-sync-result.yaml | `{workspace_root}/.hiivmind/github/plan-sync-result.yaml` |
+| apply-status | apply-status-result.yaml | `{workspace_root}/.hiivmind/github/apply-status-result.yaml` |
 
 Result files are per-machine transient run artifacts (never authority — see
 `workspace-detection.md` § Multi-machine topology). The workspace repo's
@@ -36,7 +37,7 @@ not kinds they were not asked to validate.
 
 ```yaml
 contract_version: 1                   # int, required
-kind: status | healthcheck | fleet-membership | refresh | workflow-run | impact | repo-mutation | generated-artifact | plan-sync
+kind: status | healthcheck | fleet-membership | refresh | workflow-run | impact | repo-mutation | apply-status | generated-artifact | plan-sync
 workspace: <login>                    # str, required — org/user login
 run_at: <ISO 8601 timestamp>          # str, required
 actor:                                # required on ALL kinds (I4)
@@ -61,6 +62,7 @@ profiles, and machines: identity-sensitive logic resolves against the
     uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py repo-mutation-result.yaml --kind repo-mutation
     uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py generated-artifact-result.yaml --kind generated-artifact
     uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py plan-sync-result.yaml --kind plan-sync
+    uv run ${CLAUDE_PLUGIN_ROOT}/lib/pulse/scripts/validate_result.py apply-status-result.yaml --kind apply-status
 
 Orchestrators validate before consuming and treat exit 1/2 as a failed run
 (report, do not commit). Exit codes: 0 valid, 1 invalid (errors on stderr),
@@ -348,7 +350,35 @@ apply later, never performed by the run itself. `reason` is required
 (non-null) whenever `state` is `blocked` or `failed`, and optional (may be
 null) when `state` is `proposed`.
 
+### apply-status-result.yaml (written by apply reconcile loop, F11)
+
+Carries the persisted apply lifecycle status for a proposal branch.
+
+```yaml
+contract_version: 1
+kind: apply-status
+workspace: <login>
+run_at: <ISO 8601>
+actor: { gh_login: <str>, machine: <str>, mode: <enum> }
+state: pushed | pr_opened | applied | rejected  # required enum — apply lifecycle state
+proposal_id: <str>                  # required — the proposal id
+selection: [<owner/name>, ...]      # list of str, required — targeted repos
+branch: <str>                       # required — branch name (pulse/apply/{proposal_id})
+pushed_sha: <str or null>           # required key, nullable — branch head SHA (required for pushed/pr_opened/applied)
+pr_url: <str or null>               # required key, nullable — pull request URL (required for pr_opened/applied)
+merged_sha: <str or null>           # required key, nullable — merge commit SHA (required for applied)
+reason: <str or null>               # required key, nullable — rejection reason (required for rejected)
+errors: []
+```
+
+Lifecycle states and required fields:
+- `pushed`: branch pushed to remote, no PR open yet. Requires `pushed_sha`. `pr_url` and `merged_sha` are null.
+- `pr_opened`: pull request created. Requires `pushed_sha` and `pr_url`. `merged_sha` is null.
+- `applied`: PR merged into default branch. Requires `pushed_sha`, `pr_url`, and `merged_sha`.
+- `rejected`: PR closed unmerged. Requires `reason` (non-null). `merged_sha` is null.
+
 ### generated-artifact-result.yaml (written by the generation audit, F7)
+
 
 Reports the drift state of committed generated-artifact bindings
 (`templates/generated.yaml.template`). For each binding the audit compares the

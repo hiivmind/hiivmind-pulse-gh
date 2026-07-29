@@ -5,7 +5,7 @@
 # ///
 """Validate a headless result file against the pulse result contract.
 
-Usage: validate_result.py <result.yaml> --kind status|healthcheck|refresh|workflow-run|fleet-membership|impact|repo-mutation|generated-artifact|plan-sync|marketplace-sync
+Usage: validate_result.py <result.yaml> --kind status|healthcheck|refresh|workflow-run|fleet-membership|impact|repo-mutation|generated-artifact|plan-sync|marketplace-sync|apply-status
 
 See lib/patterns/headless-contract.md for the schemas.
 
@@ -39,7 +39,10 @@ OUTCOMES = {"success", "failure", "skipped-cooldown", "aborted"}
 SEVERITIES = {"low", "medium", "high"}
 EDGE_STATES = {"current", "stale", "unknown"}
 REPO_MUTATION_STATES = {"proposed", "blocked", "failed"}
+APPLY_STATUS_STATES = {"pushed", "pr_opened", "applied", "rejected"}
+
 REPO_OUTCOME_STATES = {"ok", "failed", "blocked"}
+
 GENERATED_ARTIFACT_STATES = {
     "current",
     "template-drift",
@@ -648,7 +651,26 @@ def validate(data, kind: str) -> list[str]:
             _require(proposal, "proposal_id", str, errors, ctx=ctx)
         _validate_string_list(data, "proposed_actions", errors)
 
+    elif kind == "apply-status":
+        state = _require_enum(data, "state", APPLY_STATUS_STATES, errors)
+        _require(data, "proposal_id", str, errors)
+        _validate_string_list(data, "selection", errors)
+        _require(data, "branch", str, errors)
+        _require_nullable(data, "pushed_sha", str, errors)
+        _require_nullable(data, "pr_url", str, errors)
+        _require_nullable(data, "merged_sha", str, errors)
+        _require_nullable(data, "reason", str, errors)
+        if state in {"pushed", "pr_opened", "applied"} and data.get("pushed_sha") is None:
+            _err(errors, f"pushed_sha must not be null when state is {state}")
+        if state in {"pr_opened", "applied"} and data.get("pr_url") is None:
+            _err(errors, f"pr_url must not be null when state is {state}")
+        if state == "applied" and data.get("merged_sha") is None:
+            _err(errors, "merged_sha must not be null when state is applied")
+        if state == "rejected" and data.get("reason") is None:
+            _err(errors, "reason must not be null when state is rejected")
+
     return errors
+
 
 
 def main():
@@ -658,7 +680,8 @@ def main():
                         choices=["status", "healthcheck", "refresh", "workflow-run",
                                  "fleet-membership", "impact", "repo-mutation",
                                  "generated-artifact", "plan-sync",
-                                 "marketplace-sync"])
+                                 "marketplace-sync", "apply-status"])
+
     args = parser.parse_args()
 
     path = Path(args.file)
