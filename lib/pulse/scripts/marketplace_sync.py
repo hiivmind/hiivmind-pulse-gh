@@ -371,10 +371,15 @@ def build_result(
             })
             releases = []
 
-        doc = docs_by_repo.get(marketplace_repo)
-        if doc is None:
-            doc = docs_by_repo.get(f"{marketplace_repo}/{marketplace_file}")
-        if isinstance(doc, Exception) or (doc is None and marketplace_repo in docs_by_repo):
+        doc_key = f"{marketplace_repo}/{marketplace_file}"
+        doc = docs_by_repo.get(doc_key)
+        if doc is None and doc_key not in docs_by_repo:
+            doc = docs_by_repo.get(marketplace_repo)
+            lookup_key = marketplace_repo if marketplace_repo in docs_by_repo else doc_key
+        else:
+            lookup_key = doc_key
+
+        if isinstance(doc, Exception) or (doc is None and lookup_key in docs_by_repo):
             findings.append({
                 "kind": "unreadable_marketplace_file",
                 "repo": marketplace_repo,

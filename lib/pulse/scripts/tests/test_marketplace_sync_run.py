@@ -135,3 +135,48 @@ def test_driver_valid_run_with_fake_runner(tmp_path):
     assert data["drift"] == 1
     assert len(data["proposals"]) == 1
     assert data["proposals"][0]["binding"] == "acme-addon"
+
+
+def test_fetch_remote_evidence_shared_repo_different_marketplace_files():
+    from lib.pulse.scripts import marketplace_sync_run  # type: ignore
+
+    bindings = [
+        {
+            "plugin_id": "claude-addon",
+            "repo": "acme/claude-addon",
+            "marketplace_repo": "acme/marketplace",
+            "marketplace_file": ".claude-plugin/marketplace.json",
+        },
+        {
+            "plugin_id": "cursor-addon",
+            "repo": "acme/cursor-addon",
+            "marketplace_repo": "acme/marketplace",
+            "marketplace_file": ".cursor-plugin/marketplace.json",
+        },
+    ]
+
+    fetched_files = []
+
+    def fake_runner(argv, cwd=None):
+        cmd = " ".join(argv)
+        if "contents" in cmd:
+            if ".claude-plugin" in cmd:
+                fetched_files.append(".claude-plugin/marketplace.json")
+                doc = {"plugins": [{"name": "claude-addon", "version": "1.0.0"}]}
+            else:
+                fetched_files.append(".cursor-plugin/marketplace.json")
+                doc = {"plugins": [{"name": "cursor-addon", "version": "2.0.0"}]}
+            return subprocess.CompletedProcess(argv, 0, stdout=json.dumps(doc), stderr="")
+        elif "release list" in cmd:
+            return subprocess.CompletedProcess(argv, 0, stdout="[]", stderr="")
+        elif "commits/HEAD" in cmd:
+            return subprocess.CompletedProcess(argv, 0, stdout="sha123", stderr="")
+        return subprocess.CompletedProcess(argv, 1, stdout="", stderr="")
+
+    _, docs_by_repo, _ = marketplace_sync_run.fetch_remote_evidence(bindings, fake_runner)
+
+    assert len(fetched_files) == 2
+    assert ".claude-plugin/marketplace.json" in fetched_files
+    assert ".cursor-plugin/marketplace.json" in fetched_files
+    assert docs_by_repo["acme/marketplace/.claude-plugin/marketplace.json"]["plugins"][0]["name"] == "claude-addon"
+    assert docs_by_repo["acme/marketplace/.cursor-plugin/marketplace.json"]["plugins"][0]["name"] == "cursor-addon"

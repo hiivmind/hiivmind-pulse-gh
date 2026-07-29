@@ -113,10 +113,11 @@ def fetch_remote_evidence(
             else:
                 releases_by_repo[repo] = None
 
+        doc_key = f"{marketplace_repo}/{marketplace_file}"
         if (
             isinstance(marketplace_repo, str) and marketplace_repo and
             isinstance(marketplace_file, str) and marketplace_file and
-            marketplace_repo not in docs_by_repo
+            doc_key not in docs_by_repo
         ):
             doc_res = runner([
                 "gh", "api", f"repos/{marketplace_repo}/contents/{marketplace_file}",
@@ -128,15 +129,15 @@ def fetch_remote_evidence(
                     if isinstance(parsed, dict) and "content" in parsed:
                         import base64
                         decoded = base64.b64decode(parsed["content"]).decode("utf-8")
-                        docs_by_repo[marketplace_repo] = json.loads(decoded)
+                        docs_by_repo[doc_key] = json.loads(decoded)
                     elif isinstance(parsed, dict) and "plugins" in parsed:
-                        docs_by_repo[marketplace_repo] = parsed
+                        docs_by_repo[doc_key] = parsed
                     else:
-                        docs_by_repo[marketplace_repo] = None
+                        docs_by_repo[doc_key] = None
                 except Exception:
-                    docs_by_repo[marketplace_repo] = None
+                    docs_by_repo[doc_key] = None
             else:
-                docs_by_repo[marketplace_repo] = None
+                docs_by_repo[doc_key] = None
 
         if (
             isinstance(marketplace_repo, str) and marketplace_repo and
