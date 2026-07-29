@@ -1,6 +1,6 @@
 # hiivmind-pulse-gh — fleet program roadmap & backlog index
 
-**Updated:** 2026-07-30 · **One-page map of what is built, what is left, and where each item lives.**
+**Updated:** 2026-07-30 (F10 closed) · **One-page map of what is built, what is left, and where each item lives.**
 
 > Read in this order: **Status at a glance** (what shipped) → **Layer-completeness matrix**
 > (is it actually *runnable*) → **Cross-repo dependency map** (which repos an item spans) →
@@ -9,8 +9,10 @@
 
 The "F-series" fleet program built a control plane that reads/scores a repo fleet, proposes
 guarded mutations, and (now) lands them. Most phases shipped as **tested libraries**; the
-open work is dominated by one theme — **making the propose/mutate/apply phases actually run
-end-to-end in production**, not just pass in fixtures.
+open work is about **making those libraries actually run end-to-end in production**, not just
+pass in fixtures. The **propose** side now does (F10 closed 2026-07-30 — the F5–F9 audits run
+on cadence and surface proposals in the maintenance PR); the remaining gap is the **apply**
+side (F11 production wiring).
 
 ---
 
@@ -29,7 +31,7 @@ end-to-end in production**, not just pass in fixtures.
 | F7 | Binding specializations / generated artifacts | ✅ merged (#133) |
 | F8 | Generic plan sync | ✅ merged (#134) |
 | F9 | Dogfood overlays (Claude plugin/corpus) | ✅ merged (#136) |
-| **F10** | **Runnable spine** (CLI drivers + triggers for F6–F9) | ✅ merged (#139) — **drivers+trigger; live-enrollment + proposal folding open** |
+| **F10** | **Runnable spine** (CLI drivers + triggers for F6–F9) | ✅ **complete** — spine #139; proposal fold #140; enrolled live (workspace #2). "Triggered end-to-end" gate **closed**. |
 | F11 | Apply-mode (land a validated proposal) | ✅ merged (#138) — **library+tests; production wiring open** |
 
 > **What "merged ✅" does and does not mean.** It means layers 1–3 (library →
@@ -59,34 +61,37 @@ Every phase is a five-layer ladder. A phase **runs in production** only when all
 | F3 dispatched healthchecks | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (dogfooded) |
 | Pre-F4 dependency **evidence** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (evidence only) |
 | **F4 dependency-coherence adapters** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ — never built; `dependency-updates` = `unsupported` |
-| F5 impact bindings | ✅ | ✅ | ✅ | ⚠️ template | ❌ | ⚠️ runs on demand; not on cadence (`impact-audit` unenrolled) |
-| F6 pen mutations | ✅ | ✅ (F10) | ✅ (F10) | ⚠️ template | ❌ | ❌ not enrolled + folding gap (below) |
-| F7 generated artifacts | ✅ | ✅ (F10) | ✅ (F10) | ⚠️ template | ❌ | ❌ not enrolled + folding gap |
-| F8 plan sync | ✅ | ✅ (F10) | ✅ (F10) | ⚠️ template | ❌ | ❌ not enrolled + folding gap |
-| F9 dogfood overlays | ✅ | ✅ (F10) | ✅ (F10) | ⚠️ template | ❌ | ❌ not enrolled + folding gap |
-| **F10 runnable spine** | ✅ | ✅ | ✅ | ✅ `periodic` + 4 flips | ❌ | ❌ — **triggered path broken until folding + enrollment land** |
+| F5 impact bindings | ✅ | ✅ | ✅ | ✅ `periodic` | ✅ (#2) | ✅ — `impact-audit` on cadence |
+| F6 pen mutations | ✅ | ✅ (F10) | ✅ (F10) | ✅ `periodic` | ✅ (#2) | ✅ — proposals fold to PR body (#140) |
+| F7 generated artifacts | ✅ | ✅ (F10) | ✅ (F10) | ✅ `periodic` | ✅ (#2) | ⚠️ enrolled; validated-abort until `generated.yaml` binding exists |
+| F8 plan sync | ✅ | ✅ (F10) | ✅ (F10) | ✅ `periodic` | ✅ (#2) | ⚠️ enrolled; validated-abort until `plan-sync.yaml` binding exists |
+| F9 dogfood overlays | ✅ | ✅ (F10) | ✅ (F10) | ✅ `periodic` | ✅ (#2) | ✅ — via healthcheck + `marketplace-sync` |
+| **F10 runnable spine** | ✅ | ✅ | ✅ | ✅ `periodic` + 4 flips | ✅ (#2) | ✅ — **gate closed** (fold #140 + enroll #2) |
 | F11 apply-mode | ✅ | ❌ no prod driver | ⚠️ entry points | ❌ | ❌ | ❌ — seams ship; nothing assembles `execute → reconcile` |
 
-**Legend:** ✅ built & deployed · ⚠️ exists but not wired/deployed · ❌ absent.
-`⚠️ template` = a `periodic` workflow YAML exists in `templates/workflows/` (F10) but is **not copied into the live workspace** and thus never fires.
+**Legend:** ✅ built & deployed · ⚠️ exists but not fully exercised yet · ❌ absent.
 
-**The column that matters is #5 — and it is empty for everything F5 and beyond.** Nothing
-propose/mutate is enrolled in the live fleet. That is the true state behind six ✅ rows.
+**F10 is closed: F5–F10 column 5 is now live** (proposal fold `hiivmind-pulse-gh` #140 +
+enrollment `hiivmind/hiivmind-workspace` #2, both merged 2026-07-30). The remaining ⚠️ on F7/F8
+is a *data* gap, not a code gap — the trigger fires but there is no bound work until the
+`generated.yaml` / `plan-sync.yaml` binding files are added to the workspace (non-destructive
+validated-abort until then). F11 is the only phase still dark on the runnable ladder.
 
 ### Two flow facts that broke specs on contact (record so they stop recurring)
 
+Both are now resolved, but kept here because the *pattern* is the lesson.
+
 - **The `automation.scheduled_workflows` list lives in the WORKSPACE repo, not the scheduler
-  repo.** The scheduler's `TEMPLATE-workspace-maintenance.md` Phase 5b is already *generic*
-  over that list; composing F6–F9 onto the cadence is a **workspace-config** edit (+ deploying
-  the 4 YAMLs), not a scheduler-repo change. The F10 scheduler-composition spec assumed the
-  opposite.
-- **`gh-workflow-run-headless` does NOT yet fold an inner driver's `proposals[]` / `findings`
-  into the outer `workflow-run-result.yaml`.** The executor's `INVOKE skill X` projection
-  (`lib/patterns/workflow-execution.md`, "Interpretation overrides") invokes the sibling and
-  discards its result envelope. Because `*-result.yaml` is gitignored and the PR body is the
-  only delivery channel, a scheduled F6–F9 run currently surfaces **zero** proposals. This is a
-  small **`hiivmind-pulse-gh`** fix (executor + `gh-workflow-run-headless`), and it is the real
-  work behind "the F10 scheduler PR" — not a scheduler change.
+  repo.** The scheduler's `TEMPLATE-workspace-maintenance.md` Phase 5b was already *generic*
+  over that list; composing F6–F9 onto the cadence was a **workspace-config** edit (+ deploying
+  the 4 YAMLs, #2), not a scheduler-repo change. The F10 scheduler-composition spec assumed the
+  opposite — the whole "scheduler PR" was actually a pulse-gh + workspace change.
+- **`gh-workflow-run-headless` did not fold an inner driver's `proposals[]` / `findings` into
+  the outer `workflow-run-result.yaml`.** The executor's `INVOKE skill X` projection invoked the
+  sibling and discarded its result envelope, so a scheduled F6–F9 run surfaced **zero**
+  proposals. Fixed in #140 (`lib/pulse/scripts/subresult_fold.py` + executor prose) — a small
+  **`hiivmind-pulse-gh`** change, exactly as the "layer 4 defect, not a scheduler change"
+  diagnosis predicted.
 
 ---
 
@@ -133,12 +138,13 @@ graph LR
 ## The open backlog, prioritized
 
 ### 🔴 P1 — "Make it run in production" (the dominant gap)
-The libraries exist; nothing drives them against a live fleet. These three are related.
+The libraries exist; the *propose* side now runs on cadence (F10 closed 2026-07-30). The
+**apply** side is the remaining production-wiring gap.
 
 | Item | Why it matters | Source |
 |---|---|---|
-| **F10 last mile: proposal folding + live enrollment** | Drivers/triggers merged (#139), but scheduled F6–F9 runs surface **zero proposals** — `gh-workflow-run-headless` doesn't fold the inner driver's `proposals[]` into `workflow-run-result.yaml` (layer-4 defect), and the 4 `periodic` YAMLs are **not deployed** to the live workspace (layer 5). Two edits (pulse-gh folding fix + workspace enrollment) close F10's "triggered end-to-end" gate. See matrix "flow facts" above. | `../superpowers/plans/2026-07-29-f10-scheduler-composition.md` · `2026-07-30-f10-followups.md` |
-| **Apply-mode production wiring** | F11's apply side has the same gap: real seams ship (`apply_ops`, `advance_base`, clone reader, `gh` ops) but no driver assembles them into a live `execute → reconcile` run; no real F5/F8 base-writer; no bridge from Nave pen clones to the `PULSE_PEN_ROOT` contract. | [`2026-07-29-apply-mode-v2-deferrals.md`](2026-07-29-apply-mode-v2-deferrals.md) § A |
+| ~~**F10 last mile: proposal folding + live enrollment**~~ ✅ **DONE 2026-07-30** | Proposal fold (#140) + live enrollment (workspace #2) merged; F10's "triggered end-to-end" gate is closed. The propose/mutate phases F5–F9 now run daily and surface proposals in the maintenance PR body. | `2026-07-29-f10-scheduler-composition.md` · `2026-07-30-f10-followups.md` |
+| **Apply-mode production wiring** | F11's apply side still has the gap: real seams ship (`apply_ops`, `advance_base`, clone reader, `gh` ops) but no driver assembles them into a live `execute → reconcile` run; no real F5/F8 base-writer; no bridge from Nave pen clones to the `PULSE_PEN_ROOT` contract. **Now the top P1.** | [`2026-07-29-apply-mode-v2-deferrals.md`](2026-07-29-apply-mode-v2-deferrals.md) § A |
 | **F4 dependency-coherence adapters** | Never built — Pre-F4 materialized the evidence, the adapters that consume it were skipped. Closes a read-spine gap **and** unlocks the flagship neutral apply use-case (fleet-wide dependency bump + lockfile landing). | this index (row above) · [`2026-07-29-apply-mode-v2-deferrals.md`](2026-07-29-apply-mode-v2-deferrals.md) § D |
 
 ### 🟠 P2 — Correctness / data (cheap, one is a real bug)
@@ -173,12 +179,12 @@ The libraries exist; nothing drives them against a live fleet. These three are r
 
 ## Suggested sequencing
 
-1. **F10 last mile** — the proposal-folding fix (pulse-gh) + live enrollment (workspace) that
-   make F6–F9 surface proposals on cadence. Smallest unlock; closes the "triggered end-to-end" gate. **In flight.**
-2. **Apply-mode production wiring** — the apply-side spine (3-repo: pulse-gh driver + nave clone bridge + workspace base-writer); pairs naturally with F10.
+1. ~~**F10 last mile**~~ — ✅ done 2026-07-30 (fold #140 + enroll #2); the propose side runs on cadence.
+2. **Apply-mode production wiring** — the apply-side spine (3-repo: pulse-gh driver + nave clone bridge + workspace base-writer). **Now the top open item.**
 3. **F4 adapters** — read-spine gap + the flagship neutral apply use-case.
 4. **`relationships.yaml` schema drift** — cheap, and the one live correctness bug.
-5. Everything else as its feature gains a real consumer.
+5. **Binding files for the enrolled F7/F8 audits** — add `generated.yaml` / `plan-sync.yaml` to the workspace so `generated-artifact-audit` / `plan-sync` have real work instead of validated-abort. Data, when there's something to bind.
+6. Everything else as its feature gains a real consumer.
 
 > **Before branching any multi-repo item, decompose it through the Cross-repo dependency map
 > above** — which repos it spans, which sibling shape it assumes, and which branch flow each PR
