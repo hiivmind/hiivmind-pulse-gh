@@ -23,8 +23,9 @@ inert until real adoption.
 > GitHub objects via `object_apply` under `on_mutation`; `allow` (unattended direct
 > push) + scheduled auto-apply remain deferred to v2, auto-merge out of scope, and
 > real F5/F8 base-writer wiring + F4 dependency-coherence apply are still open (an
-> injected `advance_base` seam is the boundary). The historical analysis below is
-> retained for provenance.
+> injected `advance_base` seam is the boundary). **The remaining v2 / production-wiring /
+> dependent items are captured in `docs/backlogs/2026-07-29-apply-mode-v2-deferrals.md`.**
+> The historical analysis below is retained for provenance.
 
 **Severity:** ~~Medium capability gap~~ **resolved**; never a correctness bug (propose-mode is
 correct and safe).
