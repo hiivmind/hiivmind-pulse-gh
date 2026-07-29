@@ -47,15 +47,10 @@ V1 does not synchronize GitHub Projects custom fields, labels, or comments.
 
 F8 is **propose-only** end to end (see the plan's Global Constraints): the doc
 path is proposed as an F6 `plan-sync-doc-patch` repo mutation and the GitHub
-path as a Pulse proposed action, and **neither is ever applied**. Two aspects of
-the doc transformation are therefore defined but not yet execution-safe, and
+path as a Pulse proposed action, and **neither is ever applied**. One aspect of
+the doc transformation is defined but not yet execution-safe, and
 must be closed before any apply-mode consumer runs `plan-sync-doc-patch`:
 
-- **Executor path.** The registered argv runs `apply_doc_patch.py` by a
-  plugin-repo-relative path, which does not resolve inside a doc-repo pen
-  checkout (unlike F7's `regenerate-from-template`, which calls the installed
-  `nave` CLI). Apply mode needs the patch applier reachable on `PATH` in the
-  checkout (an installed console entry point or a `nave` subcommand).
 - **Bound-path enforcement.** The transformation's output allowlist is the
   *per-binding dynamic* document path, but the F6 registry allowlist and
   `validation` are static — the entry carries `validation: {kind: none}`, and

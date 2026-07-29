@@ -87,9 +87,7 @@ transformations:
   plan-sync-doc-patch:
     id: plan-sync-doc-patch
     command_argv:
-      - uv
-      - run
-      - lib/pulse/scripts/apply_doc_patch.py
+      - pulse-apply-doc-patch
       - --patch
       - .hiivmind/plan-sync-patch.yaml
     applies_to:
@@ -146,9 +144,7 @@ transformations:
   marketplace-entry-update:
     id: marketplace-entry-update
     command_argv:
-      - uv
-      - run
-      - lib/pulse/scripts/apply_marketplace_entry.py
+      - pulse-apply-marketplace-entry
       - --patch
       - .hiivmind/marketplace-entry-patch.yaml
     applies_to:
