@@ -46,6 +46,12 @@ def _mapping(value: Any, label: str) -> dict[str, Any]:
     return value
 
 
+def _string(value: Any, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{label} must be a non-empty string")
+    return value
+
+
 def apply_marketplace_patch_file(patch_file: Path, checkout: Path) -> None:
     yaml = YAML(typ="safe")
     try:
@@ -86,30 +92,24 @@ def apply_marketplace_patch_file(patch_file: Path, checkout: Path) -> None:
 
     if "content" in patch:
         new_content = str(patch["content"])
-    elif "entry_patch" in patch or "plugin_patch" in patch:
-        entry_patch = patch.get("entry_patch") or patch.get("plugin_patch")
-        if not isinstance(entry_patch, dict):
-            raise ValueError("patch.entry_patch must be a mapping")
+    elif "entry_patch" in patch:
+        entry_patch = _mapping(patch.get("entry_patch"), "patch.entry_patch")
+        plugin_name = _string(entry_patch.get("name"), "entry_patch.name")
 
-        # Handle JSON or YAML target document
         try:
             doc_data = json.loads(original_text)
         except json.JSONDecodeError:
             doc_data = yaml.load(original_text)
 
-        plugin_name = entry_patch.get("name") or entry_patch.get("plugin_id")
-        if not plugin_name:
-            raise ValueError("entry_patch must contain 'name' or 'plugin_id'")
-
         if isinstance(doc_data, dict) and isinstance(doc_data.get("plugins"), list):
             found = False
             for plugin in doc_data["plugins"]:
                 if isinstance(plugin, dict) and plugin.get("name") == plugin_name:
-                    plugin.update({k: v for k, v in entry_patch.items() if k not in ("plugin_id",)})
+                    plugin.update(entry_patch)
                     found = True
                     break
             if not found:
-                doc_data["plugins"].append({k: v for k, v in entry_patch.items() if k not in ("plugin_id",)})
+                doc_data["plugins"].append(dict(entry_patch))
         else:
             raise ValueError("target document structure does not match marketplace schema")
 

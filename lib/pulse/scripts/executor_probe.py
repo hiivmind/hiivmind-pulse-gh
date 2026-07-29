@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import shutil
-import sys
+import sysconfig
 from typing import Any
-
-from lib.pulse.scripts.mutation_plan import MutationPlanError
 
 
 KNOWN_CONSOLE_SCRIPTS = {
@@ -33,11 +31,8 @@ def validate_command_argv(command_argv: tuple[str, ...] | list[str], entry_id: s
     """
     prefix = f"transformation {entry_id}." if entry_id else ""
     for index, arg in enumerate(command_argv):
-        if not isinstance(arg, str):
-            continue
-        # Flag any element that is a repo-relative python script path
-        if arg.endswith(".py") or (("lib/" in arg or "scripts/" in arg or "/" in arg) and arg.endswith(".py")):
-            raise MutationPlanError(
+        if isinstance(arg, str) and arg.endswith(".py"):
+            raise ValueError(
                 f"{prefix}command_argv[{index}] is a repo-relative script path, not reachable on PATH: {arg!r}"
             )
 
@@ -49,12 +44,11 @@ def probe_required_tool(tool: str, ecosystem: str | None = None, path_env: str |
     missing tool and ecosystem.
     """
     resolved_ecosystem = ecosystem or ECOSYSTEM_MAP.get(tool, "unknown")
-    # Check PATH using shutil.which
     found = shutil.which(tool, path=path_env)
-    if not found and tool in KNOWN_CONSOLE_SCRIPTS:
-        # Also check if installed in Python environment's bin/scripts dir
-        bin_dir = sys.exec_prefix + "/bin"
-        found = shutil.which(tool, path=bin_dir) or shutil.which(tool, path=path_env)
+    if not found and path_env is None and tool in KNOWN_CONSOLE_SCRIPTS:
+        scripts_dir = sysconfig.get_path("scripts")
+        if scripts_dir:
+            found = shutil.which(tool, path=scripts_dir)
 
     if not found:
         return {

@@ -5,8 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-import subprocess
-import sys
 import pytest
 
 from lib.pulse.scripts import mutation_plan
@@ -58,6 +56,13 @@ def test_probe_required_tool_returns_blocked_when_tool_absent(tmp_path):
     assert result["state"] == "blocked"
     assert "npm" in result["reason"]
     assert "nodejs" in result["reason"]
+
+
+def test_probe_required_tool_honors_explicit_path_env(tmp_path):
+    fake_path = str(tmp_path)
+    # Even for a known console script, an explicit path_env must not fall back to sysconfig scripts
+    result = executor_probe.probe_required_tool("pulse-apply-doc-patch", path_env=fake_path)
+    assert result["state"] == "blocked"
 
 
 def test_apply_doc_patch_entry_applies_change_and_rejects_path_escape(tmp_path, monkeypatch):
@@ -136,3 +141,25 @@ def test_apply_marketplace_entry_applies_change_and_rejects_path_escape(tmp_path
     patch_path.write_text(patch_escape)
     ret_escape = apply_marketplace_entry.main(["--patch", ".hiivmind/marketplace-entry-patch.yaml"])
     assert ret_escape != 0
+
+
+def test_apply_marketplace_entry_with_raw_content_replacement(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    target = tmp_path / "marketplace.json"
+    initial = '{"plugins": []}\n'
+    target.write_text(initial)
+
+    patch_path = tmp_path / ".hiivmind" / "marketplace-entry-patch.yaml"
+    patch_path.parent.mkdir(parents=True, exist_ok=True)
+    new_text = '{"plugins": [{"name": "new-plugin", "version": "1.0.0"}]}\n'
+    patch_content = (
+        "path: marketplace.json\n"
+        f"base_blob: {_blob(initial)}\n"
+        f"content: '{new_text.strip()}'\n"
+        "output_paths: [marketplace.json]\n"
+    )
+    patch_path.write_text(patch_content)
+
+    ret = apply_marketplace_entry.main(["--patch", ".hiivmind/marketplace-entry-patch.yaml"])
+    assert ret == 0
+    assert target.read_text() == new_text.strip()

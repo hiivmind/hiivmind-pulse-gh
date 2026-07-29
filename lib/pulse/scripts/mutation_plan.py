@@ -21,6 +21,8 @@ from typing import Any
 
 import yaml
 
+from lib.pulse.scripts.executor_probe import validate_command_argv
+
 
 ACTOR_MODES = {"interactive", "scheduled"}
 MUTATION_POLICIES = {"propose", "allow-listed", "allow"}
@@ -167,9 +169,10 @@ def _load_transformation(raw: Any, entry_id: str) -> TransformationEntry:
             f"transformation {entry_id}.id must match its registry key: {declared_id}"
         )
     command_argv = _argv(item.get("command_argv"), f"transformation {entry_id}.command_argv")
-    from lib.pulse.scripts.executor_probe import validate_command_argv
-
-    validate_command_argv(command_argv, entry_id)
+    try:
+        validate_command_argv(command_argv, entry_id)
+    except ValueError as exc:
+        raise MutationPlanError(str(exc)) from exc
     applies_to_raw = _list(item.get("applies_to"), f"transformation {entry_id}.applies_to")
     if not applies_to_raw:
         raise MutationPlanError(f"transformation {entry_id}.applies_to must be non-empty")
