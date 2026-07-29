@@ -242,17 +242,21 @@ def skills(context: CheckContext) -> dict[str, Any]:
 def context(context: CheckContext) -> dict[str, Any]:  # noqa: A002
     """Audit ``CLAUDE.md`` for claim currency.
 
-    The audit runs in three stages, each one early-returning on the
+    The audit runs in four stages, each one early-returning on the
     smallest decisive signal:
 
     1. **Evidence gate** — without ``files`` or ``file_contents`` there
        is nothing to grade, so the adapter reports an evidence gap.
-    2. **Inference guard** — when an external agent has supplied
+    2. **Inference-status gate** — only ``evidence['inference_status']
+       == "ran"`` may yield ``pass``/``fail``. ``skipped``, ``failed``,
+       or an absent status force ``unknown`` so a headless run that never
+       extracts claims cannot silently pass over stale docs.
+    3. **Inference payload guard** — when an external agent has supplied
        candidate findings under ``evidence['inferred_claims']``, they
        must pass :func:`repo_claims.validate_inferred_findings` or the
        whole audit downgrades to ``unknown`` (we never synthesize a
        pass/fail from malformed input).
-    3. **Deterministic check** — the textual claims in ``CLAUDE.md`` are
+    4. **Deterministic check** — the textual claims in ``CLAUDE.md`` are
        cross-referenced against :func:`repo_claims.facts` (the
        repository's current ground truth). Findings from the
        deterministic pass and the (validated) inferred pass are merged
@@ -275,6 +279,25 @@ def context(context: CheckContext) -> dict[str, Any]:  # noqa: A002
         return _evidence_gap(
             "CLAUDE.md content unavailable",
             paths=(CLAUDE_CONTEXT_PATH,),
+        )
+
+    # Inference-status gate: only a completed inference step may yield
+    # pass/fail. Absent status is treated as skipped so a headless run that
+    # never extracts claims cannot silently pass over stale docs.
+    inference_status = context.evidence.get("inference_status")
+    if inference_status != "ran":
+        if inference_status in {"skipped", "failed"}:
+            label = inference_status
+        elif inference_status is None:
+            label = "skipped"
+        else:
+            label = f"invalid ({inference_status!r})"
+        return _result(
+            "unknown",
+            f"claude.context inference step {label}; "
+            "only inference_status=ran may yield pass/fail",
+            paths=(CLAUDE_CONTEXT_PATH,),
+            refs=(F0_FILES_REF,),
         )
 
     raw_inferred = context.evidence.get("inferred_claims")

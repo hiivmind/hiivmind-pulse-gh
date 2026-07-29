@@ -4,6 +4,7 @@ files:
   - skills/audit/SKILL.md
   - CLAUDE.md
   - README.md
+inference_status: ran
 file_contents:
   .claude-plugin/plugin.json: |
     {

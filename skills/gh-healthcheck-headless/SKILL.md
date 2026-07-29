@@ -184,6 +184,38 @@ overlay scorecard contributes only to that overlay's subtotal. The overlay score
 set is documented in `README.md` § Dogfood overlays; neutral fleet behavior is
 provably independent of the overlays (`lib/pulse/scripts/tests/test_dogfood_isolation.py`).
 
+**Content channel (opt-in only).** For each repository whose resolved scorecard
+contains a `claude.*` overlay adapter, attach bounded, SHA-pinned file contents
+before dispatch — either by invoking the collector
+(`lib/pulse/scripts/overlay_content.py` via the injected `gh_api` seam) and writing
+`file_contents` onto that repo's F0 entry, or by running dispatch with
+`--fetch-overlay-content`. Paths: `.claude-plugin/plugin.json`, `CLAUDE.md`, and
+every `skills/*/SKILL.md`. Neutral repo entries must never receive `file_contents`.
+Unavailable paths are explicit (`missing` / `too_large` / `fetch_error`); never
+omit silently. A SHA resolution failure marks all paths unavailable (check
+`unknown`) — never read an unpinned branch.
+
+**Inference step + status (`claude.context`).** For each overlay-opted-in repo,
+after content is attached and before dispatch:
+
+1. Read `CLAUDE.md` from that repo's `file_contents`.
+2. Extract candidate claims of kinds `stale_command`, `missing_claimed_skill`,
+   and `unsupported_evidence` (prose references the deterministic checker does
+   not fully model). Feed them as `evidence["inferred_claims"]`.
+3. Schema-guard with `repo_claims.validate_inferred_findings` (invalid payload
+   → do not invent findings; the adapter will grade `unknown` on validation
+   failure).
+4. Record `evidence["inference_status"]` as exactly one of:
+   - `ran` — inference completed and (possibly empty) candidates were attached
+   - `skipped` — inference was not attempted
+   - `failed` — inference attempted but aborted (tool error, empty content, etc.)
+
+Only `inference_status: ran` may yield `pass`/`fail` for `claude.context`.
+`skipped`, `failed`, or an absent status force `unknown` — never a silent
+`pass` over stale docs. Dispatch registers Claude adapters only when at least
+one profiled scorecard needs them; content attachment remains the
+neutral-preserving boundary.
+
 Validate:
 
 ```bash
