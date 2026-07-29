@@ -12,9 +12,21 @@ inert until real adoption.
 
 ---
 
-## 1. Apply-mode (the dominant deferral) — cross-phase, own future phase
+## 1. Apply-mode (the dominant deferral) — ✅ RESOLVED (F11, PR #138, 2026-07-29)
 
-**Severity:** Medium capability gap; **not** a correctness bug (propose-mode is
+> **RESOLVED:** apply-mode shipped as **F11** — merged to `develop` 2026-07-29
+> (PR #138, branch `feat/f11-apply-mode`, 1000 tests, whole-branch review SHIP).
+> Both blockers below are closed (T1 executor-on-PATH, T2 orchestrator-enforced
+> `bound_paths` + `paths_changed`). Landing path: `allow-listed` `mutation_policy`
+> lands repo files via `pen_orchestrator.execute` (provision `pulse/apply/{id}` →
+> exec → validate → commit-all → push-all → PR → merge-detect → base-advance) and
+> GitHub objects via `object_apply` under `on_mutation`; `allow` (unattended direct
+> push) + scheduled auto-apply remain deferred to v2, auto-merge out of scope, and
+> real F5/F8 base-writer wiring + F4 dependency-coherence apply are still open (an
+> injected `advance_base` seam is the boundary). The historical analysis below is
+> retained for provenance.
+
+**Severity:** ~~Medium capability gap~~ **resolved**; never a correctness bug (propose-mode is
 correct and safe).
 **Source:** F6 (#130/#132), F7 (#133), F8 (#134) — the entire mutation stack is
 **propose-only by explicit design**: "no commit or push ever happens without an
@@ -103,7 +115,7 @@ backlog item.
 
 ## Suggested priority
 
-1. **Apply-mode phase** — the one real capability gap (own phase, after F9).
+1. ~~**Apply-mode phase**~~ — ✅ **DONE** (F11, PR #138, 2026-07-29).
 2. **3a manifest validity** + **4 milestone dead-field** — cheap cleanup pass,
    whenever an F7/F8 file is next touched.
 3. **2 Nave release pin** — when external installability first matters.

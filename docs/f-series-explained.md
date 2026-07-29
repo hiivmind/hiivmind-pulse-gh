@@ -41,7 +41,13 @@ review first; nothing about a repository's language or layout is assumed.
    phase degrades to `unknown`/`blocked`, never a fabricated pass or a guessed value.
 4. **Propose-only by default.** Mutations are created and validated locally; pushing/
    applying is a separate, gated step. Repository-file writes happen only inside Nave
-   pens; GitHub-object writes stay Pulse-owned.
+   pens; GitHub-object writes stay Pulse-owned. That separate step now exists —
+   **apply-mode (F11, merged 2026-07-29)**: under an explicit `allow-listed`
+   `mutation_policy` a validated proposal lands (repo files via
+   `pen_orchestrator.execute` → `pulse/apply/{id}` branch → PR → merge-detect →
+   base-advance; GitHub objects via `object_apply` under `on_mutation`). Propose stays
+   the default; landing is opt-in, PR-first, and never targets a base branch. See
+   `docs/superpowers/plans/2026-07-22-f11-apply-mode.md`.
 5. **Guarded, idempotent advancement.** Every marker/base advance is guarded by an
    expected SHA (or blob) and is a no-op on repeat — concurrent runs cannot race a marker
    forward.

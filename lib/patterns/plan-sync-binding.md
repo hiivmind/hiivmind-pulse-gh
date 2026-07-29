@@ -43,12 +43,21 @@ milestone title or `null`.
 
 V1 does not synchronize GitHub Projects custom fields, labels, or comments.
 
-## V1 limitation: propose-only, apply-mode deferred
+## Applying F8 changes (apply-mode landed in F11)
 
-F8 is **propose-only** end to end (see the plan's Global Constraints): the doc
-path is proposed as an F6 `plan-sync-doc-patch` repo mutation and the GitHub
-path as a Pulse proposed action, and **neither is ever applied**.
+F8 **defaults to propose** (see the plan's Global Constraints): the doc path is a
+proposed F6 `plan-sync-doc-patch` repo mutation and the GitHub path a Pulse
+proposed action. Both **now have a landing path** — **F11 apply-mode** (merged to
+`develop` 2026-07-29, PR #138). Under an explicit, gated `allow-listed`
+`mutation_policy` the doc path lands via `pen_orchestrator.execute`
+(provision `pulse/apply/{id}` → exec → validate → commit-all → push-all → open PR →
+merge-detect → base-advance), and the GitHub path lands via `object_apply` under
+`on_mutation`. Propose remains the default; landing is always opt-in and PR-gated.
+The two V1 blockers this section previously named are both closed:
 
+- **Executor path (closed in F11 Task 1).** `plan-sync-doc-patch` argv now references
+  the installed `pulse-apply-doc-patch` console entry point (on `PATH` in any pen
+  checkout), not a plugin-repo-relative script.
 - **Bound-path enforcement (closed in F11 Task 2).** `plan-sync-doc-patch`
   proposals carry `bound_paths: {repo: [doc_path]}` as immutable proposal
   metadata, enforced by `pen_orchestrator.py` via `validation: {kind: paths_changed}`.
