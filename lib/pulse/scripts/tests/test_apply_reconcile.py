@@ -45,6 +45,14 @@ class FakeGhOps(apply_reconcile.GhOps):
                 "url": "",
             }
         pr = self.prs[key]
+        if pr.get("state") == "ERROR":
+            return {
+                "state": "ERROR",
+                "merged": False,
+                "merge_commit_sha": None,
+                "url": "",
+                "error": pr.get("error", "simulated gh view_pr execution failure"),
+            }
         return {
             "state": pr["state"],
             "merged": pr["merged"],
@@ -114,7 +122,6 @@ def test_open_apply_pr_creates_and_reuses_pr(tmp_path):
     assert validate_result.validate(doc, "apply-status") == []
     assert gh_ops.create_calls == 1
 
-    # Second pass reuses PR without creating duplicate
     doc2 = apply_reconcile.open_apply_pr(
         ledger_path=ledger_path,
         step_id="reconcile-repo1",
@@ -161,6 +168,11 @@ def test_reconcile_open_pr_withholds_base(tmp_path):
     )
 
     advance_calls = []
+
+    def advance_fake(r, s):
+        advance_calls.append((r, s))
+        return {"state": "ok"}
+
     doc = apply_reconcile.reconcile_apply(
         ledger_path=ledger_path,
         step_id="reconcile-repo1",
@@ -169,7 +181,7 @@ def test_reconcile_open_pr_withholds_base(tmp_path):
         branch="pulse/apply/prop-101",
         result_path=result_path,
         gh_ops=gh_ops,
-        advance_base=lambda repo, sha: advance_calls.append((repo, sha)),
+        advance_base=advance_fake,
         actor_id="octocat@mba-m4",
         workspace="testorg",
     )
@@ -183,6 +195,65 @@ def test_reconcile_open_pr_withholds_base(tmp_path):
     ledger_doc = resolve_run.load(ledger_path)
     step = resolve_run.find_step(ledger_doc, "reconcile-repo1")
     assert step["status"] == "blocked-on-gate"
+
+
+def test_reconcile_gh_error_withholds_and_does_not_delete_branch(tmp_path):
+    """Critical fix: transient gh view_pr error must NOT trigger branch deletion or terminal failure."""
+    ledger_path = create_test_ledger(tmp_path)
+    result_path = tmp_path / "apply-status-repo1.yaml"
+    gh_ops = FakeGhOps()
+
+    apply_reconcile.open_apply_pr(
+        ledger_path=ledger_path,
+        step_id="reconcile-repo1",
+        proposal_id="prop-101",
+        repo="testorg/repo1",
+        branch="pulse/apply/prop-101",
+        base="main",
+        pushed_sha="pushed_sha_111",
+        title="Apply proposal prop-101",
+        body="Automated apply PR",
+        result_path=result_path,
+        gh_ops=gh_ops,
+        actor_id="octocat@mba-m4",
+        workspace="testorg",
+    )
+
+    # Simulate network outage / rate limit failure on gh view_pr
+    gh_ops.prs[("testorg/repo1", "pulse/apply/prop-101")] = {
+        "state": "ERROR",
+        "error": "rate limit exceeded",
+    }
+
+    advance_calls = []
+
+    def advance_fake(r, s):
+        advance_calls.append((r, s))
+        return {"state": "ok"}
+
+    doc = apply_reconcile.reconcile_apply(
+        ledger_path=ledger_path,
+        step_id="reconcile-repo1",
+        proposal_id="prop-101",
+        repo="testorg/repo1",
+        branch="pulse/apply/prop-101",
+        result_path=result_path,
+        gh_ops=gh_ops,
+        advance_base=advance_fake,
+        actor_id="octocat@mba-m4",
+        workspace="testorg",
+    )
+
+    # Step must WITHHOLD: status remains blocked-on-gate, branch NOT deleted, run NOT failed
+    assert doc["state"] == "pr_opened"
+    assert gh_ops.deleted_branches == []
+    assert advance_calls == []
+
+    ledger_doc = resolve_run.load(ledger_path)
+    step = resolve_run.find_step(ledger_doc, "reconcile-repo1")
+    assert step["status"] == "blocked-on-gate"
+    assert ledger_doc["status"] == "blocked-on-gate"
+    assert any("rate limit" in note for note in step["notes"])
 
 
 def test_reconcile_merged_pr_advances_base_off_merged_sha(tmp_path):
@@ -206,7 +277,6 @@ def test_reconcile_merged_pr_advances_base_off_merged_sha(tmp_path):
         workspace="testorg",
     )
 
-    # Mark PR merged in fake
     gh_ops.prs[("testorg/repo1", "pulse/apply/prop-101")] = {
         "url": "https://github.com/testorg/repo1/pull/1",
         "state": "MERGED",
@@ -218,6 +288,11 @@ def test_reconcile_merged_pr_advances_base_off_merged_sha(tmp_path):
     }
 
     advance_calls = []
+
+    def advance_fake(r, s):
+        advance_calls.append((r, s))
+        return {"state": "ok"}
+
     doc = apply_reconcile.reconcile_apply(
         ledger_path=ledger_path,
         step_id="reconcile-repo1",
@@ -226,7 +301,7 @@ def test_reconcile_merged_pr_advances_base_off_merged_sha(tmp_path):
         branch="pulse/apply/prop-101",
         result_path=result_path,
         gh_ops=gh_ops,
-        advance_base=lambda repo, sha: advance_calls.append((repo, sha)),
+        advance_base=advance_fake,
         actor_id="octocat@mba-m4",
         workspace="testorg",
     )
@@ -244,6 +319,107 @@ def test_reconcile_merged_pr_advances_base_off_merged_sha(tmp_path):
     ledger_doc = resolve_run.load(ledger_path)
     step = resolve_run.find_step(ledger_doc, "reconcile-repo1")
     assert step["status"] == "done"
+
+
+def test_reconcile_applied_crash_recovery(tmp_path):
+    """Important 1 fix: crash after writing applied status but before advance_base finishes resume execution."""
+    ledger_path = create_test_ledger(tmp_path)
+    result_path = tmp_path / "apply-status-repo1.yaml"
+    gh_ops = FakeGhOps()
+
+    # Pre-write an applied status file, but ledger step is still blocked-on-gate (simulating a crash)
+    apply_reconcile.write_apply_status(
+        result_path,
+        proposal_id="prop-101",
+        repo="testorg/repo1",
+        branch="pulse/apply/prop-101",
+        state="applied",
+        pushed_sha="pushed_sha_111",
+        pr_url="https://github.com/testorg/repo1/pull/1",
+        merged_sha="merged_commit_sha_777",
+        workspace="testorg",
+    )
+
+    advance_calls = []
+
+    def advance_fake(r, s):
+        advance_calls.append((r, s))
+        return {"state": "ok"}
+
+    doc = apply_reconcile.reconcile_apply(
+        ledger_path=ledger_path,
+        step_id="reconcile-repo1",
+        proposal_id="prop-101",
+        repo="testorg/repo1",
+        branch="pulse/apply/prop-101",
+        result_path=result_path,
+        gh_ops=gh_ops,
+        advance_base=advance_fake,
+        actor_id="octocat@mba-m4",
+        workspace="testorg",
+    )
+
+    assert doc["state"] == "applied"
+    assert advance_calls == [("testorg/repo1", "merged_commit_sha_777")]
+
+    ledger_doc = resolve_run.load(ledger_path)
+    step = resolve_run.find_step(ledger_doc, "reconcile-repo1")
+    assert step["status"] == "done"
+
+
+def test_reconcile_advance_base_failure_keeps_step_blocked(tmp_path):
+    """Important 2 fix: advance_base failure must NOT mark step done."""
+    ledger_path = create_test_ledger(tmp_path)
+    result_path = tmp_path / "apply-status-repo1.yaml"
+    gh_ops = FakeGhOps()
+
+    apply_reconcile.open_apply_pr(
+        ledger_path=ledger_path,
+        step_id="reconcile-repo1",
+        proposal_id="prop-101",
+        repo="testorg/repo1",
+        branch="pulse/apply/prop-101",
+        base="main",
+        pushed_sha="pushed_sha_111",
+        title="Apply proposal prop-101",
+        body="Automated apply PR",
+        result_path=result_path,
+        gh_ops=gh_ops,
+        actor_id="octocat@mba-m4",
+        workspace="testorg",
+    )
+
+    gh_ops.prs[("testorg/repo1", "pulse/apply/prop-101")] = {
+        "url": "https://github.com/testorg/repo1/pull/1",
+        "state": "MERGED",
+        "merged": True,
+        "merge_commit_sha": "merged_commit_sha_999",
+        "base": "main",
+        "title": "Apply proposal prop-101",
+        "body": "Automated apply PR",
+    }
+
+    def failing_advance(r, s):
+        return {"state": "failed", "reason": "git push rejected"}
+
+    doc = apply_reconcile.reconcile_apply(
+        ledger_path=ledger_path,
+        step_id="reconcile-repo1",
+        proposal_id="prop-101",
+        repo="testorg/repo1",
+        branch="pulse/apply/prop-101",
+        result_path=result_path,
+        gh_ops=gh_ops,
+        advance_base=failing_advance,
+        actor_id="octocat@mba-m4",
+        workspace="testorg",
+    )
+
+    assert doc["state"] == "applied"
+    ledger_doc = resolve_run.load(ledger_path)
+    step = resolve_run.find_step(ledger_doc, "reconcile-repo1")
+    assert step["status"] == "blocked-on-gate"
+    assert any("git push rejected" in note for note in step["notes"])
 
 
 def test_reconcile_closed_unmerged_pr_rejects_and_deletes_branch(tmp_path):
@@ -267,11 +443,15 @@ def test_reconcile_closed_unmerged_pr_rejects_and_deletes_branch(tmp_path):
         workspace="testorg",
     )
 
-    # Mark PR closed unmerged
     gh_ops.prs[("testorg/repo1", "pulse/apply/prop-101")]["state"] = "CLOSED"
     gh_ops.prs[("testorg/repo1", "pulse/apply/prop-101")]["merged"] = False
 
     advance_calls = []
+
+    def advance_fake(r, s):
+        advance_calls.append((r, s))
+        return {"state": "ok"}
+
     doc = apply_reconcile.reconcile_apply(
         ledger_path=ledger_path,
         step_id="reconcile-repo1",
@@ -280,7 +460,7 @@ def test_reconcile_closed_unmerged_pr_rejects_and_deletes_branch(tmp_path):
         branch="pulse/apply/prop-101",
         result_path=result_path,
         gh_ops=gh_ops,
-        advance_base=lambda repo, sha: advance_calls.append((repo, sha)),
+        advance_base=advance_fake,
         actor_id="octocat@mba-m4",
         workspace="testorg",
     )
@@ -329,6 +509,11 @@ def test_reconcile_applied_step_is_idempotent_noop(tmp_path):
     }
 
     advance_calls = []
+
+    def advance_fake(r, s):
+        advance_calls.append((r, s))
+        return {"state": "ok"}
+
     apply_reconcile.reconcile_apply(
         ledger_path=ledger_path,
         step_id="reconcile-repo1",
@@ -337,13 +522,12 @@ def test_reconcile_applied_step_is_idempotent_noop(tmp_path):
         branch="pulse/apply/prop-101",
         result_path=result_path,
         gh_ops=gh_ops,
-        advance_base=lambda repo, sha: advance_calls.append((repo, sha)),
+        advance_base=advance_fake,
         actor_id="octocat@mba-m4",
         workspace="testorg",
     )
     assert len(advance_calls) == 1
 
-    # Re-run on already applied step
     doc2 = apply_reconcile.reconcile_apply(
         ledger_path=ledger_path,
         step_id="reconcile-repo1",
@@ -352,12 +536,12 @@ def test_reconcile_applied_step_is_idempotent_noop(tmp_path):
         branch="pulse/apply/prop-101",
         result_path=result_path,
         gh_ops=gh_ops,
-        advance_base=lambda repo, sha: advance_calls.append((repo, sha)),
+        advance_base=advance_fake,
         actor_id="octocat@mba-m4",
         workspace="testorg",
     )
     assert doc2["state"] == "applied"
-    assert len(advance_calls) == 1  # No duplicate advance!
+    assert len(advance_calls) == 1  # Idempotent: no duplicate advance!
 
 
 def test_lease_concurrency_blocks_second_actor(tmp_path):
@@ -390,7 +574,7 @@ def test_lease_concurrency_blocks_second_actor(tmp_path):
             branch="pulse/apply/prop-101",
             result_path=result_path,
             gh_ops=gh_ops,
-            advance_base=lambda repo, sha: None,
+            advance_base=lambda repo, sha: {"state": "ok"},
             actor_id="actor2@machine2",
             workspace="testorg",
         )
@@ -399,11 +583,9 @@ def test_lease_concurrency_blocks_second_actor(tmp_path):
 def test_merge_detected_gate_evaluator_fail_closed(tmp_path):
     result_path = tmp_path / "apply-status.yaml"
 
-    # Missing file
     satisfied, detail = resolve_run.evaluate_merge_detected_gate(str(result_path))
     assert satisfied is False
 
-    # State pr_opened
     apply_reconcile.write_apply_status(
         result_path,
         proposal_id="p1",
@@ -416,7 +598,6 @@ def test_merge_detected_gate_evaluator_fail_closed(tmp_path):
     satisfied, detail = resolve_run.evaluate_merge_detected_gate(str(result_path))
     assert satisfied is False
 
-    # State rejected
     apply_reconcile.write_apply_status(
         result_path,
         proposal_id="p1",
@@ -428,7 +609,6 @@ def test_merge_detected_gate_evaluator_fail_closed(tmp_path):
     satisfied, detail = resolve_run.evaluate_merge_detected_gate(str(result_path))
     assert satisfied is False
 
-    # State applied with merged_sha
     apply_reconcile.write_apply_status(
         result_path,
         proposal_id="p1",

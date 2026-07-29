@@ -36,7 +36,7 @@ class GhOps:
         raise NotImplementedError
 
     def view_pr(self, repo: str, branch: str) -> dict:
-        """Return {"state": "OPEN"|"MERGED"|"CLOSED", "merged": bool, "merge_commit_sha": str|None, "url": str}."""
+        """Return {"state": "OPEN"|"MERGED"|"CLOSED"|"ERROR", "merged": bool, "merge_commit_sha": str|None, "url": str, "error"?: str}."""
         raise NotImplementedError
 
     def delete_remote_branch(self, repo: str, branch: str) -> dict:
@@ -98,19 +98,21 @@ class GhCliOps(GhOps):
         res = subprocess.run(cmd, capture_output=True, text=True, check=False)
         if res.returncode != 0:
             return {
-                "state": "CLOSED",
+                "state": "ERROR",
                 "merged": False,
                 "merge_commit_sha": None,
                 "url": "",
+                "error": res.stderr.strip() or f"gh pr view exit code {res.returncode}",
             }
         try:
             data = json.loads(res.stdout)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as exc:
             return {
-                "state": "CLOSED",
+                "state": "ERROR",
                 "merged": False,
                 "merge_commit_sha": None,
                 "url": "",
+                "error": f"unparseable JSON from gh pr view: {exc.msg}",
             }
         state = data.get("state", "CLOSED").upper()
         merged_at = data.get("mergedAt")
@@ -267,6 +269,14 @@ def reconcile_apply(
     actor_id: str = "octocat@mba-m4",
     workspace: str = "unknown",
 ) -> dict:
+    """Reconcile a pushed apply branch against remote PR state and advance base off merged SHA.
+
+    Note on bare CLI vs Python API: When advance_base is None (e.g. bare CLI execution
+    via main()), base advancement is deferred to the caller driver, and reconcile_apply
+    marks the step done once merge is detected. When advance_base is provided, base
+    advancement must be idempotent, and the step is marked done ONLY after advance_base
+    returns {"state": "ok"}.
+    """
     resolve_run.acquire_lease(ledger_path, step_id, actor_id)
 
     existing = load_apply_status(result_path)
@@ -275,11 +285,9 @@ def reconcile_apply(
         if ex_state == "applied":
             ledger_doc = resolve_run.load(ledger_path)
             step = resolve_run.find_step(ledger_doc, step_id)
-            if step["status"] != "done":
-                step["status"] = "done"
-                resolve_run.recompute_status(ledger_doc)
-                resolve_run.save(ledger_path, ledger_doc)
-            return existing
+            if step["status"] == "done":
+                return existing
+            # If step is NOT done, fall through to re-run advancement path below.
         elif ex_state == "rejected":
             ledger_doc = resolve_run.load(ledger_path)
             step = resolve_run.find_step(ledger_doc, step_id)
@@ -289,7 +297,16 @@ def reconcile_apply(
                 resolve_run.save(ledger_path, ledger_doc)
             return existing
 
-    pr_info = gh_ops.view_pr(repo=repo, branch=branch)
+    if existing and existing.get("state") == "applied":
+        pr_info = {
+            "state": "MERGED",
+            "merged": True,
+            "merge_commit_sha": existing.get("merged_sha"),
+            "url": existing.get("pr_url", ""),
+        }
+    else:
+        pr_info = gh_ops.view_pr(repo=repo, branch=branch)
+
     actor_parts = actor_id.split("@", 1)
     login = actor_parts[0]
     machine = actor_parts[1] if len(actor_parts) > 1 else ""
@@ -300,30 +317,55 @@ def reconcile_apply(
 
     if pr_info.get("merged") and pr_info.get("merge_commit_sha"):
         merged_sha = pr_info["merge_commit_sha"]
-        doc = write_apply_status(
-            result_path,
-            proposal_id=proposal_id,
-            repo=repo,
-            branch=branch,
-            state="applied",
-            pushed_sha=pushed_sha or "unknown",
-            pr_url=pr_url or "",
-            merged_sha=merged_sha,
-            workspace=workspace,
-            actor=actor_doc,
-        )
+        if not (existing and existing.get("state") == "applied"):
+            doc = write_apply_status(
+                result_path,
+                proposal_id=proposal_id,
+                repo=repo,
+                branch=branch,
+                state="applied",
+                pushed_sha=pushed_sha or "unknown",
+                pr_url=pr_url or "",
+                merged_sha=merged_sha,
+                workspace=workspace,
+                actor=actor_doc,
+            )
+        else:
+            doc = existing
 
         satisfied, detail = resolve_run.evaluate_merge_detected_gate(str(result_path))
         if satisfied:
-            if advance_base is not None:
-                advance_base(repo, merged_sha)
-
-            ledger_doc = resolve_run.load(ledger_path)
-            step = resolve_run.find_step(ledger_doc, step_id)
-            resolve_run._apply_gate_result(step, True, detail)
-            step["status"] = "done"
-            resolve_run.recompute_status(ledger_doc)
-            resolve_run.save(ledger_path, ledger_doc)
+            if advance_base is None:
+                ledger_doc = resolve_run.load(ledger_path)
+                step = resolve_run.find_step(ledger_doc, step_id)
+                resolve_run._apply_gate_result(step, True, detail)
+                step["status"] = "done"
+                step["notes"].append(
+                    f"{resolve_run.now_iso()} Merge detected; base advance deferred to caller driver"
+                )
+                resolve_run.recompute_status(ledger_doc)
+                resolve_run.save(ledger_path, ledger_doc)
+            else:
+                adv_res = advance_base(repo, merged_sha)
+                ledger_doc = resolve_run.load(ledger_path)
+                step = resolve_run.find_step(ledger_doc, step_id)
+                if isinstance(adv_res, dict) and adv_res.get("state") == "ok":
+                    resolve_run._apply_gate_result(step, True, detail)
+                    step["status"] = "done"
+                    resolve_run.recompute_status(ledger_doc)
+                    resolve_run.save(ledger_path, ledger_doc)
+                else:
+                    reason = (
+                        adv_res.get("reason", "unknown error")
+                        if isinstance(adv_res, dict)
+                        else "unknown error"
+                    )
+                    step["status"] = "blocked-on-gate"
+                    step["notes"].append(
+                        f"{resolve_run.now_iso()} base advance failed: {reason}"
+                    )
+                    resolve_run.recompute_status(ledger_doc)
+                    resolve_run.save(ledger_path, ledger_doc)
 
         return doc
 
@@ -347,7 +389,9 @@ def reconcile_apply(
         ledger_doc = resolve_run.load(ledger_path)
         step = resolve_run.find_step(ledger_doc, step_id)
         step["status"] = "failed"
-        step["notes"].append(f"{resolve_run.now_iso()} {reason}; deleted branch {branch}")
+        step["notes"].append(
+            f"{resolve_run.now_iso()} {reason}; deleted branch {branch}"
+        )
         resolve_run.recompute_status(ledger_doc)
         resolve_run.save(ledger_path, ledger_doc)
 
@@ -357,6 +401,11 @@ def reconcile_apply(
         ledger_doc = resolve_run.load(ledger_path)
         step = resolve_run.find_step(ledger_doc, step_id)
         step["status"] = "blocked-on-gate"
+        if pr_info.get("state") == "ERROR":
+            err_detail = pr_info.get("error", "unknown gh error")
+            step["notes"].append(
+                f"{resolve_run.now_iso()} gh view_pr error: {err_detail}"
+            )
         resolve_run.recompute_status(ledger_doc)
         resolve_run.save(ledger_path, ledger_doc)
 
