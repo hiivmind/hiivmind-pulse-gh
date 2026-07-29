@@ -68,6 +68,16 @@ check runs after pen creation and the freshness/cleanliness preflight
 (a pen must exist, and have a resolvable HEAD, before it can be checked)
 and strictly before `pen exec`.
 
+## `validation.kind == "paths_changed"`: injectable changed-paths reader
+
+`mutation_plan.ValidationSpec` declares a `paths_changed` kind that asserts
+the set of changed paths in each repo matches exactly that repo's `bound_paths`
+on the `Proposal`. `execute` accepts an injectable
+`read_repo_changed_paths: Callable[[str], tuple[str, ...]] | None` seam (repo
+`owner/name` -> repo-relative paths that changed in that repo's pen clone).
+With no reader supplied and `kind == "paths_changed"`, validation fails closed
+as `blocked` with a message explaining that a reader is required.
+
 ## NEEDS_CONTEXT: per-repo command-failure attribution
 
 `nave_pen::ops::exec_pen` (verified against
@@ -87,6 +97,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from fnmatch import fnmatchcase
 from typing import Any, Callable
 
 from lib.pulse.scripts import nave_adapter
@@ -239,37 +250,108 @@ def _validate_repo_output(spec: ValidationSpec, read_repo_file, repo: str) -> st
     return None
 
 
+def _match_bound_path(pattern: str, path: str) -> bool:
+    if "*" in pattern:
+        return fnmatchcase(path, pattern)
+    return path == pattern
+
+
+def _validate_repo_paths_changed(
+    bound_patterns: tuple[str, ...],
+    read_repo_changed_paths: Callable[[str], tuple[str, ...]],
+    repo: str,
+) -> str | None:
+    try:
+        changed_raw = read_repo_changed_paths(repo)
+    except Exception as exc:
+        return f"{repo}: could not read changed paths: {exc}"
+
+    changed = set(changed_raw)
+    if not changed:
+        return f"{repo}: no paths changed (expected changes in bound_paths)"
+
+    unmatched = [
+        p for p in sorted(changed) if not any(_match_bound_path(pat, p) for pat in bound_patterns)
+    ]
+    if unmatched:
+        return f"{repo}: path changed outside bound_paths allowlist: {', '.join(unmatched)}"
+
+    missing_exact = [
+        pat for pat in bound_patterns if "*" not in pat and pat not in changed
+    ]
+    if missing_exact:
+        return f"{repo}: bound_paths exact path did not change: {', '.join(sorted(missing_exact))}"
+
+    return None
+
+
 def _validate(
-    spec: ValidationSpec, read_repo_file, selection: tuple[str, ...]
-) -> tuple[dict[str, str], str] | None:
+    spec: ValidationSpec,
+    read_repo_file: Callable[[str, str], bytes] | None,
+    read_repo_changed_paths: Callable[[str], tuple[str, ...]] | None,
+    bound_paths: dict[str, tuple[str, ...]],
+    selection: tuple[str, ...],
+) -> tuple[dict[str, str], str, str] | None:
     """Run the post-exec check `spec` declares across `selection`; return
-    `None` on success, or `(repo_outcomes, reason)` on failure. `kind ==
-    "none"` always passes. `kind == "json_schema"` with no `read_repo_file`
-    fails closed uniformly (see module docstring); with a reader, each repo
+    `None` on success, or `(repo_outcomes, reason, state)` on failure. `kind ==
+    "none"` always passes. `kind == "json_schema"` or `"paths_changed"` with no
+    reader fails closed uniformly (see module docstring); with a reader, each repo
     is checked independently so failure is attributed per repo."""
     if spec.kind == "none":
         return None
-    if read_repo_file is None:
-        reason = (
-            f"validation kind 'json_schema' (path={spec.path!r}) requires a "
-            "read_repo_file callable to read the pen's local output file "
-            "content — none was provided to execute(); pen show/status "
-            "carry no clone path, pen exec stdout/stderr are opaque by "
-            "contract, and `materialize` fetches committed GitHub content, "
-            "not a pen's local working tree, so pen_orchestrator cannot "
-            "read repo files on its own"
-        )
-        return ({repo: "failed" for repo in selection}, reason)
-    errors = {
-        repo: error
-        for repo in selection
-        if (error := _validate_repo_output(spec, read_repo_file, repo)) is not None
-    }
-    if not errors:
-        return None
-    repo_outcomes = {repo: ("failed" if repo in errors else "ok") for repo in selection}
-    reason = "; ".join(errors[repo] for repo in selection if repo in errors)
-    return (repo_outcomes, reason)
+
+    if spec.kind == "json_schema":
+        if read_repo_file is None:
+            reason = (
+                f"validation kind 'json_schema' (path={spec.path!r}) requires a "
+                "read_repo_file callable to read the pen's local output file "
+                "content — none was provided to execute(); pen show/status "
+                "carry no clone path, pen exec stdout/stderr are opaque by "
+                "contract, and `materialize` fetches committed GitHub content, "
+                "not a pen's local working tree, so pen_orchestrator cannot "
+                "read repo files on its own"
+            )
+            return ({repo: "failed" for repo in selection}, reason, "failed")
+        errors = {
+            repo: error
+            for repo in selection
+            if (error := _validate_repo_output(spec, read_repo_file, repo)) is not None
+        }
+        if not errors:
+            return None
+        repo_outcomes = {repo: ("failed" if repo in errors else "ok") for repo in selection}
+        reason = "; ".join(errors[repo] for repo in selection if repo in errors)
+        return (repo_outcomes, reason, "failed")
+
+    if spec.kind == "paths_changed":
+        if read_repo_changed_paths is None:
+            reason = (
+                "validation kind 'paths_changed' requires a "
+                "read_repo_changed_paths callable to read the pen's changed "
+                "paths — none was provided to execute(); pen show/status "
+                "carry no clone path, pen exec stdout/stderr are opaque by "
+                "contract, and `materialize` fetches committed GitHub content, "
+                "not a pen's local working tree, so pen_orchestrator cannot "
+                "read repo changed paths on its own"
+            )
+            return ({repo: "blocked" for repo in selection}, reason, "blocked")
+        errors = {
+            repo: error
+            for repo in selection
+            if (
+                error := _validate_repo_paths_changed(
+                    bound_paths.get(repo, ()), read_repo_changed_paths, repo
+                )
+            )
+            is not None
+        }
+        if not errors:
+            return None
+        repo_outcomes = {repo: ("failed" if repo in errors else "ok") for repo in selection}
+        reason = "; ".join(errors[repo] for repo in selection if repo in errors)
+        return (repo_outcomes, reason, "failed")
+
+    return None
 
 
 def execute(
@@ -278,6 +360,7 @@ def execute(
     *,
     read_repo_file: Callable[[str, str], bytes] | None = None,
     read_repo_head: Callable[[str], str] | None = None,
+    read_repo_changed_paths: Callable[[str], tuple[str, ...]] | None = None,
 ) -> PenRunResult:
     """Drive `plan` through the pen state machine using `nave_adapter_runner`.
 
@@ -468,10 +551,16 @@ def execute(
         )
 
     # --- validated -----------------------------------------------------------
-    validation_failure = _validate(entry.validation, read_repo_file, selection)
+    validation_failure = _validate(
+        entry.validation,
+        read_repo_file,
+        read_repo_changed_paths,
+        proposal.bound_paths,
+        selection,
+    )
     if validation_failure is not None:
-        repo_outcomes, reason = validation_failure
-        return _result(plan, "failed", version, repo_outcomes, reason)
+        repo_outcomes, reason, state = validation_failure
+        return _result(plan, state, version, repo_outcomes, reason)
 
     # --- proposed: terminal success, propose-only, never pushed -------------
     return _result(

@@ -64,7 +64,7 @@ def make_entry(validation=None):
     return registry.get("format-python")
 
 
-def make_proposal(selection=("acme/api", "acme/web"), mutation_policy="propose"):
+def make_proposal(selection=("acme/api", "acme/web"), mutation_policy="propose", bound_paths=None):
     return mutation_plan.build_proposal(
         id="run-1",
         selection=list(selection),
@@ -72,11 +72,12 @@ def make_proposal(selection=("acme/api", "acme/web"), mutation_policy="propose")
         expected_shas={repo: "deadbeef" for repo in selection},
         actor={"gh_login": "octocat", "machine": "laptop", "mode": "interactive"},
         mutation_policy=mutation_policy,
+        bound_paths=bound_paths,
     )
 
 
-def make_plan(selection=("acme/api", "acme/web"), mutation_policy="propose", request_push=False, validation=None):
-    proposal = make_proposal(selection=selection, mutation_policy=mutation_policy)
+def make_plan(selection=("acme/api", "acme/web"), mutation_policy="propose", request_push=False, validation=None, bound_paths=None):
+    proposal = make_proposal(selection=selection, mutation_policy=mutation_policy, bound_paths=bound_paths)
     entry = make_entry(validation=validation)
     return pen_orchestrator.PenPlan(
         proposal=proposal,
@@ -558,3 +559,195 @@ def test_pen_selection_mismatch_blocks_the_run():
     assert result.state == "blocked"
     assert "does not match" in result.reason or "do not match" in result.reason
     assert result.repo_outcomes == {repo: "blocked" for repo in SELECTION}
+
+
+# --- paths_changed validation kind ----------------------------------------
+
+
+def _paths_changed_plan(bound_paths=None):
+    if bound_paths is None:
+        bound_paths = {repo: ("docs/a.md",) for repo in SELECTION}
+    return make_plan(
+        validation={"kind": "paths_changed"},
+        bound_paths=bound_paths,
+    )
+
+
+def test_paths_changed_without_reader_fails_closed_as_blocked():
+    plan = _paths_changed_plan()
+    runner = QueuedRunner(_exec_ok_sequence())
+
+    result = pen_orchestrator.execute(plan, runner, read_repo_head=matching_head)
+
+    assert result.state == "blocked"
+    assert "paths_changed" in result.reason
+    assert "read_repo_changed_paths" in result.reason
+    assert result.repo_outcomes == {repo: "blocked" for repo in SELECTION}
+
+
+def test_paths_changed_exact_and_glob_match_passes():
+    bound_paths = {
+        "acme/api": ("docs/a.md", ".generated/docs/**"),
+        "acme/web": (".generated/docs/**",),
+    }
+    plan = _paths_changed_plan(bound_paths=bound_paths)
+    runner = QueuedRunner(_exec_ok_sequence())
+
+    def read_repo_changed_paths(repo):
+        if repo == "acme/api":
+            return ("docs/a.md", ".generated/docs/sub/page.html")
+        return (".generated/docs/index.html",)
+
+    result = pen_orchestrator.execute(
+        plan,
+        runner,
+        read_repo_head=matching_head,
+        read_repo_changed_paths=read_repo_changed_paths,
+    )
+
+    assert result.state == "proposed"
+    assert result.reason is None
+    assert result.repo_outcomes == {repo: "ok" for repo in SELECTION}
+
+
+def test_paths_changed_glob_matches_deep_subdirectories():
+    # Explicitly prove .generated/docs/sub/page.html matches .generated/docs/**
+    bound_paths = {repo: (".generated/docs/**",) for repo in SELECTION}
+    plan = _paths_changed_plan(bound_paths=bound_paths)
+    runner = QueuedRunner(_exec_ok_sequence())
+
+    def read_repo_changed_paths(repo):
+        return (".generated/docs/sub/page.html",)
+
+    result = pen_orchestrator.execute(
+        plan,
+        runner,
+        read_repo_head=matching_head,
+        read_repo_changed_paths=read_repo_changed_paths,
+    )
+
+    assert result.state == "proposed"
+    assert result.repo_outcomes == {repo: "ok" for repo in SELECTION}
+
+
+def test_paths_changed_fails_on_out_of_allowlist_change():
+    bound_paths = {repo: ("docs/a.md",) for repo in SELECTION}
+    plan = _paths_changed_plan(bound_paths=bound_paths)
+    runner = QueuedRunner(_exec_ok_sequence())
+
+    def read_repo_changed_paths(repo):
+        if repo == "acme/api":
+            return ("docs/a.md", "src/secret.py")
+        return ("docs/a.md",)
+
+    result = pen_orchestrator.execute(
+        plan,
+        runner,
+        read_repo_head=matching_head,
+        read_repo_changed_paths=read_repo_changed_paths,
+    )
+
+    assert result.state == "failed"
+    assert result.repo_outcomes == {"acme/api": "failed", "acme/web": "ok"}
+    assert "acme/api" in result.reason
+    assert "src/secret.py" in result.reason
+
+
+def test_paths_changed_fails_on_missing_exact_path():
+    bound_paths = {repo: ("docs/a.md", "docs/b.md") for repo in SELECTION}
+    plan = _paths_changed_plan(bound_paths=bound_paths)
+    runner = QueuedRunner(_exec_ok_sequence())
+
+    def read_repo_changed_paths(repo):
+        if repo == "acme/api":
+            return ("docs/a.md",)  # missing exact docs/b.md
+        return ("docs/a.md", "docs/b.md")
+
+    result = pen_orchestrator.execute(
+        plan,
+        runner,
+        read_repo_head=matching_head,
+        read_repo_changed_paths=read_repo_changed_paths,
+    )
+
+    assert result.state == "failed"
+    assert result.repo_outcomes == {"acme/api": "failed", "acme/web": "ok"}
+    assert "acme/api" in result.reason
+    assert "docs/b.md" in result.reason
+
+
+def test_paths_changed_fails_on_silent_noop():
+    bound_paths = {repo: ("docs/**",) for repo in SELECTION}
+    plan = _paths_changed_plan(bound_paths=bound_paths)
+    runner = QueuedRunner(_exec_ok_sequence())
+
+    def read_repo_changed_paths(repo):
+        if repo == "acme/api":
+            return ()  # silent no-op
+        return ("docs/a.md",)
+
+    result = pen_orchestrator.execute(
+        plan,
+        runner,
+        read_repo_head=matching_head,
+        read_repo_changed_paths=read_repo_changed_paths,
+    )
+
+    assert result.state == "failed"
+    assert result.repo_outcomes == {"acme/api": "failed", "acme/web": "ok"}
+    assert "acme/api" in result.reason
+    assert "no paths changed" in result.reason or "no-op" in result.reason
+
+
+def test_paths_changed_on_neutral_transformation_fixture():
+    # Prove the guard on a neutral transformation entry (`regenerate-docs-index`)
+    neutral_registry_data = {
+        "transformations": {
+            "regenerate-docs-index": {
+                "id": "regenerate-docs-index",
+                "command_argv": ["mkdocs", "build", "--site-dir", ".generated/docs"],
+                "applies_to": ["evidence_path:mkdocs.yml"],
+                "validation": {"kind": "paths_changed"},
+                "allow_scheduled": True,
+            }
+        }
+    }
+    registry = mutation_plan.load_registry(neutral_registry_data)
+    entry = registry.get("regenerate-docs-index")
+    proposal = mutation_plan.build_proposal(
+        id="run-neutral",
+        selection=["acme/api"],
+        transformation="regenerate-docs-index",
+        expected_shas={"acme/api": "deadbeef"},
+        actor={"gh_login": "octocat", "machine": "laptop", "mode": "interactive"},
+        bound_paths={"acme/api": [".generated/docs/**"]},
+        registry=registry,
+    )
+    plan = pen_orchestrator.PenPlan(
+        proposal=proposal,
+        entry=entry,
+        pen_name="nave/docs-gen",
+        query=nave_adapter.PenQuery(),
+    )
+    runner = QueuedRunner(
+        [
+            *create_sequence([("acme", "api")]),
+            pen_status_completed([repo_state("acme", "api")]),
+            nave_adapter.Completed(0, "built docs", ""),
+            pen_status_completed([repo_state("acme", "api")]),
+        ]
+    )
+
+    def read_repo_changed_paths(repo):
+        return (".generated/docs/index.html", ".generated/docs/search/search_index.json")
+
+    result = pen_orchestrator.execute(
+        plan,
+        runner,
+        read_repo_head=lambda repo: "deadbeef",
+        read_repo_changed_paths=read_repo_changed_paths,
+    )
+
+    assert result.state == "proposed"
+    assert result.repo_outcomes == {"acme/api": "ok"}
+

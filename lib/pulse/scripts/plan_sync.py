@@ -271,6 +271,7 @@ def build_apply_plans(
             expected_shas={repo: head},
             actor=actor,
             mutation_policy="propose",
+            bound_paths={repo: [path]},
         )
         doc_patch = {
             "path": path,

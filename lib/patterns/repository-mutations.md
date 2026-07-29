@@ -28,7 +28,7 @@ subprocess calls, no filesystem writes, no Nave interaction.
 `mutation_plan.build_proposal(...)` constructs and validates a `Proposal`:
 
 ```text
-{id, selection, transformation, expected_shas, mutation_policy, actor}
+{id, selection, transformation, expected_shas, mutation_policy, actor, bound_paths}
 ```
 
 | Field | Shape | Meaning |
@@ -39,6 +39,7 @@ subprocess calls, no filesystem writes, no Nave interaction.
 | `expected_shas` | dict `owner/name -> sha` | The expected-base guard: keys must be **exactly** `selection`, no more, no fewer. The orchestrator (Task 3) compares this against each repo's current SHA before executing and blocks on any mismatch — a stale base is never silently mutated. Since no Nave surface exposes a per-repo SHA, this comparison runs through an injectable `read_repo_head` reader `execute` accepts (same seam pattern as `read_repo_file`); with `expected_shas` non-empty and no reader supplied, verification fails closed. |
 | `mutation_policy` | one of `propose`, `allow-listed`, `allow` | See below. Default: `propose`. |
 | `actor` | `{gh_login, machine, mode}` | Same shape as the headless result contract's `actor:` block (`lib/patterns/headless-contract.md`); `mode` is `interactive` or `scheduled`. |
+| `bound_paths` | dict `owner/name -> tuple[str, ...]` | Immutable proposal metadata: per-repo allowlist of exact repo-relative paths or globs (`*`, `**`) this proposal is permitted to change. When the transformation's validation kind is `paths_changed`, keys must cover `selection` exactly (no uncovered repo, no extra repo). |
 
 ### `mutation_policy` values
 
@@ -79,7 +80,7 @@ mutations are not a separate policy dialect from GitHub-object mutations:
 | `id` | string, must match its registry key | The transformation ID proposals reference. |
 | `command_argv` | non-empty list of plain strings | The **exact** argv passed to `nave_adapter.pen_exec` after `--`. No nested structures (lists/dicts as elements are rejected), no booleans. |
 | `applies_to` | non-empty list of predicates | OR-matched repository eligibility, in the same grammar `profile_dispatch.py` uses for scorecard-check applicability: `always`, `profile:<id>`, `capability:<id>`, `evidence_path:<glob>`. `mutation_plan.transformation_applies(entry, profiles, capabilities, evidence_paths)` evaluates it. |
-| `validation` | `{kind: none \| json_schema, ...}` | Post-execution check the orchestrator runs after `pen_exec` succeeds. `kind: none` takes no extra fields. `kind: json_schema` requires `path` (repo-relative file the transformation is expected to produce/modify) and `schema` (inline JSON Schema mapping the file's parsed content must satisfy). A validation failure is a `blocked`/`failed` outcome, never a silent pass. |
+| `validation` | `{kind: none \| json_schema \| paths_changed, ...}` | Post-execution check the orchestrator runs after `pen_exec` succeeds. `kind: none` and `kind: paths_changed` take no extra fields in the registry (`paths_changed` bounds live on the proposal's `bound_paths`). `kind: json_schema` requires `path` and `schema`. `kind: paths_changed` asserts post-exec that the set of changed paths in each repo matches that repo's `bound_paths` (every changed path must match an exact/glob bound entry, every exact bound entry must change, and changed set must be non-empty). |
 | `allow_scheduled` | boolean | Whether this transformation may run under `actor.mode: scheduled`. Interactive-only transformations (destructive, judgment-requiring, or simply not yet trusted unattended) set this `false`. |
 
 ### No shell strings, ever

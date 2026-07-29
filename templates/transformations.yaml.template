@@ -31,8 +31,9 @@ transformations:
   #                                        # Same grammar as scorecard check
   #                                        # applicability (profile_dispatch.py).
   #   validation:
-  #     kind: none | json_schema          # Required. `none` takes no other
-  #                                        # keys. `json_schema` requires:
+  #     kind: none | json_schema | paths_changed # Required. `none` and `paths_changed`
+  #                                        # take no other keys (`paths_changed` bounds
+  #                                        # are carried on Proposal). `json_schema` requires:
   #     path: {{repo_relative_path}}      #   file the transformation is
   #                                        #   expected to produce/modify
   #     schema: {{inline_json_schema}}    #   parsed content must satisfy this
@@ -93,7 +94,7 @@ transformations:
     applies_to:
       - always
     validation:
-      kind: none
+      kind: paths_changed
     allow_scheduled: false
 
   # F9 v1 dogfood overlay: regenerate the corpus-navigation skill under the
@@ -188,5 +189,5 @@ transformations:
     applies_to:
       - evidence_path:mkdocs.yml
     validation:
-      kind: none
+      kind: paths_changed
     allow_scheduled: true
