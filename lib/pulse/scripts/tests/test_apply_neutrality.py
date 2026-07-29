@@ -47,7 +47,7 @@ FORBIDDEN_OVERLAY_MODULES_AND_SYMBOLS = (
 
 
 def _collect_all_ast_imports(source: str) -> set[str]:
-    """Parse source and return all imported names anywhere in the AST (top-level or inside functions)."""
+    """Parse source and return all imported names anywhere in the AST (top-level, inside functions, absolute and relative)."""
     tree = ast.parse(source)
     imported: set[str] = set()
     for node in ast.walk(tree):
@@ -55,14 +55,76 @@ def _collect_all_ast_imports(source: str) -> set[str]:
             for alias in node.names:
                 imported.add(alias.name)
         elif isinstance(node, ast.ImportFrom):
-            if node.level:
-                continue
             module = node.module or ""
             if module:
                 imported.add(module)
             for alias in node.names:
-                imported.add(f"{module}.{alias.name}" if module else alias.name)
+                alias_name = alias.name
+                imported.add(alias_name)
+                if module:
+                    imported.add(f"{module}.{alias_name}")
     return imported
+
+
+def _scan_line_for_unwhitelisted_overlay_tokens(
+    line: str, in_docstring: bool
+) -> tuple[bool, bool]:
+    """Inspect line for forbidden overlay tokens.
+
+    Returns (is_flagged, new_in_docstring_state). Whitelists apply ONLY to pure
+    comment lines (# ...) or docstring prose — code before inline comments is
+    never exempted by a comment whitelist.
+    """
+    flag_patterns = [
+        re.compile(r"\bprofile_dispatch\b"),
+        re.compile(r"\bclaude_plugin\b"),
+        re.compile(r"\bregister_claude_adapters\b"),
+        re.compile(r"\bprofile:claude-plugin\b"),
+        re.compile(r"\bcorpus_generator_overlay\b"),
+    ]
+
+    whitelist_patterns = [
+        r"#.*F6 plan",
+        r"#.*F11 plan",
+        r'""".*F6 plan',
+        r"'''.*F6 plan",
+    ]
+
+    stripped = line.strip()
+
+    num_triple_double = line.count('"""')
+    num_triple_single = line.count("'''")
+    docstring_toggle = (num_triple_double % 2 == 1) or (num_triple_single % 2 == 1)
+
+    current_is_docstring = in_docstring or stripped.startswith('"""') or stripped.startswith("'''")
+    new_in_docstring = in_docstring ^ docstring_toggle
+
+    # Case 1: Pure comment line or inside docstring
+    if current_is_docstring or stripped.startswith("#"):
+        if any(re.search(pat, line) for pat in whitelist_patterns):
+            return False, new_in_docstring
+        for pat in flag_patterns:
+            if pat.search(line):
+                return True, new_in_docstring
+        return False, new_in_docstring
+
+    # Case 2: Code line (possibly with an inline comment after #)
+    parts = line.split("#", 1)
+    code_part = parts[0]
+    comment_part = f"# {parts[1]}" if len(parts) > 1 else ""
+
+    # Code before # is NEVER whitelisted by an inline comment
+    for pat in flag_patterns:
+        if pat.search(code_part):
+            return True, new_in_docstring
+
+    if comment_part:
+        if not any(re.search(pat, comment_part) for pat in whitelist_patterns):
+            for pat in flag_patterns:
+                if pat.search(comment_part):
+                    return True, new_in_docstring
+
+    return False, new_in_docstring
 
 
 @pytest.mark.parametrize("module_path", APPLY_MODULE_PATHS)
@@ -76,7 +138,12 @@ def test_apply_module_imports_no_overlay_modules_structural_ast(module_path: str
     forbidden_hits: list[str] = []
     for imp in imported:
         for forbidden in FORBIDDEN_OVERLAY_MODULES_AND_SYMBOLS:
-            if imp == forbidden or imp.startswith(forbidden + ".") or imp.endswith("." + forbidden):
+            if (
+                imp == forbidden
+                or imp.startswith(forbidden + ".")
+                or imp.endswith("." + forbidden)
+                or f".{forbidden}." in f".{imp}."
+            ):
                 forbidden_hits.append(imp)
 
     assert forbidden_hits == [], (
@@ -111,30 +178,46 @@ def test_apply_module_secondary_whitelisted_lexical_heuristic(module_path: str) 
     full_path = REPO_ROOT / module_path
     source = full_path.read_text()
 
-    flag_patterns = [
-        re.compile(r"\bclaude_plugin\b"),
-        re.compile(r"\bregister_claude_adapters\b"),
-        re.compile(r"\bprofile:claude-plugin\b"),
-        re.compile(r"\bcorpus_generator_overlay\b"),
-    ]
-
-    whitelist_patterns = [
-        r"#.*F6 plan",
-        r"#.*F11 plan",
-        r'""".*F6 plan',
-    ]
-
     lines = source.splitlines()
     unwhitelisted_hits: list[tuple[int, str]] = []
+    in_docstring = False
 
     for idx, line in enumerate(lines, 1):
-        if any(re.search(pat, line) for pat in whitelist_patterns):
-            continue
-        for pat in flag_patterns:
-            if pat.search(line):
-                unwhitelisted_hits.append((idx, line.strip()))
+        flagged, in_docstring = _scan_line_for_unwhitelisted_overlay_tokens(line, in_docstring)
+        if flagged:
+            unwhitelisted_hits.append((idx, line.strip()))
 
     assert unwhitelisted_hits == [], (
         f"Secondary lexical scan found unwhitelisted overlay references in {module_path}: "
         f"{unwhitelisted_hits}"
     )
+
+
+def test_relative_import_detection_in_ast_guard() -> None:
+    """Unit test for Important 1: Proves relative imports of forbidden overlay modules are caught."""
+    synthetic_sources = [
+        "from .profile_dispatch import foo",
+        "from . import profile_dispatch",
+        "from ..adapters.claude_plugin import bar",
+        "from .marketplace_sync import sync",
+    ]
+    for src in synthetic_sources:
+        imported = _collect_all_ast_imports(src)
+        hits = []
+        for imp in imported:
+            for forbidden in FORBIDDEN_OVERLAY_MODULES_AND_SYMBOLS:
+                if (
+                    imp == forbidden
+                    or imp.startswith(forbidden + ".")
+                    or imp.endswith("." + forbidden)
+                    or f".{forbidden}." in f".{imp}."
+                ):
+                    hits.append(imp)
+        assert hits != [], f"Relative import not detected as forbidden in source: {src}"
+
+
+def test_inline_comment_not_whitelisted_in_secondary_scan() -> None:
+    """Unit test for Important 2: Proves inline comments do NOT whitelist code on the same line."""
+    synthetic_line = "import profile_dispatch  # F6 plan"
+    flagged, _ = _scan_line_for_unwhitelisted_overlay_tokens(synthetic_line, in_docstring=False)
+    assert flagged is True, "Inline comment must NOT whitelist forbidden code before #"
