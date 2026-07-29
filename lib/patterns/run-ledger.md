@@ -96,9 +96,18 @@ state. `check-gate` is for gates a registered evaluator can compute
 deterministically from an already-validated result file — e.g.
 `binding_edges_current` (F5) reads an `impact-result.yaml` and is satisfied
 only when it validates as kind `impact` with `edges_stale == 0` and no edge
-in state `unknown`. New evaluators register by name in `resolve_run.py`'s
-`GATE_EVALUATORS`; `--gate-type` naming an evaluator that isn't registered is
-a usage error (exit 1), never silently treated as satisfied.
+in state `unknown`; `merge_detected` (F11) reads an `apply-status` file and is
+satisfied only when it validates as kind `apply-status`, state is `applied`,
+and `merged_sha` is present.
+
+If a PR is observed `CLOSED` without merging during reconcile, the apply-status
+file is written at state `rejected`, the step status is marked `failed` (I3),
+and the remote branch is deleted; the overall run transitions to `failed` rather
+than blocking forever on gate.
+
+New evaluators register by name in `resolve_run.py`'s `GATE_EVALUATORS`;
+`--gate-type` naming an evaluator that isn't registered is a usage error
+(exit 1), never silently treated as satisfied.
 
 Exit codes: 0 ok, 1 validation/state error, 2 file missing/unparseable,
 3 lease actively held by someone else.

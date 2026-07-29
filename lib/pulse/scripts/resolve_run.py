@@ -292,8 +292,25 @@ def evaluate_binding_edges_gate(result_path):
     return True, f"{len(edges)} edge(s) current"
 
 
+def evaluate_merge_detected_gate(result_path):
+    """`merge_detected` — fail-closed gate over an apply-status result (F11).
+    Satisfied ONLY when the result file is present, validates cleanly as
+    kind `apply-status`, state is `applied`, and `merged_sha` is a
+    non-empty string."""
+    data, errors = _load_result_kind(result_path, "apply-status")
+    if data is None:
+        return False, "; ".join(errors) or "invalid apply-status result"
+    if data.get("state") != "applied":
+        return False, f"apply-status state is {data.get('state')!r}, expected 'applied'"
+    merged_sha = data.get("merged_sha")
+    if not merged_sha or not isinstance(merged_sha, str):
+        return False, "merged_sha missing or empty"
+    return True, f"merge detected: {merged_sha}"
+
+
 GATE_EVALUATORS = {
     "binding_edges_current": evaluate_binding_edges_gate,
+    "merge_detected": evaluate_merge_detected_gate,
 }
 
 
@@ -313,20 +330,34 @@ def cmd_check_gate(args):
     print(json.dumps({"satisfied": satisfied, "detail": detail}))
 
 
-def cmd_lease(args):
-    doc = load(args.file)
-    step = find_step(doc, args.step)
+class LeaseError(Exception):
+    pass
+
+
+def acquire_lease(file_path, step_id, by, ttl_minutes=120):
+    doc = load(file_path)
+    step = find_step(doc, step_id)
     lease = step.get("lease")
-    ttl = timedelta(minutes=args.ttl_minutes)
-    if lease and lease.get("leased_by") != args.by:
+    ttl = timedelta(minutes=ttl_minutes)
+    if lease and lease.get("leased_by") != by:
         age = datetime.now(timezone.utc) - parse_ts(lease["leased_at"])
         if age < ttl:
-            print(f"error: lease held by {lease['leased_by']} "
-                  f"({int(age.total_seconds() // 60)} min old)", file=sys.stderr)
-            sys.exit(3)
-    step["lease"] = {"leased_by": args.by, "leased_at": now_iso()}
-    save(args.file, doc)
-    print(json.dumps(step["lease"]))
+            raise LeaseError(
+                f"lease held by {lease['leased_by']} "
+                f"({int(age.total_seconds() // 60)} min old)"
+            )
+    step["lease"] = {"leased_by": by, "leased_at": now_iso()}
+    save(file_path, doc)
+    return step["lease"]
+
+
+def cmd_lease(args):
+    try:
+        lease = acquire_lease(args.file, args.step, args.by, args.ttl_minutes)
+        print(json.dumps(lease))
+    except LeaseError as e:
+        print(f"error: {e}", file=sys.stderr)
+        sys.exit(3)
 
 
 def main():
