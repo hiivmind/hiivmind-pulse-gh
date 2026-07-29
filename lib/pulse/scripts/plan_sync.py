@@ -15,6 +15,7 @@ from typing import Any, Mapping
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
 
+from lib.pulse.scripts import mutation_plan
 from lib.pulse.scripts.mutation_plan import Proposal, build_proposal
 
 
@@ -244,6 +245,7 @@ def build_apply_plans(
     binding: Mapping[str, Any],
     snapshot: Any,
     actor: Mapping[str, Any] | Any,
+    registry: mutation_plan.TransformationRegistry | None = None,
 ) -> ApplyPlans:
     """Build separate propose-only document and GitHub patch proposals.
 
@@ -272,6 +274,7 @@ def build_apply_plans(
             actor=actor,
             mutation_policy="propose",
             bound_paths={repo: [path]},
+            registry=registry,
         )
         doc_patch = {
             "path": path,
@@ -369,18 +372,23 @@ def build_result(
     workspace: str,
     run_at: str,
     actor: Mapping[str, Any],
+    registry: mutation_plan.TransformationRegistry | None = None,
+    mode: str = "interactive",
 ) -> dict[str, Any]:
     """Build the production plan-sync result from collected evidence.
 
     The builder composes the public merge and proposal paths used by the
     headless workflow.  It is deliberately propose-only and performs no I/O.
     """
+    actor_dict = dict(actor)
+    actor_dict["mode"] = mode
+
     result: dict[str, Any] = {
         "contract_version": 1,
         "kind": "plan-sync",
         "workspace": workspace,
         "run_at": run_at,
-        "actor": dict(actor),
+        "actor": actor_dict,
         "docs_scanned": 0,
         "in_sync": 0,
         "doc_patches": 0,
@@ -424,7 +432,42 @@ def build_result(
                 })
             continue
 
-        plans = build_apply_plans(reconciliation, document.binding, document, actor)
+        try:
+            plans = build_apply_plans(
+                reconciliation, document.binding, document, actor_dict, registry=registry
+            )
+        except mutation_plan.MutationPlanError as exc:
+            result["findings"].append({
+                "kind": "gated_transformation",
+                "repo": document.repo,
+                "severity": "medium",
+                "detail": str(exc),
+                "inferred": False,
+            })
+            plans = ApplyPlans(None, None, None)
+            # Re-evaluate github mutation manually if repo proposal was gated
+            if reconciliation.github_patch:
+                issue = _sync_binding(document.binding).get("issue")
+                if isinstance(issue, Mapping):
+                    issue_repo = issue.get("repo")
+                    issue_number = issue.get("number")
+                    if issue_repo and issue_number:
+                        patch = dict(reconciliation.github_patch)
+                        plans = ApplyPlans(
+                            None,
+                            {
+                                "repo": issue_repo,
+                                "number": issue_number,
+                                "patch": patch,
+                                "mutation_policy": "propose",
+                                "proposed_actions": [
+                                    f"propose GitHub issue patch for {issue_repo}#{issue_number}: "
+                                    f"{json.dumps(patch, sort_keys=True)}"
+                                ],
+                            },
+                            None,
+                        )
+
         if plans.repo_mutation is not None:
             result["doc_patches"] += 1
             result["proposals"].append({
@@ -442,7 +485,9 @@ def build_result(
                 plans.github_mutation.get("proposed_actions", [])
             )
         if plans.repo_mutation is None and plans.github_mutation is None:
-            result["in_sync"] += 1
+            # Only count as in_sync if there was no gated finding or conflict
+            if not any(f.get("kind") == "gated_transformation" for f in result["findings"]):
+                result["in_sync"] += 1
 
         # Propose-only: neither path is confirmed, so no base is persisted.
         final = finalize(reconciliation, doc_applied=False, github_applied=False)
