@@ -1,0 +1,86 @@
+# Machine-readable capability → driver enrollment for every headless skill.
+#
+# Every directory matching skills/*-headless MUST appear under exactly one of:
+#   drivers — authorized self-validating result-driver CLI + validator_kind
+#   exempt  — one-line reason why no single result-driver owns the envelope
+#
+# Anti-improvisation gate (test_skills_shell_drivers.py):
+#   map coverage set == on-disk skills/*-headless set.
+#   A new headless skill that is neither mapped nor exempt FAILS the suite.
+#
+# `drivers` entries are the thin F10-style result writers: they parse argv,
+# assemble inputs, call a pure library, write *-result.yaml on every exit
+# (including ABORT), and self-validate via validate_result.py --kind <k>.
+# Skill-orchestrated multi-step headless flows (evidence → evaluate → wrap)
+# stay under `exempt` because the skill owns the result envelope, not a
+# single CLI.
+
+drivers:
+  gh-marketplace-sync-headless:
+    script: lib/pulse/scripts/marketplace_sync_run.py
+    command: >-
+      uv run "{PLUGIN_ROOT}/lib/pulse/scripts/marketplace_sync_run.py"
+      --workspace <workspace_path>
+      [--repo <repo>]
+      [--result <result_path>]
+      [--mode scheduled|interactive]
+    validator_kind: marketplace-sync
+    cli_flags:
+      - --workspace
+      - --repo
+      - --result
+      - --mode
+
+  gh-plan-sync-headless:
+    script: lib/pulse/scripts/plan_sync_run.py
+    command: >-
+      uv run "{PLUGIN_ROOT}/lib/pulse/scripts/plan_sync_run.py"
+      --workspace <workspace_path>
+      [--repo <repo>]
+      [--result <result_path>]
+      [--mode scheduled|interactive]
+    validator_kind: plan-sync
+    cli_flags:
+      - --workspace
+      - --repo
+      - --result
+      - --mode
+
+  gh-generated-artifact-headless:
+    script: lib/pulse/scripts/generated_artifact_run.py
+    command: >-
+      uv run "{PLUGIN_ROOT}/lib/pulse/scripts/generated_artifact_run.py"
+      --workspace <workspace_path>
+      [--repo <repo>]
+      [--result <result_path>]
+      [--mode scheduled|interactive]
+    validator_kind: generated-artifact
+    cli_flags:
+      - --workspace
+      - --repo
+      - --result
+      - --mode
+
+exempt:
+  gh-healthcheck-headless: >-
+    skill-orchestrated multi-step (evidence + healthcheck_dispatch evaluate +
+    wrap); skill owns healthcheck-result.yaml and validate_result --kind
+    healthcheck; dispatch is evaluate-only JSON, not a result-driver
+  gh-impact-audit-headless: >-
+    skill-orchestrated multi-step (impact_snapshot + impact audit + wrap);
+    skill owns impact-result.yaml and validate_result --kind impact
+  gh-fleet-evidence-headless: >-
+    multi-step nave pipeline (probe/scan/pull/build/check) + evidence_snapshot;
+    validates via validate_evidence.py, not a single validate_result result-driver
+  gh-fleet-membership-headless: >-
+    skill assembles fleet-membership-result.yaml around fleet_membership.py
+    reconcile JSON; skill owns validate_result --kind fleet-membership
+  gh-status-headless: >-
+    read-only status pre-check; skill writes status-result.yaml around
+    freshness_status.py
+  gh-refresh-headless: >-
+    multi-phase config sync orchestration with section selection; no single
+    result-driver CLI
+  gh-workflow-run-headless: >-
+    workflow executor skill with headless policy projection; no single
+    result-driver CLI
