@@ -265,3 +265,36 @@ def test_valid_plugin_context_still_passes_with_no_claim_findings():
     assert out["status"] == "pass"
     assert out["data"]["evidence"]["paths"] == ["CLAUDE.md"]
     assert out["data"]["claim_findings"] == []
+
+
+# --- inference_status gate (F10 Task 4) ------------------------------------
+
+
+def test_absent_inference_status_grades_context_unknown():
+    evidence = _load_evidence("valid-plugin")
+    evidence.pop("inference_status", None)
+
+    out = _evaluate("claude.context", evidence)
+
+    assert out["status"] == "unknown"
+    assert "inference" in out["detail"].lower() or "skipped" in out["detail"].lower()
+
+
+@pytest.mark.parametrize("status", ["skipped", "failed"])
+def test_non_ran_inference_status_grades_context_unknown(status):
+    evidence = _load_evidence("valid-plugin")
+    evidence["inference_status"] = status
+
+    out = _evaluate("claude.context", evidence)
+
+    assert out["status"] == "unknown"
+    assert status in out["detail"].lower()
+
+
+def test_inference_status_ran_still_allows_pass():
+    evidence = _load_evidence("valid-plugin")
+    evidence["inference_status"] = "ran"
+
+    out = _evaluate("claude.context", evidence)
+
+    assert out["status"] == "pass"

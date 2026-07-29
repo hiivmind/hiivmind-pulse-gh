@@ -282,6 +282,7 @@ def dispatch(
     snapshot: dict[str, Any],
     actor: dict[str, Any] | mutation_plan.Actor,
     mutation_policy: str = "propose",
+    registry: TransformationRegistry | None = None,
 ) -> mutation_plan.Proposal:
     """Turn a drifted binding into a validated Nave mutation `Proposal`.
 
@@ -290,6 +291,9 @@ def dispatch(
     Every path in `binding["files"]` must match at least one of the
     generator's `output_paths` globs; any path outside the allowlist raises
     `MutationPlanError` without producing a proposal.
+
+    When `registry` is supplied it is threaded into `build_proposal` so
+    scheduled/`allow_scheduled` gating fires for the transformation.
     """
     source = _string(binding.get("source"), "binding.source")
     branch = _string(binding.get("branch"), "binding.branch")
@@ -330,4 +334,5 @@ def dispatch(
         expected_shas={source: head},
         actor=actor,
         mutation_policy=mutation_policy,
+        registry=registry,
     )

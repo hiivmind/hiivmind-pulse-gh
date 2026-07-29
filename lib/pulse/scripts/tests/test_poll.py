@@ -2,6 +2,7 @@
 import json
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import yaml
@@ -9,6 +10,39 @@ import yaml
 SCRIPT = "lib/pulse/scripts/poll.py"
 FIXTURES = Path("lib/pulse/scripts/tests/fixtures/poll").resolve()
 REPO_ROOT = Path(".").resolve()
+
+PHASE_TEMPLATES = (
+    "marketplace-sync.yaml",
+    "generated-artifact-audit.yaml",
+    "impact-audit.yaml",
+    "plan-sync.yaml",
+)
+
+
+def _iso_ago(minutes: float) -> str:
+    return (datetime.now(timezone.utc) - timedelta(minutes=minutes)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+
+
+def _write_periodic_workflow(cfg, name="periodic-audit", interval=60, cooldown=0):
+    (cfg / "workflows" / f"{name}.yaml").write_text(
+        f"name: {name}\n"
+        f"enabled: true\n"
+        f"auto: false\n"
+        f"cooldown_minutes: {cooldown}\n"
+        f"trigger:\n  type: periodic\n  interval_minutes: {interval}\n"
+    )
+
+
+def _set_last_run_at(cfg, name, iso_ts):
+    path = cfg / "poll-state.yaml"
+    state = yaml.safe_load(path.read_text()) or {}
+    # template seeds workflows: as null/empty comments → may not be a mapping
+    if not isinstance(state.get("workflows"), dict):
+        state["workflows"] = {}
+    state["workflows"][name] = {"last_run_at": iso_ts}
+    path.write_text(yaml.safe_dump(state, sort_keys=False))
 
 
 def make_workspace(tmp_path, with_workflow=True):
@@ -281,3 +315,100 @@ def test_docs_first_sight_baselines_then_pushed_head_move_triggers(tmp_path):
     assert changed["triggered_workflows"] == ["plan-watch"]
     state = yaml.safe_load((cfg / "poll-state.yaml").read_text())
     assert state["state"]["docs"]["testorg/docs"]["main"] == "sha-two"
+
+
+# --- periodic trigger type -------------------------------------------------
+
+
+def test_periodic_due_when_last_run_at_absent(tmp_path):
+    """First evaluated poll after bootstrap: seeded last_run_at absent → due."""
+    ws, cfg = make_workspace(tmp_path, with_workflow=False)
+    _write_periodic_workflow(cfg, interval=60, cooldown=0)
+
+    boot = json.loads(run_poll(ws).stdout)
+    assert boot.get("first_run") is True  # bootstrap returns before evaluating
+
+    r = run_poll(ws)
+    out = json.loads(r.stdout)
+    assert r.returncode == 0, r.stderr
+    assert out["triggered_workflows"] == ["periodic-audit"]
+    assert out["auto_workflows"] == []
+
+
+def test_periodic_not_due_within_interval(tmp_path):
+    ws, cfg = make_workspace(tmp_path, with_workflow=False)
+    _write_periodic_workflow(cfg, interval=60, cooldown=0)
+    run_poll(ws)  # bootstrap
+    _set_last_run_at(cfg, "periodic-audit", _iso_ago(5))
+
+    out = json.loads(run_poll(ws).stdout)
+    assert out["triggered_workflows"] == []
+
+
+def test_periodic_due_again_after_interval(tmp_path):
+    ws, cfg = make_workspace(tmp_path, with_workflow=False)
+    _write_periodic_workflow(cfg, interval=60, cooldown=0)
+    run_poll(ws)  # bootstrap
+    _set_last_run_at(cfg, "periodic-audit", _iso_ago(90))
+
+    out = json.loads(run_poll(ws).stdout)
+    assert out["triggered_workflows"] == ["periodic-audit"]
+
+
+def test_periodic_cooldown_floor_respected(tmp_path):
+    """cooldown_minutes short-circuits even when interval has elapsed."""
+    ws, cfg = make_workspace(tmp_path, with_workflow=False)
+    # interval 10 already elapsed at 30m, but cooldown 60 still blocks
+    _write_periodic_workflow(cfg, interval=10, cooldown=60)
+    run_poll(ws)  # bootstrap
+    _set_last_run_at(cfg, "periodic-audit", _iso_ago(30))
+
+    out = json.loads(run_poll(ws).stdout)
+    assert out["triggered_workflows"] == []
+
+
+def test_periodic_seeded_but_unrun_stays_due_across_polls(tmp_path):
+    """Poll surfaces due workflows but never advances last_run_at."""
+    ws, cfg = make_workspace(tmp_path, with_workflow=False)
+    _write_periodic_workflow(cfg, interval=60, cooldown=0)
+    run_poll(ws)  # bootstrap
+
+    first = json.loads(run_poll(ws).stdout)
+    second = json.loads(run_poll(ws).stdout)
+    third = json.loads(run_poll(ws).stdout)
+
+    assert first["triggered_workflows"] == ["periodic-audit"]
+    assert second["triggered_workflows"] == ["periodic-audit"]
+    assert third["triggered_workflows"] == ["periodic-audit"]
+
+    state = yaml.safe_load((cfg / "poll-state.yaml").read_text())
+    wf_state = (state.get("workflows") or {}).get("periodic-audit") or {}
+    assert wf_state.get("last_run_at") in (None, "")
+
+
+def test_periodic_not_repo_scoped(tmp_path):
+    """periodic sources are not gated on --repo (unlike REPO_SCOPED_SOURCES)."""
+    ws, cfg = make_workspace(tmp_path, with_workflow=False)
+    _write_periodic_workflow(cfg, interval=60, cooldown=0)
+    run_poll(ws)  # bootstrap
+    out = json.loads(run_poll(ws, repo=None).stdout)
+    assert out["triggered_workflows"] == ["periodic-audit"]
+
+
+def test_four_phase_periodic_templates_parse_and_surface(tmp_path):
+    """Flipped phase templates parse as periodic and surface as due (auto=false)."""
+    ws, cfg = make_workspace(tmp_path, with_workflow=False)
+    expected = []
+    for fname in PHASE_TEMPLATES:
+        src = REPO_ROOT / "templates" / "workflows" / fname
+        doc = yaml.safe_load(src.read_text())
+        assert doc["trigger"]["type"] == "periodic", fname
+        assert "interval_minutes" in doc["trigger"], fname
+        assert doc.get("auto") is False, fname
+        (cfg / "workflows" / fname).write_text(src.read_text())
+        expected.append(doc["name"])
+
+    run_poll(ws)  # bootstrap (no evaluation)
+    out = json.loads(run_poll(ws).stdout)
+    assert sorted(out["triggered_workflows"]) == sorted(expected)
+    assert out["auto_workflows"] == []

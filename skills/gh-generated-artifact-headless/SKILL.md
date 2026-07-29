@@ -25,7 +25,7 @@ caller. The skill records findings and regeneration proposals; it does not write
 
 - `workspace_path` (required): absolute workspace root containing `.hiivmind/github/`.
 - `repo` (optional): a repository full or short name; narrows the audit to
-  bindings whose `source` or generated output path matches that repo. Defaults to
+  bindings whose `source` or binding id matches that repo. Defaults to
   every configured binding.
 - `result_path` (optional): workspace default when usable, otherwise
   `./generated-artifact-result.yaml`.
@@ -43,6 +43,10 @@ caller. The skill records findings and regeneration proposals; it does not write
 - F6 pen orchestration used here is always `propose-only`. The skill may route a
   `template-drift` binding through `pen_orchestrator.execute`, but only with a
   `mutation_policy` of `propose`; a push/commit is never requested.
+- The F10 driver is propose-only: it never calls `pen_orchestrator.execute`.
+  Proposal summaries carry only `{binding, transformation, proposal_id}`; the
+  ephemeral full Proposal (built inside `build_result`) carries `expected_shas`
+  so a later apply-mode consumer can re-run the guard.
 - Missing or unreachable source branches, templates, or output blobs block
   closed: a binding that cannot be resolved is `state: error`, not `current`.
   This mirrors `generated_artifacts.audit()`'s own fail-closed rule; the skill
@@ -69,6 +73,31 @@ PROPOSALS       = []
 PROPOSED_ACTIONS = []
 ```
 
+## Execution
+
+Execute the generated-artifact binding audit by invoking the CLI driver:
+
+```bash
+uv run "${PLUGIN_ROOT}/lib/pulse/scripts/generated_artifact_run.py" --workspace <workspace_path> [--repo <repo>] [--result <result_path>] [--mode scheduled|interactive]
+```
+
+The driver CLI handles workspace validation, manifest loading, evidence
+collection via `generated_artifacts.collect`, delegation to
+`generated_artifacts.build_result` (audit classification, generator
+applicability, allowlist checks, and scheduled gating), writing the result YAML
+file, and self-validation via `validate_result.py`.
+
+- If `--repo` is provided, it narrows the audit to matching binding `source`
+  values or binding ids.
+- If `--result` is provided, output is written to that path; otherwise to
+  `.hiivmind/github/generated-artifact-result.yaml` or
+  `./generated-artifact-result.yaml`.
+- `--mode` controls scheduled vs interactive gating (`allow_scheduled: false`
+  gated in scheduled mode).
+- On any ABORT (e.g. invalid workspace, missing manifest, or unknown repo), a
+  valid `generated-artifact` result file is written with the error recorded in
+  `errors[]`.
+
 ## Phase 1: VALIDATE
 
 1. Missing `workspace_path` → ABORT `"missing required input: workspace_path"`.
@@ -81,10 +110,13 @@ PROPOSED_ACTIONS = []
    generated-artifact audit with no manifest has nothing to audit; this is a
    workspace setup gap, not a valid empty run).
 6. Load `MANIFEST`. When `repo` is given, resolve it against binding `source`
-   values and generated file repo paths; build `PREPARED_MANIFEST`, a temporary
+   values and binding ids; build `PREPARED_MANIFEST`, a temporary
    copy whose `bindings` contains only the matching entries. An unresolvable
    `repo` → ABORT `"unknown repo: {repo}"`. Otherwise `PREPARED_MANIFEST` is
    `MANIFEST` unchanged.
+7. A malformed `generated.yaml` (missing required keys, empty/duplicate
+   `files[].path`) is rejected by `generated_artifacts.validate_manifest` and
+   yields a validated ABORT result — never an index crash inside `audit`.
 
 ## Phase 2: SNAPSHOT
 
@@ -110,13 +142,15 @@ skill:
 
 **See:** `lib/pulse/scripts/generated_artifacts.py`
 
-Call `generated_artifacts.audit(PREPARED_MANIFEST, SNAPSHOT)` and copy the
-returned report fields verbatim: `bindings`, `bindings_checked`,
-`bindings_drift`, and `findings`. The skill does not recompute these values.
+Call `generated_artifacts.audit` (via `build_result`) and copy the
+returned report fields into the envelope: `bindings_audited`, `states`, and
+`findings`. The skill does not recompute these values.
 
 ## Phase 4: CONFLICT/PROPOSE
 
-For each binding result from the audit engine:
+All propose decisions live in `generated_artifacts.build_result` (not this
+skill and not the driver assembler). For each binding result from the audit
+engine:
 
 - `state: current` → no finding, no proposal.
 - `state: template-drift` → build a regeneration proposal. Look up the binding's
@@ -128,13 +162,15 @@ For each binding result from the audit engine:
   **Scheduled gating:** Under mode: scheduled, a generator whose transformation
   has allow_scheduled: false MUST NOT be dispatched — record the drift as a
   `proposed_action`/finding requiring human approval. Only allow_scheduled: true
-  transformations may be dispatched unattended. `generator_dispatch.dispatch`
-  does not check the registry's scheduled flag; the skill enforces it by reading
-  `allow_scheduled` from the transformation registry before dispatch.
+  transformations may be dispatched unattended.
+
+  (F10: gating is enforced by threading the transformation registry into
+  `dispatch`→`build_proposal`→`validate_proposal`. The driver never executes a
+  pen; it persists only the `{binding, transformation, proposal_id}` summary.)
 
   On success, append the resulting `{binding, transformation, proposal_id}` to
-  `PROPOSALS`. On failure, append a typed finding and the error detail to `ERRORS`
-  without mutating the manifest.
+  `PROPOSALS`. On failure (out-of-allowlist path, missing generator, etc.),
+  append a typed finding and the error detail without mutating the manifest.
 
 - `state: local-customization` → append a `local_customization` finding
   (`severity: medium`) and no proposal. Local edits must be reviewed by a human.
@@ -187,8 +223,9 @@ validated. If `CONFIG_DIR` is unusable, write to the `result_path` input, else
 
 ## Related
 
-- `lib/pulse/scripts/generated_artifacts.py` — collector + audit engine
-  (F7 Task 2)
+- `lib/pulse/scripts/generated_artifact_run.py` — propose-only CLI driver (F10)
+- `lib/pulse/scripts/generated_artifacts.py` — collector + audit engine +
+  pure `build_result` (F7 Task 2 / F10 Task 3)
 - `lib/pulse/scripts/generator_dispatch.py` — generator adapter dispatch
   (F7 Task 3)
 - `lib/pulse/scripts/pen_orchestrator.py` — propose-only F6 pen run driver

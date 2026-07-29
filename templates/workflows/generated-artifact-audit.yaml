@@ -18,8 +18,8 @@ headless:
   on_mutation: propose   # regenerated files are proposed, never applied unattended
 
 trigger:
-  type: on_demand
-  condition: user_requested
+  type: periodic
+  interval_minutes: 1440
 
 params:
   repo:

@@ -31,8 +31,10 @@ from lib.pulse.scripts.evaluate_checks import (
 from lib.pulse.scripts.profile_dispatch import (
     ConfigError,
     PlannedCheck,
+    ProfileConfig,
     dispatch,
     load_profiles,
+    resolve_scorecard,
 )
 
 
@@ -247,6 +249,70 @@ def _repo_result(
     }
 
 
+# Claude adapters that register_claude_adapters provides and that consume the
+# overlay file_contents channel. Transitional names (e.g. claude.plugin-structure)
+# do not trigger registration or content attachment.
+_CLAUDE_OVERLAY_ADAPTERS = frozenset(
+    {
+        "claude.plugin_manifest",
+        "claude.skills",
+        "claude.context",
+    }
+)
+
+
+def _scorecard_has_claude_adapter(
+    config: ProfileConfig, scorecard_id: str
+) -> bool:
+    """True when the resolved scorecard names a content-consuming claude adapter.
+
+    Only adapters registered by ``register_claude_adapters`` count. Transitional
+    names such as ``claude.plugin-structure`` do not opt a repo into the overlay
+    content channel or trigger registration on their own.
+    """
+    return any(
+        check.adapter in _CLAUDE_OVERLAY_ADAPTERS
+        for check in resolve_scorecard(config, scorecard_id)
+    )
+
+
+def _overlay_opted_in_repos(config: ProfileConfig) -> set[str]:
+    return {
+        repo
+        for repo, profile in config.repositories.items()
+        if _scorecard_has_claude_adapter(config, profile.scorecard)
+    }
+
+
+def _attach_overlay_content(
+    repo: str,
+    evidence: dict[str, Any],
+    gh_api: Any,
+) -> dict[str, Any]:
+    """Return a shallow-copied evidence entry with file_contents attached.
+
+    Pre-attached ``file_contents`` (fixture/skill) is preserved. The caller's
+    original mapping is never mutated.
+    """
+    entry = dict(evidence)
+    if "file_contents" in entry:
+        return entry
+    # Lazy import: neutral fleets never reach this path.
+    from lib.pulse.scripts import overlay_content
+
+    files = entry.get("files")
+    if not isinstance(files, list):
+        files = []
+    branch = overlay_content.default_branch_from_evidence(entry)
+    entry["file_contents"] = overlay_content.collect(
+        repo,
+        files=files,
+        gh_api=gh_api,
+        default_branch=branch,
+    )
+    return entry
+
+
 def evaluate_fleet(
     *,
     evidence: Mapping[str, Any],
@@ -254,8 +320,16 @@ def evaluate_fleet(
     workspace: str | Path,
     dismissals_path: str | Path | None = None,
     as_of: str | date | datetime | None = None,
+    gh_api: Any | None = None,
 ) -> dict[str, Any]:
-    """Dispatch and evaluate profiled repositories from one F0 fleet snapshot."""
+    """Dispatch and evaluate profiled repositories from one F0 fleet snapshot.
+
+    When any profiled repo's resolved scorecard contains a ``claude.*`` overlay
+    adapter, the Claude adapters are registered (lazy import). Overlay content
+    is collected and attached **only** to those opted-in repo entries, and only
+    when ``gh_api`` is provided and ``file_contents`` is not already present.
+    Neutral repos never gain ``file_contents``.
+    """
     if not isinstance(evidence, Mapping):
         raise ConfigError("evidence must be a mapping")
     evidence_by_repo = _evidence_repositories(evidence)
@@ -264,22 +338,39 @@ def evaluate_fleet(
     as_of_date = _parse_as_of(as_of)
     registry = AdapterRegistry()
     register_universal_adapters(registry)
+
+    overlay_repos = _overlay_opted_in_repos(config)
+    if overlay_repos:
+        # Lazy: importing register_claude_adapters does not load claude_plugin;
+        # calling it does. Neutral fleets never enter this branch.
+        from lib.pulse.scripts.adapters import register_claude_adapters
+
+        register_claude_adapters(registry)
+
     workspace_path = Path(workspace)
 
     profiled = sorted(config.repositories)
     unprofiled = sorted(set(evidence_by_repo) - set(config.repositories))
-    repos = [
-        _repo_result(
-            repo,
-            evidence_by_repo.get(repo, {"repo": repo}),
-            config,
-            registry,
-            workspace_path,
-            dismissals,
-            as_of_date,
+    repos = []
+    for repo in profiled:
+        entry = evidence_by_repo.get(repo, {"repo": repo})
+        if repo in overlay_repos and gh_api is not None:
+            entry = _attach_overlay_content(repo, entry, gh_api)
+        elif repo in overlay_repos:
+            # Shallow copy so pre-attached fixture content is usable without
+            # sharing mutable state with the caller.
+            entry = dict(entry)
+        repos.append(
+            _repo_result(
+                repo,
+                entry,
+                config,
+                registry,
+                workspace_path,
+                dismissals,
+                as_of_date,
+            )
         )
-        for repo in profiled
-    ]
 
     by_scorecard = aggregate_by_scorecard(repos)
     coverage = fleet_coverage(repos)
@@ -312,15 +403,31 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--workspace", required=True)
     parser.add_argument("--dismissals")
     parser.add_argument("--as-of")
+    parser.add_argument(
+        "--fetch-overlay-content",
+        action="store_true",
+        help=(
+            "Collect overlay file_contents via gh api for repos whose scorecard "
+            "opts into claude.* adapters. Pre-attached file_contents are kept. "
+            "Default off so offline/fixture runs stay network-free; the skill "
+            "attaches content (or passes this flag) for live overlay audits."
+        ),
+    )
     args = parser.parse_args(argv)
 
     try:
+        gh_api = None
+        if args.fetch_overlay_content:
+            from lib.pulse.scripts.overlay_content import default_gh_api
+
+            gh_api = default_gh_api
         result = evaluate_fleet(
             evidence=_load_evidence(Path(args.evidence)),
             profiles_path=args.profiles,
             workspace=args.workspace,
             dismissals_path=args.dismissals,
             as_of=args.as_of,
+            gh_api=gh_api,
         )
     except ConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)

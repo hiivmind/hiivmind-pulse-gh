@@ -152,12 +152,14 @@ def test_dispatches_only_authoritative_resolved_checks_across_a_mixed_fleet():
             },
         }
     }
+    # claude.skills is registered when the fleet includes an overlay scorecard;
+    # without file_contents it grades unknown (still "supported"). The transitional
+    # claude.plugin-structure name remains unregistered → unsupported.
     assert result["coverage"] == {
         "checks_total": 31,
-        "checks_supported": 21,
+        "checks_supported": 22,
         "unsupported_by_adapter": {
             "claude.plugin-structure": 1,
-            "claude.skills": 1,
             "docs.links": 1,
             "node.dependencies": 1,
             "node.web-build": 1,
@@ -481,3 +483,380 @@ def test_cli_rejects_nested_nonfinite_yaml_dismissal_metadata(
     assert "dismissals.acme/docs.documentation.details.limits[0]" in completed.stderr
     assert "finite" in completed.stderr
     assert completed.stdout == ""
+
+
+# --- F10 Task 4: overlay wiring ---------------------------------------------
+# Fixture data is inlined (not loaded from fixtures/overlays/) so the neutral
+# acceptance isolation suite can still run this module with overlays deleted.
+
+
+def _overlay_mixed_profiles() -> dict:
+    """One overlay repo + neutral repos; real claude adapters on the overlay only."""
+    return {
+        "repository_profiles": {
+            "acme/plugin": {
+                "profiles": ["claude-plugin", "python"],
+                "scorecard": "claude-plugin-v1",
+            },
+            "acme/docs": {
+                "profiles": ["documentation"],
+                "scorecard": "docs-v1",
+            },
+            "acme/python-lib": {
+                "profiles": ["python"],
+                "scorecard": "generic-v1",
+            },
+        },
+        "scorecards": {
+            "generic-v1": {
+                "checks": [
+                    {
+                        "id": "documentation",
+                        "adapter": "generic.docs",
+                        "weight": 1,
+                    },
+                    {
+                        "id": "ci",
+                        "adapter": "github.actions",
+                        "applicability": "capability:ci",
+                        "weight": 1,
+                    },
+                ]
+            },
+            "docs-v1": {
+                "extends": "generic-v1",
+                "checks": [
+                    {"id": "docs-links", "adapter": "docs.links", "weight": 1}
+                ],
+            },
+            "claude-plugin-v1": {
+                "extends": "generic-v1",
+                "checks": [
+                    {
+                        "id": "plugin-manifest",
+                        "adapter": "claude.plugin_manifest",
+                        "applicability": "profile:claude-plugin",
+                        "weight": 1,
+                    },
+                    {
+                        "id": "plugin-skills",
+                        "adapter": "claude.skills",
+                        "applicability": "profile:claude-plugin",
+                        "weight": 1,
+                    },
+                    {
+                        "id": "claude-context",
+                        "adapter": "claude.context",
+                        "applicability": "profile:claude-plugin",
+                        "weight": 1,
+                    },
+                ],
+            },
+        },
+        "adapters": {
+            "generic.docs": {"state": "available"},
+            "github.actions": {"state": "available"},
+            "docs.links": {"state": "unsupported", "reason": "not implemented"},
+            "claude.plugin_manifest": {"state": "available"},
+            "claude.skills": {"state": "available"},
+            "claude.context": {"state": "available"},
+        },
+    }
+
+
+def _valid_plugin_contents() -> dict:
+    """Inline valid plugin content (mirrors fixtures/overlays/claude-plugin)."""
+    return {
+        ".claude-plugin/plugin.json": (
+            '{\n  "name": "example-plugin",\n  "version": "1.2.3"\n}\n'
+        ),
+        "skills/example/SKILL.md": (
+            "---\n"
+            "name: example-skill\n"
+            "description: An example skill demonstrating valid frontmatter.\n"
+            "---\n"
+            "# example skill body\n"
+        ),
+        "skills/audit/SKILL.md": (
+            "---\n"
+            "name: audit-skill\n"
+            "description: Audits configuration drift across workspace repositories.\n"
+            "---\n"
+            "# audit skill body\n"
+        ),
+        "CLAUDE.md": (
+            "# Project context for Claude\nThis is the project context.\n"
+        ),
+        "README.md": "# example plugin\n",
+    }
+
+
+def test_overlay_fleet_resolves_claude_checks_to_real_statuses_not_unsupported(
+    tmp_path,
+):
+    profiles_path = tmp_path / "profiles.yaml"
+    profiles_path.write_text(yaml.safe_dump(_overlay_mixed_profiles()))
+
+    plugin_files = [
+        ".claude-plugin/plugin.json",
+        "skills/example/SKILL.md",
+        "skills/audit/SKILL.md",
+        "CLAUDE.md",
+        "README.md",
+    ]
+    evidence = {
+        "repos": [
+            {
+                "repo": "acme/plugin",
+                "files": plugin_files,
+                "files_complete": True,
+                "capabilities": ["ci", "python", "claude-plugin"],
+                "structural_signals": [],
+                "file_contents": _valid_plugin_contents(),
+                "inference_status": "ran",
+                "inferred_claims": [],
+            },
+            {
+                "repo": "acme/docs",
+                "files": ["README.md", "mkdocs.yml", "docs/index.md"],
+                "files_complete": True,
+                "capabilities": ["documentation"],
+                "structural_signals": [],
+            },
+            {
+                "repo": "acme/python-lib",
+                "files": ["README.md", "pyproject.toml"],
+                "files_complete": True,
+                "capabilities": ["ci", "python"],
+                "structural_signals": [],
+            },
+        ]
+    }
+
+    result = evaluate_fleet(
+        evidence=evidence,
+        profiles_path=profiles_path,
+        workspace=tmp_path,
+    )
+
+    by_repo = {repo["repo"]: repo for repo in result["repos"]}
+    plugin = by_repo["acme/plugin"]
+
+    for check_id in ("plugin-manifest", "plugin-skills", "claude-context"):
+        status = plugin["checks"][check_id]["status"]
+        assert status != "unsupported", (
+            f"{check_id} must resolve via registered claude adapters, got "
+            f"{plugin['checks'][check_id]}"
+        )
+        assert status in {"pass", "fail", "unknown"}
+
+    assert plugin["checks"]["plugin-manifest"]["status"] == "pass"
+    assert plugin["checks"]["plugin-skills"]["status"] == "pass"
+    assert plugin["checks"]["claude-context"]["status"] == "pass"
+
+    # Overlay subtotal stays in its own by_scorecard key.
+    assert "claude-plugin-v1" in result["aggregate"]["by_scorecard"]
+    assert "docs-v1" in result["aggregate"]["by_scorecard"]
+    assert "generic-v1" in result["aggregate"]["by_scorecard"]
+    assert result["aggregate"]["by_scorecard"]["claude-plugin-v1"]["repos"] == 1
+
+
+def test_overlay_context_without_inference_step_is_unknown_skipped(tmp_path):
+    profiles_path = tmp_path / "profiles.yaml"
+    profiles_path.write_text(yaml.safe_dump(_overlay_mixed_profiles()))
+    contents = _valid_plugin_contents()
+    evidence = {
+        "repos": [
+            {
+                "repo": "acme/plugin",
+                "files": list(contents) + ["README.md"],
+                "files_complete": True,
+                "capabilities": ["python", "claude-plugin"],
+                "structural_signals": [],
+                "file_contents": contents,
+                # inference_status absent → treated as skipped
+            },
+            {
+                "repo": "acme/docs",
+                "files": ["README.md", "docs/index.md"],
+                "files_complete": True,
+                "capabilities": ["documentation"],
+                "structural_signals": [],
+            },
+            {
+                "repo": "acme/python-lib",
+                "files": ["README.md"],
+                "files_complete": True,
+                "capabilities": ["python"],
+                "structural_signals": [],
+            },
+        ]
+    }
+
+    result = evaluate_fleet(
+        evidence=evidence,
+        profiles_path=profiles_path,
+        workspace=tmp_path,
+    )
+    plugin = next(r for r in result["repos"] if r["repo"] == "acme/plugin")
+    ctx = plugin["checks"]["claude-context"]
+    assert ctx["status"] == "unknown"
+    assert "skipped" in ctx["detail"].lower() or "inference" in ctx["detail"].lower()
+
+
+def test_content_fetch_error_and_too_large_yield_unknown_not_crash(tmp_path):
+    profiles_path = tmp_path / "profiles.yaml"
+    profiles_path.write_text(yaml.safe_dump(_overlay_mixed_profiles()))
+
+    evidence = {
+        "repos": [
+            {
+                "repo": "acme/plugin",
+                "files": [
+                    ".claude-plugin/plugin.json",
+                    "skills/example/SKILL.md",
+                    "CLAUDE.md",
+                    "README.md",
+                ],
+                "files_complete": True,
+                "capabilities": ["python", "claude-plugin"],
+                "structural_signals": [],
+                "file_contents": {
+                    ".claude-plugin/plugin.json": {"unavailable": "fetch_error"},
+                    "skills/example/SKILL.md": {"unavailable": "too_large"},
+                    "CLAUDE.md": {"unavailable": "fetch_error"},
+                },
+                "inference_status": "ran",
+            },
+            {
+                "repo": "acme/docs",
+                "files": ["README.md", "docs/index.md"],
+                "files_complete": True,
+                "capabilities": ["documentation"],
+                "structural_signals": [],
+            },
+            {
+                "repo": "acme/python-lib",
+                "files": ["README.md"],
+                "files_complete": True,
+                "capabilities": ["python"],
+                "structural_signals": [],
+            },
+        ]
+    }
+
+    result = evaluate_fleet(
+        evidence=evidence,
+        profiles_path=profiles_path,
+        workspace=tmp_path,
+    )
+    plugin = next(r for r in result["repos"] if r["repo"] == "acme/plugin")
+    assert plugin["checks"]["plugin-manifest"]["status"] == "unknown"
+    assert plugin["checks"]["plugin-skills"]["status"] == "unknown"
+    assert plugin["checks"]["claude-context"]["status"] == "unknown"
+
+
+def test_evaluate_fleet_attaches_content_only_via_collector_for_overlay_repos(
+    tmp_path,
+):
+    """When gh_api is supplied, only overlay repos receive file_contents."""
+    profiles_path = tmp_path / "profiles.yaml"
+    profiles_path.write_text(yaml.safe_dump(_overlay_mixed_profiles()))
+
+    plugin_body = {
+        ".claude-plugin/plugin.json": '{"name":"p","version":"1"}',
+        "CLAUDE.md": "# ctx\n",
+        "skills/example/SKILL.md": (
+            "---\nname: example\ndescription: d\n---\nbody\n"
+        ),
+    }
+
+    import base64
+
+    sha = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+    collected_repos: list[str] = []
+
+    def gh_api(path: str):
+        if path == "repos/acme/plugin":
+            return {"default_branch": "main"}
+        if path == "repos/acme/plugin/commits/main":
+            return {"sha": sha}
+        if path.startswith("repos/acme/plugin/contents/"):
+            rest = path[len("repos/acme/plugin/contents/") :]
+            file_path, _, query = rest.partition("?")
+            assert query == f"ref={sha}"
+            collected_repos.append(file_path)
+            text = plugin_body.get(file_path)
+            if text is None:
+                return None
+            raw = text.encode("utf-8")
+            return {
+                "type": "file",
+                "encoding": "base64",
+                "size": len(raw),
+                "content": base64.b64encode(raw).decode("ascii"),
+            }
+        # Neutral repos must never be content-fetched.
+        if path.startswith("repos/acme/docs") or path.startswith(
+            "repos/acme/python-lib"
+        ):
+            raise AssertionError(f"neutral repo content fetch: {path}")
+        return None
+
+    evidence = {
+        "repos": [
+            {
+                "repo": "acme/plugin",
+                "files": list(plugin_body) + ["README.md"],
+                "files_complete": True,
+                "capabilities": ["python", "claude-plugin"],
+                "structural_signals": [],
+                "github": {"repo": {"default_branch": "main"}},
+                "inference_status": "ran",
+                "inferred_claims": [],
+            },
+            {
+                "repo": "acme/docs",
+                "files": ["README.md", "docs/index.md", "mkdocs.yml"],
+                "files_complete": True,
+                "capabilities": ["documentation"],
+                "structural_signals": [],
+            },
+            {
+                "repo": "acme/python-lib",
+                "files": ["README.md", "pyproject.toml"],
+                "files_complete": True,
+                "capabilities": ["ci", "python"],
+                "structural_signals": [],
+            },
+        ]
+    }
+
+    # Capture attached content by wrapping evaluate via evidence copies.
+    # evaluate_fleet must not mutate the caller's neutral entries.
+    import copy
+
+    original = copy.deepcopy(evidence)
+
+    result = evaluate_fleet(
+        evidence=evidence,
+        profiles_path=profiles_path,
+        workspace=tmp_path,
+        gh_api=gh_api,
+    )
+
+    assert evidence == original  # caller evidence is not mutated
+    assert collected_repos  # overlay paths were fetched
+    plugin = next(r for r in result["repos"] if r["repo"] == "acme/plugin")
+    assert plugin["checks"]["plugin-manifest"]["status"] == "pass"
+    assert plugin["checks"]["plugin-skills"]["status"] == "pass"
+
+    # Neutral repos keep real statuses without content.
+    docs = next(r for r in result["repos"] if r["repo"] == "acme/docs")
+    assert "file_contents" not in original["repos"][1]
+    assert docs["checks"]["documentation"]["status"] in {
+        "pass",
+        "warn",
+        "fail",
+        "unknown",
+    }

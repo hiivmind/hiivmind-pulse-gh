@@ -7,6 +7,7 @@ SKILL = Path("skills/gh-generated-artifact-headless/SKILL.md")
 WORKFLOW = Path("templates/workflows/generated-artifact-audit.yaml")
 GENERATED_ARTIFACTS = Path("lib/pulse/scripts/generated_artifacts.py")
 GENERATOR_DISPATCH = Path("lib/pulse/scripts/generator_dispatch.py")
+GENERATED_ARTIFACT_RUN = Path("lib/pulse/scripts/generated_artifact_run.py")
 
 
 def read_skill() -> str:
@@ -18,7 +19,13 @@ def read_workflow() -> str:
 
 
 def test_neutrality_forbidden_strings_absent():
-    for path in (GENERATED_ARTIFACTS, GENERATOR_DISPATCH, SKILL, WORKFLOW):
+    for path in (
+        GENERATED_ARTIFACTS,
+        GENERATOR_DISPATCH,
+        GENERATED_ARTIFACT_RUN,
+        SKILL,
+        WORKFLOW,
+    ):
         content = path.read_text().lower()
         for forbidden in ("claude", "corpus", "plugin manifest", "skill.md",
                           "hiivmind.corpus-navigate-skill"):

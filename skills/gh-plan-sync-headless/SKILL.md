@@ -81,6 +81,21 @@ ERRORS           = []
 COUNTS           = {docs_scanned: 0, in_sync: 0, doc_patches: 0, github_patches: 0, conflicts: 0, excluded: 0}
 ```
 
+## Execution
+
+Execute the plan document synchronization audit by invoking the CLI driver:
+
+```bash
+uv run lib/pulse/scripts/plan_sync_run.py --workspace <workspace_path> [--repo <repo>] [--result <result_path>] [--mode scheduled|interactive]
+```
+
+The driver CLI handles workspace validation, binding loading, evidence collection via `plan_sync_snapshot.collect`, delegation to `plan_sync.build_result`, writing the result YAML file, and self-validation via `validate_result.py`.
+
+- If `--repo` is provided, it narrows the audit to matching configured document bindings.
+- If `--result` is provided, output is written to that path; otherwise to `.hiivmind/github/plan-sync-result.yaml` or `./plan-sync-result.yaml`.
+- `--mode` controls scheduled vs interactive gating (`allow_scheduled: false` gated in scheduled mode).
+- On any ABORT (e.g. invalid workspace or unknown repo), a valid `plan-sync` result file is written with the error recorded in `errors[]`.
+
 ## Phase 1: DISCOVER
 
 1. Missing `workspace_path` → ABORT `"missing required input: workspace_path"`.
