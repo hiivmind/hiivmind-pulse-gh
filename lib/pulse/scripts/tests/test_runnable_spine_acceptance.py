@@ -201,7 +201,7 @@ def test_plan_sync_scheduled_gates_allow_scheduled_false(tmp_path):
     assert data["proposals"] == [], "scheduled must emit no runnable proposals"
     gated = [f for f in data["findings"] if f.get("kind") == "gated_transformation"]
     assert len(gated) == 1
-    assert data.get("proposed_actions") is not None
+    assert data["proposed_actions"], "gated path must record a proposed_action"
 
 
 # ---------------------------------------------------------------------------

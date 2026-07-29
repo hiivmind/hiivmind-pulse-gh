@@ -330,9 +330,29 @@ delete, …); read-only operations always execute.
 | Mutation | per `on_mutation` — **propose**: append a one-line description (verb + target) to `proposed_actions`, do not execute; **allow-listed**: execute if the operation's verb is in `mutation_allowlist`, else propose; **allow**: execute |
 | `SHOW` / `PRESENT` phases | no user to show to; notable items become `findings` entries — `kind` from the workflow's domain (e.g. `stale-item`, `ci-failure`), `severity` via `INFER` with `inferred: true` |
 | `INFER` | executes normally; any finding it classifies carries `inferred: true` and its label in `classification` |
-| `INVOKE skill X` | if a headless sibling exists (`X-headless`), invoke it with explicit inputs (its `workspace_path` = the context's `workspace_root`); otherwise append `"invoke {X}"` to `proposed_actions` |
+| `INVOKE skill X` | if a headless sibling exists (`X-headless`), invoke it with explicit inputs (its `workspace_path` = the context's `workspace_root`), **then fold its result** (see below); otherwise append `"invoke {X}"` to `proposed_actions` |
 | `STOP "reason"` | normal completion (outcome `success`); the reason lands in the result summary, not `errors` |
 | `params` with `default: null` | if the caller did not supply the param: append to `asks_recorded`, outcome `aborted` |
+
+### Folding a headless sibling's result (`INVOKE skill X-headless`)
+
+When `INVOKE skill X` resolves to a headless sibling, that sibling writes its **own**
+`{kind}-result.yaml` (e.g. `marketplace-sync-result.yaml`) — a separate envelope from the
+`workflow-run-result.yaml` this run emits. Because the sibling's file is gitignored and the
+maintenance PR body is the only delivery channel for a scheduled run, the sibling's surfaced
+items **must be folded into this run's accumulators**, or a scheduled F6–F9 run reports zero
+proposals even when the sibling proposed many. After the sibling returns:
+
+```bash
+uv run "${PLUGIN_ROOT}/lib/pulse/scripts/subresult_fold.py" <sibling result path>
+```
+
+It prints `{"findings": [...], "proposed_actions": [...], "asks_recorded": [...]}`. **Extend**
+FINDINGS, PROPOSED_ACTIONS, and ASKS_RECORDED with those lists (never replace). The fold is a
+deterministic pass-through of the sibling's human-facing surface — it deliberately does **not**
+re-render the sibling's `proposals[]` (each proposal already has a `proposed_actions` line;
+`proposals[]` is the F11 re-derivation channel and `workflow-run` has no `proposals` field). A
+non-foldable/malformed sibling result is a run error appended to `errors`, not a silent skip.
 
 ### Unconditional rules (regardless of `on_mutation`)
 

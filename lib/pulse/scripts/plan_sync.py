@@ -460,6 +460,14 @@ def build_result(
                 "detail": plans.gated_transformation,
                 "inferred": False,
             })
+            # Emit a proposed_actions line for the withheld doc patch so the
+            # scheduler PR-body projection surfaces it — parity with the gated
+            # paths in marketplace_sync.build_result / generated_artifacts (a
+            # gated transformation records the intended action without a
+            # proposal id, since build_apply_plans withheld the proposal).
+            result["proposed_actions"].append(
+                f"propose document patch for {document.path} at {document.head}"
+            )
 
         if plans.repo_mutation is not None:
             result["doc_patches"] += 1
