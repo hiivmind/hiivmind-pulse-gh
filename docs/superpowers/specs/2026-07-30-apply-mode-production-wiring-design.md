@@ -1,315 +1,253 @@
 # Apply-Mode Production Wiring — Design Spec
 
 **Date:** 2026-07-30
-**Status:** Approved (brainstorm) — revised after adversarial design review (Codex `gpt-5.6-sol`,
-2026-07-30, `REQUEST CHANGES` fully incorporated) — pending implementation plan
+**Status:** Approved (brainstorm) — revised after (1) an adversarial design review (Codex
+`gpt-5.6-sol`, `REQUEST CHANGES` incorporated) and (2) **PR #141's single-mutator design note**
+(`docs/superpowers/specs/2026-07-30-f11-apply-git-consolidation-note.md`), which supersedes the
+first-draft substrate choice. Pending implementation plan.
 **Origin:** `docs/backlogs/2026-07-29-apply-mode-v2-deferrals.md` § A ("Production wiring — apply-mode
 is built, not yet *runnable end-to-end*"). F11 (PR #138, merged 2026-07-29) shipped the apply
-**library + tests + docs**; every seam exists and is fake-tested, but nothing assembles them
-against a real repo. This is the apply analogue of F10's "runnable spine" — its own small phase.
+**library + tests + docs**; every seam exists and is fake-tested, but nothing assembles them against
+a real repo. This is the apply analogue of F10's "runnable spine" — its own small phase, spanning
+the `discreteds/nave` fork and `hiivmind-pulse-gh`.
 
-**Read alongside:** `docs/superpowers/plans/2026-07-22-f11-apply-mode.md` (design-of-record for the
-library), `docs/backlogs/README.md` (cross-repo dependency map + layer-completeness matrix).
+**Read alongside:** PR #141 note (the substrate decision-of-record), F11 plan
+(`docs/superpowers/plans/2026-07-22-f11-apply-mode.md`), `docs/backlogs/README.md` (cross-repo map).
 
 ---
 
-## 1. Problem — the integration the fakes never checked
+## 1. Problem — the substrate split and the two-writers hazard
 
-F11's `execute()` (`lib/pulse/scripts/pen_orchestrator.py`) owns the apply state machine:
+F11's `execute()` (`lib/pulse/scripts/pen_orchestrator.py`) owns the apply state machine
+(`provision-branch → exec → validate → commit-all → push-all → pushed`), but its two halves address
+**different clone sets**:
 
-```
-provision-branch → exec (transformation) → validate → commit-all → push-all → (pushed)
-```
+- **Transformation half** — `nave_adapter.pen_exec(pen_name, argv, …)` (`pen_orchestrator.py:609`)
+  runs the registered transformation inside a **Nave pen**.
+- **Landing half** — the raw-git apply trio `provision_apply_branch` / `commit_apply_clones` /
+  `push_apply_clones` (`nave_adapter.py:500–616`) runs `git checkout -b` / `git add -A && commit` /
+  `git push` directly against clones at a separate `PULSE_PEN_ROOT/{owner}/{name}` root.
 
-Two halves address **different clone sets**:
+The acceptance suite fakes **both** halves independently (`RecordingApplyOps` + `QueuedRunner`), so
+nothing verifies the transformation's output reaches the committed/pushed clone.
 
-- The **landing half** — `apply_ops.provision_branch/commit_repos/push_repos`
-  (`pen_orchestrator.py:580,642,670`) — operates on local git clones at
-  `PULSE_PEN_ROOT/{owner}/{name}` (what `pen_clone_reader` reads and the three
-  `nave_adapter.*_apply_clones` git ops mutate).
-- The **transformation half** — `nave_adapter.pen_exec(pen_name, argv, …)`
-  (`pen_orchestrator.py:609`) — runs the registered transformation inside a **Nave pen**, whose
-  on-disk clone path Nave does not expose (`pen_orchestrator.py:36-49`: `pen show`/`pen status`
-  carry no clone path; `pen exec` stdout is opaque-by-contract; `nave materialize` fetches from
-  the GitHub API, not the working tree).
+**PR #141 identifies the deeper flaw:** the trio is a **second independent writer** over fleet
+clones Nave already owns, and that is a structural hazard regardless of correctness — state
+divergence from Nave's `pen status` model, propose-only policy enforced twice by two mechanisms, and
+blunt `add -A` staging that commits anything dirty rather than the proposal's `bound_paths`. The trio
+has **no production callers yet**; the F11 apply driver would be its first. This is the cheapest
+moment to change course.
 
-For a change to land, the transformation's output must reach the same clones that get committed and
-pushed. The acceptance suite wires a fake `RecordingApplyOps` **and** a fake `QueuedRunner` for
-`pen_exec`, fully decoupled — so **nothing verifies that the transformation's output ever reaches
-the committed/pushed clone.** That "same on-disk clone" integration is the core production-wiring
-gap (§A.3), and it forces a substrate decision F11 left implicit.
+## 2. Decision — Nave is the single mutator (PR #141)
 
-The merged code already committed to landing via **git-ops on local clones** (not `pen_exec`'s own
-`--push-changes`) — deliberately, to get per-proposal branch targeting (C1) and per-repo failure
-signal (I4, which `exec_pen`'s opaque first-failure bail cannot give). The only unresolved question
-is where the transformation's file changes come from on those local clones.
+**Exactly one system mutates fleet clones: Nave.** Extend Nave's pen surface to cover the apply-mode
+needs, then **delete the raw-git trio**. Pulse's Python keeps orchestration, policy, and read-only
+verification; it stops running write-git entirely.
 
-## 2. Decision — local materialized clones (Fork B)
+This **resolves the substrate split by construction**: the transformation (`pen exec`) and the
+landing (new Nave verbs) both operate on the **one** Nave pen — there is no second clone set, no
+`pen_materialize` bridge, no double-clone. Nave's `pen status` is once again the authoritative
+preflight substrate (F11's stale/dirty/expected-SHA guards check the pen that actually gets
+mutated), so the earlier "wrong preflight substrate" concern dissolves.
 
-**Apply materializes its own real git clones at `PULSE_PEN_ROOT/{owner}/{name}` at the guarded base
-SHA, runs the registered transformation applier directly in each clone, then commits and pushes.**
+**Rejected — Fork B** (Pulse materializes and mutates its own clones): doubles down on exactly what
+PR #141 wants Pulse out of; two clone-management systems; violates the single-mutator rule. The
+first draft of this spec chose Fork B and is superseded here.
 
-- **Propose** stays Nave-scale discovery (`pen_exec` scans/dry-runs the fleet — Nave's value).
-- **Apply** operates on a handful of materialized clones for the already-selected selection — cheap
-  to clone, guaranteed real worktrees with an `origin` push remote, fully attributable, and
-  **entirely in pulse-gh** (no forked-Nave surface, no dependency on Nave's pen-storage layout).
+**Non-goals carried from PR #141:** apply-mode git never moves into the interactive LLM session
+(headless apply stays deterministic, model-free, fixture-testable, fail-closed); Nave pens are not
+replaced by `git worktree` / the superpowers worktrees plugin (different domain — single-repo
+session isolation vs cross-repo unattended fleet checkouts).
 
-Rejected — **Nave-storage bridge** (`PULSE_PEN_ROOT` → Nave's real pen clones): blocked on the
-`discreteds/nave` fork's pen-storage internals, risks Nave clones not being pushable worktrees, and
-makes this a 3-repo effort. The pen-exec-native push variant was already rejected in F11 for C1/I4.
+## 3. Nave pen-surface extensions (the `discreteds/nave` deliverable)
 
-The propose/apply substrate split becomes explicit: **Nave pen for discovery, local clone for
-landing.** Apply acts on a narrow selection, and all apply gates (expected-SHA, `paths_changed`,
-`json_schema`) already read the clone through `pen_clone_reader`, which works identically on a
-locally materialized clone.
+These are pen-domain capabilities in their own right — any multi-repo pen consumer wanting guarded,
+reviewable mutation needs them. Each emits **per-repo machine-readable `--json`** (the adapter
+contract: non-`--json` stdout is never parsed as data).
 
-**Consequence made explicit (review I1):** the allow-listed path is a *distinct execution branch*
-in `execute()`, not a one-call swap. In allow-listed mode the **materialized local clone is the
-authoritative preflight substrate** — cleanliness, base-SHA, and identity are checked against it,
-**not** against an unrelated Nave pen. `execute()` in allow-listed mode does **not** run
-`pen_create`/stale-dirty `pen_status` against a Nave pen (`pen_orchestrator.py:452,477`); those
-would block on irrelevant Nave dirt while leaving the real landing substrate unchecked. The
-`propose` path is byte-for-byte unchanged (Nave create/status/exec, terminates at `proposed`).
+1. **Branch provisioning at a guarded base** — provision `pulse/apply/{proposal_id}` off the
+   expected base SHA **per repo** across the selection; fail closed per repo if the branch exists or
+   the SHA is missing. Shape (PR #141 open Q1, recommended): a dedicated `nave pen branch` subcommand
+   (independently retryable/reportable), taking per-repo base SHAs via a **request file**
+   (JSON/YAML, mirroring `materialize --request` — PR #141 open Q2), not flag-per-repo.
+2. **Bounded staging on commit** — stage only the proposal's `bound_paths`; anything else dirty in
+   the clone fails the commit closed rather than riding along (replaces `add -A`). Post-validation,
+   so it is a commit step distinct from the transformation `pen exec` (PR #141 open Q1).
+3. **Structured commit/push results** — `--json` per-repo outcomes for commit and push, including the
+   **local commit SHA and the pushed remote-ref SHA + upstream** (PR #141 open Q3 — the PR-first step
+   needs the remote ref as input; today `pen exec --push-changes` does not report it).
+4. **Deterministic cleanup + fail-mode** — `nave pen reset <pen> --branch <name>` to unwind a partial
+   provision/push, plus a documented `--keep-going`/fail-fast choice. Full cross-repo transactional
+   apply is out of scope; deterministic cleanup is not.
+5. **Expose the pen clone root (the read-path capability)** — a surface (e.g. `pen status --json`
+   carrying each repo's clone path) so `pen_clone_reader` can locate clones for **independent**
+   read-only verification. PR #141 keeps verification out-of-band of the writer deliberately (checker
+   ≠ writer); that only works if Nave exposes the path. This closes the gap the note left open.
 
-## 3. Proposal & authorization model (review C1)
+Base-guard migration: the expected-SHA guard is enforced by provisioning **at** `expected_shas[repo]`
+(capability 1); the blast-radius guard is enforced by **bounded staging** (capability 2). Pulse's
+read-side `paths_changed` (no-op / wrong-target detection) and `json_schema` (content) validations
+stay — verified via capability 5.
 
-**The driver never "loads a recorded proposal."** F6–F9 producers persist only
-`{binding, transformation, proposal_id}` summaries (`plan_sync.py:472`, `validate_result.py:624`);
-they discard `selection`, `expected_shas`, `actor`, `bound_paths`, and `mutation_policy` — the
-load-bearing `Proposal` fields (`mutation_plan.py:279`). This matches the **settled F10→F11 handoff:
-"summaries only; apply re-derives."**
+## 4. Proposal & authorization model (Codex review C1 — substrate-independent)
 
-So apply obtains an authorized Proposal in two independent pieces:
+**The driver never "loads a recorded proposal."** F6–F9 persist only
+`{binding, transformation, proposal_id}` summaries (`plan_sync.py:472`, `validate_result.py:624`),
+discarding `selection`, `expected_shas`, `actor`, `bound_paths`, `mutation_policy`
+(`mutation_plan.py:279`) — matching the **settled F10→F11 handoff: "summaries only; apply re-derives."**
+Apply obtains an authorized Proposal in two pieces:
 
 1. **Re-derivation.** The driver re-runs the *propose* logic for the target binding (the same
    `build_proposal` path the F6–F9 producer used) to mint a **fresh** `Proposal` off **current**
-   repository state — current `expected_shas`, current `selection`, current `bound_paths`. A base
-   that moved since the original propose is reflected now, not stale. The fresh proposal is minted
-   directly with `mutation_policy="allow-listed"` (an authorized proposal), never by mutating a
-   frozen propose-mode one.
-2. **`ApplyAuthorization` (new, workspace-repo policy).** A workspace apply-policy document
-   enumerates, per transformation: `{transformation, permitted_repos, policy: allow-listed}`. The
-   driver checks the re-derived proposal against it — transformation is authorized **and**
-   `selection ⊆ permitted_repos` — before execution. The recorded `proposal_id` (and a content
-   digest of the re-derived proposal) is carried into the run ledger and the result for
-   audit/traceability. No apply runs without a matching authorization; the registry gains no
-   per-transformation "allow-listed" flag (authorization lives in the workspace policy, not the
-   shared registry).
+   state — current `expected_shas`, `selection`, `bound_paths` — minted directly with
+   `mutation_policy="allow-listed"`, never by mutating a frozen propose-mode proposal.
+2. **`ApplyAuthorization` (new, workspace-repo policy).** A workspace apply-policy enumerating, per
+   transformation, `{transformation, permitted_repos, policy: allow-listed}`. The driver requires the
+   re-derived proposal to match — transformation authorized **and** `selection ⊆ permitted_repos` —
+   before execution. The recorded `proposal_id` + a digest of the re-derived proposal is carried into
+   the ledger/result for audit. The shared registry gains **no** per-transformation allow-listed flag
+   (authorization lives in the workspace policy).
 
-This removes the review's central contradiction ("load the recorded proposal … never
-reconstructed") — apply **re-derives** by design, and authorization is explicit and workspace-owned.
+## 5. Pulse components (`hiivmind-pulse-gh`)
 
-## 4. Components
+### A. Thin Nave-verb adapters + delete the trio (PR #141)
 
-All in `hiivmind-pulse-gh` unless noted. Each has one purpose and a well-defined interface.
+Add adapter functions for the § 3 verbs following the existing `pen_exec` / `pen_status` idiom (argv
+construction + `--json` decode, fixture-testable via `PULSE_NAVE_FIXTURES`). **Delete**
+`provision_apply_branch` / `commit_apply_clones` / `push_apply_clones` (`nave_adapter.py:500–616`)
+and their tests. Pulse runs no write-git commands.
 
-### A. `pen_materialize.py` (new) — the clone bridge (§A.3, hardened per review I2)
+### B. `apply_ops` bound to Nave verbs + `execute()` allow-listed branch
 
-`materialize(selection, base_shas, clone_root, *, clone_urls) -> dict[repo, {"state": …, "reason"?}]`
+The injectable `ApplyOps` protocol (`provision_branch` / `commit_repos` / `push_repos`) **stays** —
+only its production binding changes: `make_apply_ops(...)` now binds to the § 5A Nave-verb adapters
+(not raw git). `commit_repos` passes the proposal's `bound_paths` for bounded staging; `push_repos`
+returns the per-repo commit + remote-ref SHAs from `--json` (Codex review C4). `execute()` in
+allow-listed mode: validate proposal + authorization → provision branch (verb 1) → `pen_exec`
+transformation (unchanged) → validate against the Nave pen via `pen_clone_reader` (verb 5) →
+bounded commit (verb 2) → push (verb 3), with `pen reset` (verb 4) on partial failure. Preflight
+(`pen_create` / stale-dirty `pen_status`) runs against the **Nave pen** — now correct, since the pen
+is the mutated substrate. The `propose` path is byte-for-byte unchanged. `execute()` stays
+subprocess-free (all Nave I/O via the injected runner).
 
-For each repo, ensure a **Pulse-owned, proposal-scoped** clone under
-`{clone_root}/{proposal_id}/{owner}/{name}` (proposal-scoped so distinct proposals/processes never
-share a mutable checkout — review C3/I2). Contract:
+### C. `apply_driver.py` (new) — Path A production driver, lease-first (Codex C3/C4)
 
-- **Ownership + atomicity:** clone into a temp dir, then atomically promote; drop a Pulse ownership
-  marker. Never hard-reset a path Pulse cannot prove it owns.
-- **Identity:** validate normalized repo names (reject `.`/`..` path components — `mutation_plan.py:299`
-  checks only slash count); canonicalize and verify `origin` matches the expected repo; the reader's
-  `.git`-only check (`pen_clone_reader.py:67`) is not sufficient identity on its own.
-- **Base guarantee:** fetch the required refs, verify `git cat-file -e <base>^{commit}`, check out
-  clean at `base_shas[repo]`; establish *clean* (remove/reject untracked+ignored — a hard-reset
-  alone does not) so `paths_changed` sees only the transformation's diff.
-- **Auth:** an authenticated clone/fetch strategy that supports private repos **without embedding
-  credentials** in the path or remote URL.
-- **Commit identity:** configure a deterministic `user.name`/`user.email` in the clone (a clean CI
-  machine may have none), so attribution is reproducible.
-- **Retry / branch reuse:** a leftover `pulse/apply/{id}` from an aborted run makes `provision_apply_branch`'s
-  `checkout -b` fail (tested — `test_nave_adapter.py:724`); materialize resets to a known-clean base
-  and the substrate reuses-or-fails-closed the existing branch (never blind force-push).
-- **Partial failure:** any repo failing materialization fails the **whole selection** before any
-  execution (no half-materialized run proceeds).
-- **Submodules/LFS:** explicitly out of scope for v1 — documented as unsupported, not silently
-  mishandled.
-
-Pure I/O; no decision logic. This is the sole writer that establishes the contract the reader and
-the `*_apply_clones` ops assume.
-
-### B. `run_transformation` seam + `make_apply_ops(clone_paths, entry)` (new) + explicit `execute()` allow-listed branch (review I1)
-
-- **Extend the `ApplyOps` protocol** with `run_transformation(argv) -> dict[repo, {"state": …, "reason"?, "commit_sha"?}]`.
-- **`execute()` allow-listed branch:** validate the immutable proposal + authorization; validate
-  local clone identity/cleanliness/base against the **materialized clone** (not a Nave pen);
-  provision branches; run `apply_ops.run_transformation(argv)` (subprocess of `command_argv`,
-  `cwd=clone`, `shell=False`) in place of `pen_exec`; validate; commit-all; push-all. Per-repo
-  result semantics are exact: **missing tool → `blocked`** (naming tool+ecosystem, the T1 contract);
-  **nonzero exec → `failed`**; **any repo failing prevents validation/commit everywhere**;
-  unknown/missing result keys **fail closed**. The `propose` path is untouched.
-- **`make_apply_ops(clone_paths, entry)`** binds `provision_branch/commit_repos/push_repos` to the
-  existing `nave_adapter.*_apply_clones` fns and `run_transformation` to the local runner. The
-  landing ops must additionally **return the local commit SHA and the verified remote-ref SHA**
-  per repo (review C4) — `commit_apply_clones`/`push_apply_clones` today return only `{state}`
-  (`nave_adapter.py:538,591`); they are extended to surface SHAs so the driver can open a correct PR
-  and write a valid result.
-
-### C. `apply_driver.py` (new) — Path A production driver (§A.1), lease-first (review C3/C4)
-
-`uv run` CLI. Flow, **lease before any mutation**:
-
-1. Resolve the target binding + recorded `proposal_id`; load the workspace `ApplyAuthorization`.
+`uv run` CLI. **Lease before any mutation:**
+1. Resolve target binding + recorded `proposal_id`; load the workspace `ApplyAuthorization`.
 2. **Create/resume the run-ledger step and acquire its lease** (`resolve_run.acquire_lease`,
-   `resolve_run.py:337`) — *before* materialization or any git mutation. Every retry inspects
-   persisted step state before acting; the lease is held/renewed through push and PR creation.
-3. **Re-derive** the fresh `allow-listed` Proposal (§3); authorize it against the policy; resolve
-   the **intended base branch** per repo from the binding/repo metadata (never a `main` default —
-   `apply_reconcile.py:432`).
-4. `pen_materialize.materialize(...)` → proposal-scoped clone paths.
-5. `make_pen_clone_reader(clone_root, selection)` + `make_apply_ops(clone_paths, entry)`.
-6. `pen_orchestrator.execute(plan, runner, read_repo_*, apply_ops=…)`.
-7. On terminal `pushed`: with the per-repo pushed SHA + intended base branch in hand,
-   `apply_reconcile.open_apply_pr` (which needs both — `apply_reconcile.py:205`).
-8. **Result on every exit:** a **pre-push** exit (`blocked`/`failed`/ABORT) writes a validated
+   `resolve_run.py:337`) *before* any Nave mutation; held/renewed through push + PR; every retry
+   inspects persisted step state first.
+3. **Re-derive** the fresh allow-listed Proposal (§ 4); authorize it; resolve the **intended base
+   branch** per repo from binding/repo metadata (never a `main` default — `apply_reconcile.py:432`).
+4. `execute(plan, runner, read_repo_*, apply_ops=make_apply_ops(...))`.
+5. On terminal `pushed`: with the per-repo pushed SHA + intended base in hand,
+   `apply_reconcile.open_apply_pr` (needs both — `apply_reconcile.py:205`).
+6. **Result on every exit:** pre-push exits (`blocked`/`failed`/ABORT) write a validated
    `repo-mutation` result; `apply-status` (`pushed|pr_opened|applied|rejected` —
-   `validate_result.py:41`) is reserved for the remote lifecycle only. Per-repo vs aggregate is
-   defined explicitly: `apply-status` is **per repo** (its `selection` is one repo — `apply_reconcile.py:160`),
-   and a multi-repo selection produces one `apply-status` per repo plus an aggregate ledger step.
+   `validate_result.py:41`) is remote-lifecycle only, **per repo** (`apply_reconcile.py:160`); a
+   multi-repo selection yields one `apply-status` per repo + an aggregate ledger step.
 
-### D. `apply_advance_base.py` (new) — F8 doc-blob finalizer only + wire into `reconcile` CLI (review C2)
+### D. `apply_advance_base.py` (new) — F8 doc-blob finalizer only + wire into `reconcile` (Codex C2)
 
-v1 base advancement is the **F8 plan-sync doc-blob finalizer** — a *typed* operation, not a generic
-`(repo, merged_sha)` callback:
+v1 base advancement is the **F8 plan-sync doc-blob finalizer**, a *typed* op (not a generic
+`(repo, merged_sha)` callback). On a detected merge, read the **merged document's git blob SHA** at
+`merged_sha` (F8 `base.blob` is a blob SHA of confirmed content — `plan_sync.py:329` requires
+`confirmed_document_blob` — not the merge commit SHA) and **compare-and-swap** the plan-sync binding's
+`base.blob`, where the *expected prior blob* was recorded **before** the run (a guard is only
+meaningful read-before, not at reconcile time). Idempotent + precondition-guarded; translates its own
+success/no-op into the `{"state": "ok"}` contract `reconcile_apply` requires (`apply_reconcile.py:349`).
+Uses **dedicated GitHub-contents read/modify/PUT logic keyed on the contents blob SHA** (or a
+workspace-repo commit/PR) — **not** `object_apply`'s `marker-advance`, whose `owner/repo:marker`
+target is not a REST endpoint and which returns `applied`, not `ok` (`object_apply.py:120,186,250`).
+Wired into `apply_reconcile.main()`'s `reconcile` subcommand (today `advance_base=None`).
 
-- On a detected merge, read the **merged document's git blob SHA** at `merged_sha` (F8 `base.blob`
-  is a blob SHA of confirmed document content — `plan_sync.py:329` requires `confirmed_document_blob`
-  — **not** the merge commit SHA), then **compare-and-swap** the plan-sync binding's `base.blob`:
-  the *expected* prior blob is the value recorded **before** the run (a stale-state guard is only
-  meaningful if read before, not at reconcile time — review C2).
-- Idempotent (re-advancing an already-advanced base is a no-op) and precondition-guarded (a drifted
-  base blocks, never blind-overwrites). The finalizer translates its own success/no-op into the
-  `{"state": "ok"}` contract `reconcile_apply` requires (`apply_reconcile.py:349`) — the review found
-  `object_apply` returns `applied`, and its `owner/repo:marker` target isn't a real REST endpoint
-  (`object_apply.py:120,186`), so this finalizer uses **dedicated GitHub-contents read/modify/PUT
-  logic keyed on the contents blob SHA**, or lands the change as a workspace-repo commit/PR — it does
-  **not** route through `object_apply`'s unimplemented `marker-advance` transport.
-- Wired into `apply_reconcile.main()`'s `reconcile` subcommand (today `advance_base=None`).
+**Not in this phase:** F5-marker advancement — F5 markers advance off the *upstream
+integration-validated `head_sha`* (`impact.py:456,493`), an F5 concern keyed off integration
+evidence, not an apply merge. Pure-neutral transformations (`refresh-node-lockfile`) have **no base
+to advance** — the merge is terminal.
 
-**Not in this phase:** F5-marker advancement is **not apply's job** — F5 markers advance off the
-*upstream integration-validated `head_sha`* (`impact.py:456,493`), which is an F5 concern keyed off
-integration evidence, not an apply PR's merge commit. It is removed from this phase entirely (it was
-mis-scoped into apply in the first draft). Pure-neutral transformations (`refresh-node-lockfile`)
-have **no base to advance** — the detected merge is terminal.
+### E. `gh-apply` skill (new) — interactive trigger, v1 (PR-gated)
 
-### E. `gh-apply` skill (new) — the interactive trigger (§A.1 trigger, v1)
+Wraps the driver + reconcile loop behind `/gh apply <proposal>`. Scheduled auto-apply stays v2.
 
-Wraps the driver + reconcile loop behind `/gh apply <proposal>`. v1 is **interactive / PR-gated**;
-scheduled auto-apply stays v2 (needs the workspace apply-policy design).
+### F. Workspace enrollment (`hiivmind/hiivmind-workspace`) — gated on an installed engine (Codex I6)
 
-### F. Workspace enrollment (`hiivmind/hiivmind-workspace` repo) — gated on an installed engine (review I6)
+A PR landing the **`ApplyAuthorization` policy** (§ 4) and a **real neutral proposal source** (a
+neutral binding producing a `refresh-node-lockfile` / `regenerate-docs-index` proposal — none exists
+in the template today). Gated on the § 3 Nave verbs **and** the pulse-gh engine being **installed** in
+the workspace's plugin (per the single-developer context, a local install suffices), not merely a
+`develop` merge (`docs/backlogs/README.md:120`).
 
-A small PR that lands the **`ApplyAuthorization` policy** (§3) and a **real neutral proposal
-source** (a neutral binding that produces a `refresh-node-lockfile` / `regenerate-docs-index`
-proposal — none exists in the template today; the generator template holds only the plugin dogfood
-generator — review I6). Enrollment is gated on the **engine being installed in the workspace's
-plugin** (per the single-developer context, a local install of the merged plugin suffices — a formal
-release is not required), **not** merely on the pulse-gh `develop` merge, because a `develop` merge
-does not put the engine in an installed plugin (`docs/backlogs/README.md:120`, feature→develop→
-release→main).
+## 6. Lifecycle, concurrency & result contracts (Codex C3/C4/I3/I4)
 
-## 5. Lifecycle, concurrency & result contracts (review C3/C4/I3/I4)
+- **Lease before mutation**, held through push + PR (§ 5C).
+- **SHAs from Nave `--json`:** commit + remote-ref SHAs flow from verb 3 (§ 3) through `push_repos`
+  to the driver, which passes the real pushed SHA to `open_apply_pr` (never the base — the current
+  acceptance wrongly passes base as `pushed_sha`, `test_apply_acceptance.py:338`).
+- **Base branch verified end-to-end:** intended base resolved per repo, persisted into `apply-status`,
+  required by the merge gate. `GhCliOps.view_pr` gains `baseRefName` (`apply_reconcile.py:87` omits
+  it); `evaluate_merge_detected_gate` (`resolve_run.py:300`) advances only when observed base == intended
+  base — a retargeted PR cannot advance the wrong base.
+- **Push atomicity — claimed honestly:** even through Nave, multi-repo push is not transactional; v1
+  models each repo as an independent per-repo ledger state + independent PR and finalizes
+  independently, with `pen reset` (verb 4) for deterministic cleanup of a partial push. No cross-repo
+  atomicity is claimed. (The v1 neutral proof is single-repo.)
 
-- **Lease ordering:** lease acquired before materialize/mutation, held through push + PR (§4C).
-- **SHAs threaded:** landing ops return per-repo local commit SHA + verified remote-ref SHA; the
-  driver passes the real pushed SHA to `open_apply_pr` (never the base SHA — the current acceptance
-  wrongly passes the base as `pushed_sha`, `test_apply_acceptance.py:338`).
-- **Base branch verified end-to-end:** intended base is resolved per repo (not defaulted), persisted
-  into `apply-status`, and the merge gate requires it. `GhCliOps.view_pr` gains `baseRefName`
-  (`apply_reconcile.py:87` omits it today); `evaluate_merge_detected_gate` (`resolve_run.py:300`)
-  advances only when the observed base equals the intended base — a retargeted PR cannot advance the
-  wrong base.
-- **Push atomicity — claimed honestly (review I3):** commit-all-then-push protects against a
-  mid-commit failure but **not** a mid-push failure (`push_apply_clones` pushes sequentially —
-  `nave_adapter.py:602`; A can be pushed when B fails). v1 models each repo as an **independent
-  per-repo ledger state + independent PR** and finalizes them independently; the design does **not**
-  claim cross-repo push atomicity. (The v1 neutral proof is single-repo, so this is bounded; the
-  multi-repo partial-push case is a tested acceptance scenario, not an atomicity guarantee.)
+## 7. Testing (Codex I5)
 
-## 6. Scope boundary
-
-**IN — the "apply runnable spine":** a re-derived, workspace-authorized `allow-listed` proposal for
-a **neutral** transformation on a real fixture repo lands as a pushed `pulse/apply/{proposal_id}`
-branch (never a base branch) + an opened PR against the **intended** base; on a **detected merge**
-into that base (never a push), the **F8 plan-sync base.blob** advances off the merged document's
-blob (for the doc-binding case); the result validates as `apply-status`/`applied` with PR URL +
-merged SHA. Interactive trigger. All F11 pre-exec gates still fire and fail closed against the
-**local materialized clone**.
-
-**DEFERRED (captured, not built):**
-- **F5-marker advancement** — an F5 concern (keyed off integration evidence, not an apply merge);
-  not apply's job.
-- **F9-marketplace + F2-profile Path B emitter wiring** (the rest of §A.4) — until those apply
-  consumers are wanted.
-- **Scheduled auto-apply + `allow`** (unattended direct push) — v2, behind an explicit workspace
-  apply-policy + `allow_scheduled: true` (§B).
-- **F4 dependency-coherence apply** — blocked on the unbuilt F4 adapters (§D.1).
-- **Submodules/LFS, cross-repo push atomicity** — documented boundaries (§4A, §5).
-- **Auto-merge** — permanent non-goal (§C); landing is always a reviewed merge.
-
-## 7. Testing (review I5)
-
-Drive acceptance through the **real `apply_driver` and production factories** (not a hand-assembled
-sequence), against a temp-git fixture whose `origin` is a local **bare** repo (no network):
-
-- `pen_materialize` clones the fixture into a proposal-scoped `PULSE_PEN_ROOT` at a base SHA; the
-  real transformation runs locally; its output **actually reaches** the clone that
-  `commit_apply_clones`/`push_apply_clones` land — assert the pushed commit **differs from the base**
-  and **matches the bare remote ref** (the integration the double-fake never checked).
-- **Re-derivation + authorization:** a proposal not covered by the `ApplyAuthorization` is refused;
-  a covered one proceeds.
-- **Lease ordering + contention:** a second competing actor is lease-blocked *before* it mutates;
-  real `resolve_run` files, not hand-edited YAML.
-- **Base-branch correctness:** a wrong-base (retargeted) merge is **rejected** by the gate;
-  default-branch resolution is asserted (a `develop`-based repo does not default to `main`).
-- **F8 finalizer:** command-test the **real** GitHub-contents adapter's request/response against
-  actual `gh` JSON shapes; assert compare-and-swap on the recorded prior blob and idempotent re-run.
-- **Crash/resume, local branch reuse, partial materialization, multi-repo partial-push** each have
-  a case. The `gh` PR/merge transport stays an injected offline boundary, but its request/response
-  contract is tested against real `gh` JSON shapes.
-
-The structural neutrality guard (F11 T8) extends to `pen_materialize`, `apply_driver`,
-`apply_advance_base`, and `make_apply_ops`: no imports from `profile_dispatch` / any claude-plugin
-adapter, and no `profile:claude-plugin` predicate evaluated in the apply path.
+- **Pulse layer** drives acceptance through the **real `apply_driver` + production factories**
+  against **Nave-verb `--json` fixtures** (`PULSE_NAVE_FIXTURES`): re-derivation + authorization
+  (an unauthorized proposal is refused), lease ordering + contention (a competing actor is
+  lease-blocked *before* it mutates, real `resolve_run` files), pushed-SHA correctness (assert the
+  result carries the verb-reported remote-ref SHA, not the base), base-branch correctness (a
+  retargeted/wrong-base merge is rejected; a `develop` repo does not default to `main`), the F8
+  finalizer (command-test the **real** GitHub-contents adapter against actual `gh` JSON shapes;
+  compare-and-swap on the recorded prior blob; idempotent re-run), and crash/resume.
+- **The cross-substrate "output actually lands" proof moves to the Nave fork's suite** — the verbs
+  are where branch/commit/push against real clones are exercised end-to-end. Pulse asserts the
+  adapter's argv + `--json` decode contract; the fork asserts the git reality. This is the clean
+  consequence of single-mutator: the writer's integration test lives with the writer.
+- **Import-boundary/neutrality guard (PR #141):** the F10 import-boundary test moves from guarding
+  four raw-git names to guarding that the **single apply driver** is the sole caller authorized to
+  pass commit/push/branch flags; the structural neutrality guard extends to `apply_driver` /
+  `apply_advance_base` (no `profile_dispatch` / claude-plugin imports; no `profile:claude-plugin`
+  predicate in the apply path). The `gh` PR/merge transport stays an injected offline boundary tested
+  against real `gh` JSON shapes.
 
 ## 8. Cross-repo & sequencing
 
-Per the `docs/backlogs/README.md` dependency map:
+Ordered by dependency (`docs/backlogs/README.md` map):
 
-- **pulse-gh** (`feat/*` → `develop`): components A–E + tests + the docstring fixes (§9) — the whole
-  engine + trigger.
-- **workspace** (`feat/*` → `main`, no `develop`): component F — the `ApplyAuthorization` policy +
-  neutral proposal source + marker records, landed **after** the engine is installed in the
-  workspace's plugin (not merely merged to `develop`).
-- **nave fork:** **not touched** (the point of Fork B).
+1. **`discreteds/nave` fork** (feature → main): the § 3 verbs + their `--json` contracts + Rust
+   tests; install locally. **First** — Pulse cannot call verbs that do not exist.
+2. **`hiivmind-pulse-gh`** (`feat/*` → `develop`): § 5 components A–E + § 4/§ 6 + delete the trio +
+   § 9 doc debt + tests. Depends on 1.
+3. **`hiivmind/hiivmind-workspace`** (`feat/*` → `main`): § 5F enrollment. **Last**, after the engine
+   is installed.
 
-## 9. Doc debt to close while wiring (review Minor)
+## 9. Doc debt to close while wiring (Codex Minor)
 
-The orchestrator module docstring still says "propose-only, unconditionally"
-(`pen_orchestrator.py:21`) and `PenPlan.request_push` says a push is always forbidden
-(`pen_orchestrator.py:136`), though merged code already supports allow-listed landing. These are
-corrected as part of B, preserving the actual propose control flow.
+Update the orchestrator docstring's "propose-only, unconditionally" (`pen_orchestrator.py:21`) and
+`PenPlan.request_push` "always forbidden" (`pen_orchestrator.py:136`) to reflect allow-listed
+landing (preserving the actual propose control flow), and `repository-mutations.md` C1's
+*Implementation* line from `nave_adapter.provision_apply_branch(...)` to the Nave verb (the invariant
+text — per-proposal branch off `expected_shas[repo]`, pushes never target a base branch — is
+unchanged).
 
 ## 10. Phase gate
 
-- A re-derived, workspace-authorized neutral `allow-listed` proposal on a real repo lands as a
-  pushed `pulse/apply/{id}` branch + opened PR against the **intended** base; on a detected merge
-  into that base the F8 plan-sync base advances off the merged document's blob; result validates as
-  `apply-status`/`applied`.
-- The transformation's output demonstrably reaches the committed/pushed clone (real materializer +
-  real local exec, asserting pushed ≠ base and pushed = remote ref — the double-fake is gone for the
-  neutral path).
+- A re-derived, workspace-authorized neutral `allow-listed` proposal on a real repo lands — **through
+  Nave verbs, with no raw-git in Pulse** — as a pushed `pulse/apply/{id}` branch + opened PR against
+  the **intended** base; on a detected merge into that base, the F8 plan-sync base advances off the
+  merged document's blob (doc-binding case); result validates as `apply-status`/`applied`.
+- The raw-git trio is **deleted**; Nave is the sole clone mutator; the import-boundary guard enforces
+  the single apply driver as the only flag-bearing caller.
 - The **lease is acquired before any mutation**; a competing actor is blocked before it acts.
-- Every F11 pre-exec gate fires and fails closed **against the local materialized clone**; no push
-  on a failed gate; the push never targets a base branch; a wrong-base merge is rejected.
-- `advance_base` is the typed F8 doc-blob finalizer — compare-and-swap on the recorded prior blob,
-  idempotent, off the merged document's blob — and returns `{"state": "ok"}`. F5-marker advance is
-  out of scope.
-- The apply engine carries no plugin imports and evaluates no `profile:claude-plugin` predicate.
-- The `propose` path through `execute()` is byte-for-byte unchanged.
+- Every F11 pre-exec gate fires and fails closed against the **Nave pen**; no push on a failed gate;
+  the push never targets a base branch; a wrong-base merge is rejected; bounded staging commits only
+  `bound_paths`.
+- `advance_base` is the typed F8 doc-blob finalizer (compare-and-swap on the recorded prior blob,
+  idempotent, off the merged document's blob), returning `{"state": "ok"}`. F5-marker advance is out
+  of scope.
+- The apply engine carries no plugin imports and evaluates no `profile:claude-plugin` predicate; the
+  `propose` path through `execute()` is byte-for-byte unchanged.
