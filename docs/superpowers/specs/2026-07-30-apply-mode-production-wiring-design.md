@@ -218,15 +218,24 @@ merge (`docs/backlogs/README.md:120`).
   PR or a force-push/late commit to the apply branch cannot land unvalidated content. Both
   observations are persisted so retry stays fail-closed; the resume path re-reads GitHub rather than
   fabricating evidence from a prior `applied` result (`apply_reconcile.py:300`).
-- **Per-repo children + aggregate parent (review I5).** A multi-repo selection creates **one child
-  ledger step + one `apply-status` per repo**, and a parent aggregate derived from all child terminal
-  states (today `reconcile_apply` marks the supplied step done on the *first* repo's success —
-  `apply_reconcile.py:349` — which would complete the run prematurely on a shared step).
-- **Partial-push policy — one model, stated (review I5/I3).** **v1: fail the whole selection on any
-  push failure and CAS-delete the already-pushed refs (verb 4)** — deterministic cleanup, no stranded
-  remote state, no mixed model. Independent per-repo PRs (preserve successful pushes, reconcile each
-  separately) are a **documented v2 extension**. The v1 neutral proof is single-repo, so this is
-  bounded.
+- **Single repo per apply run (v1 scope — amended 2026-08-03 after the plan review).** v1 lands
+  **one repo per proposal**: a proposal whose `selection` has more than one repo is `blocked`
+  (reason `"multi-repo apply is v2"`) **before any mutation** (before `pen_create`). This avoids a
+  premature-completion defect (`reconcile_apply` marks the step done on the *first* repo's success —
+  `apply_reconcile.py:349`) without building the full multi-repo ledger now. **Deferred to v2
+  (captured):** per-repo child ledger steps + aggregate-parent folding, one `apply-status` per repo,
+  and partial-push independence/cleanup across a multi-repo selection. The neutral proof is
+  single-repo, so v1 is complete without them.
+- **Transformations must be deterministic (apply contract).** A crash between `pen_exec` and the
+  journal's completion receipt cannot be distinguished from live status alone. v1 therefore requires
+  apply transformations to be **deterministic** (same base + argv → same output): on resume from an
+  in-progress `transformed` phase, the driver resets the clone to the provisioned base (Nave `pen
+  reset` local) and **re-runs** the transformation from clean — safe by determinism. Non-deterministic
+  appliers are out of scope for v1.
+- **Fencing — same-machine advisory lock (v1).** Concurrency is fenced by an **OS advisory lock
+  (flock)** held across the whole mutation sequence and passed through to `open_apply_pr` and the F8
+  finalizer (never independently reacquired). The run-ledger `token` is **ownership *detection***, not
+  a cross-process fence. **Cross-machine git-CAS lease acquisition is a documented v2 extension.**
 
 ## 7. Testing (review I5)
 
@@ -285,7 +294,8 @@ verb. Phase-gate wording is "no clone-write git in Pulse" (read-only verificatio
 - Every F11 pre-exec gate fires and fails closed against the **Nave pen**; post-exec repo-control
   invariants hold; bounded staging commits only `bound_paths`; no push on a failed gate; the push never
   targets a base branch.
-- Multi-repo runs use per-repo children + an aggregate parent; v1 partial-push fails the selection and
-  CAS-cleans; F5-marker advance is out of scope.
+- v1 lands **one repo per proposal**; a multi-repo proposal is `blocked` before any mutation
+  (per-repo children + aggregate deferred to v2). Fencing is a same-machine advisory lock; transforms
+  are deterministic (reset+re-exec on resume). F5-marker advance is out of scope.
 - The apply engine carries no plugin imports and evaluates no `profile:claude-plugin` predicate; the
   `propose` path through `execute()` is byte-for-byte unchanged.
