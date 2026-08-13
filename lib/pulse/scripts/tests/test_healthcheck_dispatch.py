@@ -161,14 +161,23 @@ def test_dispatches_only_authoritative_resolved_checks_across_a_mixed_fleet():
         "unsupported_by_adapter": {
             "claude.plugin-structure": 1,
             "docs.links": 1,
-            "node.dependencies": 1,
+            "node.dependency-freshness": 1,
             "node.web-build": 1,
-            "python.dependencies": 2,
+            "python.dependency-freshness": 2,
             "python.service-runtime": 1,
             "terraform.dependencies": 1,
             "terraform.validate": 1,
         },
         "unprofiled_repos": ["acme/unprofiled"],
+        "dependencies": {
+            "repositories_selected": 0,
+            "repositories_grouped": 0,
+            "repositories_ungrouped": 0,
+            "groups_with_insufficient_members": [],
+            "packages_matched": 0,
+            "packages_unmatched": 0,
+            "unsupported_by_adapter": {},
+        },
     }
 
 

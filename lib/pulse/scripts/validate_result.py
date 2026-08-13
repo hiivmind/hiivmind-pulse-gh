@@ -468,6 +468,56 @@ def validate(data, kind: str) -> list[str]:
             _validate_string_list(
                 coverage, "unprofiled_repos", errors, ctx="coverage."
             )
+            dependencies_coverage = coverage.get("dependencies")
+            if "dependencies" in coverage and not isinstance(dependencies_coverage, dict):
+                _err(errors, "wrong type for coverage.dependencies: expected dict")
+                dependencies_coverage = None
+            if dependencies_coverage is not None:
+                dctx = "coverage.dependencies."
+                repos_selected = _require_nonnegative_integer(
+                    dependencies_coverage, "repositories_selected", errors, ctx=dctx
+                )
+                repos_grouped = _require_nonnegative_integer(
+                    dependencies_coverage, "repositories_grouped", errors, ctx=dctx
+                )
+                repos_ungrouped = _require_nonnegative_integer(
+                    dependencies_coverage, "repositories_ungrouped", errors, ctx=dctx
+                )
+                if None not in (repos_selected, repos_grouped, repos_ungrouped):
+                    if repos_grouped + repos_ungrouped != repos_selected:
+                        _err(
+                            errors,
+                            f"{dctx}repositories_grouped + repositories_ungrouped "
+                            "must equal repositories_selected",
+                        )
+                _validate_string_list(
+                    dependencies_coverage,
+                    "groups_with_insufficient_members",
+                    errors,
+                    ctx=dctx,
+                )
+                _require_nonnegative_integer(
+                    dependencies_coverage, "packages_matched", errors, ctx=dctx
+                )
+                _require_nonnegative_integer(
+                    dependencies_coverage, "packages_unmatched", errors, ctx=dctx
+                )
+                dep_unsupported = _require(
+                    dependencies_coverage,
+                    "unsupported_by_adapter",
+                    dict,
+                    errors,
+                    ctx=dctx,
+                )
+                for adapter, count in (dep_unsupported or {}).items():
+                    if not isinstance(adapter, str):
+                        _err(errors, f"{dctx}unsupported_by_adapter keys must be strings")
+                    if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+                        _err(
+                            errors,
+                            f"{dctx}unsupported_by_adapter.{adapter} must be a "
+                            "non-negative integer",
+                        )
             if len(reconciled_repos) == len(repos or []):
                 expected_coverage = fleet_coverage(reconciled_repos)
                 _reconcile_mapping(

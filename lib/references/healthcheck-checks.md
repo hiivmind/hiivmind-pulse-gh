@@ -194,6 +194,68 @@ Each check defines:
 
 ---
 
+### `python_manifest_lock_consistency`
+
+| Field | Value |
+|-------|-------|
+| Category | security |
+| Severity | medium |
+| Pass | Exactly one supported Python manager identified (uv, Poetry, PDM, pip-tools, or Conda's nested `pip:` section); content parses cleanly; every declared package resolves to a single locked version that satisfies every declaration of it |
+| Warn | A supported lockless form (pip-tools without a compiled `requirements.txt`) whose declared range cannot prove a single resolution |
+| Fail | A declared package's resolved version violates at least one of its declarations, a required lock is authoritatively missing, or the manifest/lock content is structurally invalid |
+| Local Data | Transient dependency-evidence document (see `lib/patterns/dependency-evidence-contract.md`) — never F0 path observations, never Nave cache internals |
+| API Fallback | None — this check is evidence-only; missing/unresolvable evidence produces `unknown`, never a guess |
+| Fix Action | Suggest pinning the violating package to its declared range, or regenerating the lockfile |
+
+Adapter `python.dependencies`. A manager-declared workspace (`[tool.uv.workspace]`) or
+multiple recognized-but-conflicting managers (e.g. both `poetry.lock` and `uv.lock`) produce
+`unsupported`, not a guessed pass/fail. See `lib/patterns/dependency-coherence.md` for the
+full evidence-state lattice.
+
+---
+
+### `node_manifest_lock_consistency`
+
+| Field | Value |
+|-------|-------|
+| Category | security |
+| Severity | medium |
+| Pass | Exactly one supported Node manager identified (npm, pnpm, or Yarn v1); content parses cleanly; every declared package resolves to a single locked version that satisfies every declaration of it |
+| Warn | — |
+| Fail | A declared package's resolved version violates at least one of its declarations, a required lock is authoritatively missing, or the manifest/lock content is structurally invalid |
+| Local Data | Transient dependency-evidence document (see `lib/patterns/dependency-evidence-contract.md`) |
+| API Fallback | None — evidence-only; missing/unresolvable evidence produces `unknown` |
+| Fix Action | Suggest pinning the violating package to its declared range, or regenerating the lockfile |
+
+Adapter `node.dependencies`. A `workspaces` key in `package.json`, or a `pnpm-workspace.yaml`
+artifact, produces `unsupported` — per-workspace-member divergence is out of v1 scope (see
+`docs/backlogs/2026-08-13-f4-deferred-scope.md`). An unparseable (Yarn Berry/modern) lockfile
+generation is also `unsupported`.
+
+---
+
+### `fleet_dependency_coherence`
+
+| Field | Value |
+|-------|-------|
+| Category | governance |
+| Severity | medium |
+| Pass | Repository is a member of at least one committed `.hiivmind/github/dependencies.yaml` coherence group, and no tracked package in that group diverges beyond its policy |
+| Warn | A tracked package's locked version diverges at `minor`/`patch` tier and that tier is a policy violation for its group |
+| Fail | A tracked package's locked version diverges at `major` tier for a group this repository belongs to |
+| Local Data | `.hiivmind/github/dependencies.yaml` (committed coherence policy) plus every group member's dependency-evidence records, compared exactly once per fleet run |
+| API Fallback | None |
+| Fix Action | Suggest aligning the diverging package to the group's other members, or narrowing the group's `policy` |
+
+Adapter `fleet.dependencies.coherence`. Finalized only by the fleet pass (never per-repo):
+every selected repository gets a placeholder during dispatch that the fleet pass always
+replaces — `not_applicable` when the repository is outside every committed group (correct, no
+policy claim — tracked as durable `coverage.dependencies` debt, not silently hidden), `unknown`
+with reason `missing_policy` when `dependencies.yaml` does not exist. See
+`lib/patterns/dependency-coherence.md` for the full comparison and severity semantics.
+
+---
+
 ## Grading Scale
 
 | Grade | Score Range | Meaning |

@@ -1,0 +1,75 @@
+[[package]]
+name = "caret-full"
+version = "1.2.5"
+
+[[package]]
+name = "caret-minor-prefix-zero"
+version = "0.2.9"
+
+[[package]]
+name = "caret-patch-prefix-zeros"
+version = "0.0.3"
+
+[[package]]
+name = "caret-two-part"
+version = "1.9.0"
+
+[[package]]
+name = "caret-one-part"
+version = "1.5.0"
+
+[[package]]
+name = "caret-zero"
+version = "0.5.0"
+
+[[package]]
+name = "caret-all-zero"
+version = "0.0.0"
+
+[[package]]
+name = "tilde-full"
+version = "1.2.9"
+
+[[package]]
+name = "tilde-two-part"
+version = "1.2.9"
+
+[[package]]
+name = "tilde-one-part"
+version = "1.9.0"
+
+[[package]]
+name = "compound-range"
+version = "1.5.0"
+
+[[package]]
+name = "exact-version"
+version = "1.2.3"
+
+[[package]]
+name = "prefix-wildcard-two"
+version = "1.9.0"
+
+[[package]]
+name = "prefix-wildcard-three"
+version = "1.2.9"
+
+[[package]]
+name = "bare-wildcard"
+version = "9.9.9"
+
+[[package]]
+name = "union-range"
+version = "1.4.5"
+
+[[package]]
+name = "vcs-dep"
+version = "0.1.0"
+
+[[package]]
+name = "pytest"
+version = "7.4.0"
+
+[[package]]
+name = "shared-pkg"
+version = "2.5.0"

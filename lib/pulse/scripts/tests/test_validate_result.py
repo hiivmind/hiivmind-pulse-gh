@@ -513,6 +513,94 @@ def test_healthcheck_rejects_unsupported_adapter_mapping_not_derived_from_checks
     assert "coverage.unsupported_by_adapter does not match repo checks" in result.stderr
 
 
+def _dependencies_coverage_block(**overrides):
+    block = {
+        "repositories_selected": 2,
+        "repositories_grouped": 1,
+        "repositories_ungrouped": 1,
+        "groups_with_insufficient_members": ["solo-group"],
+        "packages_matched": 3,
+        "packages_unmatched": 1,
+        "unsupported_by_adapter": {"python.dependencies": 1},
+    }
+    block.update(overrides)
+    return block
+
+
+def test_healthcheck_accepts_valid_coverage_dependencies_block(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    doc["coverage"]["dependencies"] = _dependencies_coverage_block()
+    path = tmp_path / "healthcheck.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "healthcheck")
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_healthcheck_is_still_valid_without_coverage_dependencies(tmp_path):
+    # Backward compatible: pre-F4 healthcheck results never carried this key.
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    assert "dependencies" not in doc["coverage"]
+    path = tmp_path / "healthcheck.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "healthcheck")
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_healthcheck_rejects_dependencies_grouped_ungrouped_mismatch(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    doc["coverage"]["dependencies"] = _dependencies_coverage_block(
+        repositories_selected=2, repositories_grouped=1, repositories_ungrouped=2
+    )
+    path = tmp_path / "healthcheck.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "healthcheck")
+
+    assert result.returncode == 1
+    assert (
+        "repositories_grouped + repositories_ungrouped must equal repositories_selected"
+        in result.stderr
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("repositories_selected", -1),
+        ("packages_matched", -1),
+        ("packages_unmatched", "not-an-int"),
+    ],
+)
+def test_healthcheck_rejects_malformed_dependencies_counters(tmp_path, field, value):
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    doc["coverage"]["dependencies"] = _dependencies_coverage_block(**{field: value})
+    path = tmp_path / "healthcheck.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "healthcheck")
+
+    assert result.returncode == 1
+    assert f"coverage.dependencies.{field}" in result.stderr
+
+
+def test_healthcheck_rejects_negative_unsupported_by_adapter_count(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "healthcheck-valid.yaml").read_text())
+    doc["coverage"]["dependencies"] = _dependencies_coverage_block(
+        unsupported_by_adapter={"python.dependencies": -1}
+    )
+    path = tmp_path / "healthcheck.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "healthcheck")
+
+    assert result.returncode == 1
+    assert "non-negative integer" in result.stderr
+
+
 def test_membership_explanation_requires_inferred_marker(tmp_path):
     doc = yaml.safe_load((FIXTURES / "fleet-membership-valid.yaml").read_text())
     doc["profile_proposals"][0]["explanation"] = "Inferred explanation"

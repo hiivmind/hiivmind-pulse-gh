@@ -34,15 +34,15 @@ scorecards:
   python-service-v1:
     extends: generic-v1
     checks:
-      - id: dependencies
-        adapter: python.lockfiles
+      - id: python_manifest_lock_consistency
+        adapter: python.dependencies
         applicability: profile:python
         weight: 2
 
 adapters:
   generic.docs:
     state: available
-  python.lockfiles:
+  python.dependencies:
     state: available
   terraform.dependencies:
     state: unsupported
@@ -103,6 +103,21 @@ A check ID occurs once in a resolved scorecard. A child that intentionally
 changes an inherited check must set `replace: true`; accidental duplicates are
 configuration errors. Weight is a non-negative number and travels with the
 check result so scoring can be reproduced from the artifact.
+
+**Polyglot repositories select multiple ecosystem-specific check IDs, never
+one shared ID.** A repository whose scorecard resolves both
+`python_manifest_lock_consistency` (adapter `python.dependencies`) and
+`node_manifest_lock_consistency` (adapter `node.dependencies`) is legal — they
+are distinct check IDs, and the same-check-ID-occurs-once rule above never
+forces them into one. Reusing a single ID for both ecosystems would not load:
+the second `checks[].id` occurrence requires `replace: true`, which is
+semantically wrong here (both ecosystems' results are wanted, not one
+replacing the other). See `lib/patterns/dependency-coherence.md` for the full
+evidence-state lattice both adapters share, and the separate
+`fleet_dependency_coherence` check (adapter `fleet.dependencies.coherence`),
+which compares locked versions across repositories inside committed
+`.hiivmind/github/dependencies.yaml` coherence groups rather than within one
+repository.
 
 Applicability predicates are evaluated only after inheritance resolves:
 

@@ -31,6 +31,30 @@ scorecards:
         applicability: profile:claude-plugin
         weight: 1
 
+  python-v1:
+    extends: generic-v1
+    checks:
+      - id: python_manifest_lock_consistency
+        adapter: python.dependencies
+        applicability: profile:python
+        weight: 2
+      - id: fleet_dependency_coherence
+        adapter: fleet.dependencies.coherence
+        applicability: always
+        weight: 1
+
+  nodejs-v1:
+    extends: generic-v1
+    checks:
+      - id: node_manifest_lock_consistency
+        adapter: node.dependencies
+        applicability: profile:nodejs
+        weight: 2
+      - id: fleet_dependency_coherence
+        adapter: fleet.dependencies.coherence
+        applicability: always
+        weight: 1
+
 adapters:
   generic.docs:
     state: available
@@ -41,6 +65,12 @@ adapters:
   claude.skills:
     state: available
   claude.context:
+    state: available
+  python.dependencies:
+    state: available
+  node.dependencies:
+    state: available
+  fleet.dependencies.coherence:
     state: available
 
 # Non-authoritative detection policy. Matching rules create review proposals only.

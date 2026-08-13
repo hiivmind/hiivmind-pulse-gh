@@ -22,8 +22,82 @@ import hashlib
 import json
 import os
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Literal
+
+
+@dataclass(frozen=True)
+class Artifact:
+    """One materialized (or non-materialized) artifact within a repo's evidence."""
+
+    selector_id: str
+    path: str | None
+    blob_sha: str | None
+    size_bytes: int | None
+    state: Literal[
+        "found", "absent", "unresolved", "too_large", "binary", "unsupported", "error"
+    ]
+    encoding: str | None
+    content: str | None
+    detail: str | None
+
+
+@dataclass(frozen=True)
+class RepoEvidence:
+    """Typed, per-repo view over one repo's normalized dependency-evidence entry."""
+
+    repo: str
+    ref_name: str
+    tree_sha: str | None
+    tree_complete: bool
+    artifacts: tuple[Artifact, ...]
+
+    def by_selector(self, selector_id: str) -> tuple[Artifact, ...]:
+        """Every artifact sharing `selector_id` (a glob selector fans out to many)."""
+        return tuple(a for a in self.artifacts if a.selector_id == selector_id)
+
+    def by_path(self, path: str) -> Artifact | None:
+        """The artifact at a repo-relative `path`, or None if no artifact has it."""
+        for artifact in self.artifacts:
+            if artifact.path == path:
+                return artifact
+        return None
+
+
+def load_dependency_evidence(document: dict) -> dict[str, RepoEvidence]:
+    """Load an ALREADY-VALIDATED (validate_dependency_evidence.validate(document) == [])
+    normalized document into typed per-repo evidence, keyed by repo.
+
+    Never called on unvalidated input — F4's driver validates first. Every field is
+    read by direct key access (never `.get()` with a silent default), so a malformed
+    document raises `KeyError`/`TypeError` immediately rather than yielding a partial
+    index.
+    """
+    index: dict[str, RepoEvidence] = {}
+    for repo_entry in document["repos"]:
+        artifacts = tuple(
+            Artifact(
+                selector_id=artifact["selector_id"],
+                path=artifact["path"],
+                blob_sha=artifact["blob_sha"],
+                size_bytes=artifact["size_bytes"],
+                state=artifact["state"],
+                encoding=artifact["encoding"],
+                content=artifact["content"],
+                detail=artifact["detail"],
+            )
+            for artifact in repo_entry["artifacts"]
+        )
+        repo = repo_entry["repo"]
+        index[repo] = RepoEvidence(
+            repo=repo,
+            ref_name=repo_entry["ref_name"],
+            tree_sha=repo_entry["tree_sha"],
+            tree_complete=repo_entry["tree_complete"],
+            artifacts=artifacts,
+        )
+    return index
 
 
 def build_request(repos: list[str], selectors: list[dict]) -> dict:

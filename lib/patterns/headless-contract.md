@@ -134,6 +134,18 @@ coverage:                             # required; fleet adapter-coverage debt
   unsupported_by_adapter:             # dict, required: adapter -> check count
     <adapter id>: <int>
   unprofiled_repos: [<owner/name>, ...]
+  dependencies:                       # optional (F4); present whenever any repo
+                                       # selected python.dependencies/node.dependencies/
+                                       # fleet.dependencies.coherence — see
+                                       # lib/patterns/dependency-coherence.md
+    repositories_selected: <int>
+    repositories_grouped: <int>
+    repositories_ungrouped: <int>     # = repositories_selected - repositories_grouped
+    groups_with_insufficient_members: [<group id>, ...]
+    packages_matched: <int>
+    packages_unmatched: <int>
+    unsupported_by_adapter:
+      <adapter id>: <int>
 errors: []
 ```
 
@@ -172,6 +184,14 @@ weights, and applicability rules differ.
 `aggregate.by_scorecard` averages only repositories with a non-zero scoring
 denominator. `coverage` is separate from health: unsupported adapters are explicit
 delivery debt and do not become false repository failures.
+
+**F4 `deps-snapshot.json`** is a separate, transient, gitignored, run-scoped
+artifact — never part of this `*-result.yaml` contract, never committed. It
+carries the per-package fleet-comparison detail (`records`, `groups`,
+`findings`, `unresolved`, `repository_evaluations`) behind
+`coverage.dependencies`'s summary counters, validated by its own
+`validate_dependency_snapshot.py` (not a `validate_result.py` `kind`). See
+`lib/patterns/dependency-coherence.md`.
 
 ### fleet-membership-result.yaml (written by gh-fleet-membership-headless, F2)
 

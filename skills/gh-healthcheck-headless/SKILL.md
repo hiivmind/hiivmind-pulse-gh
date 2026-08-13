@@ -129,7 +129,40 @@ do not synthesize a healthy or unhealthy state.
 
 ## Phase 3: DISPATCH + APPLY DISMISSALS
 
-Invoke the F3 engine exactly once over the prepared F0/F1 inputs:
+### Dependency coherence (F4)
+
+When any selected repository's resolved scorecard contains
+`python_manifest_lock_consistency`, `node_manifest_lock_consistency`, or
+`fleet_dependency_coherence`, materialize dependency evidence before dispatch.
+Resolve the selected repository list from `dependency_pipeline.dependency_selected_repos`,
+then invoke the materialize CLI directly — never `nave_adapter.py materialize`
+(its own terminal-facing output is deliberately content-free, so it cannot
+carry artifact `content` through) and never `nave_adapter.py materialize --json`
+(no such flag exists on that subcommand):
+
+```bash
+DEPENDENCY_EVIDENCE_JSON=$(
+  uv run "${PLUGIN_ROOT}/lib/pulse/scripts/dependency_pipeline.py" \
+    --repos "$DEPENDENCY_SELECTED_REPOS"
+)
+```
+
+This one call performs `build_request` → `nave_adapter.materialize` →
+`dependency_evidence.normalize` → `validate_dependency_evidence.validate` →
+`dependency_evidence.write_evidence` under a run-scoped `0700` temp directory
+(`dependency_evidence.secure_run_dir`), and prints **only the resulting file
+path** to stdout — the normalized document carries raw file content and must
+never otherwise reach a terminal, log, or this skill's own working state.
+`$DEPENDENCY_SELECTED_REPOS` is a comma-separated `owner/name` list.
+
+Missing protocol-2 capability, or a materialize/validation failure, writes the
+per-check `unsupported` coverage F4's adapters already handle — it does not
+ABORT the run; every other healthcheck continues unaffected. Delete
+`$DEPENDENCY_EVIDENCE_JSON` once the snapshot below is written.
+
+If `CONFIG_DIR/dependencies.yaml` exists, pass it as the coherence policy.
+Invoke the F3 engine exactly once over the prepared F0/F1 inputs, plus the F4
+inputs when applicable:
 
 ```bash
 uv run "${PLUGIN_ROOT}/lib/pulse/scripts/healthcheck_dispatch.py" \
@@ -137,7 +170,25 @@ uv run "${PLUGIN_ROOT}/lib/pulse/scripts/healthcheck_dispatch.py" \
   --profiles "$PREPARED_PROFILES" \
   --workspace "$workspace_path" \
   --dismissals "$DISMISSALS" \
-  --as-of "$RUN_AT" > "$DISPATCH_JSON"
+  --as-of "$RUN_AT" \
+  --dependency-evidence "$DEPENDENCY_EVIDENCE_JSON" \
+  --dependency-policy "$CONFIG_DIR/dependencies.yaml" \
+  --dependency-snapshot-out "$DEPS_SNAPSHOT_JSON" > "$DISPATCH_JSON"
+```
+
+Omit `--dependency-evidence`/`--dependency-policy`/`--dependency-snapshot-out`
+together when no selected scorecard needs F4 at all (skip materialization
+entirely in that case). Omit `--dependency-policy` alone when
+`dependencies.yaml` does not exist — `fleet_dependency_coherence` still
+finalizes to a stable `missing_policy` block plus a run error, per
+`lib/patterns/dependency-coherence.md`; it is never left as an undismissed
+placeholder. `$DEPS_SNAPSHOT_JSON` is the content-free, gitignored
+`deps-snapshot.json` — validate it, then delete both it and
+`$DEPENDENCY_EVIDENCE_JSON`:
+
+```bash
+uv run "${PLUGIN_ROOT}/lib/pulse/scripts/validate_dependency_snapshot.py" \
+  "$DEPS_SNAPSHOT_JSON"
 ```
 
 Omit `--dismissals` when the governance record does not yet exist. Dispatch resolves
@@ -255,6 +306,14 @@ coverage:
   checks_supported: 0
   unsupported_by_adapter: {}
   unprofiled_repos: []
+  dependencies:
+    repositories_selected: 0
+    repositories_grouped: 0
+    repositories_ungrouped: 0
+    groups_with_insufficient_members: []
+    packages_matched: 0
+    packages_unmatched: 0
+    unsupported_by_adapter: {}
 errors: [<reason>, ...]
 ```
 
@@ -263,4 +322,6 @@ errors: [<reason>, ...]
 - `lib/patterns/nave-evidence-contract.md` — F0 evidence
 - `lib/patterns/repository-profiles.md` — F1 profiles and scorecards
 - `lib/patterns/headless-contract.md` — result schema
-- `lib/pulse/scripts/healthcheck_dispatch.py` — deterministic F3 dispatch/scoring
+- `lib/patterns/dependency-coherence.md` — F4 coherence policy and evidence-state lattice
+- `lib/patterns/dependency-evidence-contract.md` — F4 transient materialize contract
+- `lib/pulse/scripts/healthcheck_dispatch.py` — deterministic F3/F4 dispatch/scoring

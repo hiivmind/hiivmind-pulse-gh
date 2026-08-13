@@ -1,0 +1,6 @@
+[project]
+name = "acme-platform-split"
+version = "0.1.0"
+dependencies = [
+    "foo>=1.0",
+]

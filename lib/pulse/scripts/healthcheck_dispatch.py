@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["pyyaml>=6.0"]
+# dependencies = ["pyyaml>=6.0", "packaging>=24.0", "semantic-version>=2.10", "tomli>=2.0; python_version<'3.11'"]
 # ///
 """Evaluate a heterogeneous F0 fleet through authoritative scorecards."""
 
@@ -23,6 +23,29 @@ if __package__ in {None, ""}:
 
 from lib.pulse.scripts.adapters import register_universal_adapters
 from lib.pulse.scripts.check_adapters import AdapterRegistry, CheckContext
+from lib.pulse.scripts.dependencies import (
+    DependencyPolicy,
+    DependencyRepoEvaluation,
+    DivergenceReport,
+    RepositoryEvaluationSummary,
+    compare,
+    reconcile_coverage,
+)
+from lib.pulse.scripts import dependency_evidence as dependency_evidence_module
+from lib.pulse.scripts import dependency_snapshot
+from lib.pulse.scripts import validate_dependency_evidence
+from lib.pulse.scripts.dependency_evidence import RepoEvidence
+from lib.pulse.scripts.dependency_policy import DependencyPolicyError, load_dependency_policy
+from lib.pulse.scripts.dependency_pipeline import (
+    FLEET_COHERENCE_CHECK_ID,
+    build_fleet_coherence_block,
+    build_fleet_missing_policy_block,
+    build_repository_evaluation_summary,
+    dependency_coverage_to_dict,
+    dependency_selected_repos,
+    evaluate_dependencies,
+    fleet_coherence_selected_repos,
+)
 from lib.pulse.scripts.evaluate_checks import (
     aggregate_by_scorecard,
     fleet_coverage,
@@ -176,38 +199,53 @@ def _json_native(value: Any, *, path: str = "dismissal metadata") -> Any:
     )
 
 
+def _apply_single_dismissal(
+    checks: dict[str, dict[str, Any]],
+    check_id: str,
+    dismissal: dict[str, Any],
+    scope: str,
+    as_of: date,
+) -> None:
+    """Apply one check's dismissal in place, if not yet due for review."""
+    if check_id not in checks:
+        return
+    review_after = _review_after_date(
+        dismissal.get("review_after"), scope=scope, check_id=check_id
+    )
+    if review_after is not None and as_of >= review_after:
+        return
+    reason = dismissal.get("reason", "")
+    checks[check_id] = {
+        **checks[check_id],
+        "status": "not_applicable",
+        "detail": f"Dismissed: {reason}",
+        "data": {
+            "dismissed": True,
+            "dismissal": _json_native(
+                dismissal, path=f"dismissals.{scope}.{check_id}"
+            ),
+            "evidence": {
+                "paths": [],
+                "refs": [f"dismissals:{scope}:{check_id}"],
+            },
+        },
+    }
+
+
 def _apply_dismissals(
     repo: str,
     checks: dict[str, dict[str, Any]],
     dismissals: Mapping[str, Any],
     as_of: date,
+    *,
+    skip_check_ids: frozenset[str] = frozenset(),
 ) -> None:
     for check_id, (dismissal, scope) in _repo_dismissals(
         repo, dismissals
     ).items():
-        if check_id not in checks:
+        if check_id in skip_check_ids:
             continue
-        review_after = _review_after_date(
-            dismissal.get("review_after"), scope=scope, check_id=check_id
-        )
-        if review_after is not None and as_of >= review_after:
-            continue
-        reason = dismissal.get("reason", "")
-        checks[check_id] = {
-            **checks[check_id],
-            "status": "not_applicable",
-            "detail": f"Dismissed: {reason}",
-            "data": {
-                "dismissed": True,
-                "dismissal": _json_native(
-                    dismissal, path=f"dismissals.{scope}.{check_id}"
-                ),
-                "evidence": {
-                    "paths": [],
-                    "refs": [f"dismissals:{scope}:{check_id}"],
-                },
-            },
-        }
+        _apply_single_dismissal(checks, check_id, dismissal, scope, as_of)
 
 
 def _repo_result(
@@ -235,7 +273,9 @@ def _repo_result(
             block = registry.evaluate(planned.adapter, context)
         checks[check_id] = block
 
-    _apply_dismissals(repo, checks, dismissals, as_of)
+    _apply_dismissals(
+        repo, checks, dismissals, as_of, skip_check_ids=frozenset({FLEET_COHERENCE_CHECK_ID})
+    )
     summary = score_checks(checks)
     return {
         "repo": repo,
@@ -321,6 +361,9 @@ def evaluate_fleet(
     dismissals_path: str | Path | None = None,
     as_of: str | date | datetime | None = None,
     gh_api: Any | None = None,
+    dependency_evidence: Mapping[str, RepoEvidence] | None = None,
+    dependency_policy: DependencyPolicy | None = None,
+    dependency_collector: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Dispatch and evaluate profiled repositories from one F0 fleet snapshot.
 
@@ -329,6 +372,13 @@ def evaluate_fleet(
     is collected and attached **only** to those opted-in repo entries, and only
     when ``gh_api`` is provided and ``file_contents`` is not already present.
     Neutral repos never gain ``file_contents``.
+
+    ``dependency_collector``, if provided, is populated (as a side effect,
+    before returning) with keys "records", "groups", "report", and
+    "repository_evaluations" — the exact typed objects this call used
+    internally to build the durable ``coverage["dependencies"]``. This is an
+    ADDITIVE, purely-optional out-param: every existing caller passing
+    ``dependency_collector=None`` (the default) sees zero behavior change.
     """
     if not isinstance(evidence, Mapping):
         raise ConfigError("evidence must be a mapping")
@@ -349,8 +399,26 @@ def evaluate_fleet(
 
     workspace_path = Path(workspace)
 
+    groups = dependency_policy.groups if dependency_policy is not None else ()
+
+    # --- Step 1: pre-dispatch dependency evaluation, exactly once per
+    # (repo, ecosystem), before any per-repo dispatch or dismissal logic. ---
+    dependency_evaluations_by_repo: dict[str, dict[str, DependencyRepoEvaluation]] = {}
+    all_evaluations: list[DependencyRepoEvaluation] = []
+    all_summaries: list[RepositoryEvaluationSummary] = []
+    for repo, ecosystems in dependency_selected_repos(config).items():
+        for ecosystem in sorted(ecosystems):
+            repo_evidence = (
+                dependency_evidence.get(repo) if dependency_evidence is not None else None
+            )
+            evaluation = evaluate_dependencies(repo, ecosystem, repo_evidence)
+            dependency_evaluations_by_repo.setdefault(repo, {})[ecosystem] = evaluation
+            all_evaluations.append(evaluation)
+            all_summaries.append(build_repository_evaluation_summary(evaluation, groups))
+
     profiled = sorted(config.repositories)
     unprofiled = sorted(set(evidence_by_repo) - set(config.repositories))
+    fleet_repos = fleet_coherence_selected_repos(config)
     repos = []
     for repo in profiled:
         entry = evidence_by_repo.get(repo, {"repo": repo})
@@ -360,6 +428,9 @@ def evaluate_fleet(
             # Shallow copy so pre-attached fixture content is usable without
             # sharing mutable state with the caller.
             entry = dict(entry)
+        else:
+            entry = dict(entry)
+        entry["dependency_evaluations"] = dependency_evaluations_by_repo.get(repo, {})
         repos.append(
             _repo_result(
                 repo,
@@ -372,16 +443,75 @@ def evaluate_fleet(
             )
         )
 
+    # --- Steps 3-4: the fleet pass — one compare() call for the whole run,
+    # replacing every selected repo's placeholder in place, then rescoring. ---
+    errors: list[str] = []
+    report = DivergenceReport(findings=(), unresolved=())
+    if fleet_repos:
+        if dependency_policy is None:
+            errors.append("dependencies.yaml missing: fleet_dependency_coherence unresolved")
+        else:
+            records = tuple(
+                record for evaluation in all_evaluations for record in evaluation.records
+            )
+            report = compare(records, groups)
+
+    repos_by_name = {repo_dict["repo"]: repo_dict for repo_dict in repos}
+    for repo in fleet_repos:
+        repo_dict = repos_by_name.get(repo)
+        if repo_dict is None:
+            continue
+        checks = repo_dict["checks"]
+        placeholder = checks.get(FLEET_COHERENCE_CHECK_ID)
+        if placeholder is None or placeholder.get("adapter") != "fleet.dependencies.coherence":
+            raise ConfigError(
+                f"{repo}: missing or mismatched fleet_dependency_coherence placeholder"
+            )
+        weight = placeholder["weight"]
+        if dependency_policy is None:
+            block = build_fleet_missing_policy_block(weight)
+        else:
+            block = build_fleet_coherence_block(repo, weight, report, groups)
+        checks[FLEET_COHERENCE_CHECK_ID] = block
+
+        dismissal_entry = _repo_dismissals(repo, dismissals).get(FLEET_COHERENCE_CHECK_ID)
+        if dismissal_entry is not None:
+            dismissal, scope = dismissal_entry
+            _apply_single_dismissal(
+                checks, FLEET_COHERENCE_CHECK_ID, dismissal, scope, as_of_date
+            )
+
+        summary = score_checks(checks)
+        repo_dict["score"] = summary.score
+        repo_dict["total"] = summary.total
+        repo_dict["grade"] = summary.grade
+        repo_dict["coverage_supported"] = summary.coverage_supported
+        repo_dict["coverage_total"] = summary.coverage_total
+
     by_scorecard = aggregate_by_scorecard(repos)
     coverage = fleet_coverage(repos)
-    return {
+
+    dependency_coverage = reconcile_coverage(all_summaries, groups)
+    if dependency_collector is not None:
+        dependency_collector["records"] = tuple(
+            record for evaluation in all_evaluations for record in evaluation.records
+        )
+        dependency_collector["groups"] = groups
+        dependency_collector["report"] = report
+        dependency_collector["repository_evaluations"] = tuple(all_summaries)
+
+    result = {
         "repos": repos,
         "aggregate": {"by_scorecard": by_scorecard},
         "coverage": {
             **coverage,
             "unprofiled_repos": unprofiled,
+            "dependencies": dependency_coverage_to_dict(dependency_coverage),
         },
     }
+    if errors:
+        result["errors"] = errors
+    return result
 
 
 def _load_evidence(path: Path) -> Mapping[str, Any]:
@@ -413,6 +543,26 @@ def main(argv: list[str] | None = None) -> int:
             "attaches content (or passes this flag) for live overlay audits."
         ),
     )
+    parser.add_argument(
+        "--dependency-evidence",
+        help=(
+            "Path to an already-validated normalized dependency-evidence.json "
+            "document (see lib/patterns/dependency-evidence-contract.md). "
+            "Re-validated here before loading — never trusted unchecked."
+        ),
+    )
+    parser.add_argument(
+        "--dependency-policy",
+        help="Path to the committed .hiivmind/github/dependencies.yaml coherence policy.",
+    )
+    parser.add_argument(
+        "--dependency-snapshot-out",
+        help=(
+            "Path to write the content-free deps-snapshot.json envelope. Requires "
+            "--dependency-evidence (its request_sha256/generated_at anchor the "
+            "snapshot); silently skipped otherwise."
+        ),
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -421,6 +571,36 @@ def main(argv: list[str] | None = None) -> int:
             from lib.pulse.scripts.overlay_content import default_gh_api
 
             gh_api = default_gh_api
+
+        dependency_evidence_doc: dict[str, Any] | None = None
+        dependency_evidence: dict[str, RepoEvidence] | None = None
+        if args.dependency_evidence:
+            try:
+                dependency_evidence_doc = json.loads(
+                    Path(args.dependency_evidence).read_text(encoding="utf-8")
+                )
+            except (OSError, json.JSONDecodeError) as exc:
+                raise ConfigError(f"could not load dependency evidence: {exc}") from exc
+            evidence_errors = validate_dependency_evidence.validate(dependency_evidence_doc)
+            if evidence_errors:
+                raise ConfigError(
+                    "dependency evidence failed validation: " + "; ".join(evidence_errors)
+                )
+            dependency_evidence = dependency_evidence_module.load_dependency_evidence(
+                dependency_evidence_doc
+            )
+
+        dependency_policy = None
+        if args.dependency_policy:
+            try:
+                dependency_policy = load_dependency_policy(args.dependency_policy)
+            except DependencyPolicyError as exc:
+                raise ConfigError(f"could not load dependency policy: {exc}") from exc
+
+        dependency_collector: dict[str, Any] | None = (
+            {} if args.dependency_snapshot_out else None
+        )
+
         result = evaluate_fleet(
             evidence=_load_evidence(Path(args.evidence)),
             profiles_path=args.profiles,
@@ -428,7 +608,27 @@ def main(argv: list[str] | None = None) -> int:
             dismissals_path=args.dismissals,
             as_of=args.as_of,
             gh_api=gh_api,
+            dependency_evidence=dependency_evidence,
+            dependency_policy=dependency_policy,
+            dependency_collector=dependency_collector,
         )
+
+        if args.dependency_snapshot_out and dependency_collector is not None:
+            if dependency_evidence_doc is None:
+                raise ConfigError(
+                    "--dependency-snapshot-out requires --dependency-evidence"
+                )
+            document = dependency_snapshot.build_document(
+                contract_version=1,
+                generated_at=dependency_evidence_doc["generated_at"],
+                request_sha256=dependency_evidence_doc["request_sha256"],
+                collector=dependency_collector,
+                errors=tuple(result.get("errors", [])),
+            )
+            snapshot_path = Path(args.dependency_snapshot_out)
+            snapshot_path.write_text(
+                json.dumps(dependency_snapshot.serialize(document), indent=2, sort_keys=True)
+            )
     except ConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
