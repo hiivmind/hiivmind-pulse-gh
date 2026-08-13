@@ -1,0 +1,1 @@
+{"protocol_version":1,"adapter_state":"ok","repos":[{"repo":"acme/widget","remote":"origin","remote_ref":"refs/heads/pulse/apply/p1","remote_sha":"cccccccccccccccccccccccccccccccccccccccc","upstream":"origin/pulse/apply/p1","local_commit_sha":"cccccccccccccccccccccccccccccccccccccccc","state":"ok"}]}

@@ -1,7 +1,6 @@
 """Tests for the external Nave CLI adapter."""
 
 import json
-import subprocess
 from pathlib import Path
 
 from lib.pulse.scripts import nave_adapter
@@ -676,189 +675,634 @@ def test_cli_pen_show_and_status_use_fixtures(monkeypatch, capsys):
     assert json.loads(capsys.readouterr().out)["repos"][0]["owner"] == "acme"
 
 
-def _init_git_repo_for_adapter(path: Path) -> str:
-    path.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["git", "init"], cwd=path, check=True, capture_output=True)
-    subprocess.run(["git", "config", "user.name", "Test User"], cwd=path, check=True, capture_output=True)
-    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=path, check=True, capture_output=True)
-    (path / "init.txt").write_text("initial content\n")
-    subprocess.run(["git", "add", "init.txt"], cwd=path, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "-m", "initial commit"], cwd=path, check=True, capture_output=True)
-    res = subprocess.run(["git", "rev-parse", "HEAD"], cwd=path, check=True, capture_output=True, text=True)
-    return res.stdout.strip()
+# --- apply verbs ---
+#
+# Contract: `docs/superpowers/specs/2026-08-13-apply-verb-contract-handoff.md`
+# in `discreteds/nave` (PR #2) is authoritative for wire shapes; this repo's
+# own plan table (`docs/superpowers/plans/2026-07-30-apply-mode-pulse-wiring.md`
+# Task 1) predates that implementation and is superseded where the two disagree.
+
+APPLY_FIXTURES = Path("lib/pulse/scripts/tests/fixtures/nave_apply")
 
 
-def test_provision_apply_branch_success(tmp_path):
-    repo_path = tmp_path / "acme" / "widget"
-    base_sha = _init_git_repo_for_adapter(repo_path)
+class RequestFileRunner:
+    """Fake runner that captures the JSON body of any `--request <file>` arg.
 
-    branch_name = "pulse/apply/prop-100"
-    results = nave_adapter.provision_apply_branch(
-        clone_paths={"acme/widget": repo_path},
-        branch=branch_name,
-        base_shas={"acme/widget": base_sha},
+    `pen branch`/`commit`/`push`/`reset` always write their request envelope
+    to a temp file the adapter creates and deletes around the call -- a plain
+    `RecordingRunner` can observe the argv shape but the file is gone by the
+    time the test inspects it, so this fake reads it back while `run()` is
+    still on the stack.
+    """
+
+    def __init__(self, results):
+        self.calls = []
+        self.request_bodies = []
+        self._results = list(results)
+
+    def run(self, args):
+        self.calls.append(list(args))
+        if "--request" in args:
+            request_path = Path(args[args.index("--request") + 1])
+            self.request_bodies.append(json.loads(request_path.read_text()))
+        else:
+            self.request_bodies.append(None)
+        return self._results.pop(0)
+
+
+def _json_ok(payload: dict) -> nave_adapter.Completed:
+    return nave_adapter.Completed(0, json.dumps(payload), "")
+
+
+def _json_result(payload: dict, returncode: int, stderr: str = "") -> nave_adapter.Completed:
+    return nave_adapter.Completed(returncode, json.dumps(payload), stderr)
+
+
+def test_trio_is_deleted():
+    """The raw-git trio is fully replaced by the Nave apply verbs (F11 consolidation note)."""
+    for name in ("provision_apply_branch", "commit_apply_clones", "push_apply_clones"):
+        assert not hasattr(nave_adapter, name)
+
+
+# --- pen capabilities ---
+
+
+def test_pen_capabilities_happy_path_reports_ok():
+    payload = {"protocol_version": 1, "verbs": ["branch", "commit", "push", "reset"], "adapter_state": "ok"}
+    runner = RecordingRunner(_json_ok(payload))
+
+    result = nave_adapter.pen_capabilities(runner)
+
+    assert runner.calls == [["pen", "capabilities", "--json"]]
+    assert result == {
+        "protocol_version": 1,
+        "verbs": ["branch", "commit", "push", "reset"],
+        "adapter_state": "ok",
+        "reason": None,
+    }
+
+
+def test_pen_capabilities_superset_of_required_verbs_still_ok():
+    payload = {
+        "protocol_version": 1,
+        "verbs": ["branch", "commit", "push", "reset", "future-verb"],
+        "adapter_state": "ok",
+    }
+    runner = RecordingRunner(_json_ok(payload))
+
+    assert nave_adapter.pen_capabilities(runner)["adapter_state"] == "ok"
+
+
+def test_pen_capabilities_stale_binary_missing_subcommand_is_error():
+    # clap's "unrecognized subcommand" -> nonzero exit, no JSON on stdout.
+    runner = RecordingRunner(
+        nave_adapter.Completed(2, "", "error: unrecognized subcommand 'capabilities'")
     )
 
-    assert results == {"acme/widget": {"state": "ok"}}
+    result = nave_adapter.pen_capabilities(runner)
 
-    # Verify symbolic ref (current branch) and commit SHA
-    branch_ref = subprocess.run(
-        ["git", "symbolic-ref", "--short", "HEAD"],
-        cwd=repo_path,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    assert branch_ref == branch_name
-
-    current_sha = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=repo_path,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    assert current_sha == base_sha
+    assert result["adapter_state"] == "error"
+    assert result["verbs"] == []
 
 
-def test_provision_apply_branch_already_exists(tmp_path):
-    repo_path = tmp_path / "acme" / "widget"
-    base_sha = _init_git_repo_for_adapter(repo_path)
-    branch_name = "pulse/apply/prop-100"
+def test_pen_capabilities_wrong_protocol_version_is_error():
+    payload = {"protocol_version": 2, "verbs": ["branch", "commit", "push", "reset"], "adapter_state": "ok"}
+    runner = RecordingRunner(_json_ok(payload))
 
-    # Provision first time
-    nave_adapter.provision_apply_branch(
-        clone_paths={"acme/widget": repo_path},
-        branch=branch_name,
-        base_shas={"acme/widget": base_sha},
+    result = nave_adapter.pen_capabilities(runner)
+
+    assert result["adapter_state"] == "error"
+    assert "protocol_version" in result["reason"]
+
+
+def test_pen_capabilities_missing_required_verb_is_error():
+    payload = {"protocol_version": 1, "verbs": ["branch", "commit", "push"], "adapter_state": "ok"}
+    runner = RecordingRunner(_json_ok(payload))
+
+    result = nave_adapter.pen_capabilities(runner)
+
+    assert result["adapter_state"] == "error"
+    assert "reset" in result["reason"]
+
+
+def test_fixture_pen_capabilities_decodes_json():
+    runner = nave_adapter.NaveRunner(fixtures=APPLY_FIXTURES)
+
+    result = nave_adapter.pen_capabilities(runner)
+
+    assert result["adapter_state"] == "ok"
+    assert set(nave_adapter.APPLY_VERBS) <= set(result["verbs"])
+
+
+# --- pen branch ---
+
+
+def _branch_repo_result(
+    repo="acme/docs",
+    *,
+    base_ref="develop",
+    expected_base_sha="a" * 40,
+    observed_base_sha="a" * 40,
+    apply_ref="pulse/apply/p1",
+    state="ok",
+    **extra,
+):
+    entry = {
+        "repo": repo,
+        "base_ref": base_ref,
+        "expected_base_sha": expected_base_sha,
+        "observed_base_sha": observed_base_sha,
+        "apply_ref": apply_ref,
+        "state": state,
+    }
+    entry.update(extra)
+    return entry
+
+
+_BRANCH_REQUEST = [{"repo": "acme/docs", "base_ref": "develop", "expected_base_sha": "a" * 40}]
+
+
+def test_pen_branch_happy_path_writes_versioned_request_file():
+    payload = {"protocol_version": 1, "adapter_state": "ok", "repos": [_branch_repo_result()]}
+    runner = RequestFileRunner([_json_ok(payload)])
+
+    result = nave_adapter.pen_branch(runner, "pen1", "pulse/apply/p1", _BRANCH_REQUEST)
+
+    assert result["adapter_state"] == "ok"
+    assert result["repos"][0]["repo"] == "acme/docs"
+    call = runner.calls[0]
+    assert call[:3] == ["pen", "branch", "pen1"]
+    assert "--request" in call
+    assert call[-1] == "--json"
+    assert runner.request_bodies[0] == {
+        "protocol_version": 1,
+        "apply_ref": "pulse/apply/p1",
+        "repos": _BRANCH_REQUEST,
+    }
+
+
+def test_pen_branch_rejects_missing_required_field():
+    entry = _branch_repo_result()
+    del entry["observed_base_sha"]
+    payload = {"protocol_version": 1, "adapter_state": "ok", "repos": [entry]}
+    runner = RequestFileRunner([_json_ok(payload)])
+
+    result = nave_adapter.pen_branch(runner, "pen1", "pulse/apply/p1", _BRANCH_REQUEST)
+
+    assert result["adapter_state"] == "error"
+    assert "observed_base_sha" in result["reason"]
+    assert result["repos"] == []
+
+
+def test_pen_branch_rejects_invalid_state_value():
+    payload = {
+        "protocol_version": 1,
+        "adapter_state": "ok",
+        "repos": [_branch_repo_result(state="not-a-real-state")],
+    }
+    runner = RequestFileRunner([_json_ok(payload)])
+
+    result = nave_adapter.pen_branch(runner, "pen1", "pulse/apply/p1", _BRANCH_REQUEST)
+
+    assert result["adapter_state"] == "error"
+    assert "state" in result["reason"].lower()
+
+
+def test_pen_branch_rejects_wrong_protocol_version():
+    payload = {"protocol_version": 2, "adapter_state": "ok", "repos": [_branch_repo_result()]}
+    runner = RequestFileRunner([_json_ok(payload)])
+
+    result = nave_adapter.pen_branch(runner, "pen1", "pulse/apply/p1", _BRANCH_REQUEST)
+
+    assert result["adapter_state"] == "error"
+    assert "protocol_version" in result["reason"]
+
+
+def test_pen_branch_rejects_absent_adapter_state():
+    payload = {"protocol_version": 1, "repos": []}
+    runner = RequestFileRunner([_json_ok(payload)])
+
+    result = nave_adapter.pen_branch(runner, "pen1", "pulse/apply/p1", _BRANCH_REQUEST)
+
+    assert result["adapter_state"] == "error"
+    assert "adapter_state" in result["reason"]
+
+
+def test_pen_branch_rejects_missing_repo_in_response():
+    payload = {"protocol_version": 1, "adapter_state": "ok", "repos": []}
+    runner = RequestFileRunner([_json_ok(payload)])
+
+    result = nave_adapter.pen_branch(runner, "pen1", "pulse/apply/p1", _BRANCH_REQUEST)
+
+    assert result["adapter_state"] == "error"
+    assert "acme/docs" in result["reason"]
+
+
+def test_pen_branch_rejects_extra_repo_in_response():
+    payload = {
+        "protocol_version": 1,
+        "adapter_state": "ok",
+        "repos": [_branch_repo_result(), _branch_repo_result(repo="acme/extra")],
+    }
+    runner = RequestFileRunner([_json_ok(payload)])
+
+    result = nave_adapter.pen_branch(runner, "pen1", "pulse/apply/p1", _BRANCH_REQUEST)
+
+    assert result["adapter_state"] == "error"
+    assert "acme/extra" in result["reason"]
+
+
+def test_pen_branch_rejects_duplicate_repo_in_response():
+    payload = {
+        "protocol_version": 1,
+        "adapter_state": "ok",
+        "repos": [_branch_repo_result(), _branch_repo_result()],
+    }
+    runner = RequestFileRunner([_json_ok(payload)])
+
+    result = nave_adapter.pen_branch(runner, "pen1", "pulse/apply/p1", _BRANCH_REQUEST)
+
+    assert result["adapter_state"] == "error"
+    assert "duplicate" in result["reason"].lower()
+
+
+def test_pen_branch_rejects_echoed_expected_base_sha_mismatch():
+    payload = {
+        "protocol_version": 1,
+        "adapter_state": "ok",
+        "repos": [_branch_repo_result(expected_base_sha="f" * 40)],
+    }
+    runner = RequestFileRunner([_json_ok(payload)])
+
+    result = nave_adapter.pen_branch(runner, "pen1", "pulse/apply/p1", _BRANCH_REQUEST)
+
+    assert result["adapter_state"] == "error"
+    assert "expected_base_sha" in result["reason"]
+
+
+def test_pen_branch_rejects_echoed_base_ref_mismatch():
+    payload = {"protocol_version": 1, "adapter_state": "ok", "repos": [_branch_repo_result(base_ref="main")]}
+    runner = RequestFileRunner([_json_ok(payload)])
+
+    result = nave_adapter.pen_branch(runner, "pen1", "pulse/apply/p1", _BRANCH_REQUEST)
+
+    assert result["adapter_state"] == "error"
+    assert "base_ref" in result["reason"]
+
+
+def test_pen_branch_rejects_echoed_apply_ref_mismatch():
+    payload = {
+        "protocol_version": 1,
+        "adapter_state": "ok",
+        "repos": [_branch_repo_result(apply_ref="pulse/apply/wrong")],
+    }
+    runner = RequestFileRunner([_json_ok(payload)])
+
+    result = nave_adapter.pen_branch(runner, "pen1", "pulse/apply/p1", _BRANCH_REQUEST)
+
+    assert result["adapter_state"] == "error"
+    assert "apply_ref" in result["reason"]
+
+
+def test_pen_branch_surfaces_nonzero_returncode_with_valid_partial_failure_json():
+    # A stale base fails the CLI's own exit code, but stdout is still a
+    # valid, fully-shaped result envelope -- decode it, don't hard-error.
+    payload = {
+        "protocol_version": 1,
+        "adapter_state": "ok",
+        "repos": [_branch_repo_result(state="stale-base", observed_base_sha="b" * 40)],
+    }
+    runner = RequestFileRunner([_json_result(payload, returncode=1)])
+
+    result = nave_adapter.pen_branch(runner, "pen1", "pulse/apply/p1", _BRANCH_REQUEST)
+
+    assert result["adapter_state"] == "ok"
+    assert result["repos"][0]["state"] == "stale-base"
+
+
+def test_pen_branch_rejects_malformed_json():
+    runner = RequestFileRunner([nave_adapter.Completed(1, "not json", "boom")])
+
+    result = nave_adapter.pen_branch(runner, "pen1", "pulse/apply/p1", _BRANCH_REQUEST)
+
+    assert result["adapter_state"] == "error"
+
+
+def test_pen_branch_error_envelope_reason_is_top_level_never_scanned_from_repos():
+    payload = {"protocol_version": 1, "adapter_state": "error", "reason": "invalid ref name", "repos": []}
+    runner = RequestFileRunner([_json_ok(payload)])
+
+    result = nave_adapter.pen_branch(runner, "pen1", "pulse/apply/p1", _BRANCH_REQUEST)
+
+    assert result == {"protocol_version": 1, "adapter_state": "error", "reason": "invalid ref name", "repos": []}
+
+
+def test_fixture_pen_branch_decodes_json():
+    runner = nave_adapter.NaveRunner(fixtures=APPLY_FIXTURES)
+
+    result = nave_adapter.pen_branch(
+        runner, "pen1", "pulse/apply/p1", [{"repo": "acme/widget", "base_ref": "develop", "expected_base_sha": "a" * 40}]
     )
 
-    # Provision second time -> failure
-    results = nave_adapter.provision_apply_branch(
-        clone_paths={"acme/widget": repo_path},
-        branch=branch_name,
-        base_shas={"acme/widget": base_sha},
+    assert result["adapter_state"] == "ok"
+    assert result["repos"][0]["repo"] == "acme/widget"
+
+
+# --- pen commit ---
+
+
+_COMMIT_REQUEST = [{"repo": "acme/docs", "paths": ["docs/foo.md"]}]
+
+
+def test_pen_commit_happy_path_argv_has_branch_positional_and_message_flag():
+    payload = {
+        "protocol_version": 1,
+        "adapter_state": "ok",
+        "repos": [{"repo": "acme/docs", "local_commit_sha": "c" * 40, "state": "ok"}],
+    }
+    runner = RequestFileRunner([_json_ok(payload)])
+
+    result = nave_adapter.pen_commit(
+        runner, "pen1", "pulse/apply/p1", _COMMIT_REQUEST, "chore: bump lockfile"
     )
 
-    assert results["acme/widget"]["state"] == "failed"
-    assert "already exists" in results["acme/widget"]["reason"]
+    assert result["adapter_state"] == "ok"
+    call = runner.calls[0]
+    assert call[:4] == ["pen", "commit", "pen1", "pulse/apply/p1"]
+    assert "-m" in call
+    assert call[call.index("-m") + 1] == "chore: bump lockfile"
+    assert runner.request_bodies[0] == {"protocol_version": 1, "repos": _COMMIT_REQUEST}
 
 
-def test_provision_apply_branch_missing_base_sha(tmp_path):
-    repo_path = tmp_path / "acme" / "widget"
-    _init_git_repo_for_adapter(repo_path)
+def test_pen_commit_request_body_omits_expected_base_sha_and_message():
+    # `pen branch`'s server-side sidecar owns `expected_base_sha`; `message`
+    # is the separate `-m` flag. Neither belongs in the request body.
+    payload = {
+        "protocol_version": 1,
+        "adapter_state": "ok",
+        "repos": [{"repo": "acme/docs", "local_commit_sha": "c" * 40, "state": "ok"}],
+    }
+    runner = RequestFileRunner([_json_ok(payload)])
 
-    results = nave_adapter.provision_apply_branch(
-        clone_paths={"acme/widget": repo_path},
-        branch="pulse/apply/prop-100",
-        base_shas={},
+    nave_adapter.pen_commit(runner, "pen1", "pulse/apply/p1", _COMMIT_REQUEST, "chore: bump lockfile")
+
+    body = runner.request_bodies[0]
+    assert "message" not in body
+    assert all("expected_base_sha" not in repo for repo in body["repos"])
+
+
+def test_pen_commit_rejects_invalid_state():
+    payload = {"protocol_version": 1, "adapter_state": "ok", "repos": [{"repo": "acme/docs", "state": "half-committed"}]}
+    runner = RequestFileRunner([_json_ok(payload)])
+
+    result = nave_adapter.pen_commit(runner, "pen1", "pulse/apply/p1", _COMMIT_REQUEST, "msg")
+
+    assert result["adapter_state"] == "error"
+
+
+def test_pen_commit_reports_nothing_to_commit_without_local_commit_sha():
+    payload = {
+        "protocol_version": 1,
+        "adapter_state": "ok",
+        "repos": [{"repo": "acme/docs", "state": "nothing-to-commit"}],
+    }
+    runner = RequestFileRunner([_json_ok(payload)])
+
+    result = nave_adapter.pen_commit(runner, "pen1", "pulse/apply/p1", _COMMIT_REQUEST, "msg")
+
+    assert result["adapter_state"] == "ok"
+    assert result["repos"][0]["state"] == "nothing-to-commit"
+    assert "local_commit_sha" not in result["repos"][0]
+
+
+def test_pen_commit_rejects_missing_repo_coverage():
+    payload = {"protocol_version": 1, "adapter_state": "ok", "repos": []}
+    runner = RequestFileRunner([_json_ok(payload)])
+
+    result = nave_adapter.pen_commit(runner, "pen1", "pulse/apply/p1", _COMMIT_REQUEST, "msg")
+
+    assert result["adapter_state"] == "error"
+    assert "acme/docs" in result["reason"]
+
+
+def test_fixture_pen_commit_decodes_json():
+    runner = nave_adapter.NaveRunner(fixtures=APPLY_FIXTURES)
+
+    result = nave_adapter.pen_commit(
+        runner, "pen1", "pulse/apply/p1", [{"repo": "acme/widget", "paths": ["docs/foo.md"]}], "msg"
     )
 
-    assert results["acme/widget"]["state"] == "failed"
-    assert "missing base SHA" in results["acme/widget"]["reason"]
+    assert result["adapter_state"] == "ok"
 
 
-def test_commit_apply_clones_success(tmp_path):
-    repo_path = tmp_path / "acme" / "widget"
-    base_sha = _init_git_repo_for_adapter(repo_path)
+# --- pen push ---
 
-    # Provision branch first
-    nave_adapter.provision_apply_branch(
-        clone_paths={"acme/widget": repo_path},
-        branch="pulse/apply/prop-100",
-        base_shas={"acme/widget": base_sha},
+
+def test_pen_push_happy_path_argv_has_branch_positional():
+    payload = {
+        "protocol_version": 1,
+        "adapter_state": "ok",
+        "repos": [
+            {
+                "repo": "acme/docs",
+                "remote": "origin",
+                "remote_ref": "refs/heads/pulse/apply/p1",
+                "remote_sha": "c" * 40,
+                "upstream": "origin/pulse/apply/p1",
+                "local_commit_sha": "c" * 40,
+                "state": "ok",
+            }
+        ],
+    }
+    request = [{"repo": "acme/docs"}]
+    runner = RequestFileRunner([_json_ok(payload)])
+
+    result = nave_adapter.pen_push(runner, "pen1", "pulse/apply/p1", request)
+
+    assert result["adapter_state"] == "ok"
+    call = runner.calls[0]
+    assert call[:4] == ["pen", "push", "pen1", "pulse/apply/p1"]
+    assert runner.request_bodies[0] == {"protocol_version": 1, "repos": request}
+
+
+def test_pen_push_rejects_invalid_state():
+    payload = {"protocol_version": 1, "adapter_state": "ok", "repos": [{"repo": "acme/docs", "state": "half-pushed"}]}
+    runner = RequestFileRunner([_json_ok(payload)])
+
+    result = nave_adapter.pen_push(runner, "pen1", "pulse/apply/p1", [{"repo": "acme/docs"}])
+
+    assert result["adapter_state"] == "error"
+
+
+def test_pen_push_coverage_is_authoritative_from_request_never_inferred_from_response():
+    # An empty response `repos` array must still be caught as missing
+    # coverage, never silently treated as "nothing requested."
+    payload = {"protocol_version": 1, "adapter_state": "ok", "repos": []}
+    runner = RequestFileRunner([_json_ok(payload)])
+    request = [{"repo": "acme/docs"}, {"repo": "acme/web"}]
+
+    result = nave_adapter.pen_push(runner, "pen1", "pulse/apply/p1", request)
+
+    assert result["adapter_state"] == "error"
+    assert "acme/docs" in result["reason"]
+    assert "acme/web" in result["reason"]
+
+
+def test_fixture_pen_push_decodes_json():
+    runner = nave_adapter.NaveRunner(fixtures=APPLY_FIXTURES)
+
+    result = nave_adapter.pen_push(runner, "pen1", "pulse/apply/p1", [{"repo": "acme/widget"}])
+
+    assert result["adapter_state"] == "ok"
+
+
+# --- pen reset ---
+
+
+def test_pen_reset_happy_path_reports_local_reset_and_remote_deleted():
+    payload = {
+        "protocol_version": 1,
+        "adapter_state": "ok",
+        "repos": [{"repo": "acme/docs", "local_reset": True, "remote_deleted": True, "state": "ok"}],
+    }
+    request = [{"repo": "acme/docs", "expected_pushed_sha": "c" * 40}]
+    runner = RequestFileRunner([_json_ok(payload)])
+
+    result = nave_adapter.pen_reset(runner, "pen1", "pulse/apply/p1", request)
+
+    assert result["adapter_state"] == "ok"
+    assert result["repos"][0] == {
+        "repo": "acme/docs",
+        "local_reset": True,
+        "remote_deleted": True,
+        "state": "ok",
+    }
+    call = runner.calls[0]
+    assert call[:4] == ["pen", "reset", "pen1", "pulse/apply/p1"]
+    assert runner.request_bodies[0] == {"protocol_version": 1, "repos": request}
+
+
+def test_pen_reset_omits_expected_pushed_sha_when_never_pushed():
+    payload = {
+        "protocol_version": 1,
+        "adapter_state": "ok",
+        "repos": [{"repo": "acme/docs", "local_reset": True, "remote_deleted": False, "state": "ok"}],
+    }
+    runner = RequestFileRunner([_json_ok(payload)])
+
+    result = nave_adapter.pen_reset(
+        runner, "pen1", "pulse/apply/p1", [{"repo": "acme/docs", "expected_pushed_sha": None}]
     )
 
-    # Make working tree change
-    (repo_path / "file.txt").write_text("change\n")
+    assert result["repos"][0]["remote_deleted"] is False
 
-    message = "pulse-apply prop-100 by octocat@laptop"
-    results = nave_adapter.commit_apply_clones(
-        clone_paths={"acme/widget": repo_path},
-        message=message,
+
+def test_pen_reset_rejects_missing_required_field():
+    payload = {
+        "protocol_version": 1,
+        "adapter_state": "ok",
+        "repos": [{"repo": "acme/docs", "local_reset": True, "state": "ok"}],
+    }
+    runner = RequestFileRunner([_json_ok(payload)])
+
+    result = nave_adapter.pen_reset(
+        runner, "pen1", "pulse/apply/p1", [{"repo": "acme/docs", "expected_pushed_sha": None}]
     )
 
-    assert results == {"acme/widget": {"state": "ok"}}
-
-    # Verify commit log
-    log = subprocess.run(
-        ["git", "log", "-1", "--pretty=%s"],
-        cwd=repo_path,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    assert log == message
+    assert result["adapter_state"] == "error"
+    assert "remote_deleted" in result["reason"]
 
 
-def test_commit_apply_clones_nothing_to_commit(tmp_path):
-    repo_path = tmp_path / "acme" / "widget"
-    _init_git_repo_for_adapter(repo_path)
+def test_pen_reset_rejects_invalid_state():
+    payload = {
+        "protocol_version": 1,
+        "adapter_state": "ok",
+        "repos": [{"repo": "acme/docs", "local_reset": True, "remote_deleted": True, "state": "half-reset"}],
+    }
+    runner = RequestFileRunner([_json_ok(payload)])
 
-    # Clean working tree -> nothing to commit
-    results = nave_adapter.commit_apply_clones(
-        clone_paths={"acme/widget": repo_path},
-        message="pulse-apply prop-100 by octocat@laptop",
+    result = nave_adapter.pen_reset(
+        runner, "pen1", "pulse/apply/p1", [{"repo": "acme/docs", "expected_pushed_sha": None}]
     )
 
-    assert results["acme/widget"]["state"] == "failed"
-    assert "nothing to commit" in results["acme/widget"]["reason"].lower()
+    assert result["adapter_state"] == "error"
 
 
-def test_push_apply_clones_success(tmp_path):
-    bare_remote = tmp_path / "remote.git"
-    subprocess.run(["git", "init", "--bare", str(bare_remote)], check=True, capture_output=True)
+def test_fixture_pen_reset_decodes_json():
+    runner = nave_adapter.NaveRunner(fixtures=APPLY_FIXTURES)
 
-    repo_path = tmp_path / "acme" / "widget"
-    base_sha = _init_git_repo_for_adapter(repo_path)
-    subprocess.run(
-        ["git", "remote", "add", "origin", str(bare_remote)],
-        cwd=repo_path,
-        check=True,
-        capture_output=True,
+    result = nave_adapter.pen_reset(
+        runner, "pen1", "pulse/apply/p1", [{"repo": "acme/widget", "expected_pushed_sha": None}]
     )
 
-    branch_name = "pulse/apply/prop-100"
-    nave_adapter.provision_apply_branch(
-        clone_paths={"acme/widget": repo_path},
-        branch=branch_name,
-        base_shas={"acme/widget": base_sha},
-    )
-    (repo_path / "file.txt").write_text("change\n")
-    nave_adapter.commit_apply_clones(
-        clone_paths={"acme/widget": repo_path},
-        message="pulse-apply prop-100 by octocat@laptop",
-    )
-
-    results = nave_adapter.push_apply_clones(
-        clone_paths={"acme/widget": repo_path},
-        branch=branch_name,
-    )
-
-    assert results == {"acme/widget": {"state": "ok"}}
-
-    # Verify branch exists on remote
-    remote_branches = subprocess.run(
-        ["git", "branch", "-a"],
-        cwd=repo_path,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
-    assert f"remotes/origin/{branch_name}" in remote_branches
+    assert result["adapter_state"] == "ok"
 
 
-def test_push_apply_clones_failure(tmp_path):
-    repo_path = tmp_path / "acme" / "widget"
-    _init_git_repo_for_adapter(repo_path)
+# --- CLI wiring (fixture-backed) ---
 
-    # No origin remote configured
-    results = nave_adapter.push_apply_clones(
-        clone_paths={"acme/widget": repo_path},
-        branch="pulse/apply/prop-100",
+
+def test_cli_pen_capabilities_uses_fixtures(monkeypatch, capsys):
+    monkeypatch.setenv("PULSE_NAVE_FIXTURES", str(APPLY_FIXTURES))
+
+    assert nave_adapter.main(["pen-capabilities"]) == 0
+    assert json.loads(capsys.readouterr().out)["adapter_state"] == "ok"
+
+
+def test_cli_pen_branch_reads_request_file_and_apply_ref_flag(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("PULSE_NAVE_FIXTURES", str(APPLY_FIXTURES))
+    request_path = tmp_path / "branch-request.json"
+    request_path.write_text(
+        json.dumps([{"repo": "acme/widget", "base_ref": "develop", "expected_base_sha": "a" * 40}])
     )
 
-    assert results["acme/widget"]["state"] == "failed"
-    assert results["acme/widget"]["reason"]
+    exit_code = nave_adapter.main(
+        ["pen-branch", "--name", "pen1", "--apply-ref", "pulse/apply/p1", "--request", str(request_path)]
+    )
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out)["adapter_state"] == "ok"
 
 
+def test_cli_pen_commit_reads_request_file_and_message_flag(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("PULSE_NAVE_FIXTURES", str(APPLY_FIXTURES))
+    request_path = tmp_path / "commit-request.json"
+    request_path.write_text(json.dumps([{"repo": "acme/widget", "paths": ["docs/foo.md"]}]))
+
+    exit_code = nave_adapter.main(
+        [
+            "pen-commit",
+            "--name", "pen1",
+            "--branch", "pulse/apply/p1",
+            "--request", str(request_path),
+            "-m", "chore: bump lockfile",
+        ]
+    )
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out)["adapter_state"] == "ok"
+
+
+def test_cli_pen_push_reads_request_file(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("PULSE_NAVE_FIXTURES", str(APPLY_FIXTURES))
+    request_path = tmp_path / "push-request.json"
+    request_path.write_text(json.dumps([{"repo": "acme/widget"}]))
+
+    exit_code = nave_adapter.main(
+        ["pen-push", "--name", "pen1", "--branch", "pulse/apply/p1", "--request", str(request_path)]
+    )
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out)["adapter_state"] == "ok"
+
+
+def test_cli_pen_reset_reads_request_file(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("PULSE_NAVE_FIXTURES", str(APPLY_FIXTURES))
+    request_path = tmp_path / "reset-request.json"
+    request_path.write_text(json.dumps([{"repo": "acme/widget", "expected_pushed_sha": None}]))
+
+    exit_code = nave_adapter.main(
+        ["pen-reset", "--name", "pen1", "--branch", "pulse/apply/p1", "--request", str(request_path)]
+    )
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out)["adapter_state"] == "ok"
