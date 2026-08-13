@@ -145,7 +145,7 @@ The libraries exist; the *propose* side now runs on cadence (F10 closed 2026-07-
 |---|---|---|
 | ~~**F10 last mile: proposal folding + live enrollment**~~ ✅ **DONE 2026-07-30** | Proposal fold (#140) + live enrollment (workspace #2) merged; F10's "triggered end-to-end" gate is closed. The propose/mutate phases F5–F9 now run daily and surface proposals in the maintenance PR body. | `2026-07-29-f10-scheduler-composition.md` · `2026-07-30-f10-followups.md` |
 | **Apply-mode production wiring** | F11's apply side still has the gap: real seams ship (`apply_ops`, `advance_base`, clone reader, `gh` ops) but no driver assembles them into a live `execute → reconcile` run; no real F5/F8 base-writer; no bridge from Nave pen clones to the `PULSE_PEN_ROOT` contract. **Now the top P1.** | [`2026-07-29-apply-mode-v2-deferrals.md`](2026-07-29-apply-mode-v2-deferrals.md) § A |
-| **F4 dependency-coherence adapters** | Never built — Pre-F4 materialized the evidence, the adapters that consume it were skipped. Closes a read-spine gap **and** unlocks the flagship neutral apply use-case (fleet-wide dependency bump + lockfile landing). | this index (row above) · [`2026-07-29-apply-mode-v2-deferrals.md`](2026-07-29-apply-mode-v2-deferrals.md) § D |
+| **F4 dependency-coherence adapters** | Never built — Pre-F4 materialized the evidence, the adapters that consume it were skipped. Closes a read-spine gap **and** unlocks the flagship neutral apply use-case (fleet-wide dependency bump + lockfile landing). Plan went through 7 rounds of adversarial review (2026-08-13, BLOCK → BLOCK → ... → **SHIP**); every blocking/major finding resolved in-plan, genuine v2 forks moved to a follow-up backlog. **Approved for execution.** | this index (row above) · [`2026-07-13-f4-dependency-adapters.md`](../superpowers/plans/2026-07-13-f4-dependency-adapters.md) · [`2026-08-13-f4-deferred-scope.md`](2026-08-13-f4-deferred-scope.md) · [`2026-07-29-apply-mode-v2-deferrals.md`](2026-07-29-apply-mode-v2-deferrals.md) § D
 
 ### 🟠 P2 — Correctness / data (cheap, one is a real bug)
 | Item | Why it matters | Source |
@@ -192,6 +192,7 @@ The libraries exist; the *propose* side now runs on cadence (F10 closed 2026-07-
 > the wrong repo) both come from skipping this step.
 
 ## Backlog docs (full detail lives here)
+- [`2026-08-13-f4-deferred-scope.md`](2026-08-13-f4-deferred-scope.md) — F4 v1 scope cuts (Conda, cardinality, F11 handoff, per-package overrides) deferred from the post-review plan revision
 - [`2026-07-29-apply-mode-v2-deferrals.md`](2026-07-29-apply-mode-v2-deferrals.md) — apply-mode (F11) v2 / production-wiring / dependent items
 - [`2026-07-22-f1-f8-phase-deferrals.md`](2026-07-22-f1-f8-phase-deferrals.md) — F1–F8 roll-up (apply-mode #1 now ✅ resolved; #2–#4 open)
 - [`2026-07-13-nave-json-lifecycle-protocol.md`](2026-07-13-nave-json-lifecycle-protocol.md) — upstream Nave protocol proposal
