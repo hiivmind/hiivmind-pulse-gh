@@ -1,6 +1,6 @@
 # hiivmind-pulse-gh — fleet program roadmap & backlog index
 
-**Updated:** 2026-07-30 (F10 closed) · **One-page map of what is built, what is left, and where each item lives.**
+**Updated:** 2026-08-13 (F4 closed) · **One-page map of what is built, what is left, and where each item lives.**
 
 > Read in this order: **Status at a glance** (what shipped) → **Layer-completeness matrix**
 > (is it actually *runnable*) → **Cross-repo dependency map** (which repos an item spans) →
@@ -25,7 +25,7 @@ side (F11 production wiring).
 | F2 | Fleet membership + profile metadata | ✅ merged (#126) |
 | F3 | Dispatched healthchecks | ✅ merged (#127) |
 | Pre-F4 | Nave dependency **evidence** | ✅ merged (#128) |
-| **F4** | Dependency-**coherence adapters** (consume the evidence) | ❌ **never built** — `dependency-updates` = `unsupported` |
+| **F4** | Dependency-**coherence adapters** (consume the evidence) | ✅ merged (#142) |
 | F5 | Impact bindings / `integration_tested_sha` markers | ✅ merged (#129) |
 | F6 | Nave pen mutations (propose) | ✅ merged (#130/#132) |
 | F7 | Binding specializations / generated artifacts | ✅ merged (#133) |
@@ -60,7 +60,7 @@ Every phase is a five-layer ladder. A phase **runs in production** only when all
 | F2 fleet membership | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | F3 dispatched healthchecks | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (dogfooded) |
 | Pre-F4 dependency **evidence** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (evidence only) |
-| **F4 dependency-coherence adapters** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ — never built; `dependency-updates` = `unsupported` |
+| **F4 dependency-coherence adapters** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (via healthcheck; `python_manifest_lock_consistency` / `node_manifest_lock_consistency` / `fleet_dependency_coherence` scored) |
 | F5 impact bindings | ✅ | ✅ | ✅ | ✅ `periodic` | ✅ (#2) | ✅ — `impact-audit` on cadence |
 | F6 pen mutations | ✅ | ✅ (F10) | ✅ (F10) | ✅ `periodic` | ✅ (#2) | ✅ — proposals fold to PR body (#140) |
 | F7 generated artifacts | ✅ | ✅ (F10) | ✅ (F10) | ✅ `periodic` | ✅ (#2) | ⚠️ enrolled; validated-abort until `generated.yaml` binding exists |
@@ -128,7 +128,7 @@ graph LR
 |---|:--:|:--:|:--:|:--:|---|
 | **F10 triggered end-to-end** | ✅ **folding fix (real work)** | ○ generic already; doc-only | ✅ enroll list + deploy 4 YAMLs | — | list + deploy live in **workspace**; the code fix is in **pulse-gh** |
 | **Apply-mode production wiring** | ✅ assembly driver | — | ✅ real F5/F8 base-writer | ✅ pen-clone → `PULSE_PEN_ROOT/{owner}/{name}` bridge | 3-repo; no single-repo PR closes it |
-| **F4 dependency-coherence adapters** | ✅ adapters | — | ○ evidence already present | ○ evidence source | mostly pulse-gh; evidence already flows |
+| ~~**F4 dependency-coherence adapters**~~ ✅ **DONE** | ✅ adapters | — | ○ evidence already present | ○ evidence source | mostly pulse-gh; evidence already flows |
 | **`relationships.yaml` schema drift** | ✅ | — | — | — | 1-repo (needs schema-vs-evaluator ruling) |
 | **Stale workspace catalog** | — | — | ✅ data fix | — | 1-repo, **data not code** |
 | **Nave lifecycle protocol** | — | — | — | ✅ upstream | 1-repo, gated on nave |
@@ -144,8 +144,8 @@ The libraries exist; the *propose* side now runs on cadence (F10 closed 2026-07-
 | Item | Why it matters | Source |
 |---|---|---|
 | ~~**F10 last mile: proposal folding + live enrollment**~~ ✅ **DONE 2026-07-30** | Proposal fold (#140) + live enrollment (workspace #2) merged; F10's "triggered end-to-end" gate is closed. The propose/mutate phases F5–F9 now run daily and surface proposals in the maintenance PR body. | `2026-07-29-f10-scheduler-composition.md` · `2026-07-30-f10-followups.md` |
-| **Apply-mode production wiring** | F11's apply side still has the gap: real seams ship (`apply_ops`, `advance_base`, clone reader, `gh` ops) but no driver assembles them into a live `execute → reconcile` run; no real F5/F8 base-writer; no bridge from Nave pen clones to the `PULSE_PEN_ROOT` contract. **Now the top P1.** | [`2026-07-29-apply-mode-v2-deferrals.md`](2026-07-29-apply-mode-v2-deferrals.md) § A |
-| **F4 dependency-coherence adapters** | Never built — Pre-F4 materialized the evidence, the adapters that consume it were skipped. Closes a read-spine gap **and** unlocks the flagship neutral apply use-case (fleet-wide dependency bump + lockfile landing). Plan went through 7 rounds of adversarial review (2026-08-13, BLOCK → BLOCK → ... → **SHIP**); every blocking/major finding resolved in-plan, genuine v2 forks moved to a follow-up backlog. **Approved for execution.** | this index (row above) · [`2026-07-13-f4-dependency-adapters.md`](../superpowers/plans/2026-07-13-f4-dependency-adapters.md) · [`2026-08-13-f4-deferred-scope.md`](2026-08-13-f4-deferred-scope.md) · [`2026-07-29-apply-mode-v2-deferrals.md`](2026-07-29-apply-mode-v2-deferrals.md) § D
+| **Apply-mode production wiring** | F11's apply side still has the gap: real seams ship (`apply_ops`, `advance_base`, clone reader, `gh` ops) but no driver assembles them into a live `execute → reconcile` run; no real F5/F8 base-writer; no bridge from Nave pen clones to the `PULSE_PEN_ROOT` contract. **The top P1.** A single-mutator (PR #141 decision, "Nave owns all clone writes") implementation plan for the pulse-gh half is written and reviewed: `2026-07-30-apply-mode-pulse-wiring.md`; the Nave-verb half is a separate `discreteds/nave` fork plan the pulse-gh plan's Task 1 contract is written against. | [`2026-07-30-apply-mode-pulse-wiring.md`](../superpowers/plans/2026-07-30-apply-mode-pulse-wiring.md) · [`2026-07-30-apply-mode-production-wiring-design.md`](../superpowers/specs/2026-07-30-apply-mode-production-wiring-design.md) · [`2026-07-30-f11-apply-git-consolidation-note.md`](../superpowers/specs/2026-07-30-f11-apply-git-consolidation-note.md) · [`2026-07-29-apply-mode-v2-deferrals.md`](2026-07-29-apply-mode-v2-deferrals.md) § A
+| ~~**F4 dependency-coherence adapters**~~ ✅ **DONE 2026-08-13** | Pre-F4 materialized the evidence; the coherence adapters that consume it are merged (#142). Closed the read-spine gap and unlocked the flagship neutral apply use-case (fleet-wide dependency bump + lockfile landing) as a future apply-mode consumer. | [`2026-07-13-f4-dependency-adapters.md`](../superpowers/plans/2026-07-13-f4-dependency-adapters.md) · [`2026-08-13-f4-deferred-scope.md`](2026-08-13-f4-deferred-scope.md)
 
 ### 🟠 P2 — Correctness / data (cheap, one is a real bug)
 | Item | Why it matters | Source |
@@ -180,8 +180,8 @@ The libraries exist; the *propose* side now runs on cadence (F10 closed 2026-07-
 ## Suggested sequencing
 
 1. ~~**F10 last mile**~~ — ✅ done 2026-07-30 (fold #140 + enroll #2); the propose side runs on cadence.
-2. **Apply-mode production wiring** — the apply-side spine (3-repo: pulse-gh driver + nave clone bridge + workspace base-writer). **Now the top open item.**
-3. **F4 adapters** — read-spine gap + the flagship neutral apply use-case.
+2. ~~**F4 adapters**~~ — ✅ done 2026-08-13 (#142); read-spine gap closed.
+3. **Apply-mode production wiring** — the apply-side spine (3-repo: pulse-gh driver + nave clone bridge + workspace base-writer). **The top open item.** The pulse-gh-half implementation plan is written and reviewed (`2026-07-30-apply-mode-pulse-wiring.md`); the Nave-verb half needs its own fork plan against that plan's Task 1 contract before the pulse-gh driver can land end-to-end.
 4. **`relationships.yaml` schema drift** — cheap, and the one live correctness bug.
 5. **Binding files for the enrolled F7/F8 audits** — add `generated.yaml` / `plan-sync.yaml` to the workspace so `generated-artifact-audit` / `plan-sync` have real work instead of validated-abort. Data, when there's something to bind.
 6. Everything else as its feature gains a real consumer.
