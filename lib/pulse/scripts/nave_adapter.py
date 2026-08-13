@@ -13,9 +13,10 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Mapping, Sequence
 
 
 BASELINE_CAPABILITIES = {
@@ -497,124 +498,336 @@ def pen_exec(
     }
 
 
-def provision_apply_branch(
-    clone_paths: dict[str, str | Path],
-    branch: str,
-    base_shas: dict[str, str],
-) -> dict[str, dict[str, str]]:
-    """Provision a per-proposal branch off the guarded base SHA in each repo clone.
+# --- apply verbs -----------------------------------------------------------
+#
+# `nave pen {capabilities,branch,commit,push,reset}` — the sole git-mutation
+# path for apply-mode landings (F11 consolidation note: no clone-write git
+# in Pulse). Contract source of truth: `crates/nave_apply/src/lib.rs` in
+# `discreteds/nave`, transcribed for cross-repo convenience in
+# `docs/superpowers/specs/2026-08-13-apply-verb-contract-handoff.md` (that
+# repo, PR #2) — read it before changing anything below.
 
-    Operates directly on local repository clones via `git checkout -b <branch> <base_sha>`.
-    This is a git operation on local clones, not a Nave CLI subcommand.
+NAVE_APPLY_PROTOCOL = 1
+APPLY_VERBS = ("branch", "commit", "push", "reset")
 
-    Returns a dict mapping repo identifier (`owner/name`) to a result dict:
-      `{"state": "ok"}` or `{"state": "failed", "reason": "..."}`.
+# Per-repo `state` values are closed sets, kebab-case on the wire. An
+# unrecognized value is a validation error, never silently accepted.
+_BRANCH_STATES = frozenset(
+    {
+        "ok",
+        "stale-base",
+        "exists",
+        "missing-ref",
+        "not-a-commit",
+        "unknown-repo",
+        "evidence-unavailable",
+    }
+)
+_COMMIT_STATES = frozenset(
+    {
+        "ok",
+        "nothing-to-commit",
+        "dirty-outside-bounds",
+        "invariant-violated",
+        "missing-clone",
+        "no-apply-state",
+        "unknown-repo",
+    }
+)
+_PUSH_STATES = frozenset(
+    {"ok", "missing-branch", "diverged", "push-rejected", "no-apply-state", "unknown-repo"}
+)
+_RESET_STATES = frozenset(
+    {"ok", "remote-cas-mismatch", "missing-branch", "unknown-repo", "evidence-mismatch"}
+)
+
+# Fields every `*RepoResult` variant serializes unconditionally (matches the
+# Rust structs' non-`Option` fields); anything else (`reason`,
+# `local_commit_sha`, ...) is present only when the verb has it to report.
+_BRANCH_REQUIRED_FIELDS = (
+    "repo",
+    "base_ref",
+    "expected_base_sha",
+    "observed_base_sha",
+    "apply_ref",
+    "state",
+)
+_COMMIT_REQUIRED_FIELDS = ("repo", "state")
+_PUSH_REQUIRED_FIELDS = ("repo", "state")
+_RESET_REQUIRED_FIELDS = ("repo", "local_reset", "remote_deleted", "state")
+
+
+def _validate_apply_result(
+    data: dict,
+    *,
+    command: str,
+    request_repos: Sequence[str],
+    required_fields: Sequence[str],
+    valid_states: frozenset[str],
+    request_by_repo: Mapping[str, Mapping[str, object]] | None = None,
+    per_repo_echo_from_request: Sequence[str] = (),
+    per_repo_echo_uniform: Mapping[str, object] | None = None,
+) -> dict:
+    """Enforce the versioned apply-verb wire contract; never invent success.
+
+    Checks, in order: JSON is an object; `protocol_version` matches; a
+    `_decode_json` transport-layer error (bad JSON / non-dict root) passes
+    through unchanged; `adapter_state` is present and one of `{"ok",
+    "error"}` (an `"error"` envelope's `reason` is already top-level and is
+    returned as-is); on `"ok"`, `repos` is a list with exact coverage
+    against `request_repos` (no missing, no extra, no duplicate repo), every
+    entry carries `required_fields` and a `state` in `valid_states`, and any
+    echoed field — either per-repo (`per_repo_echo_from_request`, checked
+    against the matching request entry) or envelope-uniform
+    (`per_repo_echo_uniform`, e.g. `pen branch`'s single `apply_ref` across
+    every repo) — matches what was requested. Any failure returns a typed
+    `adapter_state: "error"` envelope with an empty `repos` and a `reason`
+    naming exactly what was wrong.
     """
-    results: dict[str, dict[str, str]] = {}
-    for repo, clone_path in clone_paths.items():
-        base_sha = base_shas.get(repo)
-        if not base_sha:
-            results[repo] = {
-                "state": "failed",
-                "reason": f"missing base SHA for repo {repo}",
-            }
-            continue
 
-        res = subprocess.run(
-            ["git", "-C", str(clone_path), "checkout", "-b", branch, base_sha],
-            capture_output=True,
-            text=True,
-            check=False,
+    def fail(reason: str) -> dict:
+        return {
+            "protocol_version": data.get("protocol_version") if isinstance(data, dict) else None,
+            "adapter_state": "error",
+            "reason": reason,
+            "repos": [],
+        }
+
+    if not isinstance(data, dict):
+        return fail(f"invalid JSON from nave {command}: root is not an object")
+    if "command" in data and "returncode" in data and "error" in data:
+        return data  # `_decode_json` transport-layer error; already typed.
+
+    protocol_version = data.get("protocol_version")
+    if protocol_version != NAVE_APPLY_PROTOCOL:
+        return fail(
+            f"unsupported protocol_version {protocol_version!r} from nave {command} "
+            f"(expected {NAVE_APPLY_PROTOCOL})"
         )
-        if res.returncode == 0:
-            results[repo] = {"state": "ok"}
-        else:
-            reason = res.stderr.strip() or res.stdout.strip() or "git checkout -b failed"
-            results[repo] = {"state": "failed", "reason": reason}
 
-    return results
+    adapter_state = data.get("adapter_state")
+    if adapter_state is None:
+        return fail(f"adapter_state missing from nave {command} output")
+    if adapter_state not in ("ok", "error"):
+        return fail(f"unrecognized adapter_state {adapter_state!r} from nave {command}")
+    if adapter_state == "error":
+        return data
+
+    repos = data.get("repos")
+    if not isinstance(repos, list):
+        return fail(f"nave {command} reported adapter_state=ok with a non-list repos field")
+
+    seen: dict[str, int] = {}
+    for entry in repos:
+        if not isinstance(entry, dict) or "repo" not in entry:
+            return fail(f"nave {command} repo entry missing 'repo' field")
+        seen[entry["repo"]] = seen.get(entry["repo"], 0) + 1
+
+    duplicates = sorted(repo for repo, count in seen.items() if count > 1)
+    if duplicates:
+        return fail(f"nave {command} reported duplicate repo(s): {', '.join(duplicates)}")
+
+    requested = set(request_repos)
+    reported = set(seen)
+    missing = sorted(requested - reported)
+    extra = sorted(reported - requested)
+    if missing:
+        return fail(f"nave {command} omitted requested repo(s): {', '.join(missing)}")
+    if extra:
+        return fail(f"nave {command} reported unrequested repo(s): {', '.join(extra)}")
+
+    for entry in repos:
+        repo = entry["repo"]
+        missing_fields = [f for f in required_fields if f not in entry]
+        if missing_fields:
+            return fail(
+                f"nave {command} repo {repo!r} missing required field(s): {', '.join(missing_fields)}"
+            )
+        state = entry.get("state")
+        if state not in valid_states:
+            return fail(f"nave {command} repo {repo!r} reported unrecognized state {state!r}")
+        if request_by_repo is not None:
+            requested_entry = request_by_repo.get(repo, {})
+            for field in per_repo_echo_from_request:
+                if field in requested_entry and entry.get(field) != requested_entry[field]:
+                    return fail(
+                        f"nave {command} repo {repo!r} echoed {field}={entry.get(field)!r}, "
+                        f"requested {requested_entry[field]!r}"
+                    )
+        if per_repo_echo_uniform:
+            for field, expected in per_repo_echo_uniform.items():
+                if entry.get(field) != expected:
+                    return fail(
+                        f"nave {command} repo {repo!r} echoed {field}={entry.get(field)!r}, "
+                        f"requested {expected!r}"
+                    )
+
+    return data
 
 
-def commit_apply_clones(
-    clone_paths: dict[str, str | Path],
+def _run_apply_verb(
+    runner: NaveRunner,
+    argv_prefix: Sequence[str],
+    envelope: dict,
+    *,
+    extra_args: Sequence[str] = (),
+    command: str,
+) -> dict:
+    """Write a versioned request envelope to a temp file, run the verb, decode JSON.
+
+    `--request` always names a file path — the wire body is never passed as
+    an inline shell argument (mirrors the existing `nave materialize
+    --request` convention). The temp directory is removed once the process
+    returns; callers needing the request body itself must capture it inside
+    a fake runner's `run()` before this returns.
+    """
+    with tempfile.TemporaryDirectory(prefix="pulse-nave-apply-") as tmp_dir:
+        request_path = Path(tmp_dir) / "request.json"
+        request_path.write_text(json.dumps(envelope))
+        args = [*argv_prefix, "--request", str(request_path), *extra_args, "--json"]
+        return _decode_json(command, runner.run(args))
+
+
+def pen_capabilities(runner: NaveRunner) -> dict:
+    """Probe the apply-verb protocol version and supported verbs.
+
+    Run before any apply-mode mutation. Fails closed if the command doesn't
+    exist at all (a stale/pre-apply-verb Nave binary has no `pen
+    capabilities` subcommand — `clap`'s "unrecognized subcommand" nonzero
+    exit *is* the fail-closed signal), if `protocol_version` doesn't match
+    `NAVE_APPLY_PROTOCOL`, or if `verbs` isn't a superset of `APPLY_VERBS`.
+    """
+    decoded = _decode_json("pen capabilities", runner.run(["pen", "capabilities", "--json"]))
+    if decoded.get("adapter_state") != "ok":
+        return {
+            "protocol_version": decoded.get("protocol_version"),
+            "verbs": [],
+            "adapter_state": "error",
+            "reason": decoded.get("reason") or decoded.get("error") or "nave pen capabilities failed",
+        }
+    protocol_version = decoded.get("protocol_version")
+    verbs = decoded.get("verbs")
+    if protocol_version != NAVE_APPLY_PROTOCOL:
+        return {
+            "protocol_version": protocol_version,
+            "verbs": verbs if isinstance(verbs, list) else [],
+            "adapter_state": "error",
+            "reason": f"unsupported protocol_version {protocol_version!r} (expected {NAVE_APPLY_PROTOCOL})",
+        }
+    if not isinstance(verbs, list) or not set(APPLY_VERBS) <= set(verbs):
+        missing = sorted(set(APPLY_VERBS) - set(verbs or []))
+        return {
+            "protocol_version": protocol_version,
+            "verbs": verbs if isinstance(verbs, list) else [],
+            "adapter_state": "error",
+            "reason": f"nave pen capabilities missing required verb(s): {', '.join(missing)}",
+        }
+    return {"protocol_version": protocol_version, "verbs": verbs, "adapter_state": "ok", "reason": None}
+
+
+def pen_branch(
+    runner: NaveRunner,
+    name: str,
+    apply_ref: str,
+    request: Sequence[dict],
+) -> dict:
+    """Provision the apply branch across a request's repos off a verified remote base.
+
+    `request`: `[{"repo": str, "base_ref": str, "expected_base_sha": str}, ...]`.
+    `apply_ref` is a single envelope-level field — one branch provisioning
+    call names one apply branch across every repo in the request, never a
+    per-repo field.
+    """
+    request_repos = [entry["repo"] for entry in request]
+    request_by_repo = {entry["repo"]: entry for entry in request}
+    envelope = {"protocol_version": NAVE_APPLY_PROTOCOL, "apply_ref": apply_ref, "repos": list(request)}
+    decoded = _run_apply_verb(runner, ["pen", "branch", name], envelope, command="pen branch")
+    return _validate_apply_result(
+        decoded,
+        command="pen branch",
+        request_repos=request_repos,
+        required_fields=_BRANCH_REQUIRED_FIELDS,
+        valid_states=_BRANCH_STATES,
+        request_by_repo=request_by_repo,
+        per_repo_echo_from_request=("base_ref", "expected_base_sha"),
+        per_repo_echo_uniform={"apply_ref": apply_ref},
+    )
+
+
+def pen_commit(
+    runner: NaveRunner,
+    name: str,
+    branch: str,
+    request: Sequence[dict],
     message: str,
-) -> dict[str, dict[str, str]]:
-    """Commit uncommitted changes in each repo clone with the attributed message.
+) -> dict:
+    """Bounded-stage and commit dirty apply-branch paths, with post-exec invariant checks.
 
-    Operates directly on local repository clones via `git -C <clone> add -A` then
-    `git -C <clone> commit -m <message>`. A repo with nothing to commit fails.
-
-    Returns a dict mapping repo identifier (`owner/name`) to a result dict:
-      `{"state": "ok"}` or `{"state": "failed", "reason": "..."}`.
+    `request`: `[{"repo": str, "paths": [str, ...]}, ...]`. `branch` is a
+    positional, not part of the request body. Neither `expected_base_sha`
+    (Nave checks the committed branch against its own server-side sidecar
+    written by `pen branch`) nor `message` (the separate `-m` flag) belongs
+    in the request body.
     """
-    results: dict[str, dict[str, str]] = {}
-    for repo, clone_path in clone_paths.items():
-        add_res = subprocess.run(
-            ["git", "-C", str(clone_path), "add", "-A"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if add_res.returncode != 0:
-            reason = add_res.stderr.strip() or add_res.stdout.strip() or "git add failed"
-            results[repo] = {"state": "failed", "reason": reason}
-            continue
-
-        status_res = subprocess.run(
-            ["git", "-C", str(clone_path), "status", "--porcelain"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if status_res.returncode == 0 and not status_res.stdout.strip():
-            results[repo] = {
-                "state": "failed",
-                "reason": f"nothing to commit in {repo}",
-            }
-            continue
-
-        res = subprocess.run(
-            ["git", "-C", str(clone_path), "commit", "-m", message],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if res.returncode == 0:
-            results[repo] = {"state": "ok"}
-        else:
-            reason = res.stderr.strip() or res.stdout.strip() or "git commit failed"
-            results[repo] = {"state": "failed", "reason": reason}
-
-    return results
+    request_repos = [entry["repo"] for entry in request]
+    envelope = {"protocol_version": NAVE_APPLY_PROTOCOL, "repos": list(request)}
+    decoded = _run_apply_verb(
+        runner, ["pen", "commit", name, branch], envelope, extra_args=["-m", message], command="pen commit"
+    )
+    return _validate_apply_result(
+        decoded,
+        command="pen commit",
+        request_repos=request_repos,
+        required_fields=_COMMIT_REQUIRED_FIELDS,
+        valid_states=_COMMIT_STATES,
+    )
 
 
-def push_apply_clones(
-    clone_paths: dict[str, str | Path],
+def pen_push(
+    runner: NaveRunner,
+    name: str,
     branch: str,
-) -> dict[str, dict[str, str]]:
-    """Push each clone's apply branch to origin.
+    request: Sequence[dict],
+) -> dict:
+    """Push the apply branch's committed local tip, verifying evidence before reporting ok.
 
-    Operates directly on local repository clones via `git -C <clone> push origin <branch>`.
-
-    Returns a dict mapping repo identifier (`owner/name`) to a result dict:
-      `{"state": "ok"}` or `{"state": "failed", "reason": "..."}`.
+    `request`: `[{"repo": str}, ...]` — carries the expected repo set so
+    coverage is enforced against the request, never inferred from the
+    response.
     """
-    results: dict[str, dict[str, str]] = {}
-    for repo, clone_path in clone_paths.items():
-        res = subprocess.run(
-            ["git", "-C", str(clone_path), "push", "origin", branch],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if res.returncode == 0:
-            results[repo] = {"state": "ok"}
-        else:
-            reason = res.stderr.strip() or res.stdout.strip() or "git push failed"
-            results[repo] = {"state": "failed", "reason": reason}
+    request_repos = [entry["repo"] for entry in request]
+    envelope = {"protocol_version": NAVE_APPLY_PROTOCOL, "repos": list(request)}
+    decoded = _run_apply_verb(runner, ["pen", "push", name, branch], envelope, command="pen push")
+    return _validate_apply_result(
+        decoded,
+        command="pen push",
+        request_repos=request_repos,
+        required_fields=_PUSH_REQUIRED_FIELDS,
+        valid_states=_PUSH_STATES,
+    )
 
-    return results
 
+def pen_reset(
+    runner: NaveRunner,
+    name: str,
+    branch: str,
+    request: Sequence[dict],
+) -> dict:
+    """Discard a partial apply attempt: CAS-guarded local + remote branch cleanup.
+
+    `request`: `[{"repo": str, "expected_pushed_sha": str | None}, ...]`;
+    `expected_pushed_sha` is `None` for a repo that was never pushed.
+    """
+    request_repos = [entry["repo"] for entry in request]
+    envelope = {"protocol_version": NAVE_APPLY_PROTOCOL, "repos": list(request)}
+    decoded = _run_apply_verb(runner, ["pen", "reset", name, branch], envelope, command="pen reset")
+    return _validate_apply_result(
+        decoded,
+        command="pen reset",
+        request_repos=request_repos,
+        required_fields=_RESET_REQUIRED_FIELDS,
+        valid_states=_RESET_STATES,
+    )
 
 
 def _materialize_summary(report: dict) -> dict:
@@ -640,6 +853,20 @@ def _materialize_summary(report: dict) -> dict:
         "repos": repos_summary,
         "protocol_note": "content omitted from CLI output; see materialize() for in-process access",
     }
+
+
+def _load_apply_request(path: str) -> list[dict]:
+    """Read a CLI-supplied apply-verb request file: a JSON array of per-repo objects.
+
+    Mirrors each `pen_*` function's own `request` parameter shape — the CLI
+    reads this file and passes the parsed list straight through; the
+    envelope wrapper (`protocol_version`, `apply_ref`/branch) is built by
+    the adapter function itself, never by the caller.
+    """
+    data = json.loads(Path(path).read_text())
+    if not isinstance(data, list):
+        raise ValueError(f"apply-verb request file {path} must contain a JSON array of repo objects")
+    return data
 
 
 def _runner_from_args(args: argparse.Namespace) -> NaveRunner:
@@ -699,6 +926,33 @@ def main(argv: list[str] | None = None) -> int:
     pen_exec_parser.add_argument("--push-changes", action="store_true")
     pen_exec_parser.add_argument("--message", "-m")
     pen_exec_parser.add_argument("cmd", nargs=argparse.REMAINDER)
+    pen_capabilities_parser = subparsers.add_parser("pen-capabilities")
+    add_runner_options(pen_capabilities_parser)
+    pen_branch_parser = subparsers.add_parser("pen-branch")
+    add_runner_options(pen_branch_parser)
+    pen_branch_parser.add_argument("--name", required=True)
+    pen_branch_parser.add_argument("--apply-ref", required=True)
+    pen_branch_parser.add_argument(
+        "--request", required=True, help="JSON file: [{repo, base_ref, expected_base_sha}, ...]"
+    )
+    pen_commit_parser = subparsers.add_parser("pen-commit")
+    add_runner_options(pen_commit_parser)
+    pen_commit_parser.add_argument("--name", required=True)
+    pen_commit_parser.add_argument("--branch", required=True)
+    pen_commit_parser.add_argument("--request", required=True, help="JSON file: [{repo, paths}, ...]")
+    pen_commit_parser.add_argument("--message", "-m", required=True)
+    pen_push_parser = subparsers.add_parser("pen-push")
+    add_runner_options(pen_push_parser)
+    pen_push_parser.add_argument("--name", required=True)
+    pen_push_parser.add_argument("--branch", required=True)
+    pen_push_parser.add_argument("--request", required=True, help="JSON file: [{repo}, ...]")
+    pen_reset_parser = subparsers.add_parser("pen-reset")
+    add_runner_options(pen_reset_parser)
+    pen_reset_parser.add_argument("--name", required=True)
+    pen_reset_parser.add_argument("--branch", required=True)
+    pen_reset_parser.add_argument(
+        "--request", required=True, help="JSON file: [{repo, expected_pushed_sha}, ...]"
+    )
     args = parser.parse_args(argv)
 
     runner = _runner_from_args(args)
@@ -769,6 +1023,28 @@ def main(argv: list[str] | None = None) -> int:
             push_changes=args.push_changes,
             message=args.message,
         )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 1 if result.get("adapter_state") == "error" else 0
+    if args.command == "pen-capabilities":
+        result = pen_capabilities(runner)
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 1 if result.get("adapter_state") == "error" else 0
+    if args.command == "pen-branch":
+        result = pen_branch(runner, args.name, args.apply_ref, _load_apply_request(args.request))
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 1 if result.get("adapter_state") == "error" else 0
+    if args.command == "pen-commit":
+        result = pen_commit(
+            runner, args.name, args.branch, _load_apply_request(args.request), args.message
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 1 if result.get("adapter_state") == "error" else 0
+    if args.command == "pen-push":
+        result = pen_push(runner, args.name, args.branch, _load_apply_request(args.request))
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 1 if result.get("adapter_state") == "error" else 0
+    if args.command == "pen-reset":
+        result = pen_reset(runner, args.name, args.branch, _load_apply_request(args.request))
         print(json.dumps(result, indent=2, sort_keys=True))
         return 1 if result.get("adapter_state") == "error" else 0
     return 2

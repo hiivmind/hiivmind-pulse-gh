@@ -28,15 +28,22 @@
 ## Authoritative Interfaces (single source of truth — every task and test uses these verbatim)
 
 ```
-# nave_adapter.py (Task 1)
+# nave_adapter.py (Task 1) — as shipped; see
+# docs/superpowers/specs/2026-08-13-apply-verb-contract-handoff.md for the
+# full wire contract (states, echo checks, CLI shapes) this table only summarizes.
 NAVE_APPLY_PROTOCOL = 1
+APPLY_VERBS = ("branch", "commit", "push", "reset")
 pen_capabilities(runner) -> {"protocol_version": int|None, "verbs": list[str], "adapter_state": str, "reason": str|None}
-pen_branch(runner, name, request: list[dict]) -> {"adapter_state","repos":[{repo,base_ref,expected_base_sha,observed_base_sha,apply_ref,state,reason?}]}
-pen_commit(runner, name, request: list[dict], message) -> {"adapter_state","repos":[{repo,local_commit_sha,state,reason?}]}
-pen_push(runner, name, branch, request: list[dict]) -> {"adapter_state","repos":[{repo,remote,remote_ref,remote_sha,upstream,local_commit_sha,state,reason?}]}  # request=[{repo}] carries expected_repos so coverage can be enforced
+pen_branch(runner, name, apply_ref, request: list[dict]) -> {"adapter_state","repos":[{repo,base_ref,expected_base_sha,observed_base_sha,apply_ref,state,reason?}]}
+  # apply_ref is a single envelope-level field naming one branch across every repo, NOT per-repo
+pen_commit(runner, name, branch, request: list[dict], message) -> {"adapter_state","repos":[{repo,local_commit_sha?,state,reason?}]}
+  # branch is a positional (this table's original signature omitted it); request carries only {repo,paths}
+pen_push(runner, name, branch, request: list[dict]) -> {"adapter_state","repos":[{repo,remote?,remote_ref?,remote_sha?,upstream?,local_commit_sha?,state,reason?}]}  # request=[{repo}] carries expected_repos so coverage can be enforced
 pen_reset(runner, name, branch, request: list[dict]) -> {"adapter_state","repos":[{repo,local_reset,remote_deleted,state,reason?}]}
 pen_status(runner, name)  # existing owner/name shape UNCHANGED; each repo entry GAINS clone_path
-# request envelopes are versioned: {"protocol_version":1,"repos":[...]}
+# request envelopes are versioned: {"protocol_version":1,"repos":[...]}; per-repo `state` values are
+# closed, kebab-case sets that differ per verb (e.g. branch: stale-base/exists/evidence-unavailable/...)
+# — NOT a generic "failed"; see the handoff doc's enumerated sets.
 
 # apply_rederive.py (Task 2) — re-derives from FRESH SOURCE STATE (no pen), via typed provider inputs
 RederivedProposal(binding_id: str, proposal: Proposal, source_kind: str, finalizer_record: dict|None)
@@ -95,7 +102,7 @@ make_f8_advance_base(finalizer_record, contents_ops, gh_ops) -> Callable[[str,st
 
 **Interfaces:** Produces the `nave_adapter` functions in the Authoritative Interfaces table. Uses the real decode helper — note its signature is `_decode_json(command, completed)` (`nave_adapter.py:305`), not `_decode_json(raw)`.
 
-- [ ] **Step 1: Write failing tests** — for each verb: happy path; **required-field missing** → error; **state enum invalid** → error; **wrong `protocol_version`** → error; **absent `adapter_state`** → error (never invent `"ok"`); **repo coverage mismatch** (extra/missing/duplicate repo vs request) → error; **echoed mismatch** (`pen_branch` returns `expected_base_sha` ≠ requested) → error; **nonzero returncode with valid partial-failure JSON** → surfaced as per-repo `failed`, not a hard error; **malformed JSON** → error. Plus `test_trio_is_deleted` (no `provision_apply_branch`/`commit_apply_clones`/`push_apply_clones`).
+- [x] **Step 1: Write failing tests** — for each verb: happy path; **required-field missing** → error; **state enum invalid** → error; **wrong `protocol_version`** → error; **absent `adapter_state`** → error (never invent `"ok"`); **repo coverage mismatch** (extra/missing/duplicate repo vs request) → error; **echoed mismatch** (`pen_branch` returns `expected_base_sha` ≠ requested) → error; **nonzero returncode with valid partial-failure JSON** → surfaced as per-repo `failed`, not a hard error; **malformed JSON** → error. Plus `test_trio_is_deleted` (no `provision_apply_branch`/`commit_apply_clones`/`push_apply_clones`).
 
 ```python
 def test_pen_branch_rejects_echoed_expected_sha_mismatch():
@@ -111,10 +118,21 @@ def test_missing_adapter_state_is_error_not_invented():
     assert na.pen_push(runner, "pen1", "b")["adapter_state"] == "error"
 ```
 
-- [ ] **Step 2: Run, verify fail.**
-- [ ] **Step 3: Implement** a `_validate_apply_result(data, *, request_repos, required_fields, state_field="state")` helper that enforces protocol, envelope, `adapter_state` presence, per-repo required fields + `state` enum, exact coverage against `request_repos`, and echoed-field equality; each `pen_*` builds its argv (writing a **versioned** request envelope), calls the real `_decode_json(command, completed)`, and returns the validated dict (or `{"adapter_state":"error","reason":...,"repos":[]}`). **`pen_push` takes a `request: list[dict]` of `[{repo}]` so `request_repos` is authoritative for coverage** (never inferred from the response). `pen_reset` returns per-repo `local_reset`/`remote_deleted` separately. Preserve `Completed.returncode`; accept nonzero **only** with a valid partial-failure document. Extend `pen_status` decode to pass through `clone_path`. **Delete** the trio (`nave_adapter.py:500-616`) and its tests (incl. `:724`).
-- [ ] **Step 4: Run, verify pass.**
-- [ ] **Step 5: Commit** — `feat: strict versioned nave apply-verb adapters; delete raw-git trio`.
+- [x] **Step 2: Run, verify fail.**
+- [x] **Step 3: Implement** a `_validate_apply_result(data, *, request_repos, required_fields, state_field="state")` helper that enforces protocol, envelope, `adapter_state` presence, per-repo required fields + `state` enum, exact coverage against `request_repos`, and echoed-field equality; each `pen_*` builds its argv (writing a **versioned** request envelope), calls the real `_decode_json(command, completed)`, and returns the validated dict (or `{"adapter_state":"error","reason":...,"repos":[]}`). **`pen_push` takes a `request: list[dict]` of `[{repo}]` so `request_repos` is authoritative for coverage** (never inferred from the response). `pen_reset` returns per-repo `local_reset`/`remote_deleted` separately. Preserve `Completed.returncode`; accept nonzero returncode with valid JSON as a normal decode (never a hard error keyed off exit status).
+
+  **Revised against the actual shipped Nave contract** (`discreteds/nave` PR #2,
+  `docs/superpowers/specs/2026-08-13-apply-verb-contract-handoff.md` — authoritative
+  where it disagrees with this table): `pen_branch(runner, name, apply_ref, request)`
+  — `apply_ref` is a single envelope-level field, not per-repo, so it's a distinct
+  parameter, not folded into `request` as this table's original signature implied.
+  `pen_commit(runner, name, branch, request, message)` gains the `branch` positional
+  this table originally omitted. States are richer verb-specific closed sets
+  (`stale-base`/`exists`/`evidence-unavailable` for branch, etc.), not a generic
+  `"failed"`. `pen_status`/`pen_list --json` both gain `clone_path` (Task 2's own
+  concern — cross-referenced here since the Nave-side handoff flagged it).
+- [x] **Step 4: Run, verify pass.** `uv run pytest lib/pulse/scripts/tests/test_nave_adapter.py -q` — 86 passed. Full suite: `uv run pytest -q` — 1309 passed. `git diff --check` clean.
+- [x] **Step 5: Commit** — `feat: strict versioned nave apply-verb adapters; delete raw-git trio`.
 
 ---
 
