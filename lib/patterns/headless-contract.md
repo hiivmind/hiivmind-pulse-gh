@@ -353,6 +353,9 @@ run_at: <ISO 8601>
 actor: { gh_login: <str>, machine: <str>, mode: <enum> }
 state: proposed | blocked | failed  # required enum — the run's terminal state
 proposal_id: <str>                  # required — the mutation_plan.Proposal id
+recorded_proposal_id: <str>         # required — the proposal id as recorded by snapshot_audit
+proposal_digest: <str>              # required — mutation_plan.proposal_digest() of the re-derived Proposal
+authorization_digest: <str>         # required — digest of the authorization that cleared this run
 transformation: <str>               # required — registered transformation id
 pen_name: <str>                     # required — the Nave pen this run used
 selection: [<owner/name>, ...]      # list of str, required — repos targeted
@@ -368,7 +371,10 @@ This orchestrator is propose-only: `state: proposed` is its only terminal
 success, meaning a commit/push/PR action is proposed for something else to
 apply later, never performed by the run itself. `reason` is required
 (non-null) whenever `state` is `blocked` or `failed`, and optional (may be
-null) when `state` is `proposed`.
+null) when `state` is `proposed`. `recorded_proposal_id`, `proposal_digest`,
+and `authorization_digest` are unconditionally required non-null strings —
+snapshot_audit records them before the first mutation, so every terminal
+state (`proposed`, `blocked`, `failed`) always has them.
 
 ### apply-status-result.yaml (written by apply reconcile loop, F11)
 
@@ -382,20 +388,38 @@ run_at: <ISO 8601>
 actor: { gh_login: <str>, machine: <str>, mode: <enum> }
 state: pushed | pr_opened | applied | rejected  # required enum — apply lifecycle state
 proposal_id: <str>                  # required — the proposal id
+recorded_proposal_id: <str>         # required — the proposal id as recorded by snapshot_audit
+proposal_digest: <str>              # required — mutation_plan.proposal_digest() of the re-derived Proposal
+authorization_digest: <str>         # required — digest of the authorization that cleared this run
 selection: [<owner/name>, ...]      # list of str, required — targeted repos
 branch: <str>                       # required — branch name (pulse/apply/{proposal_id})
 pushed_sha: <str or null>           # required key, nullable — branch head SHA (required for pushed/pr_opened/applied)
 pr_url: <str or null>               # required key, nullable — pull request URL (required for pr_opened/applied)
 merged_sha: <str or null>           # required key, nullable — merge commit SHA (required for applied)
 reason: <str or null>               # required key, nullable — rejection reason (required for rejected)
+intended_base: <str>                # required key, non-null from `pushed` onward — base branch the push targeted
+expected_head_sha: <str>            # required key, non-null from `pushed` onward — SHA the driver expected to push;
+                                     #   must equal `pushed_sha` when both are present
+observed_base: <str or null>        # required key, nullable — base branch observed at merge time (required for applied)
+observed_head_sha: <str or null>    # required key, nullable — head SHA observed at merge time (required for applied)
 errors: []
 ```
 
 Lifecycle states and required fields:
-- `pushed`: branch pushed to remote, no PR open yet. Requires `pushed_sha`. `pr_url` and `merged_sha` are null.
-- `pr_opened`: pull request created. Requires `pushed_sha` and `pr_url`. `merged_sha` is null.
-- `applied`: PR merged into default branch. Requires `pushed_sha`, `pr_url`, and `merged_sha`.
-- `rejected`: PR closed unmerged. Requires `reason` (non-null). `merged_sha` is null.
+- `pushed`: branch pushed to remote, no PR open yet. Requires `pushed_sha`, `intended_base`, `expected_head_sha`. `pr_url` and `merged_sha` are null.
+- `pr_opened`: pull request created. Requires `pushed_sha`, `pr_url`, `intended_base`, `expected_head_sha`. `merged_sha` is null.
+- `applied`: PR merged into default branch. Requires `pushed_sha`, `pr_url`, `merged_sha`, `intended_base`, `expected_head_sha`, `observed_base`, `observed_head_sha`.
+- `rejected`: PR closed unmerged. Requires `reason` (non-null), `intended_base`, `expected_head_sha`. `merged_sha` is null.
+
+`intended_base` and `expected_head_sha` are required (non-null) for every
+state in the enum, not just `pushed`: `pushed` is the earliest lifecycle
+state ever written, so every later state implies the branch already passed
+through it. `observed_base`/`observed_head_sha` stay null until `applied`.
+`recorded_proposal_id`, `proposal_digest`, and `authorization_digest` are
+unconditionally required non-null strings on every state, for the same
+snapshot_audit reason as `repo-mutation-result.yaml` above. When both
+`pushed_sha` and `expected_head_sha` are non-null they must be equal — a
+mismatch is a validation error.
 
 ### generated-artifact-result.yaml (written by the generation audit, F7)
 

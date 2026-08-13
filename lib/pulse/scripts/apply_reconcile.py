@@ -164,6 +164,13 @@ def write_apply_status(
     repo: str,
     branch: str,
     state: str,
+    recorded_proposal_id: str,
+    proposal_digest: str,
+    authorization_digest: str,
+    intended_base: str,
+    expected_head_sha: str,
+    observed_base: str | None = None,
+    observed_head_sha: str | None = None,
     pushed_sha: str | None = None,
     pr_url: str | None = None,
     merged_sha: str | None = None,
@@ -182,6 +189,9 @@ def write_apply_status(
         "actor": actor,
         "errors": errors or [],
         "proposal_id": proposal_id,
+        "recorded_proposal_id": recorded_proposal_id,
+        "proposal_digest": proposal_digest,
+        "authorization_digest": authorization_digest,
         "selection": [repo],
         "branch": branch,
         "state": state,
@@ -189,6 +199,10 @@ def write_apply_status(
         "pr_url": pr_url,
         "merged_sha": merged_sha,
         "reason": reason,
+        "intended_base": intended_base,
+        "expected_head_sha": expected_head_sha,
+        "observed_base": observed_base,
+        "observed_head_sha": observed_head_sha,
     }
     validation_errors = validate_result.validate(doc, "apply-status")
     if validation_errors:
@@ -215,6 +229,11 @@ def open_apply_pr(
     body: str,
     result_path: str | Path,
     gh_ops: GhOps,
+    recorded_proposal_id: str,
+    proposal_digest: str,
+    authorization_digest: str,
+    intended_base: str,
+    expected_head_sha: str,
     actor_id: str = "octocat@mba-m4",
     workspace: str = "unknown",
 ) -> dict:
@@ -240,6 +259,11 @@ def open_apply_pr(
         repo=repo,
         branch=branch,
         state="pr_opened",
+        recorded_proposal_id=recorded_proposal_id,
+        proposal_digest=proposal_digest,
+        authorization_digest=authorization_digest,
+        intended_base=intended_base,
+        expected_head_sha=expected_head_sha,
         pushed_sha=pushed_sha,
         pr_url=pr_url,
         workspace=workspace,
@@ -265,6 +289,13 @@ def reconcile_apply(
     branch: str,
     result_path: str | Path,
     gh_ops: GhOps,
+    recorded_proposal_id: str,
+    proposal_digest: str,
+    authorization_digest: str,
+    intended_base: str,
+    expected_head_sha: str,
+    observed_base: str | None = None,
+    observed_head_sha: str | None = None,
     advance_base: Callable[[str, str], dict] | None = None,
     actor_id: str = "octocat@mba-m4",
     workspace: str = "unknown",
@@ -324,6 +355,13 @@ def reconcile_apply(
                 repo=repo,
                 branch=branch,
                 state="applied",
+                recorded_proposal_id=recorded_proposal_id,
+                proposal_digest=proposal_digest,
+                authorization_digest=authorization_digest,
+                intended_base=intended_base,
+                expected_head_sha=expected_head_sha,
+                observed_base=observed_base,
+                observed_head_sha=observed_head_sha,
                 pushed_sha=pushed_sha or "unknown",
                 pr_url=pr_url or "",
                 merged_sha=merged_sha,
@@ -377,6 +415,11 @@ def reconcile_apply(
             repo=repo,
             branch=branch,
             state="rejected",
+            recorded_proposal_id=recorded_proposal_id,
+            proposal_digest=proposal_digest,
+            authorization_digest=authorization_digest,
+            intended_base=intended_base,
+            expected_head_sha=expected_head_sha,
             pushed_sha=pushed_sha,
             pr_url=pr_url,
             reason=reason,
@@ -418,6 +461,11 @@ def reconcile_apply(
                 repo=repo,
                 branch=branch,
                 state="pr_opened",
+                recorded_proposal_id=recorded_proposal_id,
+                proposal_digest=proposal_digest,
+                authorization_digest=authorization_digest,
+                intended_base=intended_base,
+                expected_head_sha=expected_head_sha,
                 pushed_sha=pushed_sha or "unknown",
                 pr_url=pr_url or "",
                 workspace=workspace,
@@ -440,6 +488,11 @@ def main():
     o.add_argument("--title", required=True)
     o.add_argument("--body", default="")
     o.add_argument("--result", required=True)
+    o.add_argument("--recorded-proposal-id", required=True)
+    o.add_argument("--proposal-digest", required=True)
+    o.add_argument("--authorization-digest", required=True)
+    o.add_argument("--intended-base", required=True)
+    o.add_argument("--expected-head-sha", required=True)
     o.add_argument("--actor", default="unknown@unknown")
     o.add_argument("--workspace", default="unknown")
 
@@ -450,6 +503,13 @@ def main():
     r.add_argument("--repo", required=True)
     r.add_argument("--branch", required=True)
     r.add_argument("--result", required=True)
+    r.add_argument("--recorded-proposal-id", required=True)
+    r.add_argument("--proposal-digest", required=True)
+    r.add_argument("--authorization-digest", required=True)
+    r.add_argument("--intended-base", required=True)
+    r.add_argument("--expected-head-sha", required=True)
+    r.add_argument("--observed-base", default=None)
+    r.add_argument("--observed-head-sha", default=None)
     r.add_argument("--actor", default="unknown@unknown")
     r.add_argument("--workspace", default="unknown")
 
@@ -469,6 +529,11 @@ def main():
             body=args.body,
             result_path=args.result,
             gh_ops=gh_ops,
+            recorded_proposal_id=args.recorded_proposal_id,
+            proposal_digest=args.proposal_digest,
+            authorization_digest=args.authorization_digest,
+            intended_base=args.intended_base,
+            expected_head_sha=args.expected_head_sha,
             actor_id=args.actor,
             workspace=args.workspace,
         )
@@ -483,6 +548,13 @@ def main():
             branch=args.branch,
             result_path=args.result,
             gh_ops=gh_ops,
+            recorded_proposal_id=args.recorded_proposal_id,
+            proposal_digest=args.proposal_digest,
+            authorization_digest=args.authorization_digest,
+            intended_base=args.intended_base,
+            expected_head_sha=args.expected_head_sha,
+            observed_base=args.observed_base,
+            observed_head_sha=args.observed_head_sha,
             actor_id=args.actor,
             workspace=args.workspace,
         )

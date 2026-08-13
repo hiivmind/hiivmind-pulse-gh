@@ -8,10 +8,17 @@ actor:
   mode: scheduled
 state: pr_opened
 proposal_id: bump-lockfile-2026-07-10
+recorded_proposal_id: bump-lockfile-2026-07-10
+proposal_digest: "v1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+authorization_digest: "v1|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 selection: [testorg/widget, testorg/core]
 branch: pulse/apply/bump-lockfile-2026-07-10
 pushed_sha: "1234567890abcdef1234567890abcdef12345678"
 pr_url: "https://github.com/testorg/widget/pull/42"
 merged_sha: null
 reason: null
+intended_base: "main"
+expected_head_sha: "1234567890abcdef1234567890abcdef12345678"
+observed_base: null
+observed_head_sha: null
 errors: []

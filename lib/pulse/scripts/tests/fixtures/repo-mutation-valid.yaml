@@ -8,6 +8,9 @@ actor:
   mode: scheduled
 state: proposed
 proposal_id: bump-lockfile-2026-07-10
+recorded_proposal_id: bump-lockfile-2026-07-10
+proposal_digest: "v1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+authorization_digest: "v1|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 transformation: bump-lockfile
 pen_name: pen-bump-lockfile-2026-07-10
 selection: [testorg/widget, testorg/core]

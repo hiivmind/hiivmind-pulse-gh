@@ -629,6 +629,9 @@ def validate(data, kind: str) -> list[str]:
     elif kind == "repo-mutation":
         state = _require_enum(data, "state", REPO_MUTATION_STATES, errors)
         _require(data, "proposal_id", str, errors)
+        _require(data, "recorded_proposal_id", str, errors)
+        _require(data, "proposal_digest", str, errors)
+        _require(data, "authorization_digest", str, errors)
         _require(data, "transformation", str, errors)
         _require(data, "pen_name", str, errors)
         _validate_string_list(data, "selection", errors)
@@ -704,12 +707,19 @@ def validate(data, kind: str) -> list[str]:
     elif kind == "apply-status":
         state = _require_enum(data, "state", APPLY_STATUS_STATES, errors)
         _require(data, "proposal_id", str, errors)
+        _require(data, "recorded_proposal_id", str, errors)
+        _require(data, "proposal_digest", str, errors)
+        _require(data, "authorization_digest", str, errors)
         _validate_string_list(data, "selection", errors)
         _require(data, "branch", str, errors)
         _require_nullable(data, "pushed_sha", str, errors)
         _require_nullable(data, "pr_url", str, errors)
         _require_nullable(data, "merged_sha", str, errors)
         _require_nullable(data, "reason", str, errors)
+        _require_nullable(data, "intended_base", str, errors)
+        _require_nullable(data, "expected_head_sha", str, errors)
+        _require_nullable(data, "observed_base", str, errors)
+        _require_nullable(data, "observed_head_sha", str, errors)
         if state in {"pushed", "pr_opened", "applied"} and data.get("pushed_sha") is None:
             _err(errors, f"pushed_sha must not be null when state is {state}")
         if state in {"pr_opened", "applied"} and data.get("pr_url") is None:
@@ -718,6 +728,22 @@ def validate(data, kind: str) -> list[str]:
             _err(errors, "merged_sha must not be null when state is applied")
         if state == "rejected" and data.get("reason") is None:
             _err(errors, "reason must not be null when state is rejected")
+        if state in APPLY_STATUS_STATES and data.get("intended_base") is None:
+            _err(errors, f"intended_base must not be null when state is {state}")
+        if state in APPLY_STATUS_STATES and data.get("expected_head_sha") is None:
+            _err(errors, f"expected_head_sha must not be null when state is {state}")
+        if state == "applied" and data.get("observed_base") is None:
+            _err(errors, "observed_base must not be null when state is applied")
+        if state == "applied" and data.get("observed_head_sha") is None:
+            _err(errors, "observed_head_sha must not be null when state is applied")
+        pushed_sha_val = data.get("pushed_sha")
+        expected_head_sha_val = data.get("expected_head_sha")
+        if (
+            pushed_sha_val is not None
+            and expected_head_sha_val is not None
+            and pushed_sha_val != expected_head_sha_val
+        ):
+            _err(errors, "pushed_sha != expected_head_sha")
 
     return errors
 

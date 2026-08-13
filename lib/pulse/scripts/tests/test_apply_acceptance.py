@@ -29,6 +29,9 @@ from lib.pulse.scripts import (
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "neutral_repos"
 
+PROPOSAL_DIGEST = "v1|" + "a" * 64
+AUTHORIZATION_DIGEST = "v1|" + "b" * 64
+
 
 # --- Fakes & Test Helpers --------------------------------------------------
 
@@ -347,6 +350,11 @@ class TestNeutralApplyAcceptanceSuite:
             body="Automated neutral apply PR",
             result_path=result_path,
             gh_ops=gh_ops,
+            recorded_proposal_id="prop-docs-100",
+            proposal_digest=PROPOSAL_DIGEST,
+            authorization_digest=AUTHORIZATION_DIGEST,
+            intended_base="main",
+            expected_head_sha="pushed_sha_base_100",
             actor_id="octocat@laptop",
             workspace="acme",
         )
@@ -375,6 +383,11 @@ class TestNeutralApplyAcceptanceSuite:
             branch="pulse/apply/prop-docs-100",
             result_path=result_path,
             gh_ops=gh_ops,
+            recorded_proposal_id="prop-docs-100",
+            proposal_digest=PROPOSAL_DIGEST,
+            authorization_digest=AUTHORIZATION_DIGEST,
+            intended_base="main",
+            expected_head_sha="pushed_sha_base_100",
             advance_base=advance_base_fake,
             actor_id="octocat@laptop",
             workspace="acme",
@@ -395,6 +408,13 @@ class TestNeutralApplyAcceptanceSuite:
             branch="pulse/apply/prop-docs-100",
             result_path=result_path,
             gh_ops=gh_ops,
+            recorded_proposal_id="prop-docs-100",
+            proposal_digest=PROPOSAL_DIGEST,
+            authorization_digest=AUTHORIZATION_DIGEST,
+            intended_base="main",
+            expected_head_sha="pushed_sha_base_100",
+            observed_base="main",
+            observed_head_sha="merged_sha_docs_999",
             advance_base=advance_base_fake,
             actor_id="octocat@laptop",
             workspace="acme",
@@ -543,6 +563,11 @@ class TestNeutralApplyAcceptanceSuite:
             body="Automated node lockfile PR",
             result_path=result_path,
             gh_ops=gh_ops,
+            recorded_proposal_id="prop-node-200",
+            proposal_digest=PROPOSAL_DIGEST,
+            authorization_digest=AUTHORIZATION_DIGEST,
+            intended_base="main",
+            expected_head_sha="sha_node_base_200",
             actor_id="octocat@laptop",
             workspace="acme",
         )
@@ -565,6 +590,13 @@ class TestNeutralApplyAcceptanceSuite:
             branch="pulse/apply/prop-node-200",
             result_path=result_path,
             gh_ops=gh_ops,
+            recorded_proposal_id="prop-node-200",
+            proposal_digest=PROPOSAL_DIGEST,
+            authorization_digest=AUTHORIZATION_DIGEST,
+            intended_base="main",
+            expected_head_sha="sha_node_base_200",
+            observed_base="main",
+            observed_head_sha="merged_sha_node_888",
             advance_base=advance_base_fake,
             actor_id="octocat@laptop",
             workspace="acme",
@@ -648,6 +680,11 @@ class TestOverlayApplySuite:
             body="Automated marketplace entry PR",
             result_path=result_path,
             gh_ops=gh_ops,
+            recorded_proposal_id="prop-mkt-300",
+            proposal_digest=PROPOSAL_DIGEST,
+            authorization_digest=AUTHORIZATION_DIGEST,
+            intended_base="main",
+            expected_head_sha="sha_plugin_base_300",
             actor_id="octocat@laptop",
             workspace="acme",
         )
@@ -670,6 +707,13 @@ class TestOverlayApplySuite:
             branch="pulse/apply/prop-mkt-300",
             result_path=result_path,
             gh_ops=gh_ops,
+            recorded_proposal_id="prop-mkt-300",
+            proposal_digest=PROPOSAL_DIGEST,
+            authorization_digest=AUTHORIZATION_DIGEST,
+            intended_base="main",
+            expected_head_sha="sha_plugin_base_300",
+            observed_base="main",
+            observed_head_sha="merged_sha_mkt_777",
             advance_base=advance_base_fake,
             actor_id="octocat@laptop",
             workspace="acme",
