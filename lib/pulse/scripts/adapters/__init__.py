@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from lib.pulse.scripts.adapters import generic
+from lib.pulse.scripts.adapters import node_dependencies
+from lib.pulse.scripts.adapters import python_dependencies
 from lib.pulse.scripts.check_adapters import AdapterRegistry
 
 
@@ -13,6 +15,20 @@ def register_universal_adapters(registry: AdapterRegistry) -> None:
     registry.register("generic.license", generic.license)
     registry.register("github.branch_protection", generic.branch_protection)
     registry.register("github.security_policy", generic.security_policy)
+    registry.register("python.dependencies", python_dependencies.evaluate_python)
+    registry.register("node.dependencies", node_dependencies.evaluate_node)
+
+    # Lazy: dependency_pipeline imports lib.pulse.scripts.adapters.{python,node}_
+    # dependencies, so importing it at module level here would cycle back into
+    # this very package's __init__. Deferring to call time breaks the cycle —
+    # by then both submodules above are already fully imported.
+    from lib.pulse.scripts.dependency_pipeline import (
+        evaluate_fleet_dependency_coherence_placeholder,
+    )
+
+    registry.register(
+        "fleet.dependencies.coherence", evaluate_fleet_dependency_coherence_placeholder
+    )
 
     registry.register("generic.docs", generic.documentation)
     registry.register("github.actions", generic.ci)

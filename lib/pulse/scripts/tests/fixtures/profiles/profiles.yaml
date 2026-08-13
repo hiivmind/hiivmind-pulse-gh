@@ -40,7 +40,7 @@ scorecards:
     extends: generic-v1
     checks:
       - id: dependency-updates
-        adapter: python.dependencies
+        adapter: python.dependency-freshness
         weight: 1
       - id: package-release
         adapter: python.package-release
@@ -51,7 +51,7 @@ scorecards:
     extends: generic-v1
     checks:
       - id: dependency-updates
-        adapter: python.dependencies
+        adapter: python.dependency-freshness
         weight: 1
       - id: service-runtime
         adapter: python.service-runtime
@@ -61,7 +61,7 @@ scorecards:
     extends: generic-v1
     checks:
       - id: dependency-updates
-        adapter: node.dependencies
+        adapter: node.dependency-freshness
         weight: 1
       - id: web-build
         adapter: node.web-build
@@ -99,13 +99,13 @@ adapters:
     state: available
   claude.plugin-structure:
     state: available
-  python.dependencies:
+  python.dependency-freshness:
     state: available
   python.package-release:
     state: available
   python.service-runtime:
     state: available
-  node.dependencies:
+  node.dependency-freshness:
     state: available
   node.web-build:
     state: available
