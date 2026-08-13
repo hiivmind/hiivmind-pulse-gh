@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["pyyaml>=6.0"]
+# dependencies = ["pyyaml>=6.0", "packaging>=24.0", "semantic-version>=2.10"]
 # ///
 """Evaluate a heterogeneous F0 fleet through authoritative scorecards."""
 

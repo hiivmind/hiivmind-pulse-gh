@@ -14,6 +14,8 @@ dev = [
     "pytest>=8.0",
     "pyyaml>=6.0",
     "ruamel.yaml>=0.18.0",
+    "packaging>=24.0",
+    "semantic-version>=2.10",
 ]
 
 [tool.pytest.ini_options]

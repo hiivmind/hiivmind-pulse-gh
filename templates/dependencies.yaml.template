@@ -1,0 +1,20 @@
+# Fleet dependency-coherence policy — see lib/patterns/dependency-coherence.md
+# for the full contract (glob grammar, policy semantics, strict-loading rules).
+#
+# Empty by default: `fleet_dependency_coherence` reports `not_applicable` for
+# every selected repository until at least one group is committed here. That
+# is real, durable coverage debt (tracked via `repositories_ungrouped`), not a
+# silent gap — commit a group as soon as two or more repositories should track
+# the same dependency versions together.
+
+contract_version: 1
+coherence_groups: {}
+
+# Example (uncomment and adapt):
+#
+# coherence_groups:
+#   core-runtime:
+#     repos: [acme/api, acme/worker]
+#     packages: ["python:requests", "npm:@acme/*"]
+#     exclude_packages: ["python:typing-extensions"]
+#     policy: same-minor
