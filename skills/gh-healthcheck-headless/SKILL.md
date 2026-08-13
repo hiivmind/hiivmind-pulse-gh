@@ -133,32 +133,32 @@ do not synthesize a healthy or unhealthy state.
 
 When any selected repository's resolved scorecard contains
 `python_manifest_lock_consistency`, `node_manifest_lock_consistency`, or
-`fleet_dependency_coherence`, materialize dependency evidence before dispatch:
+`fleet_dependency_coherence`, materialize dependency evidence before dispatch.
+Resolve the selected repository list from `dependency_pipeline.dependency_selected_repos`,
+then invoke the materialize CLI directly — never `nave_adapter.py materialize`
+(its own terminal-facing output is deliberately content-free, so it cannot
+carry artifact `content` through) and never `nave_adapter.py materialize --json`
+(no such flag exists on that subcommand):
 
 ```bash
-uv run "${PLUGIN_ROOT}/lib/pulse/scripts/nave_adapter.py" materialize \
-  --request "$DEPENDENCY_REQUEST" --json > "$DEPENDENCY_EVIDENCE_RAW"
+DEPENDENCY_EVIDENCE_JSON=$(
+  uv run "${PLUGIN_ROOT}/lib/pulse/scripts/dependency_pipeline.py" \
+    --repos "$DEPENDENCY_SELECTED_REPOS"
+)
 ```
 
-The skill never calls GitHub raw-content APIs and never reads Nave cache paths
-for this data — `nave_adapter.py materialize` (protocol 2) is the only source.
-Build `$DEPENDENCY_REQUEST` from `dependency_pipeline.DEPENDENCY_SELECTORS`
-applied to the selected repositories (`dependency_pipeline.dependency_selected_repos`),
-normalize the raw result with `dependency_evidence.normalize`, and validate
-strictly before use:
-
-```bash
-uv run "${PLUGIN_ROOT}/lib/pulse/scripts/validate_dependency_evidence.py" \
-  "$DEPENDENCY_EVIDENCE_JSON"
-```
+This one call performs `build_request` → `nave_adapter.materialize` →
+`dependency_evidence.normalize` → `validate_dependency_evidence.validate` →
+`dependency_evidence.write_evidence` under a run-scoped `0700` temp directory
+(`dependency_evidence.secure_run_dir`), and prints **only the resulting file
+path** to stdout — the normalized document carries raw file content and must
+never otherwise reach a terminal, log, or this skill's own working state.
+`$DEPENDENCY_SELECTED_REPOS` is a comma-separated `owner/name` list.
 
 Missing protocol-2 capability, or a materialize/validation failure, writes the
 per-check `unsupported` coverage F4's adapters already handle — it does not
-ABORT the run; every other healthcheck continues unaffected. Store
-`$DEPENDENCY_EVIDENCE_JSON` under a run-scoped `0700` temp directory
-(`dependency_evidence.secure_run_dir`) and delete it once the snapshot below is
-written — it carries raw file content and must never persist across sessions
-or be committed.
+ABORT the run; every other healthcheck continues unaffected. Delete
+`$DEPENDENCY_EVIDENCE_JSON` once the snapshot below is written.
 
 If `CONFIG_DIR/dependencies.yaml` exists, pass it as the coherence policy.
 Invoke the F3 engine exactly once over the prepared F0/F1 inputs, plus the F4

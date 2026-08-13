@@ -3,6 +3,15 @@ sanitized pre-dispatch evaluation boundary."""
 
 from __future__ import annotations
 
+import json
+import shutil
+import stat
+import subprocess
+import tempfile
+from pathlib import Path
+
+import pytest
+
 from lib.pulse.scripts import dependency_pipeline as dp
 from lib.pulse.scripts.dependency_evidence import Artifact, RepoEvidence
 from lib.pulse.scripts.profile_dispatch import (
@@ -187,3 +196,61 @@ def test_evaluate_dependencies_sanitizes_an_internal_parser_exception(monkeypatc
     assert evaluation.detection.state == "error"
     assert "leaked secret" not in str(evaluation)
     assert evaluation.coverage_state == "complete"
+
+
+# --- materialize CLI entry point (main()) --------------------------------------
+
+
+_MATERIALIZE_FIXTURES = Path(__file__).parent / "fixtures" / "nave" / "dependency_pipeline_cli"
+
+
+def test_main_writes_content_free_path_and_secure_file(tmp_path, monkeypatch, capsys):
+    # Route secure_run_dir() into tmp_path so the test cleans up after itself.
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
+    exit_code = dp.main(["--repos", "acme/api", "--nave-fixtures", str(_MATERIALIZE_FIXTURES)])
+    assert exit_code == 0
+    out = capsys.readouterr().out.strip()
+    written_path = Path(out)
+    assert written_path.exists()
+    # stdout is ONLY the path — never the materialized content.
+    assert "pyproject.toml" not in out
+    assert "[project]" not in out
+
+    document = json.loads(written_path.read_text())
+    assert document["repos"][0]["repo"] == "acme/api"
+    assert document["repos"][0]["artifacts"][0]["content"] == '[project]\nname="x"\n'
+    assert stat.S_IMODE(written_path.stat().st_mode) == 0o600
+    assert stat.S_IMODE(written_path.parent.stat().st_mode) == 0o700
+
+
+def test_main_rejects_empty_repos_list():
+    assert dp.main(["--repos", ""]) == 2
+
+
+@pytest.mark.skipif(shutil.which("uv") is None, reason="uv is not installed on PATH")
+def test_isolated_uv_run_materialize_cli_never_prints_raw_content():
+    """The exact production `uv run` invocation, not an in-process import —
+    proves the PEP 723 header is sufficient standalone AND that nothing but
+    the file path ever reaches stdout."""
+    script = Path("lib/pulse/scripts/dependency_pipeline.py")
+    completed = subprocess.run(
+        [
+            "uv", "run", "--no-project", str(script),
+            "--repos", "acme/api",
+            "--nave-fixtures", str(_MATERIALIZE_FIXTURES),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert completed.returncode == 0, completed.stderr
+    out = completed.stdout.strip()
+    assert "[project]" not in out
+    assert "pyproject.toml" not in out
+    written_path = Path(out)
+    assert written_path.exists()
+    document = json.loads(written_path.read_text())
+    assert document["repos"][0]["repo"] == "acme/api"
+    written_path.unlink()
+    written_path.parent.rmdir()

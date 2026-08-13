@@ -21,6 +21,16 @@ coherence_groups:
 """
 
 
+def test_malformed_yaml_error_never_echoes_source_content():
+    # PyYAML embeds the offending source line in its own exception message —
+    # the policy loader must never let that content reach the raised error.
+    canary = "CANARY-SECRET-do-not-leak-42"
+    doc = f"contract_version: 1\ncoherence_groups: {{{canary}: [unbalanced\n"
+    with pytest.raises(DependencyPolicyError) as excinfo:
+        parse_dependency_policy(doc)
+    assert canary not in str(excinfo.value)
+
+
 def test_valid_document_parses_into_dependency_policy():
     policy = parse_dependency_policy(VALID_DOC)
     assert len(policy.groups) == 1
@@ -193,6 +203,21 @@ coherence_groups:
         "python:requests",
         "python:type[i]ng*",
     )
+
+
+def test_bracket_range_rejects_non_ascii_digit():
+    # str.isdigit() accepts Unicode digits (e.g. Devanagari "३"); the grammar's
+    # digit terminal is strictly ASCII "0".."9".
+    doc = """
+contract_version: 1
+coherence_groups:
+  g1:
+    repos: [acme/api, acme/worker]
+    packages: ["python:foo[\u09693-5]"]
+    policy: exact
+"""
+    with pytest.raises(DependencyPolicyError):
+        parse_dependency_policy(doc)
 
 
 # --- unknown keys / policies -------------------------------------------------

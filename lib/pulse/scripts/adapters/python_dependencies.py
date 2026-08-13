@@ -16,6 +16,7 @@ from typing import Any, Literal
 
 import yaml
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.version import InvalidVersion, Version
 
 try:
     import tomllib
@@ -392,6 +393,26 @@ def _build_records_from_lock(
                 )
             )
             continue
+        try:
+            Version(unique_versions[0])
+        except InvalidVersion:
+            records.append(
+                PackageRecord(
+                    repo=repo,
+                    ecosystem="python",
+                    name=name,
+                    resolution="single",
+                    manifest_range=None,
+                    locked_version=None,
+                    unresolved_reason="unparseable_version",
+                    manager=manager,
+                    manifest_path=None,
+                    lock_path=None,
+                    tree_sha=tree_sha,
+                    provenance=provenance,
+                )
+            )
+            continue
         records.append(
             PackageRecord(
                 repo=repo,
@@ -583,10 +604,14 @@ def _range_local_findings(
     declarations: list[DeclaredRequirement],
     records: tuple[PackageRecord, ...],
     *,
-    poetry_branches_by_name: dict[str, tuple[str, ...]] | None = None,
+    is_poetry: bool = False,
 ) -> list[LocalFinding]:
-    """One LocalFinding per package with at least one range-checkable
-    declaration, fail if ANY declaration is violated."""
+    """One LocalFinding per package with at least one declaration, fail if ANY
+    range-checkable declaration is violated; unknown/non_range_spec when the
+    package resolved but every one of its declarations is non-range-spec —
+    never silently dropped. Poetry constraints are converted fresh per
+    declaration (never cached by package name — a package declared twice
+    with two different constraints must check each against its own range)."""
     records_by_name = {r.name: r for r in records}
     declarations_by_name: dict[str, list[DeclaredRequirement]] = {}
     for d in declarations:
@@ -602,11 +627,11 @@ def _range_local_findings(
         for decl in decls:
             if decl.unresolved_reason is not None or decl.manifest_range is None:
                 continue
-            checked_any = True
-            if poetry_branches_by_name is not None:
-                branches = poetry_branches_by_name.get(name)
+            if is_poetry:
+                branches = convert_poetry_constraint(decl.manifest_range)
                 if branches is None:
                     continue
+                checked_any = True
                 if not _satisfies_poetry_branches(branches, record.locked_version):
                     violated = True
                     break
@@ -617,10 +642,14 @@ def _range_local_findings(
                     )
                 except InvalidSpecifier:
                     continue
+                checked_any = True
                 if not ok:
                     violated = True
                     break
         if not checked_any:
+            findings.append(
+                LocalFinding(name=name, status="unknown", reason_code="non_range_spec")
+            )
             continue
         findings.append(
             LocalFinding(
@@ -643,14 +672,19 @@ def _finalize(
     partial_unsupported: int = 0,
     force_status: tuple[str, str | None] | None = None,
 ) -> DependencyRepoEvaluation:
-    has_multiple = any(r.resolution == "multiple" for r in records)
+    has_multiple_resolutions = any(r.resolution == "multiple" for r in records)
+    has_unparseable_version = any(r.unresolved_reason == "unparseable_version" for r in records)
+    has_unresolved_record = has_multiple_resolutions or has_unparseable_version
     if force_status is not None:
         status, reason = force_status
     else:
         status, reason = reduce_local_status(local_findings)
-        if status == "pass" and has_multiple:
-            status, reason = "unknown", "multiple_resolutions"
-    coverage_state = "incomplete" if (has_multiple or force_status is not None) else "complete"
+        if status == "pass" and has_unresolved_record:
+            status = "unknown"
+            reason = (
+                "multiple_resolutions" if has_multiple_resolutions else "unparseable_version"
+            )
+    coverage_state = "incomplete" if (has_unresolved_record or force_status is not None) else "complete"
     return DependencyRepoEvaluation(
         repo=repo,
         ecosystem=ecosystem,
@@ -799,13 +833,6 @@ def _parse_poetry(repo: str, evidence: RepoEvidence) -> DependencyRepoEvaluation
         )
 
     declarations = _poetry_declarations(manifest_data, "pyproject.toml")
-    poetry_branches_by_name: dict[str, tuple[str, ...]] = {}
-    for d in declarations:
-        if d.unresolved_reason is None and d.manifest_range is not None:
-            branches = convert_poetry_constraint(d.manifest_range)
-            if branches is not None:
-                poetry_branches_by_name[d.name] = branches
-
     manifest_ranges = {d.name: d.manifest_range for d in declarations if d.unresolved_reason is None}
     lock_versions = _collect_lock_versions(lock_data)
     records = _build_records_from_lock(
@@ -819,9 +846,7 @@ def _parse_poetry(repo: str, evidence: RepoEvidence) -> DependencyRepoEvaluation
         lock_versions,
         manifest_ranges,
     )
-    findings = _range_local_findings(
-        declarations, records, poetry_branches_by_name=poetry_branches_by_name
-    )
+    findings = _range_local_findings(declarations, records, is_poetry=True)
     return _finalize(repo, "python", detection, declarations, records, findings)
 
 
@@ -833,13 +858,18 @@ def _parse_pip_tools(repo: str, evidence: RepoEvidence) -> DependencyRepoEvaluat
     for artifact in in_artifacts:
         declarations.extend(_pip_tools_in_declarations(artifact.content or "", artifact.path))
 
-    pins: dict[str, str] = {}
-    txt_paths: list[str] = []
+    # Accumulate EVERY (version, contributing artifact) pair per name across
+    # every requirements*.txt artifact — never last-file-wins, so two
+    # compiled files pinning different versions of the same package surface
+    # as a genuine resolution="multiple", not a silently overwritten pin.
+    pins_by_name: dict[str, list[tuple[str, Any]]] = {}
     for artifact in txt_artifacts:
-        txt_paths.append(artifact.path)
-        pins.update(_pip_tools_txt_pins(artifact.content or ""))
+        for name, version in _pip_tools_txt_pins(artifact.content or "").items():
+            pins_by_name.setdefault(name, []).append((version, artifact))
 
-    source_files = tuple(sorted([a.path for a in in_artifacts] + txt_paths))
+    source_files = tuple(
+        sorted([a.path for a in in_artifacts] + [a.path for a in txt_artifacts])
+    )
     detection = AdapterDetection(
         state="applicable", manager="pip-tools", reason_code=None, source_files=source_files
     )
@@ -857,16 +887,19 @@ def _parse_pip_tools(repo: str, evidence: RepoEvidence) -> DependencyRepoEvaluat
             force_status=("warn", "unresolved_lockless"),
         )
 
-    manifest_path = in_artifacts[0].path if in_artifacts else txt_paths[0]
+    manifest_path = in_artifacts[0].path if in_artifacts else txt_artifacts[0].path
     manifest_ranges = {d.name: d.manifest_range for d in declarations if d.unresolved_reason is None}
     if not in_artifacts:
         # A frozen requirements.txt with no source .in: each pin is its own
-        # trivially-satisfied declaration.
-        for name, version in pins.items():
+        # trivially-satisfied declaration (the first resolved version stands
+        # in for the declaration text when a name is pinned differently by
+        # more than one compiled file).
+        for name, entries in sorted(pins_by_name.items()):
+            version = sorted({v for v, _artifact in entries})[0]
             declarations.append(
                 DeclaredRequirement(
                     name=name,
-                    manifest_path=txt_paths[0],
+                    manifest_path=txt_artifacts[0].path,
                     manifest_range=f"=={version}",
                     unresolved_reason=None,
                     group="main",
@@ -874,29 +907,77 @@ def _parse_pip_tools(repo: str, evidence: RepoEvidence) -> DependencyRepoEvaluat
             )
         manifest_ranges = {d.name: d.manifest_range for d in declarations}
 
-    lock_path = txt_paths[0]
-    records = tuple(
-        PackageRecord(
-            repo=repo,
-            ecosystem="python",
-            name=name,
-            resolution="single",
-            manifest_range=manifest_ranges.get(name),
-            locked_version=version,
-            unresolved_reason=None,
-            manager="pip-tools",
-            manifest_path=manifest_path,
-            lock_path=lock_path,
-            tree_sha=evidence.tree_sha,
-            provenance=(
-                ArtifactProvenance(role="manifest", path=manifest_path, blob_sha=None),
-                ArtifactProvenance(role="lock", path=lock_path, blob_sha=None),
-            ),
+    manifest_provenance = tuple(
+        ArtifactProvenance(role="manifest", path=a.path, blob_sha=a.blob_sha)
+        for a in sorted(in_artifacts, key=lambda a: a.path)
+    ) or (ArtifactProvenance(role="manifest", path=manifest_path, blob_sha=None),)
+
+    records: list[PackageRecord] = []
+    for name, entries in sorted(pins_by_name.items()):
+        unique_versions = sorted({v for v, _artifact in entries})
+        contributing = sorted({a.path: a for _v, a in entries}.values(), key=lambda a: a.path)
+        lock_provenance = tuple(
+            ArtifactProvenance(role="lock", path=a.path, blob_sha=a.blob_sha) for a in contributing
         )
-        for name, version in sorted(pins.items())
-    )
-    findings = _range_local_findings(declarations, records)
-    return _finalize(repo, "python", detection, declarations, records, findings)
+        provenance = tuple(
+            sorted(manifest_provenance + lock_provenance, key=lambda p: (p.role, p.path))
+        )
+        if len(unique_versions) > 1:
+            records.append(
+                PackageRecord(
+                    repo=repo,
+                    ecosystem="python",
+                    name=name,
+                    resolution="multiple",
+                    manifest_range=None,
+                    locked_version=None,
+                    unresolved_reason="multiple_resolutions",
+                    manager="pip-tools",
+                    manifest_path=None,
+                    lock_path=None,
+                    tree_sha=evidence.tree_sha,
+                    provenance=provenance,
+                )
+            )
+            continue
+        try:
+            Version(unique_versions[0])
+        except InvalidVersion:
+            records.append(
+                PackageRecord(
+                    repo=repo,
+                    ecosystem="python",
+                    name=name,
+                    resolution="single",
+                    manifest_range=None,
+                    locked_version=None,
+                    unresolved_reason="unparseable_version",
+                    manager="pip-tools",
+                    manifest_path=None,
+                    lock_path=None,
+                    tree_sha=evidence.tree_sha,
+                    provenance=provenance,
+                )
+            )
+            continue
+        records.append(
+            PackageRecord(
+                repo=repo,
+                ecosystem="python",
+                name=name,
+                resolution="single",
+                manifest_range=manifest_ranges.get(name),
+                locked_version=unique_versions[0],
+                unresolved_reason=None,
+                manager="pip-tools",
+                manifest_path=manifest_path,
+                lock_path=contributing[0].path,
+                tree_sha=evidence.tree_sha,
+                provenance=provenance,
+            )
+        )
+    findings = _range_local_findings(declarations, tuple(records))
+    return _finalize(repo, "python", detection, declarations, tuple(records), findings)
 
 
 _CONDA_EXACT_PIN_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([^\s;]+)$")

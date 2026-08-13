@@ -241,6 +241,10 @@ def _is_ascii_letter(ch: str) -> bool:
     return ch.isascii() and ch.isalpha()
 
 
+def _is_ascii_digit(ch: str) -> bool:
+    return "0" <= ch <= "9"
+
+
 def _is_valid_bracket_body(body: str) -> bool:
     if body.startswith("!"):
         body = body[1:]
@@ -250,12 +254,12 @@ def _is_valid_bracket_body(body: str) -> bool:
     while i < n:
         c = body[i]
         is_letter = _is_ascii_letter(c)
-        is_digit = c.isdigit()
+        is_digit = _is_ascii_digit(c)
         if not (is_letter or is_digit):
             return False
         if i + 2 < n and body[i + 1] == "-":
             c2 = body[i + 2]
-            if is_digit and c2.isdigit():
+            if is_digit and _is_ascii_digit(c2):
                 i += 3
                 continue
             if is_letter and _is_ascii_letter(c2):
@@ -394,6 +398,8 @@ def compare(
     group's own member repos; a package identity matched by multiple groups
     produces one independent finding per group (never merged or ranked).
     """
+    records = list(records)
+    groups = list(groups)
     findings: list[DivergenceFinding] = []
     unresolved: list[DivergenceFinding] = []
 

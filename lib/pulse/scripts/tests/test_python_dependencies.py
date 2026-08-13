@@ -342,6 +342,41 @@ def test_poetry_vcs_dependency_is_non_range_spec():
     assert decl.unresolved_reason == "non_range_spec"
 
 
+def test_poetry_vcs_dependency_produces_unknown_local_finding_not_silent_pass():
+    evidence = _manager_evidence("poetry")
+    evaluation = parse_python("acme/poetry", evidence, capability=True)
+    vcs = next(f for f in evaluation.local_findings if f.name == "vcs-dep")
+    assert vcs.status == "unknown"
+    assert vcs.reason_code == "non_range_spec"
+
+
+def test_poetry_evaluates_each_declaration_against_its_own_constraint():
+    # A package declared in BOTH main and dev with DIFFERENT caret ranges must
+    # check each declaration against its own converted range — never a single
+    # per-package cache that the last-processed declaration overwrites.
+    pyproject = """
+[tool.poetry.dependencies]
+order-pkg = "^2.0"
+
+[tool.poetry.group.dev.dependencies]
+order-pkg = "^1.0"
+"""
+    lock = '[[package]]\nname = "order-pkg"\nversion = "1.5.0"\n'
+    evidence = _evidence(
+        "acme/poetry-order",
+        [
+            _found("pyproject.toml", pyproject, selector_id="python.pyproject"),
+            _found("poetry.lock", lock, selector_id="python.poetry_lock"),
+        ],
+    )
+    evaluation = parse_python("acme/poetry-order", evidence, capability=True)
+    finding = next(f for f in evaluation.local_findings if f.name == "order-pkg")
+    # main's own range (^2.0 == [2.0.0,3.0.0)) does NOT contain the locked
+    # 1.5.0 — this must fail regardless of dev's separately-satisfied ^1.0.
+    assert finding.status == "fail"
+    assert finding.reason_code == "range_violation"
+
+
 # --- PDM ----------------------------------------------------------------------
 
 
@@ -375,6 +410,93 @@ def test_pip_tools_lockless_is_warn_unresolved_lockless():
     assert evaluation.local_reason_code == "unresolved_lockless"
     assert evaluation.records == ()
     assert evaluation.coverage_state == "incomplete"
+
+
+def test_pip_tools_conflicting_versions_across_files_is_multiple_resolutions():
+    # Two compiled requirements*.txt files pinning DIFFERENT versions of the
+    # same package must never silently collapse to whichever file was
+    # processed last — this is a genuine resolution ambiguity.
+    evidence = _evidence(
+        "acme/pip-tools-conflict",
+        [
+            _found("requirements.in", "click>=8.0\n", selector_id="python.pip_tools_in"),
+            _found(
+                "requirements.txt", "click==8.1.3\n", selector_id="python.pip_tools_txt"
+            ),
+            _found(
+                "requirements-dev.txt",
+                "click==8.0.0\n",
+                selector_id="python.pip_tools_txt",
+            ),
+        ],
+    )
+    evaluation = parse_python("acme/pip-tools-conflict", evidence, capability=True)
+    click = next(r for r in evaluation.records if r.name == "click")
+    assert click.resolution == "multiple"
+    assert click.unresolved_reason == "multiple_resolutions"
+    assert click.locked_version is None
+    lock_provenance = {p.path for p in click.provenance if p.role == "lock"}
+    assert lock_provenance == {"requirements.txt", "requirements-dev.txt"}
+
+
+def test_pip_tools_preserves_real_blob_sha_in_provenance():
+    evidence = _evidence(
+        "acme/pip-tools-provenance",
+        [
+            _found("requirements.in", "click>=8.0\n", selector_id="python.pip_tools_in"),
+            _found("requirements.txt", "click==8.1.3\n", selector_id="python.pip_tools_txt"),
+        ],
+    )
+    evaluation = parse_python("acme/pip-tools-provenance", evidence, capability=True)
+    click = next(r for r in evaluation.records if r.name == "click")
+    lock_entry = next(p for p in click.provenance if p.role == "lock")
+    manifest_entry = next(p for p in click.provenance if p.role == "manifest")
+    assert lock_entry.blob_sha == "a" * 40  # _found() stubs every artifact's blob_sha to "a"*40
+    assert manifest_entry.blob_sha == "a" * 40
+
+
+def test_unparseable_locked_version_never_crashes_and_is_typed():
+    evidence = _evidence(
+        "acme/uv-garbage-version",
+        [
+            _found(
+                "pyproject.toml",
+                '[project]\nname="x"\ndependencies=["requests>=1.0"]\n',
+                selector_id="python.pyproject",
+            ),
+            _found(
+                "uv.lock",
+                '[[package]]\nname="requests"\nversion="not-a-real-version!!"\n',
+                selector_id="python.uv_lock",
+            ),
+        ],
+    )
+    evaluation = parse_python("acme/uv-garbage-version", evidence, capability=True)
+    record = next(r for r in evaluation.records if r.name == "requests")
+    assert record.resolution == "single"
+    assert record.locked_version is None
+    assert record.unresolved_reason == "unparseable_version"
+    assert evaluation.local_status == "unknown"
+    assert evaluation.local_reason_code == "unparseable_version"
+    assert evaluation.coverage_state == "incomplete"
+
+    # And it must never abort compare() when fed into fleet comparison.
+    from lib.pulse.scripts.dependencies import CoherenceGroup, compare
+
+    group = CoherenceGroup(
+        id="g1",
+        repos=("acme/uv-garbage-version",),
+        packages=("python:requests",),
+        exclude_packages=(),
+        policy="same-minor",
+    )
+    report = compare(evaluation.records, [group])
+    assert report.findings == ()
+    # A single unparseable-version member still surfaces as unresolved
+    # coverage debt (never a guessed comparison) — the point of this test is
+    # that compare() handles it without raising, not that it vanishes.
+    assert len(report.unresolved) == 1
+    assert report.unresolved[0].distance == "unresolved"
 
 
 # --- Conda (nested pip: only) ------------------------------------------------

@@ -145,6 +145,48 @@ def test_pnpm_workspace_yaml_unresolved_is_workspace_sentinel_unresolved():
     assert evaluation.local_reason_code == "workspace_sentinel_unresolved"
 
 
+def test_empty_workspaces_array_still_declares_a_workspace():
+    # Any "workspaces" key at all is a declaration — an empty array is not
+    # evidence of "no workspace" and must not fall through to normal parsing.
+    evidence = _evidence(
+        "acme/mono-empty",
+        [
+            _found(
+                "package.json",
+                '{"name":"acme-mono","version":"0.1.0","workspaces":[]}',
+                selector_id="node.package_json",
+            ),
+            _absent("package-lock.json", selector_id="node.npm_lock"),
+            _absent("pnpm-lock.yaml", selector_id="node.pnpm_lock"),
+            _absent("pnpm-workspace.yaml", selector_id="node.pnpm_workspace_yaml"),
+            _absent("yarn.lock", selector_id="node.yarn_lock"),
+        ],
+    )
+    detection = detect_node("acme/mono-empty", evidence, capability=True)
+    assert detection.state == "unsupported"
+    assert detection.reason_code == "workspace_repository"
+
+
+def test_empty_workspaces_packages_object_still_declares_a_workspace():
+    evidence = _evidence(
+        "acme/mono-empty-obj",
+        [
+            _found(
+                "package.json",
+                '{"name":"acme-mono","version":"0.1.0","workspaces":{"packages":[]}}',
+                selector_id="node.package_json",
+            ),
+            _absent("package-lock.json", selector_id="node.npm_lock"),
+            _absent("pnpm-lock.yaml", selector_id="node.pnpm_lock"),
+            _absent("pnpm-workspace.yaml", selector_id="node.pnpm_workspace_yaml"),
+            _absent("yarn.lock", selector_id="node.yarn_lock"),
+        ],
+    )
+    detection = detect_node("acme/mono-empty-obj", evidence, capability=True)
+    assert detection.state == "unsupported"
+    assert detection.reason_code == "workspace_repository"
+
+
 # --- no manager evidence / evidence gap ---------------------------------------
 
 
@@ -358,11 +400,17 @@ def test_non_range_npm_forms_are_non_range_spec():
     assert reasons["git-dep"] == "non_range_spec"
     assert reasons["alias-dep"] == "non_range_spec"
     # every record still resolves — a non-range declared spec never blocks
-    # fleet comparison of the locked_version.
+    # fleet comparison of the locked_version — but the LOCAL check can't
+    # confirm compliance with an unconstrained/non-range declaration, so it
+    # is explicit unknown coverage debt, never a guessed pass.
     for name in ("wildcard-dep", "workspace-dep", "git-dep", "alias-dep"):
         record = next(r for r in evaluation.records if r.name == name)
         assert record.resolution == "single"
-    assert evaluation.local_status == "pass"
+        finding = next(f for f in evaluation.local_findings if f.name == name)
+        assert finding.status == "unknown"
+        assert finding.reason_code == "non_range_spec"
+    assert evaluation.local_status == "unknown"
+    assert evaluation.local_reason_code == "non_range_spec"
 
 
 # --- genuinely ambiguous resolution --------------------------------------------
@@ -394,6 +442,47 @@ def test_genuine_multi_resolution_is_unknown_multiple_resolutions():
     assert evaluation.local_status == "unknown"
     assert evaluation.local_reason_code == "multiple_resolutions"
 
+
+
+def test_unparseable_npm_locked_version_never_crashes_and_is_typed():
+    package_json = '{"name":"acme-garbage","version":"0.1.0","dependencies":{"lodash":"^1.0.0"}}'
+    lock = (
+        '{"lockfileVersion":3,"packages":{'
+        '"":{"name":"acme-garbage","version":"0.1.0"},'
+        '"node_modules/lodash":{"version":"not-a-real-semver!!"}'
+        "}}"
+    )
+    evidence = _evidence(
+        "acme/garbage-version",
+        [
+            _found("package.json", package_json, selector_id="node.package_json"),
+            _found("package-lock.json", lock, selector_id="node.npm_lock"),
+            _absent("pnpm-lock.yaml", selector_id="node.pnpm_lock"),
+            _absent("pnpm-workspace.yaml", selector_id="node.pnpm_workspace_yaml"),
+            _absent("yarn.lock", selector_id="node.yarn_lock"),
+        ],
+    )
+    evaluation = parse_node("acme/garbage-version", evidence, capability=True)
+    record = next(r for r in evaluation.records if r.name == "lodash")
+    assert record.resolution == "single"
+    assert record.locked_version is None
+    assert record.unresolved_reason == "unparseable_version"
+    assert evaluation.local_status == "unknown"
+    assert evaluation.local_reason_code == "unparseable_version"
+    assert evaluation.coverage_state == "incomplete"
+
+    from lib.pulse.scripts.dependencies import CoherenceGroup, compare
+
+    group = CoherenceGroup(
+        id="g1",
+        repos=("acme/garbage-version",),
+        packages=("npm:lodash",),
+        exclude_packages=(),
+        policy="same-minor",
+    )
+    report = compare(evaluation.records, [group])
+    assert report.findings == ()
+    assert len(report.unresolved) == 1
 
 # --- evaluate_node (CheckBlock dispatch) ----------------------------------------
 

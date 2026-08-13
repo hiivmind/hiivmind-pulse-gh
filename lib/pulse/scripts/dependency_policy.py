@@ -144,7 +144,15 @@ def parse_dependency_policy(text: str) -> DependencyPolicy:
     except DependencyPolicyError:
         raise
     except yaml.YAMLError as exc:
-        raise DependencyPolicyError(f"invalid YAML: {exc}") from exc
+        # Content-free: PyYAML embeds the offending source line in its own
+        # exception message — never interpolate it. A bounded position (when
+        # available) is the most we ever surface.
+        mark = getattr(exc, "problem_mark", None)
+        if mark is not None:
+            raise DependencyPolicyError(
+                f"invalid YAML at line {mark.line + 1}, column {mark.column + 1}"
+            ) from exc
+        raise DependencyPolicyError("invalid YAML") from exc
 
     document = _mapping(raw, "dependencies.yaml")
     _only_keys(document, TOP_LEVEL_KEYS, "dependencies.yaml")

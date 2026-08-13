@@ -180,6 +180,28 @@ def _require_hex_or_null(data: dict[str, Any], key: str, errors: list[str], ctx:
         errors.append(f"{ctx}{key} must be a 40- or 64-char hex string or null")
 
 
+def _require_nonnegative_int(data: dict[str, Any], key: str, errors: list[str], ctx: str) -> int | None:
+    value = require(data, key, int, errors, ctx)
+    if value is not None and value < 0:
+        errors.append(f"{ctx}{key} must be a non-negative integer")
+        return None
+    return value
+
+
+def _require_string_list(
+    data: dict[str, Any], key: str, errors: list[str], ctx: str, *, allow_empty: bool = True
+) -> list[str] | None:
+    value = require(data, key, list, errors, ctx)
+    if value is None:
+        return None
+    if not allow_empty and not value:
+        errors.append(f"{ctx}{key} must be non-empty")
+        return None
+    if not all(isinstance(item, str) and item for item in value):
+        errors.append(f"{ctx}{key} must be a list of non-empty strings")
+        return None
+    return value
+
 def _validate_provenance(entry: Any, errors: list[str], ctx: str) -> None:
     if not isinstance(entry, dict):
         errors.append(f"{ctx[:-1]} is not a mapping")
@@ -234,9 +256,9 @@ def _validate_group(group_id: Any, entry: Any, errors: list[str], ctx: str) -> N
         return
     _require_exact_keys(entry, GROUP_KEYS, errors, ctx)
     require_enum(entry, "policy", POLICIES, errors, ctx)
-    require(entry, "repos", list, errors, ctx)
-    require(entry, "packages", list, errors, ctx)
-    require(entry, "exclude_packages", list, errors, ctx)
+    _require_string_list(entry, "repos", errors, ctx, allow_empty=False)
+    _require_string_list(entry, "packages", errors, ctx, allow_empty=False)
+    _require_string_list(entry, "exclude_packages", errors, ctx, allow_empty=True)
 
 
 def _validate_finding(entry: Any, errors: list[str], ctx: str, *, allowed_distances: set[str]) -> tuple[str, str, str] | None:
@@ -270,9 +292,9 @@ def _validate_summary(entry: Any, errors: list[str], ctx: str) -> RepositoryEval
     adapter = require_enum(entry, "adapter", ADAPTERS, errors, ctx)
     status = require_enum(entry, "status", CHECK_STATUSES, errors, ctx)
     reason_code = require_nullable(entry, "reason_code", str, errors, ctx)
-    total = require(entry, "total_packages", int, errors, ctx)
-    matched = require(entry, "matched_packages", int, errors, ctx)
-    partial = require(entry, "partial_unsupported", int, errors, ctx)
+    total = _require_nonnegative_int(entry, "total_packages", errors, ctx)
+    matched = _require_nonnegative_int(entry, "matched_packages", errors, ctx)
+    partial = _require_nonnegative_int(entry, "partial_unsupported", errors, ctx)
     memberships = require(entry, "group_memberships", list, errors, ctx)
     if (
         repo is None
@@ -285,8 +307,17 @@ def _validate_summary(entry: Any, errors: list[str], ctx: str) -> RepositoryEval
         or memberships is None
     ):
         return None
-    if not all(isinstance(m, str) for m in memberships):
-        errors.append(f"{ctx}group_memberships must be a list of strings")
+    if not all(isinstance(m, str) and m for m in memberships):
+        errors.append(f"{ctx}group_memberships must be a list of non-empty strings")
+        return None
+    if len(set(memberships)) != len(memberships):
+        errors.append(f"{ctx}group_memberships must not contain duplicates")
+        return None
+    if list(memberships) != sorted(memberships):
+        errors.append(f"{ctx}group_memberships must be sorted")
+        return None
+    if matched > total:
+        errors.append(f"{ctx}matched_packages must not exceed total_packages")
         return None
     return RepositoryEvaluationSummary(
         repo=repo,
@@ -387,12 +418,18 @@ def validate(data: Any) -> list[str]:
 
     summaries_raw = require(data, "repository_evaluations", list, errors)
     parsed_summaries: list[RepositoryEvaluationSummary] = []
+    seen_summary_pairs: set[tuple[str, str]] = set()
     prior_pair: tuple[str, str] | None = None
     for index, entry in enumerate(summaries_raw or []):
         summary = _validate_summary(entry, errors, f"repository_evaluations[{index}].")
         if summary is not None:
             parsed_summaries.append(summary)
             pair = (summary.repo, summary.ecosystem)
+            if pair in seen_summary_pairs:
+                errors.append(
+                    f"repository_evaluations[{index}]: duplicate (repo, ecosystem): {pair}"
+                )
+            seen_summary_pairs.add(pair)
             if prior_pair is not None and pair < prior_pair:
                 errors.append("repository_evaluations must be sorted by (repo, ecosystem)")
             prior_pair = pair

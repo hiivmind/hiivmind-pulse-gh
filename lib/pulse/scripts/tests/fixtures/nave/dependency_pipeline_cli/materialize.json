@@ -1,0 +1,23 @@
+{
+  "contract_version": 1,
+  "repos": [
+    {
+      "repo": "acme/api",
+      "ref_name": "main",
+      "tree_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "tree_complete": true,
+      "artifacts": [
+        {
+          "selector_id": "python.pyproject",
+          "path": "pyproject.toml",
+          "blob_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "size_bytes": 20,
+          "state": "found",
+          "encoding": "utf-8",
+          "content": "[project]\nname=\"x\"\n",
+          "detail": null
+        }
+      ]
+    }
+  ]
+}

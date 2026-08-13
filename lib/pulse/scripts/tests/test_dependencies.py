@@ -241,6 +241,21 @@ def test_single_member_bucket_produces_no_finding():
     assert report.unresolved == ()
 
 
+def test_compare_accepts_a_one_shot_iterator_of_records_across_multiple_groups():
+    # records is documented as Iterable[PackageRecord] — a generator (consumed
+    # once) must still produce findings for every group, not just the first.
+    def _records():
+        yield _record("acme/api", "requests", locked_version="1.0.0")
+        yield _record("acme/worker", "requests", locked_version="2.0.0")
+
+    groups = [
+        _group("g1", ["acme/api", "acme/worker"], ["python:requests"]),
+        _group("g2", ["acme/api", "acme/worker"], ["python:requests"]),
+    ]
+    report = compare(_records(), groups)
+    assert {f.group for f in report.findings} == {"g1", "g2"}
+
+
 # --- ecosystem / group scoping ------------------------------------------------
 
 

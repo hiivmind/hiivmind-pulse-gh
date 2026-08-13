@@ -60,12 +60,10 @@ def _yaml_loads(text: str) -> Any | None:
 
 
 def _has_workspaces_key(package_json: dict[str, Any]) -> bool:
-    value = package_json.get("workspaces")
-    if isinstance(value, list):
-        return bool(value)
-    if isinstance(value, dict):
-        return bool(value.get("packages"))
-    return False
+    # Any "workspaces" key at all — even an empty array or {"packages": []}
+    # — declares the repo a manager-declared workspace. An empty declaration
+    # is still a declaration; it is never evidence of "no workspace".
+    return "workspaces" in package_json
 
 
 # --- workspace / manager detection --------------------------------------------
@@ -340,6 +338,26 @@ def _build_npm_records(
                 )
             )
             continue
+        try:
+            SemVersion(unique_versions[0])
+        except ValueError:
+            records.append(
+                PackageRecord(
+                    repo=repo,
+                    ecosystem="npm",
+                    name=name,
+                    resolution="single",
+                    manifest_range=None,
+                    locked_version=None,
+                    unresolved_reason="unparseable_version",
+                    manager=manager,
+                    manifest_path=None,
+                    lock_path=None,
+                    tree_sha=tree_sha,
+                    provenance=provenance,
+                )
+            )
+            continue
         records.append(
             PackageRecord(
                 repo=repo,
@@ -377,15 +395,18 @@ def _range_local_findings(
         for decl in decls:
             if decl.unresolved_reason is not None or decl.manifest_range is None:
                 continue
-            checked_any = True
             try:
                 ok = NpmSpec(decl.manifest_range).match(SemVersion(record.locked_version))
             except ValueError:
                 continue
+            checked_any = True
             if not ok:
                 violated = True
                 break
         if not checked_any:
+            findings.append(
+                LocalFinding(name=name, status="unknown", reason_code="non_range_spec")
+            )
             continue
         findings.append(
             LocalFinding(
@@ -409,14 +430,19 @@ def _finalize(
     *,
     force_status: tuple[str, str | None] | None = None,
 ) -> DependencyRepoEvaluation:
-    has_multiple = any(r.resolution == "multiple" for r in records)
+    has_multiple_resolutions = any(r.resolution == "multiple" for r in records)
+    has_unparseable_version = any(r.unresolved_reason == "unparseable_version" for r in records)
+    has_unresolved_record = has_multiple_resolutions or has_unparseable_version
     if force_status is not None:
         status, reason = force_status
     else:
         status, reason = reduce_local_status(local_findings)
-        if status == "pass" and has_multiple:
-            status, reason = "unknown", "multiple_resolutions"
-    coverage_state = "incomplete" if (has_multiple or force_status is not None) else "complete"
+        if status == "pass" and has_unresolved_record:
+            status = "unknown"
+            reason = (
+                "multiple_resolutions" if has_multiple_resolutions else "unparseable_version"
+            )
+    coverage_state = "incomplete" if (has_unresolved_record or force_status is not None) else "complete"
     return DependencyRepoEvaluation(
         repo=repo,
         ecosystem="node",

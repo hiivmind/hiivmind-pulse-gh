@@ -13,10 +13,16 @@ unchecked `Mapping.get` fed directly into a parser.
 
 from __future__ import annotations
 
+import argparse
 import json
+import sys
 from collections.abc import Sequence
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Literal
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from lib.pulse.scripts import dependency_evidence as de
 from lib.pulse.scripts import nave_adapter
@@ -344,3 +350,44 @@ def dependency_coverage_to_dict(coverage: DependencyCoverage) -> dict:
         "packages_unmatched": coverage.packages_unmatched,
         "unsupported_by_adapter": dict(coverage.unsupported_by_adapter),
     }
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Materialize -> normalize -> validate -> write dependency evidence to a
+    secure, run-scoped temp file. Prints ONLY the resulting file path to
+    stdout — the normalized document carries raw file content and must never
+    reach a terminal or log. This is the one supported way to obtain
+    dependency-evidence.json outside an in-process caller: nave_adapter.py's
+    own `materialize` CLI subcommand deliberately strips content from its
+    terminal-facing output for the same reason.
+    """
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--repos", required=True, help="comma-separated owner/name repository list"
+    )
+    parser.add_argument("--nave-binary", default="nave")
+    parser.add_argument(
+        "--nave-fixtures", help="offline fixture directory (tests/dry-runs only)"
+    )
+    args = parser.parse_args(argv)
+
+    repos = [repo for repo in args.repos.split(",") if repo]
+    if not repos:
+        print("error: --repos must name at least one repository", file=sys.stderr)
+        return 2
+
+    runner = nave_adapter.NaveRunner(binary=args.nave_binary, fixtures=args.nave_fixtures)
+    try:
+        document = materialize_dependency_evidence(repos, runner=runner)
+    except ConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    run_dir = de.secure_run_dir()
+    path = de.write_evidence(run_dir, "dependency-evidence.json", document)
+    print(str(path))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

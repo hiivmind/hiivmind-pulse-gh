@@ -180,6 +180,56 @@ def test_unknown_top_level_key_rejected():
     assert any("unknown key: extra" in e for e in errors)
 
 
+def test_negative_repository_evaluation_counter_rejected():
+    wire = _valid_wire()
+    wire["repository_evaluations"][0]["total_packages"] = -1
+    errors = vds.validate(wire)
+    assert any("total_packages must be a non-negative integer" in e for e in errors)
+
+
+def test_matched_exceeding_total_packages_rejected():
+    wire = _valid_wire()
+    wire["repository_evaluations"][0]["total_packages"] = 1
+    wire["repository_evaluations"][0]["matched_packages"] = 2
+    errors = vds.validate(wire)
+    assert any("matched_packages must not exceed total_packages" in e for e in errors)
+
+
+def test_non_string_group_list_member_rejected():
+    wire = _valid_wire()
+    wire["groups"]["well-covered"]["packages"] = [123]
+    errors = vds.validate(wire)
+    assert any("packages must be a list of non-empty strings" in e for e in errors)
+
+
+def test_empty_group_repos_rejected():
+    wire = _valid_wire()
+    wire["groups"]["well-covered"]["repos"] = []
+    errors = vds.validate(wire)
+    assert any("repos must be non-empty" in e for e in errors)
+
+
+def test_duplicate_repository_evaluation_pair_rejected():
+    wire = _valid_wire()
+    wire["repository_evaluations"].append(dict(wire["repository_evaluations"][0]))
+    errors = vds.validate(wire)
+    assert any("duplicate (repo, ecosystem)" in e for e in errors)
+
+
+def test_unsorted_group_memberships_rejected():
+    wire = _valid_wire()
+    wire["repository_evaluations"][0]["group_memberships"] = ["z-group", "a-group"]
+    errors = vds.validate(wire)
+    assert any("group_memberships must be sorted" in e for e in errors)
+
+
+def test_duplicate_group_memberships_rejected():
+    wire = _valid_wire()
+    wire["repository_evaluations"][0]["group_memberships"] = ["well-covered", "well-covered"]
+    errors = vds.validate(wire)
+    assert any("group_memberships must not contain duplicates" in e for e in errors)
+
+
 def test_missing_file_exits_2(tmp_path):
     assert vds.main([str(tmp_path / "missing.json")]) == 2
 
