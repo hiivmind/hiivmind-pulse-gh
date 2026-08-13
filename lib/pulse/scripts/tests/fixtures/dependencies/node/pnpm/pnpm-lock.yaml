@@ -1,0 +1,8 @@
+lockfileVersion: '6.0'
+
+packages:
+  /express@4.18.2:
+    resolution: {integrity: sha512-abc}
+  /typescript@5.1.6:
+    resolution: {integrity: sha512-def}
+    dev: true

@@ -1,0 +1,7 @@
+{
+  "name": "acme-edge",
+  "version": "0.1.0",
+  "dependencies": {
+    "chalk": "^4.1.0"
+  }
+}
