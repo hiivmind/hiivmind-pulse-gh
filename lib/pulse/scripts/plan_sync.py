@@ -252,6 +252,8 @@ def build_apply_plans(
     snapshot: Any,
     actor: Mapping[str, Any] | Any,
     registry: mutation_plan.TransformationRegistry | None = None,
+    mutation_policy: str = "propose",
+    bound_paths: dict[str, list[str]] | None = None,
 ) -> ApplyPlans:
     """Build separate propose-only document and GitHub patch proposals.
 
@@ -259,6 +261,12 @@ def build_apply_plans(
     ``.hiivmind/plan-sync-patch.yaml`` in the pen checkout only when it is
     ready to execute the already-proposed F6 document path.  GitHub receives
     a parallel proposed action and is never folded into that proposal.
+
+    ``mutation_policy``/``bound_paths`` thread into the document-side
+    `build_proposal` call; the GitHub-side proposal dict is unaffected
+    (GitHub patches remain propose-only, applied separately). Defaults
+    preserve existing callers byte-for-byte: `mutation_policy="propose"`
+    and, when `bound_paths` is omitted, the existing `{repo: [path]}`.
     """
     repo = _required_string(binding.get("repo"), "binding.repo")
     path = _required_string(binding.get("path"), "binding.path")
@@ -280,8 +288,8 @@ def build_apply_plans(
                 transformation="plan-sync-doc-patch",
                 expected_shas={repo: head},
                 actor=actor,
-                mutation_policy="propose",
-                bound_paths={repo: [path]},
+                mutation_policy=mutation_policy,
+                bound_paths=bound_paths if bound_paths is not None else {repo: [path]},
                 registry=registry,
             )
             doc_patch = {

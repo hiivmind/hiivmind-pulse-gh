@@ -480,6 +480,7 @@ class TestNeutralApplyAcceptanceSuite:
             expected_shas={"acme/node-repo": "sha_node_base_200"},
             actor={"gh_login": "octocat", "machine": "laptop", "mode": "interactive"},
             mutation_policy="allow-listed",
+            bound_paths={"acme/node-repo": ["package-lock.json"]},
         )
         registry = mutation_plan.load_registry({
             "transformations": {
@@ -594,6 +595,7 @@ class TestOverlayApplySuite:
             expected_shas={"acme/plugin-repo": "sha_plugin_base_300"},
             actor={"gh_login": "octocat", "machine": "laptop", "mode": "interactive"},
             mutation_policy="allow-listed",
+            bound_paths={"acme/plugin-repo": [".hiivmind/marketplace-entry-patch.yaml"]},
         )
         registry = mutation_plan.load_registry({
             "transformations": {

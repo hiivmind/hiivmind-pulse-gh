@@ -282,6 +282,7 @@ def dispatch(
     snapshot: dict[str, Any],
     actor: dict[str, Any] | mutation_plan.Actor,
     mutation_policy: str = "propose",
+    bound_paths: dict[str, list[str]] | None = None,
     registry: TransformationRegistry | None = None,
 ) -> mutation_plan.Proposal:
     """Turn a drifted binding into a validated Nave mutation `Proposal`.
@@ -334,5 +335,6 @@ def dispatch(
         expected_shas={source: head},
         actor=actor,
         mutation_policy=mutation_policy,
+        bound_paths=bound_paths,
         registry=registry,
     )

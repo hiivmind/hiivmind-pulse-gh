@@ -255,14 +255,18 @@ def build_marketplace_proposal(
     head_sha: str,
     actor: dict[str, Any],
     registry: TransformationRegistry | None = None,
+    mutation_policy: str = "propose",
+    bound_paths: dict[str, list[str]] | None = None,
 ) -> Proposal:
     """Wrap a `drift` or `missing_entry` decision in an F6 `Proposal`.
 
     The proposal selects the `marketplace_repo` (single selection) and
     carries `expected_shas={marketplace_repo: head_sha}` so the F6
     expected-SHA guard (see `pen_orchestrator.execute`) blocks a stale
-    base at execution. `mutation_policy="propose"` — this orchestrator
-    is propose-only, exactly like `plan-sync-doc-patch`.
+    base at execution. `mutation_policy` defaults to `"propose"` — this
+    orchestrator is propose-only by default, exactly like
+    `plan-sync-doc-patch`; a caller re-deriving for allow-listed apply
+    passes `mutation_policy="allow-listed"` and `bound_paths` explicitly.
 
     Raises `ValueError` when `drift.outcome` is not in
     `{OUTCOME_DRIFT, OUTCOME_MISSING_ENTRY}` — the caller (the headless
@@ -279,7 +283,8 @@ def build_marketplace_proposal(
         transformation="marketplace-entry-update",
         expected_shas={drift.marketplace_repo: head_sha},
         actor=actor,
-        mutation_policy="propose",
+        mutation_policy=mutation_policy,
+        bound_paths=bound_paths,
         registry=registry,
     )
 

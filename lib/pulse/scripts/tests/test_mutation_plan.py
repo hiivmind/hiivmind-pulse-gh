@@ -297,6 +297,7 @@ def test_build_proposal_accepts_all_mutation_policy_values(policy):
         expected_shas={"acme/api": "abc123"},
         actor=minimal_actor(),
         mutation_policy=policy,
+        bound_paths={"acme/api": ["src/**"]},
     )
     assert proposal.mutation_policy == policy
 
