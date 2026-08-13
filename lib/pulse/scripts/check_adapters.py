@@ -120,9 +120,11 @@ class AdapterRegistry:
         try:
             output = adapter(context)
             return self._normalize(name, context, output)
-        except Exception as exc:
+        except Exception:
+            # Content-free boundary: the caught exception's message is never
+            # written anywhere — not here, not stdout, not stderr, not a log.
             return self._boundary_block(
-                name, context, "error", f"Adapter {name} failed: {exc}"
+                name, context, "error", f"Adapter {name} raised an internal error"
             )
 
     @classmethod

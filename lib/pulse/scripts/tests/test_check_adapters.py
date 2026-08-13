@@ -185,7 +185,7 @@ def test_invalid_evidence_citation_output_is_error(evidence):
     out = registry.evaluate("invalid", context())
 
     assert out["status"] == "error"
-    assert "invalid output" in out["detail"]
+    assert out["detail"] == "Adapter invalid raised an internal error"
     assert out["data"] == {"evidence": {"paths": [], "refs": []}}
 
 
@@ -208,5 +208,5 @@ def test_invalid_adapter_output_is_error(output):
     assert out["check_id"] == "docs"
     assert out["weight"] == 1.0
     assert out["status"] == "error"
-    assert "invalid output" in out["detail"]
+    assert out["detail"] == "Adapter invalid raised an internal error"
     assert out["data"] == {"evidence": {"paths": [], "refs": []}}

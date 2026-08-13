@@ -129,7 +129,40 @@ do not synthesize a healthy or unhealthy state.
 
 ## Phase 3: DISPATCH + APPLY DISMISSALS
 
-Invoke the F3 engine exactly once over the prepared F0/F1 inputs:
+### Dependency coherence (F4)
+
+When any selected repository's resolved scorecard contains
+`python_manifest_lock_consistency`, `node_manifest_lock_consistency`, or
+`fleet_dependency_coherence`, materialize dependency evidence before dispatch:
+
+```bash
+uv run "${PLUGIN_ROOT}/lib/pulse/scripts/nave_adapter.py" materialize \
+  --request "$DEPENDENCY_REQUEST" --json > "$DEPENDENCY_EVIDENCE_RAW"
+```
+
+The skill never calls GitHub raw-content APIs and never reads Nave cache paths
+for this data — `nave_adapter.py materialize` (protocol 2) is the only source.
+Build `$DEPENDENCY_REQUEST` from `dependency_pipeline.DEPENDENCY_SELECTORS`
+applied to the selected repositories (`dependency_pipeline.dependency_selected_repos`),
+normalize the raw result with `dependency_evidence.normalize`, and validate
+strictly before use:
+
+```bash
+uv run "${PLUGIN_ROOT}/lib/pulse/scripts/validate_dependency_evidence.py" \
+  "$DEPENDENCY_EVIDENCE_JSON"
+```
+
+Missing protocol-2 capability, or a materialize/validation failure, writes the
+per-check `unsupported` coverage F4's adapters already handle — it does not
+ABORT the run; every other healthcheck continues unaffected. Store
+`$DEPENDENCY_EVIDENCE_JSON` under a run-scoped `0700` temp directory
+(`dependency_evidence.secure_run_dir`) and delete it once the snapshot below is
+written — it carries raw file content and must never persist across sessions
+or be committed.
+
+If `CONFIG_DIR/dependencies.yaml` exists, pass it as the coherence policy.
+Invoke the F3 engine exactly once over the prepared F0/F1 inputs, plus the F4
+inputs when applicable:
 
 ```bash
 uv run "${PLUGIN_ROOT}/lib/pulse/scripts/healthcheck_dispatch.py" \
@@ -137,7 +170,25 @@ uv run "${PLUGIN_ROOT}/lib/pulse/scripts/healthcheck_dispatch.py" \
   --profiles "$PREPARED_PROFILES" \
   --workspace "$workspace_path" \
   --dismissals "$DISMISSALS" \
-  --as-of "$RUN_AT" > "$DISPATCH_JSON"
+  --as-of "$RUN_AT" \
+  --dependency-evidence "$DEPENDENCY_EVIDENCE_JSON" \
+  --dependency-policy "$CONFIG_DIR/dependencies.yaml" \
+  --dependency-snapshot-out "$DEPS_SNAPSHOT_JSON" > "$DISPATCH_JSON"
+```
+
+Omit `--dependency-evidence`/`--dependency-policy`/`--dependency-snapshot-out`
+together when no selected scorecard needs F4 at all (skip materialization
+entirely in that case). Omit `--dependency-policy` alone when
+`dependencies.yaml` does not exist — `fleet_dependency_coherence` still
+finalizes to a stable `missing_policy` block plus a run error, per
+`lib/patterns/dependency-coherence.md`; it is never left as an undismissed
+placeholder. `$DEPS_SNAPSHOT_JSON` is the content-free, gitignored
+`deps-snapshot.json` — validate it, then delete both it and
+`$DEPENDENCY_EVIDENCE_JSON`:
+
+```bash
+uv run "${PLUGIN_ROOT}/lib/pulse/scripts/validate_dependency_snapshot.py" \
+  "$DEPS_SNAPSHOT_JSON"
 ```
 
 Omit `--dismissals` when the governance record does not yet exist. Dispatch resolves
@@ -255,6 +306,14 @@ coverage:
   checks_supported: 0
   unsupported_by_adapter: {}
   unprofiled_repos: []
+  dependencies:
+    repositories_selected: 0
+    repositories_grouped: 0
+    repositories_ungrouped: 0
+    groups_with_insufficient_members: []
+    packages_matched: 0
+    packages_unmatched: 0
+    unsupported_by_adapter: {}
 errors: [<reason>, ...]
 ```
 
@@ -263,4 +322,6 @@ errors: [<reason>, ...]
 - `lib/patterns/nave-evidence-contract.md` — F0 evidence
 - `lib/patterns/repository-profiles.md` — F1 profiles and scorecards
 - `lib/patterns/headless-contract.md` — result schema
-- `lib/pulse/scripts/healthcheck_dispatch.py` — deterministic F3 dispatch/scoring
+- `lib/patterns/dependency-coherence.md` — F4 coherence policy and evidence-state lattice
+- `lib/patterns/dependency-evidence-contract.md` — F4 transient materialize contract
+- `lib/pulse/scripts/healthcheck_dispatch.py` — deterministic F3/F4 dispatch/scoring

@@ -31,7 +31,11 @@ from lib.pulse.scripts.dependencies import (
     compare,
     reconcile_coverage,
 )
+from lib.pulse.scripts import dependency_evidence as dependency_evidence_module
+from lib.pulse.scripts import dependency_snapshot
+from lib.pulse.scripts import validate_dependency_evidence
 from lib.pulse.scripts.dependency_evidence import RepoEvidence
+from lib.pulse.scripts.dependency_policy import DependencyPolicyError, load_dependency_policy
 from lib.pulse.scripts.dependency_pipeline import (
     FLEET_COHERENCE_CHECK_ID,
     build_fleet_coherence_block,
@@ -539,6 +543,26 @@ def main(argv: list[str] | None = None) -> int:
             "attaches content (or passes this flag) for live overlay audits."
         ),
     )
+    parser.add_argument(
+        "--dependency-evidence",
+        help=(
+            "Path to an already-validated normalized dependency-evidence.json "
+            "document (see lib/patterns/dependency-evidence-contract.md). "
+            "Re-validated here before loading — never trusted unchecked."
+        ),
+    )
+    parser.add_argument(
+        "--dependency-policy",
+        help="Path to the committed .hiivmind/github/dependencies.yaml coherence policy.",
+    )
+    parser.add_argument(
+        "--dependency-snapshot-out",
+        help=(
+            "Path to write the content-free deps-snapshot.json envelope. Requires "
+            "--dependency-evidence (its request_sha256/generated_at anchor the "
+            "snapshot); silently skipped otherwise."
+        ),
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -547,6 +571,36 @@ def main(argv: list[str] | None = None) -> int:
             from lib.pulse.scripts.overlay_content import default_gh_api
 
             gh_api = default_gh_api
+
+        dependency_evidence_doc: dict[str, Any] | None = None
+        dependency_evidence: dict[str, RepoEvidence] | None = None
+        if args.dependency_evidence:
+            try:
+                dependency_evidence_doc = json.loads(
+                    Path(args.dependency_evidence).read_text(encoding="utf-8")
+                )
+            except (OSError, json.JSONDecodeError) as exc:
+                raise ConfigError(f"could not load dependency evidence: {exc}") from exc
+            evidence_errors = validate_dependency_evidence.validate(dependency_evidence_doc)
+            if evidence_errors:
+                raise ConfigError(
+                    "dependency evidence failed validation: " + "; ".join(evidence_errors)
+                )
+            dependency_evidence = dependency_evidence_module.load_dependency_evidence(
+                dependency_evidence_doc
+            )
+
+        dependency_policy = None
+        if args.dependency_policy:
+            try:
+                dependency_policy = load_dependency_policy(args.dependency_policy)
+            except DependencyPolicyError as exc:
+                raise ConfigError(f"could not load dependency policy: {exc}") from exc
+
+        dependency_collector: dict[str, Any] | None = (
+            {} if args.dependency_snapshot_out else None
+        )
+
         result = evaluate_fleet(
             evidence=_load_evidence(Path(args.evidence)),
             profiles_path=args.profiles,
@@ -554,7 +608,27 @@ def main(argv: list[str] | None = None) -> int:
             dismissals_path=args.dismissals,
             as_of=args.as_of,
             gh_api=gh_api,
+            dependency_evidence=dependency_evidence,
+            dependency_policy=dependency_policy,
+            dependency_collector=dependency_collector,
         )
+
+        if args.dependency_snapshot_out and dependency_collector is not None:
+            if dependency_evidence_doc is None:
+                raise ConfigError(
+                    "--dependency-snapshot-out requires --dependency-evidence"
+                )
+            document = dependency_snapshot.build_document(
+                contract_version=1,
+                generated_at=dependency_evidence_doc["generated_at"],
+                request_sha256=dependency_evidence_doc["request_sha256"],
+                collector=dependency_collector,
+                errors=tuple(result.get("errors", [])),
+            )
+            snapshot_path = Path(args.dependency_snapshot_out)
+            snapshot_path.write_text(
+                json.dumps(dependency_snapshot.serialize(document), indent=2, sort_keys=True)
+            )
     except ConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

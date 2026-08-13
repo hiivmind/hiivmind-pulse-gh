@@ -9,6 +9,8 @@ fleet-evidence.yaml
 # under a run-specific 0700 temp dir (dependency_evidence.secure_run_dir) and
 # be deleted once F4 emits its content-free snapshot; never committed.
 dependency-evidence.json
+# Content-free F4 snapshot — transient, run-scoped; never committed.
+deps-snapshot.json
 log/
 .assignments-tmp.json
 .project-changes.json
