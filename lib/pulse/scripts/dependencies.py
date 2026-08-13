@@ -508,3 +508,61 @@ def reconcile_coverage(
         packages_unmatched=packages_unmatched,
         unsupported_by_adapter=dict(sorted(unsupported_by_adapter.items())),
     )
+
+
+# --- shared adapter helpers (Task 2/3) -----------------------------------------
+
+
+def project_evaluation(evaluation: DependencyRepoEvaluation) -> dict:
+    """JSON-safe projection of a DependencyRepoEvaluation for CheckBlock.data —
+    plain dicts/lists only, covering declarations and records."""
+    return {
+        "declarations": [
+            {
+                "name": d.name,
+                "manifest_path": d.manifest_path,
+                "manifest_range": d.manifest_range,
+                "unresolved_reason": d.unresolved_reason,
+                "group": d.group,
+            }
+            for d in evaluation.declarations
+        ],
+        "records": [
+            {
+                "repo": r.repo,
+                "ecosystem": r.ecosystem,
+                "name": r.name,
+                "resolution": r.resolution,
+                "manifest_range": r.manifest_range,
+                "locked_version": r.locked_version,
+                "unresolved_reason": r.unresolved_reason,
+                "manager": r.manager,
+                "manifest_path": r.manifest_path,
+                "lock_path": r.lock_path,
+                "tree_sha": r.tree_sha,
+                "provenance": [
+                    {"role": p.role, "path": p.path, "blob_sha": p.blob_sha}
+                    for p in r.provenance
+                ],
+            }
+            for r in evaluation.records
+        ],
+    }
+
+
+def reduce_local_status(
+    findings: Iterable[LocalFinding],
+) -> tuple[
+    Literal["pass", "warn", "fail", "unknown"], str | None
+]:
+    """Precedence-ordered reduction over one repo/ecosystem's LocalFindings:
+    fail > unknown > warn > pass. A resolution="multiple" finding (status=
+    "unknown") never suppresses a "fail" earned by a different, fully-resolved
+    package — callers add such a finding alongside whatever the rest earn.
+    """
+    findings = list(findings)
+    for status in ("fail", "unknown", "warn"):
+        for finding in findings:
+            if finding.status == status:
+                return status, finding.reason_code
+    return "pass", None

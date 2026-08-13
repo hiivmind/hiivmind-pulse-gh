@@ -1,0 +1,28 @@
+[tool.poetry]
+name = "acme-worker"
+version = "0.1.0"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+caret-full = "^1.2.3"
+caret-minor-prefix-zero = "^0.2.3"
+caret-patch-prefix-zeros = "^0.0.3"
+caret-two-part = "^1.2"
+caret-one-part = "^1"
+caret-zero = "^0"
+caret-all-zero = "^0.0.0"
+tilde-full = "~1.2.3"
+tilde-two-part = "~1.2"
+tilde-one-part = "~1"
+compound-range = ">=1.2,<2.0"
+exact-version = "1.2.3"
+prefix-wildcard-two = "1.*"
+prefix-wildcard-three = "1.2.*"
+bare-wildcard = "*"
+union-range = ">=1.2,<1.3 || >=1.4"
+vcs-dep = { git = "https://example.com/acme/vcsdep.git" }
+shared-pkg = ">=2.0,<3.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.0"
+shared-pkg = ">=1.0,<2.0"

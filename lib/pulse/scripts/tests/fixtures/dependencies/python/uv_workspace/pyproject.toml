@@ -1,0 +1,6 @@
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[project]
+name = "acme-monorepo"
+version = "0.1.0"
