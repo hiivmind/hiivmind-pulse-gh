@@ -18,15 +18,16 @@ binary or the network; `execute`'s second parameter is that runner
 with the statically-imported `nave_adapter` module it forms "the Nave
 adapter").
 
-This orchestrator is **propose-only, unconditionally**: it never emits
-`--commit`/`--push-changes` to `pen exec` regardless of a proposal's
-`mutation_policy`. Its terminal success state is always `proposed` — a
-commit/push/PR action for something else to apply later, never performed
-here. A proposal whose `mutation_policy` is not `propose`, or a `PenPlan`
-that explicitly requests a push, is a **forbidden push** and blocks
-before any Nave call. See `lib/patterns/repository-mutations.md` for the
-full mutation-policy vocabulary; Task 4 (F6 plan) is where a policy other
-than `propose` gets to actually authorize a later apply step.
+This orchestrator is **propose-only**: it never emits
+`--commit`/`--push-changes` to `pen exec`. Its terminal success state is
+always `proposed`. Allow-listed landing does NOT happen here — the
+allow-listed phase sequence (provision → exec → validate → commit → push →
+PR) lives in `lib/pulse/scripts/apply_phases.py`, sequenced by
+`lib/pulse/scripts/apply_driver.py` (`run_apply`); `execute()` blocks an
+allow-listed proposal with reason "use apply_driver". A `PenPlan` that
+explicitly requests a push is a **forbidden push** and blocks before any
+Nave call. See `lib/patterns/repository-mutations.md` for the full
+mutation-policy vocabulary.
 
 ## `validation.kind == "json_schema"`: injectable file reader
 
@@ -127,12 +128,12 @@ class PenPlan:
     are the caller's job; `execute` never loads a registry itself, it
     only requires `entry.id == proposal.transformation` (checked, raises
     `PenOrchestratorError` otherwise). `pen_name`/`query` are the pen
-    provisioning details only the orchestrator needs: the pen to
     create and the `PenQuery` used to seed it. `request_push` records an
-    explicit caller ask to commit/push; since this orchestrator's
-    terminal success state is always `proposed` (propose-only, never
-    pushes — see module docstring), `request_push=True` is always a
-    forbidden-push attempt and blocks before any Nave call.
+    explicit caller ask to commit/push; since this orchestrator's terminal
+    success state is always `proposed` (propose-only — allow-listed landing
+    lives in `apply_phases`/`apply_driver`, see module docstring),
+    `request_push=True` is always a forbidden-push attempt and blocks before
+    any Nave call.
     """
 
     proposal: Proposal

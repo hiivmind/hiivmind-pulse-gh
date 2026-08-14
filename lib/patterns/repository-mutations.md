@@ -59,10 +59,11 @@ mutations are not a separate policy dialect from GitHub-object mutations:
   other gate below (still requires a registered transformation; still
   blocks on a stale/dirty pen or a validation failure).
 
-> **Current implementation status:** `pen_orchestrator.execute` supports `propose`
-> (propose-only, terminal state `proposed`) and `allow-listed` (Path A apply mode:
-> provision per-proposal branch `pulse/apply/{id}` -> exec -> validate -> commit-all -> push-all ->
-> terminal state `pushed`). `allow` policy remains reserved and blocked in v1.
+> **Current implementation status:** `pen_orchestrator.execute` is propose-only
+> (terminal state `proposed`). Allow-listed landing (Path A apply mode: provision
+> `pulse/apply/{id}` -> exec -> validate -> commit -> push -> PR) lives in
+> `apply_phases`/`apply_driver` (`run_apply`), not `execute`. `allow` policy remains
+> reserved and blocked in v1.
 
 
 ## The transformation registry
@@ -139,9 +140,10 @@ Before any apply step commits or pushes changes, each selected repo clone is
 provisioned onto a dedicated per-proposal branch named `pulse/apply/{proposal_id}`,
 created off its guarded base SHA (`expected_shas[repo]`).
 
-- **Implementation:** `nave_adapter.provision_apply_branch(clone_paths, branch, base_shas)`
-  executes `git -C <clone> checkout -b pulse/apply/{proposal_id} <base_sha>` for each
-  selected repo clone.
+- **Implementation:** the Nave `pen branch` verb (`nave_adapter.pen_branch`) provisions
+  `pulse/apply/{proposal_id}` off each repo's guarded base SHA (`expected_shas[repo]`),
+  verifying the remote base ref against `expected_base_sha` before branching
+  (remote-base CAS).
 - **Invariant:** Every apply push targets `pulse/apply/{proposal_id}`, never a default
   or base branch.
 - **Fail-closed:** If branch provisioning fails on any selected repo (e.g. if the branch
