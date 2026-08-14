@@ -629,9 +629,9 @@ def validate(data, kind: str) -> list[str]:
     elif kind == "repo-mutation":
         state = _require_enum(data, "state", REPO_MUTATION_STATES, errors)
         _require(data, "proposal_id", str, errors)
-        _require(data, "recorded_proposal_id", str, errors)
-        _require(data, "proposal_digest", str, errors)
-        _require(data, "authorization_digest", str, errors)
+        _require_nullable(data, "recorded_proposal_id", str, errors)
+        _require_nullable(data, "proposal_digest", str, errors)
+        _require_nullable(data, "authorization_digest", str, errors)
         _require(data, "transformation", str, errors)
         _require(data, "pen_name", str, errors)
         _validate_string_list(data, "selection", errors)
@@ -722,8 +722,11 @@ def validate(data, kind: str) -> list[str]:
         _require_nullable(data, "observed_head_sha", str, errors)
         if state in {"pushed", "pr_opened", "applied"} and data.get("pushed_sha") is None:
             _err(errors, f"pushed_sha must not be null when state is {state}")
-        if state in {"pr_opened", "applied"} and data.get("pr_url") is None:
-            _err(errors, f"pr_url must not be null when state is {state}")
+        if state in {"pr_opened", "applied"}:
+            if data.get("pr_url") is None:
+                _err(errors, f"pr_url must not be null when state is {state}")
+            elif data.get("pr_url") == "":
+                _err(errors, f"pr_url must not be empty when state is {state}")
         if state == "applied" and data.get("merged_sha") is None:
             _err(errors, "merged_sha must not be null when state is applied")
         if state == "rejected" and data.get("reason") is None:

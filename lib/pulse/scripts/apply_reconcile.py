@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -39,8 +41,10 @@ class GhOps:
         """Return state, merged, merge_commit_sha, url, observed base/head, and error."""
         raise NotImplementedError
 
-    def delete_remote_branch(self, repo: str, branch: str) -> dict:
-        """Return {"state": "ok"|"failed", "reason": str|None}."""
+    def delete_remote_branch(
+        self, repo: str, branch: str, expected_sha: str
+    ) -> dict:
+        """CAS-delete a remote branch, returning state and an optional reason."""
         raise NotImplementedError
 
 
@@ -136,13 +140,51 @@ class GhCliOps(GhOps):
             "observed_head_sha": data.get("headRefOid"),
         }
 
-    def delete_remote_branch(self, repo: str, branch: str) -> dict:
+    def delete_remote_branch(
+        self, repo: str, branch: str, expected_sha: str
+    ) -> dict:
+        if not expected_sha:
+            return {
+                "state": "failed",
+                "reason": "missing expected ref sha, refusing to delete",
+            }
+
+        endpoint = f"repos/{repo}/git/refs/heads/{branch}"
+        observed = subprocess.run(
+            [self.gh_binary, "api", endpoint],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if observed.returncode != 0:
+            error = observed.stderr.strip() or observed.stdout.strip()
+            if "404" in error or "not found" in error.lower():
+                return {"state": "ok"}
+            return {
+                "state": "failed",
+                "reason": error or "could not read remote branch ref",
+            }
+
+        try:
+            current_sha = json.loads(observed.stdout)["object"]["sha"]
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            return {
+                "state": "failed",
+                "reason": f"could not parse remote branch ref SHA: {exc}",
+            }
+
+        if current_sha != expected_sha:
+            return {
+                "state": "failed",
+                "reason": "ref sha changed since observation, refusing to delete",
+            }
+
         cmd = [
             self.gh_binary,
             "api",
             "-X",
             "DELETE",
-            f"repos/{repo}/git/refs/heads/{branch}",
+            endpoint,
         ]
         res = subprocess.run(cmd, capture_output=True, text=True, check=False)
         if res.returncode == 0:
@@ -162,29 +204,77 @@ def resolve_intended_base(
             return binding_ref["base_ref"]
         raise ValueError("cannot resolve intended base for plan-sync: no base_ref")
 
-    if source_kind in {"generated-artifact", "marketplace-sync"}:
-        if binding_ref.get("base_ref"):
-            return binding_ref["base_ref"]
-        if binding_ref.get("base"):
-            return binding_ref["base"]
+    if source_kind == "marketplace-sync":
+        if finalizer_record and finalizer_record.get("base_ref"):
+            return finalizer_record["base_ref"]
         raise ValueError(
-            f"cannot resolve intended base for {source_kind}: no base/base_ref"
+            "cannot resolve intended base for marketplace-sync: no base_ref"
+        )
+
+    if source_kind == "generated-artifact":
+        if binding_ref.get("branch"):
+            return binding_ref["branch"]
+        raise ValueError(
+            "cannot resolve intended base for generated-artifact: no branch"
         )
 
     raise ValueError(f"unknown source_kind: {source_kind}")
 
 
+class ApplyStatusError(ValueError):
+    """Raised when apply-status state cannot be safely read or persisted."""
+
+
 def load_apply_status(path: str | Path) -> dict | None:
     p = Path(path)
-    if not p.exists():
-        return None
     try:
-        data = yaml.safe_load(p.read_text())
-        if isinstance(data, dict):
-            return data
-    except Exception:
-        pass
-    return None
+        text = p.read_text()
+    except FileNotFoundError:
+        return None
+    except (OSError, UnicodeError) as exc:
+        raise ApplyStatusError(f"could not load apply status {p}: {exc}") from exc
+
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        raise ApplyStatusError(f"could not load apply status {p}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ApplyStatusError(
+            f"could not load apply status {p}: expected a mapping"
+        )
+    return data
+
+
+def _atomic_write_yaml(path: str | Path, doc: Mapping[str, Any]) -> None:
+    p = Path(path)
+    temporary_name: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            dir=p.parent,
+            prefix=f".{p.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary_name = handle.name
+            yaml.safe_dump(doc, handle, sort_keys=False, allow_unicode=True)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_name, p)
+        # Rename succeeded: nothing left to clean up on a later failure.
+        temporary_name = None
+        dir_fd = os.open(str(p.parent), os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except OSError as exc:
+        if temporary_name:
+            try:
+                Path(temporary_name).unlink()
+            except OSError:
+                pass
+        raise ApplyStatusError(f"could not write apply status {p}: {exc}") from exc
 
 
 def write_apply_status(
@@ -242,7 +332,7 @@ def write_apply_status(
 
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(yaml.safe_dump(doc, sort_keys=False))
+    _atomic_write_yaml(p, doc)
     return doc
 
 
@@ -268,6 +358,11 @@ def open_apply_pr(
     actor_id: str = "octocat@mba-m4",
     workspace: str = "unknown",
 ) -> dict:
+    if base != intended_base:
+        raise ValueError(
+            f"open_apply_pr: base {base!r} != intended_base {intended_base!r} "
+            "- the PR's actual base must match the audited intended base"
+        )
     if token is not None:
         resolve_run.renew_lease(ledger_path, step_id, actor_id, token)
     else:
@@ -319,6 +414,15 @@ def open_apply_pr(
     resolve_run.save(ledger_path, ledger_doc)
 
     return doc
+
+
+def _branch_cleanup_note(branch: str, result: dict) -> str:
+    if result.get("state") == "ok":
+        return f"deleted branch {branch}"
+    reason = result.get("reason") or "unknown cleanup error"
+    if "sha changed" in reason or "refusing to delete" in reason:
+        return f"refused: sha mismatch for branch {branch}: {reason}"
+    return f"branch cleanup failed for {branch}: {reason}"
 
 
 def reconcile_apply(
@@ -411,13 +515,16 @@ def reconcile_apply(
                 workspace=workspace,
                 actor=actor_doc,
             )
-            gh_ops.delete_remote_branch(repo, branch)
+            cleanup_result = gh_ops.delete_remote_branch(
+                repo, branch, observed_head_sha
+            )
 
             ledger_doc = resolve_run.load(ledger_path)
             step = resolve_run.find_step(ledger_doc, step_id)
             step["status"] = "failed"
             step["notes"].append(
-                f"{resolve_run.now_iso()} {reason}; deleted branch {branch}"
+                f"{resolve_run.now_iso()} {reason}; "
+                f"{_branch_cleanup_note(branch, cleanup_result)}"
             )
             resolve_run.recompute_status(ledger_doc)
             resolve_run.save(ledger_path, ledger_doc)
@@ -530,13 +637,17 @@ def reconcile_apply(
             actor=actor_doc,
         )
 
-        gh_ops.delete_remote_branch(repo, branch)
+        cleanup_expected_sha = pr_info.get("observed_head_sha") or pushed_sha
+        cleanup_result = gh_ops.delete_remote_branch(
+            repo, branch, cleanup_expected_sha
+        )
 
         ledger_doc = resolve_run.load(ledger_path)
         step = resolve_run.find_step(ledger_doc, step_id)
         step["status"] = "failed"
         step["notes"].append(
-            f"{resolve_run.now_iso()} {reason}; deleted branch {branch}"
+            f"{resolve_run.now_iso()} {reason}; "
+            f"{_branch_cleanup_note(branch, cleanup_result)}"
         )
         resolve_run.recompute_status(ledger_doc)
         resolve_run.save(ledger_path, ledger_doc)
@@ -570,6 +681,16 @@ def reconcile_apply(
     resolve_run.recompute_status(ledger_doc)
     resolve_run.save(ledger_path, ledger_doc)
 
+    if pr_info.get("state") == "ERROR":
+        err_detail = pr_info.get("error", "unknown gh error")
+        raise ApplyStatusError(
+            f"cannot determine PR state for {repo} {branch}: {err_detail}"
+        )
+    if not pr_url:
+        raise ApplyStatusError(
+            f"cannot determine PR state for {repo} {branch}: no PR URL"
+        )
+
     return write_apply_status(
         result_path,
         proposal_id=proposal_id,
@@ -582,7 +703,7 @@ def reconcile_apply(
         intended_base=intended_base,
         expected_head_sha=expected_head_sha,
         pushed_sha=pushed_sha,
-        pr_url=pr_url or "",
+        pr_url=pr_url,
         workspace=workspace,
         actor=actor_doc,
     )

@@ -353,9 +353,12 @@ run_at: <ISO 8601>
 actor: { gh_login: <str>, machine: <str>, mode: <enum> }
 state: proposed | blocked | failed  # required enum — the run's terminal state
 proposal_id: <str>                  # required — the mutation_plan.Proposal id
-recorded_proposal_id: <str>         # required — the proposal id as recorded by snapshot_audit
-proposal_digest: <str>              # required — mutation_plan.proposal_digest() of the re-derived Proposal
-authorization_digest: <str>         # required — digest of the authorization that cleared this run
+recorded_proposal_id: <str or null> # required key, nullable — F11 re-derivation + authorization audit value;
+                                     #   null for F6 propose-only, which has no authorization to digest
+proposal_digest: <str or null>      # required key, nullable — F11 re-derivation + authorization audit value;
+                                     #   null for F6 propose-only, which has no authorization to digest
+authorization_digest: <str or null> # required key, nullable — F11 re-derivation + authorization audit value;
+                                     #   null for F6 propose-only, which has no authorization to digest
 transformation: <str>               # required — registered transformation id
 pen_name: <str>                     # required — the Nave pen this run used
 selection: [<owner/name>, ...]      # list of str, required — repos targeted
@@ -372,9 +375,10 @@ success, meaning a commit/push/PR action is proposed for something else to
 apply later, never performed by the run itself. `reason` is required
 (non-null) whenever `state` is `blocked` or `failed`, and optional (may be
 null) when `state` is `proposed`. `recorded_proposal_id`, `proposal_digest`,
-and `authorization_digest` are unconditionally required non-null strings —
-snapshot_audit records them before the first mutation, so every terminal
-state (`proposed`, `blocked`, `failed`) always has them.
+and `authorization_digest` are required keys but nullable values. They are
+populated when a run went through F11 re-derivation and authorization; they
+are null for the pre-existing F6 propose-only orchestrator, which has no
+authorization or `snapshot_audit` stage from which to derive them.
 
 ### apply-status-result.yaml (written by apply reconcile loop, F11)
 
@@ -409,12 +413,18 @@ Lifecycle states and required fields:
 - `pushed`: branch pushed to remote, no PR open yet. Requires `pushed_sha`, `intended_base`, `expected_head_sha`. `pr_url` and `merged_sha` are null.
 - `pr_opened`: pull request created. Requires `pushed_sha`, `pr_url`, `intended_base`, `expected_head_sha`. `merged_sha` is null.
 - `applied`: PR merged into default branch. Requires `pushed_sha`, `pr_url`, `merged_sha`, `intended_base`, `expected_head_sha`, `observed_base`, `observed_head_sha`.
-- `rejected`: PR closed unmerged. Requires `reason` (non-null), `intended_base`, `expected_head_sha`. `merged_sha` is null.
+- `rejected`: PR closed unmerged **or** merged with an unexpected base/head.
+  Requires `reason` (non-null), `intended_base`, and `expected_head_sha`.
+  For a closed-unmerged PR, `merged_sha` is null. For a merged-but-mismatched
+  PR, `merged_sha`, `observed_base`, and `observed_head_sha` may be non-null as
+  evidence of what was actually observed even though the result is rejected.
 
 `intended_base` and `expected_head_sha` are required (non-null) for every
 state in the enum, not just `pushed`: `pushed` is the earliest lifecycle
 state ever written, so every later state implies the branch already passed
-through it. `observed_base`/`observed_head_sha` stay null until `applied`.
+through it. `observed_base`/`observed_head_sha` stay null until `applied`,
+except that a merged-but-mismatched `rejected` result may retain them as
+rejection evidence.
 `recorded_proposal_id`, `proposal_digest`, and `authorization_digest` are
 unconditionally required non-null strings on every state, for the same
 snapshot_audit reason as `repo-mutation-result.yaml` above. When both

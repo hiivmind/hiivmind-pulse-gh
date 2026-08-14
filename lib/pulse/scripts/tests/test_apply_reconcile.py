@@ -16,7 +16,9 @@ class FakeGhOps(apply_reconcile.GhOps):
 
     def __init__(self):
         self.prs = {}
+        self.remote_refs = {}
         self.deleted_branches = []
+        self.delete_calls = []
         self.create_calls = 0
         self.view_calls = []
 
@@ -72,7 +74,24 @@ class FakeGhOps(apply_reconcile.GhOps):
             "observed_head_sha": pr.get("head_ref"),
         }
 
-    def delete_remote_branch(self, repo: str, branch: str) -> dict:
+    def delete_remote_branch(
+        self, repo: str, branch: str, expected_sha: str
+    ) -> dict:
+        self.delete_calls.append((repo, branch, expected_sha))
+        if not expected_sha:
+            return {
+                "state": "failed",
+                "reason": "missing expected ref sha, refusing to delete",
+            }
+        key = (repo, branch)
+        if key not in self.remote_refs:
+            return {"state": "ok"}
+        if self.remote_refs[key] != expected_sha:
+            return {
+                "state": "failed",
+                "reason": "ref sha changed since observation, refusing to delete",
+            }
+        del self.remote_refs[key]
         self.deleted_branches.append((repo, branch))
         return {"state": "ok"}
 
@@ -113,6 +132,92 @@ def test_gh_cli_view_pr_returns_remote_base_and_head(monkeypatch):
     )
     assert doc["observed_base"] == "develop"
     assert doc["observed_head_sha"] == "pushed_sha_111"
+
+
+def test_gh_cli_delete_remote_branch_deletes_only_matching_ref(monkeypatch):
+    calls = []
+    responses = iter(
+        [
+            type(
+                "Result",
+                (),
+                {
+                    "returncode": 0,
+                    "stdout": json.dumps({"object": {"sha": "observed_sha"}}),
+                    "stderr": "",
+                },
+            )(),
+            type(
+                "Result",
+                (),
+                {"returncode": 0, "stdout": "", "stderr": ""},
+            )(),
+        ]
+    )
+
+    def fake_run(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return next(responses)
+
+    monkeypatch.setattr(apply_reconcile.subprocess, "run", fake_run)
+
+    result = apply_reconcile.GhCliOps().delete_remote_branch(
+        "testorg/repo1", "pulse/apply/prop-101", "observed_sha"
+    )
+
+    endpoint = "repos/testorg/repo1/git/refs/heads/pulse/apply/prop-101"
+    assert result == {"state": "ok"}
+    assert calls[0][0] == ["gh", "api", endpoint]
+    assert calls[1][0] == ["gh", "api", "-X", "DELETE", endpoint]
+
+
+def test_gh_cli_delete_remote_branch_refuses_changed_ref(monkeypatch):
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return type(
+            "Result",
+            (),
+            {
+                "returncode": 0,
+                "stdout": json.dumps({"object": {"sha": "replacement_sha"}}),
+                "stderr": "",
+            },
+        )()
+
+    monkeypatch.setattr(apply_reconcile.subprocess, "run", fake_run)
+
+    result = apply_reconcile.GhCliOps().delete_remote_branch(
+        "testorg/repo1", "pulse/apply/prop-101", "observed_sha"
+    )
+
+    assert result == {
+        "state": "failed",
+        "reason": "ref sha changed since observation, refusing to delete",
+    }
+    assert len(calls) == 1
+
+
+def test_gh_cli_delete_remote_branch_treats_missing_ref_as_success(monkeypatch):
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return type(
+            "Result",
+            (),
+            {"returncode": 1, "stdout": "", "stderr": "gh: Not Found (HTTP 404)"},
+        )()
+
+    monkeypatch.setattr(apply_reconcile.subprocess, "run", fake_run)
+
+    result = apply_reconcile.GhCliOps().delete_remote_branch(
+        "testorg/repo1", "pulse/apply/prop-101", "observed_sha"
+    )
+
+    assert result == {"state": "ok"}
+    assert len(calls) == 1
 
 
 def create_test_ledger(tmp_path, step_id="reconcile-repo1"):
@@ -204,6 +309,38 @@ def test_open_apply_pr_creates_and_reuses_pr(tmp_path):
     ledger_doc = resolve_run.load(ledger_path)
     step = resolve_run.find_step(ledger_doc, "reconcile-repo1")
     assert step["status"] == "blocked-on-gate"
+
+
+def test_open_apply_pr_rejects_mismatched_actual_and_audited_base(tmp_path):
+    ledger_path = create_test_ledger(tmp_path)
+    gh_ops = FakeGhOps()
+
+    with pytest.raises(
+        ValueError,
+        match="the PR's actual base must match the audited intended base",
+    ):
+        apply_reconcile.open_apply_pr(
+            ledger_path=ledger_path,
+            step_id="reconcile-repo1",
+            proposal_id="prop-101",
+            repo="testorg/repo1",
+            branch="pulse/apply/prop-101",
+            base="develop",
+            pushed_sha="pushed_sha_111",
+            title="Apply proposal prop-101",
+            body="Automated apply PR",
+            result_path=tmp_path / "apply-status-repo1.yaml",
+            gh_ops=gh_ops,
+            recorded_proposal_id="prop-101",
+            proposal_digest=PROPOSAL_DIGEST,
+            authorization_digest=AUTHORIZATION_DIGEST,
+            intended_base="main",
+            expected_head_sha="pushed_sha_111",
+            actor_id="octocat@mba-m4",
+            workspace="testorg",
+        )
+
+    assert gh_ops.create_calls == 0
 
 
 def test_open_apply_pr_uses_token_and_does_not_reacquire(tmp_path):
@@ -393,7 +530,7 @@ def test_reconcile_gh_error_withholds_and_does_not_delete_branch(tmp_path):
     assert any("rate limit" in note for note in step["notes"])
 
 
-def test_reconcile_gh_error_without_status_uses_expected_head_sha(tmp_path):
+def test_reconcile_gh_error_without_status_fails_closed(tmp_path):
     ledger_path = create_test_ledger(tmp_path)
     result_path = tmp_path / "apply-status-repo1.yaml"
     gh_ops = FakeGhOps()
@@ -402,28 +539,27 @@ def test_reconcile_gh_error_without_status_uses_expected_head_sha(tmp_path):
         "error": "rate limit exceeded",
     }
 
-    doc = apply_reconcile.reconcile_apply(
-        ledger_path=ledger_path,
-        step_id="reconcile-repo1",
-        proposal_id="prop-101",
-        repo="testorg/repo1",
-        branch="pulse/apply/prop-101",
-        result_path=result_path,
-        gh_ops=gh_ops,
-        recorded_proposal_id="prop-101",
-        proposal_digest=PROPOSAL_DIGEST,
-        authorization_digest=AUTHORIZATION_DIGEST,
-        intended_base="main",
-        expected_head_sha="pushed_sha_111",
-        actor_id="octocat@mba-m4",
-        workspace="testorg",
-    )
+    with pytest.raises(ValueError, match="cannot determine PR state"):
+        apply_reconcile.reconcile_apply(
+            ledger_path=ledger_path,
+            step_id="reconcile-repo1",
+            proposal_id="prop-101",
+            repo="testorg/repo1",
+            branch="pulse/apply/prop-101",
+            result_path=result_path,
+            gh_ops=gh_ops,
+            recorded_proposal_id="prop-101",
+            proposal_digest=PROPOSAL_DIGEST,
+            authorization_digest=AUTHORIZATION_DIGEST,
+            intended_base="main",
+            expected_head_sha="pushed_sha_111",
+            actor_id="octocat@mba-m4",
+            workspace="testorg",
+        )
 
     ledger_doc = resolve_run.load(ledger_path)
     step = resolve_run.find_step(ledger_doc, "reconcile-repo1")
-    assert doc["state"] == "pr_opened"
-    assert doc["pushed_sha"] == "pushed_sha_111"
-    assert doc["pr_url"] == ""
+    assert not result_path.exists()
     assert step["status"] == "blocked-on-gate"
     assert any("rate limit exceeded" in note for note in step["notes"])
 
@@ -532,6 +668,7 @@ def test_reconcile_merged_pr_wrong_base_rejects(tmp_path):
     gh_ops.prs[key]["merge_commit_sha"] = "merged_commit_sha_999"
     gh_ops.prs[key]["base"] = "develop"
     gh_ops.prs[key]["head_ref"] = "pushed_sha_111"
+    gh_ops.remote_refs[key] = "pushed_sha_111"
     advance_calls = []
 
     doc = apply_reconcile.reconcile_apply(
@@ -557,7 +694,11 @@ def test_reconcile_merged_pr_wrong_base_rejects(tmp_path):
     assert doc["state"] == "rejected"
     assert "observed_base=develop" in doc["reason"]
     assert gh_ops.deleted_branches == [("testorg/repo1", "pulse/apply/prop-101")]
+    assert gh_ops.delete_calls == [
+        ("testorg/repo1", "pulse/apply/prop-101", "pushed_sha_111")
+    ]
     assert step["status"] == "failed"
+    assert any("deleted branch pulse/apply/prop-101" in note for note in step["notes"])
     assert advance_calls == []
 
 
@@ -591,6 +732,7 @@ def test_reconcile_merged_pr_wrong_head_rejects(tmp_path):
     gh_ops.prs[key]["merged"] = True
     gh_ops.prs[key]["merge_commit_sha"] = "merged_commit_sha_999"
     gh_ops.prs[key]["head_ref"] = "other_sha"
+    gh_ops.remote_refs[key] = "replacement_sha"
     advance_calls = []
 
     doc = apply_reconcile.reconcile_apply(
@@ -615,8 +757,13 @@ def test_reconcile_merged_pr_wrong_head_rejects(tmp_path):
     step = resolve_run.find_step(ledger_doc, "reconcile-repo1")
     assert doc["state"] == "rejected"
     assert "observed_head_sha=other_sha" in doc["reason"]
-    assert gh_ops.deleted_branches == [("testorg/repo1", "pulse/apply/prop-101")]
+    assert gh_ops.delete_calls == [
+        ("testorg/repo1", "pulse/apply/prop-101", "other_sha")
+    ]
+    assert gh_ops.deleted_branches == []
     assert step["status"] == "failed"
+    assert any("refused: sha mismatch" in note for note in step["notes"])
+    assert not any("deleted branch" in note for note in step["notes"])
     assert advance_calls == []
 
 
@@ -839,8 +986,10 @@ def test_reconcile_closed_unmerged_pr_rejects_and_deletes_branch(tmp_path):
         workspace="testorg",
     )
 
-    gh_ops.prs[("testorg/repo1", "pulse/apply/prop-101")]["state"] = "CLOSED"
-    gh_ops.prs[("testorg/repo1", "pulse/apply/prop-101")]["merged"] = False
+    key = ("testorg/repo1", "pulse/apply/prop-101")
+    gh_ops.prs[key]["state"] = "CLOSED"
+    gh_ops.prs[key]["merged"] = False
+    gh_ops.remote_refs[key] = "pushed_sha_111"
 
     advance_calls = []
 
@@ -871,6 +1020,9 @@ def test_reconcile_closed_unmerged_pr_rejects_and_deletes_branch(tmp_path):
     assert validate_result.validate(doc, "apply-status") == []
     assert advance_calls == []
     assert gh_ops.deleted_branches == [("testorg/repo1", "pulse/apply/prop-101")]
+    assert gh_ops.delete_calls == [
+        ("testorg/repo1", "pulse/apply/prop-101", "pushed_sha_111")
+    ]
 
     ledger_doc = resolve_run.load(ledger_path)
     step = resolve_run.find_step(ledger_doc, "reconcile-repo1")
@@ -1017,16 +1169,16 @@ def test_resolve_intended_base_plan_sync_prefers_finalizer_record():
     ) == "binding-base"
 
 
-def test_resolve_intended_base_generated_artifact_prefers_base_ref():
+def test_resolve_intended_base_generated_artifact_uses_branch():
     assert apply_reconcile.resolve_intended_base(
         "generated-artifact",
-        {"base_ref": "release", "base": "develop"},
+        {"branch": "release"},
     ) == "release"
 
 
-def test_resolve_intended_base_marketplace_sync_falls_back_to_base():
+def test_resolve_intended_base_marketplace_sync_uses_finalizer_record():
     assert apply_reconcile.resolve_intended_base(
-        "marketplace-sync", {"base": "develop"}
+        "marketplace-sync", {}, {"base_ref": "develop"}
     ) == "develop"
 
 
@@ -1042,6 +1194,85 @@ def test_resolve_intended_base_rejects_missing_base(source_kind):
 def test_resolve_intended_base_rejects_unknown_source_kind():
     with pytest.raises(ValueError):
         apply_reconcile.resolve_intended_base("unknown", {"base": "main"})
+
+
+@pytest.mark.parametrize("contents", ["state: [\n", "- not\n- a mapping\n"])
+def test_load_apply_status_rejects_corrupt_or_non_mapping(tmp_path, contents):
+    result_path = tmp_path / "apply-status.yaml"
+    result_path.write_text(contents)
+
+    with pytest.raises(ValueError, match="could not load apply status"):
+        apply_reconcile.load_apply_status(result_path)
+
+
+def test_reconcile_corrupt_status_fails_closed_before_remote_view(tmp_path):
+    ledger_path = create_test_ledger(tmp_path)
+    result_path = tmp_path / "apply-status-repo1.yaml"
+    result_path.write_text("state: [\n")
+    gh_ops = FakeGhOps()
+
+    with pytest.raises(ValueError, match="could not load apply status"):
+        apply_reconcile.reconcile_apply(
+            ledger_path=ledger_path,
+            step_id="reconcile-repo1",
+            proposal_id="prop-101",
+            repo="testorg/repo1",
+            branch="pulse/apply/prop-101",
+            result_path=result_path,
+            gh_ops=gh_ops,
+            recorded_proposal_id="prop-101",
+            proposal_digest=PROPOSAL_DIGEST,
+            authorization_digest=AUTHORIZATION_DIGEST,
+            intended_base="main",
+            expected_head_sha="pushed_sha_111",
+            actor_id="octocat@mba-m4",
+            workspace="testorg",
+        )
+
+    assert gh_ops.view_calls == []
+    assert result_path.read_text() == "state: [\n"
+
+
+def test_atomic_apply_status_write_fsyncs_file_and_directory(tmp_path, monkeypatch):
+    result_path = tmp_path / "apply-status.yaml"
+    fsync_calls = []
+    replace_calls = []
+    real_replace = apply_reconcile.os.replace
+
+    def record_fsync(fd):
+        fsync_calls.append(fd)
+
+    def record_replace(source, destination):
+        replace_calls.append((source, destination))
+        real_replace(source, destination)
+
+    monkeypatch.setattr(apply_reconcile.os, "fsync", record_fsync)
+    monkeypatch.setattr(apply_reconcile.os, "replace", record_replace)
+
+    apply_reconcile._atomic_write_yaml(result_path, {"state": "ok"})
+
+    assert yaml.safe_load(result_path.read_text()) == {"state": "ok"}
+    assert len(fsync_calls) == 2
+    assert replace_calls and replace_calls[0][1] == result_path
+    assert not list(tmp_path.glob(f".{result_path.name}.*.tmp"))
+
+
+def test_atomic_apply_status_write_preserves_existing_file_on_replace_error(
+    tmp_path, monkeypatch
+):
+    result_path = tmp_path / "apply-status.yaml"
+    result_path.write_text("state: old\n")
+
+    def fail_replace(source, destination):
+        raise OSError("simulated replace failure")
+
+    monkeypatch.setattr(apply_reconcile.os, "replace", fail_replace)
+
+    with pytest.raises(ValueError, match="could not write apply status"):
+        apply_reconcile._atomic_write_yaml(result_path, {"state": "new"})
+
+    assert result_path.read_text() == "state: old\n"
+    assert not list(tmp_path.glob(f".{result_path.name}.*.tmp"))
 
 
 def test_merge_detected_gate_evaluator_fail_closed(tmp_path):
