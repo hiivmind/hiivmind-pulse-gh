@@ -1421,3 +1421,14 @@ def test_merge_detected_gate_evaluator_fail_closed(tmp_path):
     satisfied, detail = resolve_run.evaluate_merge_detected_gate(str(result_path))
     assert satisfied is False
     assert "observed_head_sha" in detail
+
+
+def test_resolve_intended_base_neutral_uses_binding_base_ref():
+    assert apply_reconcile.resolve_intended_base(
+        "neutral", {"base_ref": "main"}, None
+    ) == "main"
+
+
+def test_resolve_intended_base_neutral_rejects_missing_base_ref():
+    with pytest.raises(ValueError, match="cannot resolve intended base for neutral"):
+        apply_reconcile.resolve_intended_base("neutral", {}, None)
