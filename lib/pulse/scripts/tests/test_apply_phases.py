@@ -78,3 +78,25 @@ def test_cleanup_passes_confirmed_and_local_only_shas():
     ops = Ops({})
     apply_phases.cleanup(ops, "pulse/apply/run-1", {"acme/api": "abc", "acme/web": None})
     assert ops.calls == [("pulse/apply/run-1", {"acme/api": "abc", "acme/web": None})]
+
+
+def test_preflight_blocks_on_empty_clone_path_value(monkeypatch):
+    monkeypatch.setattr(apply_phases.nave_adapter, "pen_status", lambda *_: {"repos": [status("api"), status("web")]})
+    result = apply_phases.preflight_phase(
+        None,
+        {"name": "p", "repos": [{"owner": "acme", "name": "api"}, {"owner": "acme", "name": "web"}]},
+        proposal(),
+        {"acme/api": None, "acme/web": ""},
+    )
+    assert "missing clone_path" in result["acme/api"]["reason"]
+    assert "missing clone_path" in result["acme/web"]["reason"]
+
+
+def test_provision_blocks_when_expected_base_ref_missing():
+    ops = Ops({"acme/api": provision_item("acme/api"), "acme/web": provision_item("acme/web")})
+    result = apply_phases.provision_phase(
+        None, None, ops, proposal(), "pulse/apply/run-1", {"acme/api": "refs/heads/main"}
+    )
+    assert result["acme/api"]["state"] == "ok"
+    assert result["acme/web"]["state"] == "blocked"
+    assert "base_ref" in result["acme/web"]["reason"]

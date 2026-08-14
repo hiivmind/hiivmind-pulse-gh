@@ -39,7 +39,7 @@ def preflight_phase(runner, pen, proposal, clone_paths) -> dict[str, dict]:
         state = status_by_repo.get(repo)
         if not exact:
             reasons.append("pen selection/status repos do not exactly match proposal selection")
-        if repo not in clone_paths:
+        if not clone_paths.get(repo):
             reasons.append("missing clone_path")
         if state is None:
             reasons.append("missing from pen status")
@@ -68,10 +68,10 @@ def provision_phase(runner, pen, apply_ops, proposal, apply_branch, base_refs) -
             reason = "provision echoed expected_base_sha mismatch"
         elif item.get("apply_ref") != apply_branch:
             reason = "provision echoed apply_ref mismatch"
-        elif base_refs and item.get("base_ref") != base_refs.get(repo):
+        elif repo not in base_refs or not base_refs[repo]:
+            reason = "provision missing expected base_ref for echo verification"
+        elif item.get("base_ref") != base_refs[repo]:
             reason = "provision echoed base_ref mismatch"
-        elif not item.get("base_ref"):
-            reason = "provision missing echoed base_ref"
         elif item.get("observed_base_sha") != expected_shas.get(repo):
             reason = "stale-base: observed base SHA drifted from expected base SHA"
         outcomes[repo] = ({"state": "blocked", "reason": reason} if reason else {"state": "ok", "observed_base_sha": item["observed_base_sha"]})

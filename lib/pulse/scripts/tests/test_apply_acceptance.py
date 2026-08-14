@@ -285,13 +285,21 @@ def _drive_apply(proposal, entry, runner, apply_ops, read_repo_head, *, read_rep
     apply_branch = f"pulse/apply/{proposal.id}"
     base_refs = {repo: "main" for repo in proposal.selection}
     preflight = apply_phases.preflight_phase(runner, pen, proposal, clone_paths)
+    if any(item["state"] != "ok" for item in preflight.values()):
+        return preflight, {}, {}, {}, {}, {}
     provision = apply_phases.provision_phase(runner, pen, apply_ops, proposal, apply_branch, base_refs)
+    if any(item["state"] != "ok" for item in provision.values()):
+        return preflight, provision, {}, {}, {}, {}
     executed = apply_phases.exec_phase(runner, pen, entry)
+    if any(item["state"] != "ok" for item in executed.values()):
+        return preflight, provision, executed, {}, {}, {}
     validated = apply_phases.validate_phase(entry, reader, proposal)
     if any(item["state"] != "ok" for item in validated.values()):
         return preflight, provision, executed, validated, {}, {}
     message = f"pulse-apply {proposal.id} by {proposal.actor.gh_login}@{proposal.actor.machine}"
     committed = apply_phases.commit_phase(apply_ops, proposal, message)
+    if any(item["state"] != "ok" for item in committed.values()):
+        return preflight, provision, executed, validated, committed, {}
     expected_local_shas = {repo: committed[repo]["local_commit_sha"] for repo in proposal.selection}
     push_reader = SimpleNamespace(read_repo_head=lambda repo: expected_local_shas[repo])
     pushed = apply_phases.push_phase(apply_ops, push_reader, apply_branch, expected_local_shas)
