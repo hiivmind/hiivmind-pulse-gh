@@ -834,3 +834,71 @@ def test_neutral_summary_matches_binding_and_proposal_id():
         "transformation": "format-python",
         "proposal_id": "apply-format-python-hiivmind-agent-kernel",
     }
+
+
+def _neutral_gh_api(head_sha=NEUTRAL_HEAD):
+    def gh_api(path):
+        if path == f"repos/{NEUTRAL_REPO}/branches/main":
+            return {"commit": {"sha": head_sha}}
+        return None
+    return gh_api
+
+
+def neutral_registry():
+    return mutation_plan.load_registry({
+        "transformations": {
+            "format-python": {
+                "id": "format-python",
+                "command_argv": ["ruff", "format", "."],
+                "applies_to": ["profile:python"],
+                "validation": {"kind": "none"},
+                "allow_scheduled": True,
+            },
+        },
+    })
+
+
+def test_collect_inputs_neutral_fetches_live_head():
+    io_seams = apply_rederive.IoSeams(gh_api=_neutral_gh_api(), registry=neutral_registry())
+    inputs = apply_rederive.collect_inputs(
+        "neutral", neutral_binding(),
+        {"binding": NEUTRAL_REPO, "transformation": "format-python",
+         "proposal_id": "apply-format-python-hiivmind-agent-kernel"},
+        actor=ACTOR, io_seams=io_seams,
+    )
+    assert isinstance(inputs, apply_rederive.NeutralProviderInputs)
+    assert inputs.head_sha == NEUTRAL_HEAD
+    assert inputs.registry is io_seams.registry
+
+
+def test_collect_inputs_neutral_rejects_missing_base_ref():
+    io_seams = apply_rederive.IoSeams(gh_api=_neutral_gh_api())
+    with pytest.raises(apply_rederive.RederiveError, match="base_ref"):
+        apply_rederive.collect_inputs(
+            "neutral", {"repo": NEUTRAL_REPO, "transformation": "format-python"},
+            {"binding": NEUTRAL_REPO, "transformation": "format-python",
+             "proposal_id": "apply-format-python-hiivmind-agent-kernel"},
+            actor=ACTOR, io_seams=io_seams,
+        )
+
+
+def test_collect_inputs_neutral_rejects_missing_head_evidence():
+    io_seams = apply_rederive.IoSeams(gh_api=lambda path: None)
+    with pytest.raises(apply_rederive.RederiveError, match="HEAD"):
+        apply_rederive.collect_inputs(
+            "neutral", neutral_binding(),
+            {"binding": NEUTRAL_REPO, "transformation": "format-python",
+             "proposal_id": "apply-format-python-hiivmind-agent-kernel"},
+            actor=ACTOR, io_seams=io_seams,
+        )
+
+
+def test_collect_inputs_neutral_rejects_binding_identity_mismatch():
+    io_seams = apply_rederive.IoSeams(gh_api=_neutral_gh_api())
+    with pytest.raises(apply_rederive.RederiveError, match="binding"):
+        apply_rederive.collect_inputs(
+            "neutral", neutral_binding(),
+            {"binding": "someone/else", "transformation": "format-python",
+             "proposal_id": "apply-format-python-hiivmind-agent-kernel"},
+            actor=ACTOR, io_seams=io_seams,
+        )

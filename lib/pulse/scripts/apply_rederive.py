@@ -227,7 +227,9 @@ def collect_inputs(
         raise RederiveError(f"apply_rederive: unknown source_kind: {source_kind!r}")
 
     binding_id = binding_ref.get(
-        "plugin_id" if source_kind == "marketplace-sync" else "id"
+        "repo"
+        if source_kind == "neutral"
+        else ("plugin_id" if source_kind == "marketplace-sync" else "id")
     )
     recorded_binding = recorded_summary.get("binding")
     if recorded_binding is not None and binding_id != recorded_binding:
@@ -241,6 +243,8 @@ def collect_inputs(
         return _collect_plan_sync(binding_ref, actor, io_seams)
     if source_kind == "generated-artifact":
         return _collect_generated(binding_ref, actor, io_seams)
+    if source_kind == "neutral":
+        return _collect_neutral(binding_ref, actor, io_seams)
     return _collect_marketplace(binding_ref, actor, io_seams)
 
 
@@ -328,6 +332,42 @@ def _collect_marketplace(
         drift=drift,
         head_sha=head_sha,
         default_branch=default_branch,
+        actor=actor,
+        registry=io_seams.registry,
+    )
+
+
+def _collect_neutral(
+    binding_ref: Mapping[str, Any],
+    actor: Mapping[str, Any] | mutation_plan.Actor,
+    io_seams: IoSeams,
+) -> NeutralProviderInputs:
+    owner, name = _validate_neutral_binding(binding_ref)  # repo + transformation
+    base_ref = binding_ref.get("base_ref")
+    if not isinstance(base_ref, str) or not base_ref:
+        raise RederiveError(
+            f"apply_rederive: neutral binding requires a non-empty base_ref, got {base_ref!r}"
+        )
+    if io_seams.gh_api is None:
+        raise RederiveError("apply_rederive: neutral requires io_seams.gh_api")
+    try:
+        payload = io_seams.gh_api(f"repos/{owner}/{name}/branches/{base_ref}")
+    except Exception as exc:
+        raise RederiveError(
+            f"apply_rederive: neutral HEAD fetch failed for {owner}/{name}: {exc}"
+        ) from exc
+    head_sha = None
+    if isinstance(payload, Mapping):
+        commit = payload.get("commit")
+        if isinstance(commit, Mapping) and isinstance(commit.get("sha"), str):
+            head_sha = commit["sha"] or None
+    if head_sha is None:
+        raise RederiveError(
+            f"apply_rederive: neutral could not resolve HEAD for {owner}/{name}@{base_ref}"
+        )
+    return NeutralProviderInputs(
+        binding=binding_ref,
+        head_sha=head_sha,
         actor=actor,
         registry=io_seams.registry,
     )
