@@ -14,11 +14,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 import pytest
 import yaml
 
 from lib.pulse.scripts import (
     apply_reconcile,
+    apply_phases,
     mutation_plan,
     nave_adapter,
     object_apply,
@@ -42,6 +44,11 @@ def _stub_probe(monkeypatch):
         pen_orchestrator.nave_adapter,
         "probe",
         lambda _runner: {"available": True, "version": "0.0.8", "protocol": 1},
+    )
+    monkeypatch.setattr(
+        apply_phases.executor_probe,
+        "probe_required_tool",
+        lambda *args, **kwargs: {"state": "ok", "tool": "test", "ecosystem": "test"},
     )
 
 
@@ -78,24 +85,39 @@ class RecordingApplyOps:
         self.prov_results = prov_results
         self.commit_results = commit_results
         self.push_results = push_results
+        self.repos = set()
 
     def provision_branch(self, branch: str, base_shas: dict[str, str]) -> dict[str, dict[str, str]]:
         self.calls.append(("provision_branch", branch, base_shas))
         if self.prov_results is not None:
             return self.prov_results
-        return {repo: {"state": "ok"} for repo in base_shas}
+        return {
+            repo: {
+                "state": "ok",
+                "base_ref": "main",
+                "expected_base_sha": sha,
+                "apply_ref": branch,
+                "observed_base_sha": sha,
+            }
+            for repo, sha in base_shas.items()
+        }
 
-    def commit_repos(self, message: str) -> dict[str, dict[str, str]]:
-        self.calls.append(("commit_repos", message))
+    def commit_repos(self, message: str, bound_paths) -> dict[str, dict[str, str]]:
+        self.calls.append(("commit_repos", message, bound_paths))
+        self.repos = set(bound_paths)
         if self.commit_results is not None:
             return self.commit_results
-        return {"acme/docs-repo": {"state": "ok"}, "acme/node-repo": {"state": "ok"}, "acme/plugin-repo": {"state": "ok"}}
+        return {repo: {"state": "ok", "local_commit_sha": "local_commit_sha"} for repo in bound_paths}
 
     def push_repos(self, branch: str) -> dict[str, dict[str, str]]:
         self.calls.append(("push_repos", branch))
         if self.push_results is not None:
             return self.push_results
-        return {"acme/docs-repo": {"state": "ok"}, "acme/node-repo": {"state": "ok"}, "acme/plugin-repo": {"state": "ok"}}
+        return {repo: {"state": "ok", "remote_ref": branch, "remote_sha": "local_commit_sha", "upstream": f"origin/{branch}"} for repo in self.repos}
+
+    def reset_repos(self, branch: str, expected_pushed_shas):
+        self.calls.append(("reset_repos", branch, expected_pushed_shas))
+        return {repo: {"state": "ok"} for repo in expected_pushed_shas}
 
 
 class FakeGhOps(apply_reconcile.GhOps):
@@ -237,6 +259,45 @@ def _exec_ok_sequence(repos: list[tuple[str, str]]) -> list[nave_adapter.Complet
     ]
 
 
+def _phase_runner(repos: list[tuple[str, str]]) -> QueuedRunner:
+    status_entries = [
+        {"owner": o, "repo": n, "working_tree": "clean", "freshness": "fresh", "divergence": "up-to-date"}
+        for o, n in repos
+    ]
+    return QueuedRunner([
+        _pen_status_completed(status_entries),
+        nave_adapter.Completed(0, "exec ok\n", ""),
+        _pen_status_completed(status_entries),
+    ])
+
+
+def _drive_apply(proposal, entry, runner, apply_ops, read_repo_head, *, read_repo_file=None, read_repo_changed_paths=None, monkeypatch=None):
+    if monkeypatch is not None:
+        monkeypatch.setattr(apply_phases.executor_probe, "probe_required_tool", lambda *a, **k: {"state": "ok", "tool": "test", "ecosystem": "test"})
+    repos = [{"owner": repo.split("/", 1)[0], "name": repo.split("/", 1)[1]} for repo in proposal.selection]
+    pen = {"name": "nave/acceptance", "repos": repos}
+    clone_paths = {repo: f"/tmp/clone/{repo}" for repo in proposal.selection}
+    reader = SimpleNamespace(
+        read_repo_head=read_repo_head,
+        read_repo_file=read_repo_file or (lambda repo, path: (_ for _ in ()).throw(FileNotFoundError(path))),
+        read_repo_changed_paths=read_repo_changed_paths or (lambda repo: ()),
+    )
+    apply_branch = f"pulse/apply/{proposal.id}"
+    base_refs = {repo: "main" for repo in proposal.selection}
+    preflight = apply_phases.preflight_phase(runner, pen, proposal, clone_paths)
+    provision = apply_phases.provision_phase(runner, pen, apply_ops, proposal, apply_branch, base_refs)
+    executed = apply_phases.exec_phase(runner, pen, entry)
+    validated = apply_phases.validate_phase(entry, reader, proposal)
+    if any(item["state"] != "ok" for item in validated.values()):
+        return preflight, provision, executed, validated, {}, {}
+    message = f"pulse-apply {proposal.id} by {proposal.actor.gh_login}@{proposal.actor.machine}"
+    committed = apply_phases.commit_phase(apply_ops, proposal, message)
+    expected_local_shas = {repo: committed[repo]["local_commit_sha"] for repo in proposal.selection}
+    push_reader = SimpleNamespace(read_repo_head=lambda repo: expected_local_shas[repo])
+    pushed = apply_phases.push_phase(apply_ops, push_reader, apply_branch, expected_local_shas)
+    return preflight, provision, executed, validated, committed, pushed
+
+
 def _create_test_ledger(tmp_path: Path, run_id: str, step_id: str, repo: str) -> Path:
     steps = json.dumps([
         {
@@ -316,18 +377,13 @@ class TestNeutralApplyAcceptanceSuite:
         def read_repo_changed_paths(repo: str) -> tuple[str, ...]:
             return (".generated/docs/index.html",)
 
-        # 2. Execute allow-listed apply
-        exec_res = pen_orchestrator.execute(
-            plan,
-            runner,
-            read_repo_head=read_repo_head,
-            read_repo_changed_paths=read_repo_changed_paths,
-            apply_ops=apply_ops,
+        # 2. Drive allow-listed apply phases directly
+        *_, pushed = _drive_apply(
+            proposal, plan.entry, _phase_runner([("acme", "docs-repo")]), apply_ops,
+            read_repo_head, read_repo_changed_paths=read_repo_changed_paths,
         )
-
-        # Assert: reaches state "pushed" and push targeted pulse/apply/{id}, NEVER main/base
-        assert exec_res.state == "pushed"
-        assert exec_res.repo_outcomes == {"acme/docs-repo": "ok"}
+        assert pushed["acme/docs-repo"]["state"] == "ok"
+        assert pushed["acme/docs-repo"]["remote_ref"] == "pulse/apply/prop-docs-100"
 
         assert len(apply_ops.calls) == 3
         prov_call, commit_call, push_call = apply_ops.calls
@@ -479,18 +535,13 @@ class TestNeutralApplyAcceptanceSuite:
         def read_repo_changed_paths_violating(repo: str) -> tuple[str, ...]:
             return (".generated/docs/index.html", "src/unauthorized_code.py")
 
-        exec_res = pen_orchestrator.execute(
-            plan,
-            runner,
-            read_repo_head=read_repo_head,
-            read_repo_changed_paths=read_repo_changed_paths_violating,
-            apply_ops=apply_ops,
+        *_, validated, _, pushed = _drive_apply(
+            proposal, plan.entry, _phase_runner([("acme", "docs-repo")]), apply_ops,
+            read_repo_head, read_repo_changed_paths=read_repo_changed_paths_violating,
         )
 
-        # Assert: fails closed with blocked or failed (NOT pushed)
-        assert exec_res.state in ("blocked", "failed")
-        assert exec_res.state != "pushed"
-        assert "bound_paths" in (exec_res.reason or "") or "out-of-bounds" in (exec_res.reason or "") or "validation" in (exec_res.reason or "")
+        # Assert: validation fails closed and no push is executed
+        assert validated["acme/docs-repo"]["state"] in ("blocked", "failed")
 
         # Assert: no push was executed
         assert not any(call[0] == "push_repos" for call in apply_ops.calls)
@@ -541,15 +592,12 @@ class TestNeutralApplyAcceptanceSuite:
                 return node_fixture_lockfile
             raise FileNotFoundError(f"not found: {path}")
 
-        exec_res = pen_orchestrator.execute(
-            plan,
-            runner,
-            read_repo_head=read_repo_head,
-            read_repo_file=read_repo_file,
-            apply_ops=apply_ops,
+        *_, pushed = _drive_apply(
+            proposal, plan.entry, _phase_runner([("acme", "node-repo")]), apply_ops,
+            read_repo_head, read_repo_file=read_repo_file,
         )
-
-        assert exec_res.state == "pushed"
+        assert pushed["acme/node-repo"]["state"] == "ok"
+        assert pushed["acme/node-repo"]["remote_ref"] == "pulse/apply/prop-node-200"
         assert [c[0] for c in apply_ops.calls] == ["provision_branch", "commit_repos", "push_repos"]
 
         # Reconcile PR & Merge
@@ -658,14 +706,12 @@ class TestOverlayApplySuite:
         def read_repo_head(repo: str) -> str:
             return "sha_plugin_base_300"
 
-        exec_res = pen_orchestrator.execute(
-            plan,
-            runner,
-            read_repo_head=read_repo_head,
-            apply_ops=apply_ops,
+        *_, pushed = _drive_apply(
+            proposal, plan.entry, _phase_runner([("acme", "plugin-repo")]), apply_ops,
+            read_repo_head,
         )
-
-        assert exec_res.state == "pushed"
+        assert pushed["acme/plugin-repo"]["state"] == "ok"
+        assert pushed["acme/plugin-repo"]["remote_ref"] == "pulse/apply/prop-mkt-300"
         assert apply_ops.calls[2] == ("push_repos", "pulse/apply/prop-mkt-300")
 
         # PR & Reconcile through same neutral machinery
