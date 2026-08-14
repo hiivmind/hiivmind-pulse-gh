@@ -15,7 +15,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable, Mapping
 
 import yaml
 
@@ -36,7 +36,7 @@ class GhOps:
         raise NotImplementedError
 
     def view_pr(self, repo: str, branch: str) -> dict:
-        """Return {"state": "OPEN"|"MERGED"|"CLOSED"|"ERROR", "merged": bool, "merge_commit_sha": str|None, "url": str, "error"?: str}."""
+        """Return state, merged, merge_commit_sha, url, observed base/head, and error."""
         raise NotImplementedError
 
     def delete_remote_branch(self, repo: str, branch: str) -> dict:
@@ -93,7 +93,7 @@ class GhCliOps(GhOps):
             "-R",
             repo,
             "--json",
-            "state,mergedAt,mergeCommit,url",
+            "state,mergedAt,mergeCommit,url,baseRefName,headRefOid",
         ]
         res = subprocess.run(cmd, capture_output=True, text=True, check=False)
         if res.returncode != 0:
@@ -103,6 +103,8 @@ class GhCliOps(GhOps):
                 "merge_commit_sha": None,
                 "url": "",
                 "error": res.stderr.strip() or f"gh pr view exit code {res.returncode}",
+                "observed_base": None,
+                "observed_head_sha": None,
             }
         try:
             data = json.loads(res.stdout)
@@ -113,6 +115,8 @@ class GhCliOps(GhOps):
                 "merge_commit_sha": None,
                 "url": "",
                 "error": f"unparseable JSON from gh pr view: {exc.msg}",
+                "observed_base": None,
+                "observed_head_sha": None,
             }
         state = data.get("state", "CLOSED").upper()
         merged_at = data.get("mergedAt")
@@ -128,6 +132,8 @@ class GhCliOps(GhOps):
             "merged": merged,
             "merge_commit_sha": merge_commit_sha if merged else None,
             "url": data.get("url", ""),
+            "observed_base": data.get("baseRefName"),
+            "observed_head_sha": data.get("headRefOid"),
         }
 
     def delete_remote_branch(self, repo: str, branch: str) -> dict:
@@ -142,6 +148,30 @@ class GhCliOps(GhOps):
         if res.returncode == 0:
             return {"state": "ok"}
         return {"state": "failed", "reason": res.stderr.strip()}
+
+
+def resolve_intended_base(
+    source_kind: str,
+    binding_ref: Mapping[str, Any],
+    finalizer_record: Mapping[str, Any] | None = None,
+) -> str:
+    if source_kind == "plan-sync":
+        if finalizer_record and finalizer_record.get("base_ref"):
+            return finalizer_record["base_ref"]
+        if binding_ref.get("base_ref"):
+            return binding_ref["base_ref"]
+        raise ValueError("cannot resolve intended base for plan-sync: no base_ref")
+
+    if source_kind in {"generated-artifact", "marketplace-sync"}:
+        if binding_ref.get("base_ref"):
+            return binding_ref["base_ref"]
+        if binding_ref.get("base"):
+            return binding_ref["base"]
+        raise ValueError(
+            f"cannot resolve intended base for {source_kind}: no base/base_ref"
+        )
+
+    raise ValueError(f"unknown source_kind: {source_kind}")
 
 
 def load_apply_status(path: str | Path) -> dict | None:
@@ -234,10 +264,21 @@ def open_apply_pr(
     authorization_digest: str,
     intended_base: str,
     expected_head_sha: str,
+    token: str | None = None,
     actor_id: str = "octocat@mba-m4",
     workspace: str = "unknown",
 ) -> dict:
-    resolve_run.acquire_lease(ledger_path, step_id, actor_id)
+    if token is not None:
+        resolve_run.renew_lease(ledger_path, step_id, actor_id, token)
+    else:
+        resolve_run.acquire_lease(ledger_path, step_id, actor_id)
+    resolve_run.snapshot_audit(
+        ledger_path,
+        step_id,
+        recorded_proposal_id=recorded_proposal_id,
+        proposal_digest=proposal_digest,
+        authorization_digest=authorization_digest,
+    )
 
     existing = load_apply_status(result_path)
     if existing and existing.get("state") in {"pr_opened", "applied", "rejected"}:
@@ -294,9 +335,8 @@ def reconcile_apply(
     authorization_digest: str,
     intended_base: str,
     expected_head_sha: str,
-    observed_base: str | None = None,
-    observed_head_sha: str | None = None,
     advance_base: Callable[[str, str], dict] | None = None,
+    token: str | None = None,
     actor_id: str = "octocat@mba-m4",
     workspace: str = "unknown",
 ) -> dict:
@@ -308,53 +348,55 @@ def reconcile_apply(
     advancement must be idempotent, and the step is marked done ONLY after advance_base
     returns {"state": "ok"}.
     """
-    resolve_run.acquire_lease(ledger_path, step_id, actor_id)
+    if token is not None:
+        resolve_run.renew_lease(ledger_path, step_id, actor_id, token)
+    else:
+        resolve_run.acquire_lease(ledger_path, step_id, actor_id)
+    resolve_run.snapshot_audit(
+        ledger_path,
+        step_id,
+        recorded_proposal_id=recorded_proposal_id,
+        proposal_digest=proposal_digest,
+        authorization_digest=authorization_digest,
+    )
 
     existing = load_apply_status(result_path)
-    if existing:
-        ex_state = existing.get("state")
-        if ex_state == "applied":
-            ledger_doc = resolve_run.load(ledger_path)
-            step = resolve_run.find_step(ledger_doc, step_id)
-            if step["status"] == "done":
-                return existing
-            # If step is NOT done, fall through to re-run advancement path below.
-        elif ex_state == "rejected":
-            ledger_doc = resolve_run.load(ledger_path)
-            step = resolve_run.find_step(ledger_doc, step_id)
-            if step["status"] != "failed":
-                step["status"] = "failed"
-                resolve_run.recompute_status(ledger_doc)
-                resolve_run.save(ledger_path, ledger_doc)
+    if existing and existing.get("state") == "rejected":
+        ledger_doc = resolve_run.load(ledger_path)
+        step = resolve_run.find_step(ledger_doc, step_id)
+        if step["status"] == "failed":
             return existing
 
-    if existing and existing.get("state") == "applied":
-        pr_info = {
-            "state": "MERGED",
-            "merged": True,
-            "merge_commit_sha": existing.get("merged_sha"),
-            "url": existing.get("pr_url", ""),
-        }
-    else:
-        pr_info = gh_ops.view_pr(repo=repo, branch=branch)
+    pr_info = gh_ops.view_pr(repo=repo, branch=branch)
 
     actor_parts = actor_id.split("@", 1)
     login = actor_parts[0]
     machine = actor_parts[1] if len(actor_parts) > 1 else ""
     actor_doc = {"gh_login": login, "machine": machine, "mode": "interactive"}
 
-    pushed_sha = existing.get("pushed_sha") if existing else None
+    pushed_sha = (
+        existing.get("pushed_sha")
+        if existing and existing.get("pushed_sha")
+        else expected_head_sha
+    )
     pr_url = pr_info.get("url") or (existing.get("pr_url") if existing else None)
 
     if pr_info.get("merged") and pr_info.get("merge_commit_sha"):
         merged_sha = pr_info["merge_commit_sha"]
-        if not (existing and existing.get("state") == "applied"):
+        observed_base = pr_info.get("observed_base")
+        observed_head_sha = pr_info.get("observed_head_sha")
+        if observed_base != intended_base or observed_head_sha != expected_head_sha:
+            reason = (
+                "merged PR base/head mismatch: "
+                f"observed_base={observed_base} (want {intended_base}), "
+                f"observed_head_sha={observed_head_sha} (want {expected_head_sha})"
+            )
             doc = write_apply_status(
                 result_path,
                 proposal_id=proposal_id,
                 repo=repo,
                 branch=branch,
-                state="applied",
+                state="rejected",
                 recorded_proposal_id=recorded_proposal_id,
                 proposal_digest=proposal_digest,
                 authorization_digest=authorization_digest,
@@ -362,48 +404,107 @@ def reconcile_apply(
                 expected_head_sha=expected_head_sha,
                 observed_base=observed_base,
                 observed_head_sha=observed_head_sha,
-                pushed_sha=pushed_sha or "unknown",
+                pushed_sha=pushed_sha,
                 pr_url=pr_url or "",
                 merged_sha=merged_sha,
+                reason=reason,
                 workspace=workspace,
                 actor=actor_doc,
             )
-        else:
-            doc = existing
+            gh_ops.delete_remote_branch(repo, branch)
+
+            ledger_doc = resolve_run.load(ledger_path)
+            step = resolve_run.find_step(ledger_doc, step_id)
+            step["status"] = "failed"
+            step["notes"].append(
+                f"{resolve_run.now_iso()} {reason}; deleted branch {branch}"
+            )
+            resolve_run.recompute_status(ledger_doc)
+            resolve_run.save(ledger_path, ledger_doc)
+            return doc
+
+        doc = write_apply_status(
+            result_path,
+            proposal_id=proposal_id,
+            repo=repo,
+            branch=branch,
+            state="applied",
+            recorded_proposal_id=recorded_proposal_id,
+            proposal_digest=proposal_digest,
+            authorization_digest=authorization_digest,
+            intended_base=intended_base,
+            expected_head_sha=expected_head_sha,
+            observed_base=observed_base,
+            observed_head_sha=observed_head_sha,
+            pushed_sha=pushed_sha,
+            pr_url=pr_url or "",
+            merged_sha=merged_sha,
+            workspace=workspace,
+            actor=actor_doc,
+        )
 
         satisfied, detail = resolve_run.evaluate_merge_detected_gate(str(result_path))
-        if satisfied:
-            if advance_base is None:
-                ledger_doc = resolve_run.load(ledger_path)
-                step = resolve_run.find_step(ledger_doc, step_id)
+        if not satisfied:
+            doc = write_apply_status(
+                result_path,
+                proposal_id=proposal_id,
+                repo=repo,
+                branch=branch,
+                state="rejected",
+                recorded_proposal_id=recorded_proposal_id,
+                proposal_digest=proposal_digest,
+                authorization_digest=authorization_digest,
+                intended_base=intended_base,
+                expected_head_sha=expected_head_sha,
+                observed_base=observed_base,
+                observed_head_sha=observed_head_sha,
+                pushed_sha=pushed_sha,
+                pr_url=pr_url or "",
+                merged_sha=merged_sha,
+                reason=detail,
+                workspace=workspace,
+                actor=actor_doc,
+            )
+            ledger_doc = resolve_run.load(ledger_path)
+            step = resolve_run.find_step(ledger_doc, step_id)
+            resolve_run._apply_gate_result(step, False, detail)
+            step["status"] = "failed"
+            resolve_run.recompute_status(ledger_doc)
+            resolve_run.save(ledger_path, ledger_doc)
+            return doc
+
+        ledger_doc = resolve_run.load(ledger_path)
+        step = resolve_run.find_step(ledger_doc, step_id)
+        if step["status"] == "done":
+            return doc
+
+        if advance_base is None:
+            resolve_run._apply_gate_result(step, True, detail)
+            step["status"] = "done"
+            step["notes"].append(
+                f"{resolve_run.now_iso()} Merge detected; base advance deferred to caller driver"
+            )
+            resolve_run.recompute_status(ledger_doc)
+            resolve_run.save(ledger_path, ledger_doc)
+        else:
+            adv_res = advance_base(repo, merged_sha)
+            if isinstance(adv_res, dict) and adv_res.get("state") == "ok":
                 resolve_run._apply_gate_result(step, True, detail)
                 step["status"] = "done"
-                step["notes"].append(
-                    f"{resolve_run.now_iso()} Merge detected; base advance deferred to caller driver"
-                )
                 resolve_run.recompute_status(ledger_doc)
                 resolve_run.save(ledger_path, ledger_doc)
             else:
-                adv_res = advance_base(repo, merged_sha)
-                ledger_doc = resolve_run.load(ledger_path)
-                step = resolve_run.find_step(ledger_doc, step_id)
-                if isinstance(adv_res, dict) and adv_res.get("state") == "ok":
-                    resolve_run._apply_gate_result(step, True, detail)
-                    step["status"] = "done"
-                    resolve_run.recompute_status(ledger_doc)
-                    resolve_run.save(ledger_path, ledger_doc)
-                else:
-                    reason = (
-                        adv_res.get("reason", "unknown error")
-                        if isinstance(adv_res, dict)
-                        else "unknown error"
-                    )
-                    step["status"] = "blocked-on-gate"
-                    step["notes"].append(
-                        f"{resolve_run.now_iso()} base advance failed: {reason}"
-                    )
-                    resolve_run.recompute_status(ledger_doc)
-                    resolve_run.save(ledger_path, ledger_doc)
+                reason = (
+                    adv_res.get("reason", "unknown error")
+                    if isinstance(adv_res, dict)
+                    else "unknown error"
+                )
+                step["status"] = "blocked-on-gate"
+                step["notes"].append(
+                    f"{resolve_run.now_iso()} base advance failed: {reason}"
+                )
+                resolve_run.recompute_status(ledger_doc)
+                resolve_run.save(ledger_path, ledger_doc)
 
         return doc
 
@@ -420,6 +521,8 @@ def reconcile_apply(
             authorization_digest=authorization_digest,
             intended_base=intended_base,
             expected_head_sha=expected_head_sha,
+            observed_base=pr_info.get("observed_base"),
+            observed_head_sha=pr_info.get("observed_head_sha"),
             pushed_sha=pushed_sha,
             pr_url=pr_url,
             reason=reason,
@@ -440,37 +543,49 @@ def reconcile_apply(
 
         return doc
 
-    else:
+    if pr_info.get("state") == "ERROR" and existing:
         ledger_doc = resolve_run.load(ledger_path)
         step = resolve_run.find_step(ledger_doc, step_id)
-        step["status"] = "blocked-on-gate"
-        if pr_info.get("state") == "ERROR":
-            err_detail = pr_info.get("error", "unknown gh error")
-            step["notes"].append(
-                f"{resolve_run.now_iso()} gh view_pr error: {err_detail}"
-            )
+        if step["status"] not in resolve_run.TERMINAL:
+            step["status"] = "blocked-on-gate"
+        err_detail = pr_info.get("error", "unknown gh error")
+        step["notes"].append(
+            f"{resolve_run.now_iso()} gh view_pr error: {err_detail}"
+        )
         resolve_run.recompute_status(ledger_doc)
         resolve_run.save(ledger_path, ledger_doc)
+        return existing
 
-        if existing:
-            return existing
-        else:
-            return write_apply_status(
-                result_path,
-                proposal_id=proposal_id,
-                repo=repo,
-                branch=branch,
-                state="pr_opened",
-                recorded_proposal_id=recorded_proposal_id,
-                proposal_digest=proposal_digest,
-                authorization_digest=authorization_digest,
-                intended_base=intended_base,
-                expected_head_sha=expected_head_sha,
-                pushed_sha=pushed_sha or "unknown",
-                pr_url=pr_url or "",
-                workspace=workspace,
-                actor=actor_doc,
-            )
+    if existing and existing.get("state") in {"pr_opened", "applied"}:
+        return existing
+
+    ledger_doc = resolve_run.load(ledger_path)
+    step = resolve_run.find_step(ledger_doc, step_id)
+    step["status"] = "blocked-on-gate"
+    if pr_info.get("state") == "ERROR":
+        err_detail = pr_info.get("error", "unknown gh error")
+        step["notes"].append(
+            f"{resolve_run.now_iso()} gh view_pr error: {err_detail}"
+        )
+    resolve_run.recompute_status(ledger_doc)
+    resolve_run.save(ledger_path, ledger_doc)
+
+    return write_apply_status(
+        result_path,
+        proposal_id=proposal_id,
+        repo=repo,
+        branch=branch,
+        state="pr_opened",
+        recorded_proposal_id=recorded_proposal_id,
+        proposal_digest=proposal_digest,
+        authorization_digest=authorization_digest,
+        intended_base=intended_base,
+        expected_head_sha=expected_head_sha,
+        pushed_sha=pushed_sha,
+        pr_url=pr_url or "",
+        workspace=workspace,
+        actor=actor_doc,
+    )
 
 
 def main():
@@ -483,7 +598,7 @@ def main():
     o.add_argument("--proposal-id", required=True)
     o.add_argument("--repo", required=True)
     o.add_argument("--branch", required=True)
-    o.add_argument("--base", default="main")
+    o.add_argument("--base", required=True)
     o.add_argument("--pushed-sha", required=True)
     o.add_argument("--title", required=True)
     o.add_argument("--body", default="")
@@ -493,6 +608,7 @@ def main():
     o.add_argument("--authorization-digest", required=True)
     o.add_argument("--intended-base", required=True)
     o.add_argument("--expected-head-sha", required=True)
+    o.add_argument("--token")
     o.add_argument("--actor", default="unknown@unknown")
     o.add_argument("--workspace", default="unknown")
 
@@ -508,8 +624,7 @@ def main():
     r.add_argument("--authorization-digest", required=True)
     r.add_argument("--intended-base", required=True)
     r.add_argument("--expected-head-sha", required=True)
-    r.add_argument("--observed-base", default=None)
-    r.add_argument("--observed-head-sha", default=None)
+    r.add_argument("--token")
     r.add_argument("--actor", default="unknown@unknown")
     r.add_argument("--workspace", default="unknown")
 
@@ -534,6 +649,7 @@ def main():
             authorization_digest=args.authorization_digest,
             intended_base=args.intended_base,
             expected_head_sha=args.expected_head_sha,
+            token=args.token,
             actor_id=args.actor,
             workspace=args.workspace,
         )
@@ -553,8 +669,7 @@ def main():
             authorization_digest=args.authorization_digest,
             intended_base=args.intended_base,
             expected_head_sha=args.expected_head_sha,
-            observed_base=args.observed_base,
-            observed_head_sha=args.observed_head_sha,
+            token=args.token,
             actor_id=args.actor,
             workspace=args.workspace,
         )

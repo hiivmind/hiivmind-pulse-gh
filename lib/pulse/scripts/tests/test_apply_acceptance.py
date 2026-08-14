@@ -124,6 +124,7 @@ class FakeGhOps(apply_reconcile.GhOps):
             "merged": False,
             "merge_commit_sha": None,
             "base": base,
+            "head_ref": None,
             "title": title,
             "body": body,
         }
@@ -137,6 +138,8 @@ class FakeGhOps(apply_reconcile.GhOps):
                 "merged": False,
                 "merge_commit_sha": None,
                 "url": "",
+                "observed_base": None,
+                "observed_head_sha": None,
             }
         pr = self.prs[key]
         return {
@@ -144,6 +147,8 @@ class FakeGhOps(apply_reconcile.GhOps):
             "merged": pr["merged"],
             "merge_commit_sha": pr["merge_commit_sha"],
             "url": pr["url"],
+            "observed_base": pr.get("base"),
+            "observed_head_sha": pr.get("head_ref"),
         }
 
     def delete_remote_branch(self, repo: str, branch: str) -> dict[str, object]:
@@ -399,6 +404,7 @@ class TestNeutralApplyAcceptanceSuite:
         gh_ops.prs[("acme/docs-repo", "pulse/apply/prop-docs-100")]["state"] = "MERGED"
         gh_ops.prs[("acme/docs-repo", "pulse/apply/prop-docs-100")]["merged"] = True
         gh_ops.prs[("acme/docs-repo", "pulse/apply/prop-docs-100")]["merge_commit_sha"] = "merged_sha_docs_999"
+        gh_ops.prs[("acme/docs-repo", "pulse/apply/prop-docs-100")]["head_ref"] = "pushed_sha_base_100"
 
         doc_reconcile_merged = apply_reconcile.reconcile_apply(
             ledger_path=ledger_path,
@@ -413,8 +419,6 @@ class TestNeutralApplyAcceptanceSuite:
             authorization_digest=AUTHORIZATION_DIGEST,
             intended_base="main",
             expected_head_sha="pushed_sha_base_100",
-            observed_base="main",
-            observed_head_sha="merged_sha_docs_999",
             advance_base=advance_base_fake,
             actor_id="octocat@laptop",
             workspace="acme",
@@ -575,6 +579,7 @@ class TestNeutralApplyAcceptanceSuite:
         gh_ops.prs[("acme/node-repo", "pulse/apply/prop-node-200")]["state"] = "MERGED"
         gh_ops.prs[("acme/node-repo", "pulse/apply/prop-node-200")]["merged"] = True
         gh_ops.prs[("acme/node-repo", "pulse/apply/prop-node-200")]["merge_commit_sha"] = "merged_sha_node_888"
+        gh_ops.prs[("acme/node-repo", "pulse/apply/prop-node-200")]["head_ref"] = "sha_node_base_200"
 
         advance_calls: list[tuple[str, str]] = []
 
@@ -595,8 +600,6 @@ class TestNeutralApplyAcceptanceSuite:
             authorization_digest=AUTHORIZATION_DIGEST,
             intended_base="main",
             expected_head_sha="sha_node_base_200",
-            observed_base="main",
-            observed_head_sha="merged_sha_node_888",
             advance_base=advance_base_fake,
             actor_id="octocat@laptop",
             workspace="acme",
@@ -692,6 +695,7 @@ class TestOverlayApplySuite:
         gh_ops.prs[("acme/plugin-repo", "pulse/apply/prop-mkt-300")]["state"] = "MERGED"
         gh_ops.prs[("acme/plugin-repo", "pulse/apply/prop-mkt-300")]["merged"] = True
         gh_ops.prs[("acme/plugin-repo", "pulse/apply/prop-mkt-300")]["merge_commit_sha"] = "merged_sha_mkt_777"
+        gh_ops.prs[("acme/plugin-repo", "pulse/apply/prop-mkt-300")]["head_ref"] = "sha_plugin_base_300"
 
         advance_calls: list[tuple[str, str]] = []
 
@@ -712,8 +716,6 @@ class TestOverlayApplySuite:
             authorization_digest=AUTHORIZATION_DIGEST,
             intended_base="main",
             expected_head_sha="sha_plugin_base_300",
-            observed_base="main",
-            observed_head_sha="merged_sha_mkt_777",
             advance_base=advance_base_fake,
             actor_id="octocat@laptop",
             workspace="acme",
