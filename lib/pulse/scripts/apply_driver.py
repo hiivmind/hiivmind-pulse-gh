@@ -31,6 +31,20 @@ def _actor(actor_id: str) -> mutation_plan.Actor:
     return mutation_plan.Actor(login, machine, "interactive")
 
 
+def _default_gh_api(path: str):
+    """Production `gh api` seam — parsed JSON, or None on any failure."""
+    import json
+    import subprocess
+
+    res = subprocess.run(["gh", "api", path], capture_output=True, text=True)
+    if res.returncode != 0:
+        return None
+    try:
+        return json.loads(res.stdout)
+    except ValueError:
+        return None
+
+
 def _entry(inputs: apply_rederive.ProviderInputs, workspace: str, transformation: str):
     """Use the provider's registry, then the same workspace/template fallback as run callers."""
     registry = getattr(inputs, "registry", None)
@@ -101,8 +115,8 @@ def _persist_finalizer(result_path, finalizer_record) -> None:
     path.write_text(yaml.safe_dump(finalizer_record, sort_keys=False))
 
 
-def run_apply(*, source_kind, binding_ref, recorded_summary, authorization_path, ledger_path,
-              step_id, actor_id, runner, gh_ops, result_path, workspace) -> dict:
+def run_apply(*, source_kind, binding_ref, recorded_summary=None, authorization_path, ledger_path,
+              step_id, actor_id, runner, gh_api=None, gh_ops, result_path, workspace) -> dict:
     """Run one single-repository apply; return apply-status or repo-mutation."""
     proposal = None
     proposal_digest = None
@@ -110,9 +124,15 @@ def run_apply(*, source_kind, binding_ref, recorded_summary, authorization_path,
     actor = _actor(actor_id)
 
     try:
+        if source_kind == "neutral":
+            recorded_summary = apply_rederive.neutral_summary(binding_ref)
+        elif not recorded_summary:
+            raise apply_rederive.RederiveError(
+                f"recorded_summary is required for source_kind={source_kind!r}"
+            )
         inputs = apply_rederive.collect_inputs(
             source_kind, binding_ref, recorded_summary, actor=actor,
-            io_seams=apply_rederive.IoSeams(runner=runner, registry=None),
+            io_seams=apply_rederive.IoSeams(runner=runner, gh_api=gh_api, registry=None),
         )
         rederived = apply_rederive.rederive(inputs)
         proposal = rederived.proposal
@@ -352,7 +372,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Run one apply-mode proposal")
     parser.add_argument("--source-kind", required=True)
     parser.add_argument("--binding-ref", required=True, help="JSON object")
-    parser.add_argument("--recorded-summary", required=True, help="JSON {binding, transformation, proposal_id}")
+    parser.add_argument("--recorded-summary", required=False, default=None,
+                        help="JSON {binding, transformation, proposal_id}; omit for --source-kind neutral")
     parser.add_argument("--authorization", required=True)
     parser.add_argument("--ledger", required=True)
     parser.add_argument("--step", required=True)
@@ -362,16 +383,20 @@ def main(argv=None):
     parser.add_argument("--fixtures", default=None, help="optional PULSE_NAVE_FIXTURES root")
     args = parser.parse_args(argv)
 
+    if args.source_kind != "neutral" and not args.recorded_summary:
+        parser.error("--recorded-summary is required unless --source-kind is neutral")
+
     runner = nave_adapter.NaveRunner(fixtures=args.fixtures)
     result = run_apply(
         source_kind=args.source_kind,
         binding_ref=json.loads(args.binding_ref),
-        recorded_summary=json.loads(args.recorded_summary),
+        recorded_summary=json.loads(args.recorded_summary) if args.recorded_summary else None,
         authorization_path=args.authorization,
         ledger_path=args.ledger,
         step_id=args.step,
         actor_id=args.actor,
         runner=runner,
+        gh_api=_default_gh_api,
         gh_ops=apply_reconcile.GhCliOps(),
         result_path=args.result,
         workspace=args.workspace,
