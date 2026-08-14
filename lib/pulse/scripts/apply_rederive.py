@@ -390,6 +390,8 @@ def rederive(inputs: ProviderInputs) -> RederivedProposal:
         return _rederive_generated(inputs)
     if isinstance(inputs, MarketplaceProviderInputs):
         return _rederive_marketplace(inputs)
+    if isinstance(inputs, NeutralProviderInputs):
+        return _rederive_neutral(inputs)
     raise RederiveError(f"apply_rederive: unsupported provider inputs: {type(inputs)!r}")
 
 
@@ -510,4 +512,35 @@ def _rederive_marketplace(inputs: MarketplaceProviderInputs) -> RederivedProposa
         proposal=proposal,
         source_kind="marketplace-sync",
         finalizer_record={"base_ref": inputs.default_branch},
+    )
+
+
+def _rederive_neutral(inputs: NeutralProviderInputs) -> RederivedProposal:
+    binding = inputs.binding
+    transformation = binding.get("transformation")
+    if transformation not in NEUTRAL_TRANSFORMATIONS:
+        raise RederiveError(
+            f"apply_rederive: transformation {transformation!r} is not a neutral transformation"
+        )
+    head_sha = inputs.head_sha
+    if not isinstance(head_sha, str) or not head_sha:
+        raise RederiveError("apply_rederive: neutral requires a resolved head_sha")
+    try:
+        proposal = mutation_plan.build_proposal(
+            id=neutral_proposal_id(binding),
+            selection=[binding["repo"]],
+            transformation=transformation,
+            expected_shas={binding["repo"]: head_sha},
+            actor=inputs.actor,
+            mutation_policy="allow-listed",
+            bound_paths={binding["repo"]: binding["bound_paths"]},
+            registry=inputs.registry,
+        )
+    except mutation_plan.MutationPlanError as exc:
+        raise RederiveError(f"apply_rederive: neutral build failed: {exc}") from exc
+    return RederivedProposal(
+        binding_id=str(binding["repo"]),
+        proposal=proposal,
+        source_kind="neutral",
+        finalizer_record=None,
     )

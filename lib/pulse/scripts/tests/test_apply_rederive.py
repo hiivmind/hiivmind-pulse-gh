@@ -902,3 +902,84 @@ def test_collect_inputs_neutral_rejects_binding_identity_mismatch():
              "proposal_id": "apply-format-python-hiivmind-agent-kernel"},
             actor=ACTOR, io_seams=io_seams,
         )
+
+
+def test_rederive_neutral_builds_allow_listed_proposal():
+    registry = neutral_registry()
+    inputs = apply_rederive.collect_inputs(
+        "neutral", neutral_binding(),
+        {"binding": NEUTRAL_REPO, "transformation": "format-python",
+         "proposal_id": "apply-format-python-hiivmind-agent-kernel"},
+        actor=ACTOR, io_seams=apply_rederive.IoSeams(gh_api=_neutral_gh_api(), registry=registry),
+    )
+    rederived = apply_rederive.rederive(inputs)
+    assert rederived.binding_id == NEUTRAL_REPO
+    assert rederived.source_kind == "neutral"
+    assert rederived.finalizer_record is None
+    assert rederived.proposal.id == "apply-format-python-hiivmind-agent-kernel"
+    assert rederived.proposal.selection == (NEUTRAL_REPO,)
+    assert rederived.proposal.transformation == "format-python"
+    assert rederived.proposal.expected_shas == {NEUTRAL_REPO: NEUTRAL_HEAD}
+    assert rederived.proposal.bound_paths == {
+        NEUTRAL_REPO: ("src/**", "tests/**", "examples/**")
+    }
+
+
+def test_rederive_neutral_rejects_non_neutral_transformation():
+    inputs = apply_rederive.NeutralProviderInputs(
+        binding=neutral_binding(transformation="plan-sync-doc-patch"),
+        head_sha=NEUTRAL_HEAD, actor=ACTOR,
+    )
+    with pytest.raises(apply_rederive.RederiveError, match="neutral transformation"):
+        apply_rederive.rederive(inputs)
+
+
+def test_rederive_neutral_rejects_unresolved_head_sha():
+    inputs = apply_rederive.NeutralProviderInputs(
+        binding=neutral_binding(), head_sha=None, actor=ACTOR,
+    )
+    with pytest.raises(apply_rederive.RederiveError, match="head_sha"):
+        apply_rederive.rederive(inputs)
+
+
+def test_rederive_neutral_rejects_empty_bound_paths():
+    inputs = apply_rederive.NeutralProviderInputs(
+        binding=neutral_binding(bound_paths=[]), head_sha=NEUTRAL_HEAD, actor=ACTOR,
+    )
+    with pytest.raises(apply_rederive.RederiveError, match="build failed"):
+        apply_rederive.rederive(inputs)
+
+
+def test_neutral_result_round_trips_through_authorization():
+    registry = neutral_registry()
+    inputs = apply_rederive.collect_inputs(
+        "neutral", neutral_binding(),
+        {"binding": NEUTRAL_REPO, "transformation": "format-python",
+         "proposal_id": "apply-format-python-hiivmind-agent-kernel"},
+        actor=ACTOR, io_seams=apply_rederive.IoSeams(gh_api=_neutral_gh_api(), registry=registry),
+    )
+    rederived = apply_rederive.rederive(inputs)
+    auth = apply_authorization.ApplyAuthorization(
+        transformation="format-python", mutation_policy="allow-listed",
+        permitted_repos=(NEUTRAL_REPO,),
+        bound_paths={NEUTRAL_REPO: ("src/**", "tests/**", "examples/**")},
+    )
+    apply_authorization.authorize(rederived, auth, {
+        "binding": NEUTRAL_REPO, "transformation": "format-python",
+        "proposal_id": "apply-format-python-hiivmind-agent-kernel",
+    })
+
+
+def test_neutral_transformations_are_self_contained_in_template_registry():
+    """The allowlist is fail-safe only if its entries are truly standalone:
+    no `nave generate` argv and no `profile:claude-plugin` predicate."""
+    template = Path(__file__).resolve().parents[4] / "templates" / "transformations.yaml.template"
+    registry = mutation_plan.load_registry(template)
+    for entry_id in apply_rederive.NEUTRAL_TRANSFORMATIONS:
+        entry = registry.get(entry_id)
+        assert not entry.command_argv[0:1] == ("nave",), (
+            f"{entry_id} argv must be self-contained (no nave generate dispatch)"
+        )
+        assert all(not p.startswith("profile:claude-plugin") for p in entry.applies_to), (
+            f"{entry_id} must not carry a profile:claude-plugin predicate"
+        )
