@@ -106,6 +106,13 @@ class Journal:
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(temporary_name, self.path)
+            # Rename succeeded: nothing left to clean up on a later failure.
+            temporary_name = None
+            dir_fd = os.open(str(self.path.parent), os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
         except OSError as exc:
             if temporary_name:
                 try:
