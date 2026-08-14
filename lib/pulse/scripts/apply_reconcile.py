@@ -26,6 +26,8 @@ if __package__ in {None, ""}:
 
 from lib.pulse.scripts import resolve_run  # noqa: E402
 from lib.pulse.scripts import validate_result  # noqa: E402
+from lib.pulse.scripts.apply_advance_base import make_f8_advance_base  # noqa: E402
+from lib.pulse.scripts.gh_contents_ops import GhContentsCliOps  # noqa: E402
 
 
 class GhOps:
@@ -768,6 +770,7 @@ def main():
     r.add_argument("--token")
     r.add_argument("--actor", default="unknown@unknown")
     r.add_argument("--workspace", default="unknown")
+    r.add_argument("--finalizer-record")
 
     args = parser.parse_args()
     gh_ops = GhCliOps()
@@ -797,6 +800,18 @@ def main():
         print(json.dumps(doc))
 
     elif args.cmd == "reconcile":
+        advance_base = None
+        if args.finalizer_record:
+            record = yaml.safe_load(
+                Path(args.finalizer_record).read_text(encoding="utf-8")
+            )
+            if not isinstance(record, Mapping):
+                parser.error("--finalizer-record must contain a YAML/JSON mapping")
+            advance_base = make_f8_advance_base(
+                record,
+                GhContentsCliOps(),
+                gh_ops,
+            )
         doc = reconcile_apply(
             ledger_path=args.ledger,
             step_id=args.step,
@@ -810,6 +825,7 @@ def main():
             authorization_digest=args.authorization_digest,
             intended_base=args.intended_base,
             expected_head_sha=args.expected_head_sha,
+            advance_base=advance_base,
             token=args.token,
             actor_id=args.actor,
             workspace=args.workspace,
