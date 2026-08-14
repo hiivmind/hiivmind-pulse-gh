@@ -1,5 +1,5 @@
+from pathlib import Path
 from types import SimpleNamespace
-
 import yaml
 
 from lib.pulse.scripts import apply_driver, apply_rederive, mutation_plan, resolve_run
@@ -164,7 +164,7 @@ def test_stolen_token_stops_before_next_nave_or_github_call(tmp_path, monkeypatc
     def stolen(*args):
         nonlocal count
         count += 1
-        if count == 2:
+        if count == 3:
             raise resolve_run.LeaseError("lease token mismatch")
         return real(*args)
     monkeypatch.setattr(apply_driver.resolve_run, "renew_lease", stolen)
@@ -183,3 +183,20 @@ def test_happy_path_persists_pushed_sha_before_opening_pr(tmp_path, monkeypatch)
     assert result["state"] == "pr_opened"
     assert result["expected_head_sha"] == "commit" == result["pushed_sha"]
     assert gh.calls[0] == ("status", "pushed")
+
+
+def test_resume_transformed_reset_failure_fails_closed(tmp_path, monkeypatch):
+    kwargs, runner, _, result_path = setup_run(tmp_path, monkeypatch)
+    ops = install_happy(monkeypatch, runner)
+    # Simulate a crash after transformed began: journal holds an in-progress
+    # transformed boundary with the provisioned base evidence.
+    apply_driver.Journal(Path(f"{result_path}.journal")).begin(
+        REPO, "transformed", "token", observed_base_sha="base"
+    )
+    ops.reset_repos = lambda branch, shas: {REPO: {"state": "failed", "reason": "reset refused"}}
+
+    result = apply_driver.run_apply(**kwargs)
+
+    assert result["state"] == "failed"
+    assert "reset failed" in result["reason"]
+    assert "commit" not in ops.calls and "push" not in ops.calls

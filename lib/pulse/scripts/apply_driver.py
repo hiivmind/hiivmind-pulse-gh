@@ -168,6 +168,7 @@ def run_apply(*, source_kind, binding_ref, recorded_summary, authorization_path,
 
     try:
         with ApplyLock(f"{ledger_path}.apply.lock"):
+            resolve_run.renew_lease(ledger_path, step_id, actor_id, token)
             previous = journal.state(repo)
             resume_transform = (
                 previous["in_progress"] == "transformed"
@@ -188,6 +189,7 @@ def run_apply(*, source_kind, binding_ref, recorded_summary, authorization_path,
             if resume_transform:
                 pen = {"name": pen_name, "repos": [{"repo": repo}]}
             else:
+                journal.begin(repo, "pen_ready", token)
                 handle = nave_adapter.pen_create(
                     runner, nave_adapter.PenQuery(terms=list(proposal.selection)), pen_name
                 )
@@ -208,11 +210,14 @@ def run_apply(*, source_kind, binding_ref, recorded_summary, authorization_path,
                 outcomes = apply_phases.preflight_phase(runner, pen, proposal, clone_paths)
                 if any(item.get("state") != "ok" for item in outcomes.values()):
                     return failure("blocked", _phase_reason("preflight", outcomes), _failed_outcomes(outcomes, "blocked"))
+                journal.complete(repo, "pen_ready")
 
             ops = apply_ops.make_apply_ops(runner, pen_name, dict(proposal.bound_paths), base_refs)
             if resume_transform:
                 resolve_run.renew_lease(ledger_path, step_id, actor_id, token)
-                ops.reset_repos(apply_branch, {repo: None})
+                reset = ops.reset_repos(apply_branch, {repo: None})
+                if reset.get(repo, {}).get("state") != "ok":
+                    return failure("failed", f"resume reset failed: {reset.get(repo, {}).get('reason')}")
                 resolve_run.renew_lease(ledger_path, step_id, actor_id, token)
                 setattr(ops, "_apply_branch", apply_branch)
                 base_sha = previous["evidence"].get("observed_base_sha")
