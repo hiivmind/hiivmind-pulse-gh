@@ -171,7 +171,11 @@ filesystem readers over local pen clones to satisfy `pen_orchestrator`'s injecta
 - **Remote-identity check (optional):** when `expected_remotes` is given, each repo's
   `git remote get-url origin` is normalized (SSH `git@github.com:owner/name.git` and HTTPS
   `https://github.com/owner/name.git` both reduce to `owner/name`) and compared against
-  `expected_remotes[repo]`; any mismatch or unreadable remote raises `PenCloneReaderError`.
+  `expected_remotes[repo]`; any mismatch, unreadable remote, or remote using any other host or
+  scheme raises `PenCloneReaderError`.
+- **Expected-map coverage (optional, fail-closed):** when `expected_remotes` or
+  `expected_heads` is supplied, every repo in `selection` must have an entry in that map, or
+  construction raises `PenCloneReaderError` before checking individual repo identities.
 - **Branch check (optional, envelope-level):** when `expected_branch` is given, every repo in
   `selection` must report that branch via `git rev-parse --abbrev-ref HEAD`, or
   `PenCloneReaderError` is raised.

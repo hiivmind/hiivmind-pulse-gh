@@ -8,6 +8,7 @@ import pytest
 from lib.pulse.scripts.pen_clone_reader import (
     PenCloneReaderError,
     PenCloneReaders,
+    _normalize_remote_url,
     make_pen_clone_reader,
 )
 
@@ -23,6 +24,32 @@ def _init_git_repo(path: Path) -> str:
     subprocess.run(["git", "commit", "-m", "initial commit"], cwd=path, check=True, capture_output=True)
     res = subprocess.run(["git", "rev-parse", "HEAD"], cwd=path, check=True, capture_output=True, text=True)
     return res.stdout.strip()
+
+
+@pytest.mark.parametrize(
+    ("remote_url", "expected"),
+    [
+        ("git@github.com:acme/widget.git", "acme/widget"),
+        ("https://github.com/acme/widget.git", "acme/widget"),
+        ("https://github.com/acme/widget.git/", "acme/widget"),
+    ],
+)
+def test_normalize_remote_url_accepts_documented_github_forms(remote_url, expected):
+    assert _normalize_remote_url(remote_url) == expected
+
+
+@pytest.mark.parametrize(
+    "remote_url",
+    [
+        "https://evil.example.com/acme/widget.git",
+        "git@evil.example.com:acme/widget.git",
+        "git://github.com/acme/widget.git",
+        "https://github.com/acme",
+    ],
+)
+def test_normalize_remote_url_rejects_unsupported_forms(remote_url):
+    with pytest.raises(PenCloneReaderError, match="remote"):
+        _normalize_remote_url(remote_url)
 
 
 def test_make_pen_clone_reader_missing_coverage(tmp_path):
@@ -97,6 +124,34 @@ def test_make_pen_clone_reader_expected_remotes_mismatch(tmp_path):
             clone_paths={"acme/widget": str(repo_dir)},
             selection=("acme/widget",),
             expected_remotes={"acme/widget": "someone-else/decoy"},
+        )
+
+
+def test_make_pen_clone_reader_rejects_non_github_decoy_remote(tmp_path):
+    repo_dir = tmp_path / "acme" / "widget"
+    _init_git_repo(repo_dir)
+    subprocess.run(
+        ["git", "remote", "add", "origin", "https://evil.example.com/acme/widget.git"],
+        cwd=repo_dir,
+        check=True,
+        capture_output=True,
+    )
+    with pytest.raises(PenCloneReaderError, match="acme/widget"):
+        make_pen_clone_reader(
+            clone_paths={"acme/widget": str(repo_dir)},
+            selection=("acme/widget",),
+            expected_remotes={"acme/widget": "acme/widget"},
+        )
+
+
+def test_make_pen_clone_reader_expected_remotes_require_full_coverage(tmp_path):
+    repo_dir = tmp_path / "acme" / "widget"
+    _init_git_repo(repo_dir)
+    with pytest.raises(PenCloneReaderError, match="acme/widget"):
+        make_pen_clone_reader(
+            clone_paths={"acme/widget": str(repo_dir)},
+            selection=("acme/widget",),
+            expected_remotes={},
         )
 
 
@@ -182,6 +237,17 @@ def test_make_pen_clone_reader_expected_heads_match(tmp_path):
         expected_heads={"acme/widget": head_sha},
     )
     assert isinstance(readers, PenCloneReaders)
+
+
+def test_make_pen_clone_reader_expected_heads_require_full_coverage(tmp_path):
+    repo_dir = tmp_path / "acme" / "widget"
+    _init_git_repo(repo_dir)
+    with pytest.raises(PenCloneReaderError, match="acme/widget"):
+        make_pen_clone_reader(
+            clone_paths={"acme/widget": str(repo_dir)},
+            selection=("acme/widget",),
+            expected_heads={},
+        )
 
 
 def test_pen_clone_reader_seams(tmp_path):

@@ -21,6 +21,7 @@ HEAD does not match the expected value.
 
 from __future__ import annotations
 
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,18 +41,26 @@ class PenCloneReaders:
     read_repo_changed_paths: Callable[[str], tuple[str, ...]]
 
 
+_SSH_GITHUB_REMOTE = re.compile(
+    r"git@github\.com:(?P<owner>[^/:?#\s]+)/(?P<name>[^/:?#\s]+?)(?:\.git)?"
+)
+_HTTPS_GITHUB_REMOTE = re.compile(
+    r"https://github\.com/(?P<owner>[^/:?#\s]+)/(?P<name>[^/:?#\s]+?)(?:\.git)?/?"
+)
+
+
 def _normalize_remote_url(url: str) -> str:
-    """Normalize a git remote URL (SSH or HTTPS) to 'owner/name'."""
+    """Normalize a documented GitHub SSH or HTTPS remote to ``owner/name``."""
     trimmed = url.strip()
-    if trimmed.endswith(".git"):
-        trimmed = trimmed[: -len(".git")]
-    # SSH form: git@github.com:owner/name
-    # HTTPS form: https://github.com/owner/name
-    normalized = trimmed.replace(":", "/")
-    segments = [segment for segment in normalized.split("/") if segment]
-    if len(segments) < 2:
-        return trimmed
-    return "/".join(segments[-2:])
+    match = _SSH_GITHUB_REMOTE.fullmatch(trimmed)
+    if match is None:
+        match = _HTTPS_GITHUB_REMOTE.fullmatch(trimmed)
+    if match is None:
+        raise PenCloneReaderError(
+            f"Unsupported remote URL {url!r}; expected git@github.com:owner/name.git "
+            "or https://github.com/owner/name.git"
+        )
+    return f"{match.group('owner')}/{match.group('name')}"
 
 
 def make_pen_clone_reader(
@@ -68,10 +77,12 @@ def make_pen_clone_reader(
     - `clone_paths` does not exactly cover `selection` (missing or extra entries)
     - two repo keys resolve to the same canonical filesystem path
     - any repo in selection is invalid, missing, or not a git worktree
-    - `expected_remotes` is given and any repo's `origin` remote does not normalize
-      to the expected `owner/name` (or the remote cannot be read)
+    - `expected_remotes` is given but does not cover every selected repo, or any
+      repo's `origin` remote does not normalize to the expected `owner/name`
+      (or the remote cannot be read)
     - `expected_branch` is given and any repo's current branch differs
-    - `expected_heads` is given and any repo's HEAD differs from the expected SHA
+    - `expected_heads` is given but does not cover every selected repo, or any
+      repo's HEAD differs from the expected SHA
     """
     provided = set(clone_paths)
     required = set(selection)
@@ -187,11 +198,14 @@ def make_pen_clone_reader(
         return tuple(sorted(changed_paths))
 
     if expected_remotes is not None:
+        missing = set(selection) - set(expected_remotes)
+        if missing:
+            raise PenCloneReaderError(
+                f"expected_remotes missing repos in selection: {sorted(missing)}"
+            )
         for repo in selection:
             repo_dir = resolved_paths[repo]
-            expected = expected_remotes.get(repo)
-            if expected is None:
-                continue
+            expected = expected_remotes[repo]
             res = subprocess.run(
                 ["git", "-C", str(repo_dir), "remote", "get-url", "origin"],
                 capture_output=True,
@@ -202,7 +216,13 @@ def make_pen_clone_reader(
                 raise PenCloneReaderError(
                     f"Could not read origin remote for repo {repo!r}: {res.stderr.strip()}"
                 )
-            actual = _normalize_remote_url(res.stdout.strip())
+            remote_url = res.stdout.strip()
+            try:
+                actual = _normalize_remote_url(remote_url)
+            except PenCloneReaderError as exc:
+                raise PenCloneReaderError(
+                    f"Repo {repo!r} has unsupported origin remote {remote_url!r}: {exc}"
+                ) from exc
             if actual != expected:
                 raise PenCloneReaderError(
                     f"Repo {repo!r} origin remote mismatch: expected {expected!r}, got {actual!r}"
@@ -228,10 +248,13 @@ def make_pen_clone_reader(
                 )
 
     if expected_heads is not None:
+        missing = set(selection) - set(expected_heads)
+        if missing:
+            raise PenCloneReaderError(
+                f"expected_heads missing repos in selection: {sorted(missing)}"
+            )
         for repo in selection:
-            expected_sha = expected_heads.get(repo)
-            if expected_sha is None:
-                continue
+            expected_sha = expected_heads[repo]
             actual_sha = read_repo_head(repo)
             if actual_sha != expected_sha:
                 raise PenCloneReaderError(
