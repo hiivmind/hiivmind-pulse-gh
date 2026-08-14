@@ -25,6 +25,11 @@ APPLY_MODULE_PATHS = (
     "lib/pulse/scripts/object_apply.py",
     "lib/pulse/scripts/pen_clone_reader.py",
     "lib/pulse/scripts/nave_adapter.py",
+    "lib/pulse/scripts/apply_driver.py",
+    "lib/pulse/scripts/apply_advance_base.py",
+    "lib/pulse/scripts/apply_phases.py",
+    "lib/pulse/scripts/apply_ops.py",
+    "lib/pulse/scripts/gh_contents_ops.py",
 )
 
 FORBIDDEN_OVERLAY_MODULES_AND_SYMBOLS = (

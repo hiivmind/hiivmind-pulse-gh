@@ -44,6 +44,9 @@ FORBIDDEN_NAVE_NAMES = frozenset(
     }
 )
 
+APPLY_MUTATION_VERBS = frozenset({"pen_branch", "pen_commit", "pen_push", "pen_reset"})
+ALLOWED_MUTATION_CALLERS = frozenset({"apply_ops.py", "apply_phases.py", "nave_adapter.py"})
+
 
 def _module_basename(name: str) -> str:
     """Last segment of a dotted module path (handles lib.pulse.scripts.X)."""
@@ -133,3 +136,23 @@ def test_f10_propose_driver_set_is_exactly_the_three_named_modules():
     }
     for name in F10_PROPOSE_DRIVERS:
         assert (SCRIPTS / name).is_file()
+
+
+def test_only_apply_adapters_call_nave_mutation_verbs():
+    """No orchestrator or alternate driver may bypass the apply adapters."""
+    violations: list[str] = []
+    observed_callers: set[str] = set()
+    for path in sorted(SCRIPTS.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            name = _call_name(node.func)
+            if name and name.rsplit(".", 1)[-1] in APPLY_MUTATION_VERBS:
+                observed_callers.add(path.name)
+                if path.name not in ALLOWED_MUTATION_CALLERS:
+                    violations.append(f"{path.name}:{node.lineno}:{name}")
+
+    assert violations == [], f"non-adapter Nave mutation callers: {violations}"
+    assert observed_callers <= ALLOWED_MUTATION_CALLERS
+    assert "apply_ops.py" in observed_callers

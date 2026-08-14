@@ -19,6 +19,8 @@ import pytest
 import yaml
 
 from lib.pulse.scripts import (
+    apply_driver,
+    apply_journal,
     apply_reconcile,
     apply_phases,
     mutation_plan,
@@ -28,6 +30,7 @@ from lib.pulse.scripts import (
     resolve_run,
     validate_result,
 )
+from lib.pulse.scripts.tests import test_apply_driver as _driver_support
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "neutral_repos"
 
@@ -667,6 +670,241 @@ class TestNeutralApplyAcceptanceSuite:
         assert doc_final["merged_sha"] == "merged_sha_node_888"
         assert validate_result.validate(doc_final, "apply-status") == []
         assert advance_calls == [("acme/node-repo", "merged_sha_node_888")]
+
+
+# --- Real apply-driver acceptance matrix -----------------------------------
+
+class TestRealApplyDriverAcceptance:
+    """Acceptance checks that enter through the production ``run_apply`` driver."""
+
+    def test_push_receipt_is_durable_before_pr_and_uses_remote_sha(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        kwargs, runner, _, result_path = _driver_support.setup_run(tmp_path, monkeypatch)
+        ops = _driver_support.install_happy(monkeypatch, runner)
+        ops.commit_repos = lambda message, bounds: {
+            _driver_support.REPO: {"state": "ok", "local_commit_sha": "remote-verb-sha"}
+        }
+        reader = SimpleNamespace(
+            read_repo_head=lambda repo: "remote-verb-sha",
+            read_repo_file=lambda *a: b"",
+            read_repo_changed_paths=lambda *a: (),
+        )
+        monkeypatch.setattr(
+            apply_driver.pen_clone_reader, "make_pen_clone_reader", lambda *a, **k: reader
+        )
+        ops.push_repos = lambda branch: {
+            _driver_support.REPO: {
+                "state": "ok",
+                "remote_ref": branch,
+                "remote_sha": "remote-verb-sha",
+                "upstream": f"origin/{branch}",
+            }
+        }
+        gh_ops = _driver_support.FakeGhOps(result_path)
+        kwargs["gh_ops"] = gh_ops
+
+        result = apply_driver.run_apply(**kwargs)
+
+        assert result["state"] == "pr_opened"
+        assert result["branch"] == "pulse/apply/p1"
+        assert result["expected_head_sha"] == result["pushed_sha"] == "remote-verb-sha"
+        assert result["expected_head_sha"] != "base"
+        assert gh_ops.calls[0] == ("status", "pushed")
+
+    @pytest.mark.parametrize(
+        "phase",
+        apply_journal.PHASES,
+    )
+    def test_crash_at_every_journal_boundary_fails_closed_or_reexecutes_transform(
+        self, phase: str, tmp_path: Path, monkeypatch
+    ) -> None:
+        kwargs, runner, _, result_path = _driver_support.setup_run(tmp_path, monkeypatch)
+        ops = _driver_support.install_happy(monkeypatch, runner)
+        apply_journal.Journal(Path(f"{result_path}.journal")).begin(
+            _driver_support.REPO,
+            phase,
+            "stale-token",
+            **({"observed_base_sha": "base"} if phase == "transformed" else {}),
+        )
+
+        result = apply_driver.run_apply(**kwargs)
+
+        if phase == "transformed":
+            assert result["state"] == "pr_opened"
+            assert ops.calls.count("reset") == 1
+            assert ops.calls.count("commit") == 1
+            assert ops.calls.count("push") == 1
+        else:
+            assert result["state"] == "failed"
+            assert phase in result["reason"]
+            assert "commit" not in ops.calls
+            assert "push" not in ops.calls
+
+    def test_fenced_driver_stops_before_further_mutation(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        kwargs, runner, _, _ = _driver_support.setup_run(tmp_path, monkeypatch)
+        ops = _driver_support.install_happy(monkeypatch, runner)
+        real_renew = apply_driver.resolve_run.renew_lease
+        renewals = 0
+
+        def steal_token(*args):
+            nonlocal renewals
+            renewals += 1
+            if renewals == 3:
+                raise resolve_run.LeaseError("lease token mismatch")
+            return real_renew(*args)
+
+        monkeypatch.setattr(apply_driver.resolve_run, "renew_lease", steal_token)
+        result = apply_driver.run_apply(**kwargs)
+
+        assert result["state"] == "blocked"
+        assert "fencing" in result["reason"]
+        assert ops.calls == ["branch"]
+        assert kwargs["gh_ops"].calls == []
+
+    @pytest.mark.parametrize(
+        ("gate", "reason"),
+        [
+            ("preflight", "dirty tree"),
+            ("preflight", "stale base"),
+            ("preflight", "behind divergence"),
+            ("preflight", "malformed pen_status"),
+            ("preflight", "wrong pen selection"),
+            ("preflight", "missing npm"),
+            ("provision", "wrong post-provision branch"),
+            ("push", "pre-push HEAD mismatch"),
+        ],
+    )
+    def test_pre_exec_and_pre_push_gates_block_without_push(
+        self, gate: str, reason: str, tmp_path: Path, monkeypatch
+    ) -> None:
+        kwargs, runner, _, _ = _driver_support.setup_run(tmp_path, monkeypatch)
+        ops = _driver_support.install_happy(monkeypatch, runner)
+        outcome = {_driver_support.REPO: {"state": "blocked", "reason": reason}}
+        if gate == "preflight":
+            monkeypatch.setattr(apply_driver.apply_phases, "preflight_phase", lambda *a: outcome)
+        elif gate == "provision":
+            monkeypatch.setattr(apply_driver.apply_phases, "provision_phase", lambda *a: outcome)
+        else:
+            monkeypatch.setattr(apply_driver.apply_phases, "push_phase", lambda *a: outcome)
+
+        result = apply_driver.run_apply(**kwargs)
+
+        assert result["state"] in {"blocked", "failed"}
+        assert reason in result["reason"]
+        assert "push" not in ops.calls
+
+    def test_develop_binding_is_passed_to_branch_provisioning(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        kwargs, runner, _, _ = _driver_support.setup_run(tmp_path, monkeypatch)
+        ops = _driver_support.install_happy(monkeypatch, runner)
+        monkeypatch.setattr(
+            apply_driver.apply_reconcile, "resolve_intended_base", lambda *a: "develop"
+        )
+        ops.provision_branch = lambda branch, shas: {
+            _driver_support.REPO: {
+                "state": "ok",
+                "base_ref": "develop",
+                "expected_base_sha": "base",
+                "observed_base_sha": "base",
+                "apply_ref": branch,
+            }
+        }
+        captured = {}
+
+        def make_ops(_runner, _pen, _paths, base_refs):
+            captured.update(base_refs)
+            return ops
+
+        monkeypatch.setattr(apply_driver.apply_ops, "make_apply_ops", make_ops)
+
+        assert apply_driver.run_apply(**kwargs)["state"] == "pr_opened"
+        assert captured == {_driver_support.REPO: "develop"}
+
+    @pytest.mark.parametrize(
+        ("observed_base", "observed_head"),
+        [("release", "commit"), ("main", "force-pushed-head")],
+    )
+    def test_reconcile_rejects_wrong_base_or_head_after_real_driver(
+        self, observed_base: str, observed_head: str, tmp_path: Path, monkeypatch
+    ) -> None:
+        kwargs, runner, ledger_path, result_path = _driver_support.setup_run(
+            tmp_path, monkeypatch
+        )
+        _driver_support.install_happy(monkeypatch, runner)
+        gh_ops = FakeGhOps()
+        kwargs["gh_ops"] = gh_ops
+        opened = apply_driver.run_apply(**kwargs)
+        key = (_driver_support.REPO, "pulse/apply/p1")
+        gh_ops.prs[key].update(
+            state="MERGED",
+            merged=True,
+            merge_commit_sha="merge-sha",
+            base=observed_base,
+            head_ref=observed_head,
+        )
+
+        result = apply_reconcile.reconcile_apply(
+            ledger_path=ledger_path,
+            step_id="step",
+            proposal_id="p1",
+            repo=_driver_support.REPO,
+            branch="pulse/apply/p1",
+            result_path=result_path,
+            gh_ops=gh_ops,
+            recorded_proposal_id="p1",
+            proposal_digest=opened["proposal_digest"],
+            authorization_digest=opened["authorization_digest"],
+            intended_base="main",
+            expected_head_sha="commit",
+            actor_id="octocat@host",
+            workspace=str(tmp_path),
+        )
+
+        assert result["state"] == "rejected"
+        assert resolve_run.find_step(resolve_run.load(ledger_path), "step")["status"] != "done"
+
+    def test_neutral_merge_is_terminal_after_real_driver(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        kwargs, runner, ledger_path, result_path = _driver_support.setup_run(
+            tmp_path, monkeypatch
+        )
+        _driver_support.install_happy(monkeypatch, runner)
+        gh_ops = FakeGhOps()
+        kwargs["gh_ops"] = gh_ops
+        opened = apply_driver.run_apply(**kwargs)
+        key = (_driver_support.REPO, "pulse/apply/p1")
+        gh_ops.prs[key].update(
+            state="MERGED",
+            merged=True,
+            merge_commit_sha="merge-sha",
+            base="main",
+            head_ref="commit",
+        )
+
+        result = apply_reconcile.reconcile_apply(
+            ledger_path=ledger_path,
+            step_id="step",
+            proposal_id="p1",
+            repo=_driver_support.REPO,
+            branch="pulse/apply/p1",
+            result_path=result_path,
+            gh_ops=gh_ops,
+            recorded_proposal_id="p1",
+            proposal_digest=opened["proposal_digest"],
+            authorization_digest=opened["authorization_digest"],
+            intended_base="main",
+            expected_head_sha="commit",
+            actor_id="octocat@host",
+            workspace=str(tmp_path),
+        )
+
+        assert result["state"] == "applied"
+        assert resolve_run.find_step(resolve_run.load(ledger_path), "step")["status"] == "done"
 
 
 # --- Overlay Dogfood Suite --------------------------------------------------
