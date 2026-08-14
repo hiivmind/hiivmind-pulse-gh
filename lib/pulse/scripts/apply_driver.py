@@ -45,6 +45,38 @@ def _default_gh_api(path: str):
         return None
 
 
+def _expand_bound_globs(clone_dir: str, patterns: tuple[str, ...]) -> tuple[str, ...]:
+    """Expand glob `bound_paths` to the concrete repo-relative paths they cover.
+
+    Nave's commit gate is exact-path: a dirty path must literally appear in the
+    request's `paths`. The proposal carries glob patterns (`src/**`); expanding
+    them here (with the same fnmatch semantics as the paths_changed validator)
+    yields the concrete allow-list the commit request needs. Tracked + untracked
+    non-ignored files only — the same surface `git status --porcelain` reports
+    dirty, so anything Nave can flag is either covered by a pattern or fails
+    closed.
+    """
+    from fnmatch import fnmatchcase
+    import subprocess
+
+    root = Path(clone_dir)
+    listed: set[str] = set()
+    for args in (["ls-files"], ["ls-files", "--others", "--exclude-standard"]):
+        res = subprocess.run(
+            ["git", "-C", str(root), *args], capture_output=True, text=True
+        )
+        if res.returncode == 0:
+            listed.update(res.stdout.splitlines())
+    matched = []
+    for path in sorted(listed):
+        if any(
+            fnmatchcase(path, pattern) if "*" in pattern else path == pattern
+            for pattern in patterns
+        ):
+            matched.append(path)
+    return tuple(matched)
+
+
 def _entry(inputs: apply_rederive.ProviderInputs, workspace: str, transformation: str):
     """Use the provider's registry, then the same workspace/template fallback as run callers."""
     registry = getattr(inputs, "registry", None)
@@ -338,8 +370,13 @@ def run_apply(*, source_kind, binding_ref, recorded_summary=None, authorization_
 
             resolve_run.renew_lease(ledger_path, step_id, actor_id, token)
             journal.begin(repo, "committed", token)
+            bound_paths = {
+                r: _expand_bound_globs(clone_paths[r], proposal.bound_paths.get(r, ()))
+                for r in proposal.selection
+            }
             outcomes = apply_phases.commit_phase(
-                ops, proposal, f"pulse-apply {proposal.id} by {actor.gh_login}@{actor.machine}"
+                ops, proposal, f"pulse-apply {proposal.id} by {actor.gh_login}@{actor.machine}",
+                bound_paths=bound_paths,
             )
             if outcomes[repo].get("state") != "ok":
                 resolve_run.renew_lease(ledger_path, step_id, actor_id, token)

@@ -298,3 +298,31 @@ def test_run_apply_rejects_missing_summary_for_non_neutral(tmp_path, monkeypatch
     )
     assert out["state"] == "blocked"
     assert "recorded_summary" in out["reason"]
+
+
+def test_expand_bound_globs_matches_tracked_and_untracked(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "examples").mkdir()
+    (tmp_path / "src").joinpath("a.py").write_text("x")
+    (tmp_path / "src").joinpath("b.py").write_text("y")
+    (tmp_path / "examples").joinpath("spinner.py").write_text("z")
+    (tmp_path / "src").joinpath("ignored.txt").write_text("i")
+    (tmp_path / ".gitignore").write_text("src/ignored.txt\n")
+    import subprocess
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "add", "src", "examples", ".gitignore"], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "commit", "-q", "-m", "seed", "--no-verify"],
+                   check=True, env={**__import__("os").environ,
+                                    "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+                                    "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"})
+    subprocess.run(["git", "-C", str(tmp_path), "check-ignore", "-q", "src/ignored.txt"], check=False)
+    (tmp_path / "src").joinpath("untracked.py").write_text("u")
+
+    expanded = apply_driver._expand_bound_globs(
+        str(tmp_path), ("src/**", "examples/**")
+    )
+    assert "src/a.py" in expanded
+    assert "src/b.py" in expanded
+    assert "src/untracked.py" in expanded
+    assert "examples/spinner.py" in expanded
+    assert not any("ignored" in p for p in expanded)
