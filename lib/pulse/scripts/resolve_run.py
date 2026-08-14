@@ -347,7 +347,16 @@ class LeaseError(Exception):
 
 
 def acquire_lease(file_path, step_id, by, ttl_minutes=120):
-    with _apply_lock.ApplyLock(f"{file_path}.lock"):
+    # Namespaced ".lease.lock", NOT ".lock": a future driver-owned fence
+    # spanning the whole mutation sequence (plan Global Constraints - "held
+    # across the whole mutation sequence ... never independently
+    # reacquired") may reasonably claim "{ledger_path}.lock" for itself;
+    # this lock only serializes THIS function's own read-modify-write and
+    # must never collide with that outer lock's path, or a driver holding
+    # its lock while calling into acquire_lease/renew_lease would
+    # self-deadlock (flock is per open-file-description, not reentrant
+    # across separate os.open() calls even from the same process).
+    with _apply_lock.ApplyLock(f"{file_path}.lease.lock"):
         doc = load(file_path)
         step = find_step(doc, step_id)
         lease = step.get("lease")
@@ -369,7 +378,7 @@ def acquire_lease(file_path, step_id, by, ttl_minutes=120):
 
 
 def renew_lease(file_path, step_id, by, token) -> dict:
-    with _apply_lock.ApplyLock(f"{file_path}.lock"):
+    with _apply_lock.ApplyLock(f"{file_path}.lease.lock"):
         doc = load(file_path)
         step = find_step(doc, step_id)
         lease = step.get("lease")
