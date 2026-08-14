@@ -409,6 +409,20 @@ intent_flags:
       - "what changed"
     description: "Repository governance healthcheck"
 
+  has_apply:
+    keywords:
+      - "apply proposal"
+      - "apply mode"
+      - "apply the proposal"
+      - "land proposal"
+      - "run apply"
+      - "apply <proposal>"
+    negative_keywords:
+      - "apply label"
+      - "apply milestone"
+      - "apply to project"
+    description: "Apply-mode proposal landing"
+
   # ═══════════════════════════════════════════════════════════
   # SAFETY FLAG
   # ═══════════════════════════════════════════════════════════
@@ -519,6 +533,12 @@ intent_rules:
       has_healthcheck: T
     action: delegate_healthcheck
     description: "Route to repository healthcheck"
+
+  - name: "apply_proposal"
+    conditions:
+      has_apply: T
+    action: delegate_apply
+    description: "Route to apply-mode proposal landing"
 
   # ═══════════════════════════════════════════════════════════
   # DOMAIN RULES (route to operations - ordered by frequency)
@@ -763,6 +783,11 @@ actions:
   delegate_healthcheck:
     type: invoke_skill
     skill: "hiivmind-pulse-gh:gh-healthcheck"
+    pass_arguments: true
+
+  delegate_apply:
+    type: invoke_skill
+    skill: "hiivmind-pulse-gh:gh-apply"
     pass_arguments: true
 
   # Safety
