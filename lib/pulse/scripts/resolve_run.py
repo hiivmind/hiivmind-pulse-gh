@@ -20,6 +20,7 @@ import yaml
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from lib.pulse.scripts import apply_lock as _apply_lock  # noqa: E402
 from lib.pulse.scripts import validate_result as _validate_result  # noqa: E402
 
 LEDGER_VERSION = 1
@@ -346,39 +347,41 @@ class LeaseError(Exception):
 
 
 def acquire_lease(file_path, step_id, by, ttl_minutes=120):
-    doc = load(file_path)
-    step = find_step(doc, step_id)
-    lease = step.get("lease")
-    ttl = timedelta(minutes=ttl_minutes)
-    if lease and lease.get("leased_by") != by:
-        age = datetime.now(timezone.utc) - parse_ts(lease["leased_at"])
-        if age < ttl:
-            raise LeaseError(
-                f"lease held by {lease['leased_by']} "
-                f"({int(age.total_seconds() // 60)} min old)"
-            )
-    step["lease"] = {
-        "leased_by": by,
-        "leased_at": now_iso(),
-        "token": uuid.uuid4().hex,
-    }
-    save(file_path, doc)
-    return step["lease"]
+    with _apply_lock.ApplyLock(f"{file_path}.lock"):
+        doc = load(file_path)
+        step = find_step(doc, step_id)
+        lease = step.get("lease")
+        ttl = timedelta(minutes=ttl_minutes)
+        if lease and lease.get("leased_by") != by:
+            age = datetime.now(timezone.utc) - parse_ts(lease["leased_at"])
+            if age < ttl:
+                raise LeaseError(
+                    f"lease held by {lease['leased_by']} "
+                    f"({int(age.total_seconds() // 60)} min old)"
+                )
+        step["lease"] = {
+            "leased_by": by,
+            "leased_at": now_iso(),
+            "token": uuid.uuid4().hex,
+        }
+        save(file_path, doc)
+        return step["lease"]
 
 
 def renew_lease(file_path, step_id, by, token) -> dict:
-    doc = load(file_path)
-    step = find_step(doc, step_id)
-    lease = step.get("lease")
-    if not lease:
-        raise LeaseError("no active lease")
-    if lease.get("token") != token:
-        raise LeaseError("lease token mismatch")
-    if lease.get("leased_by") != by:
-        raise LeaseError(f"lease held by {lease.get('leased_by')}")
-    lease["leased_at"] = now_iso()
-    save(file_path, doc)
-    return lease
+    with _apply_lock.ApplyLock(f"{file_path}.lock"):
+        doc = load(file_path)
+        step = find_step(doc, step_id)
+        lease = step.get("lease")
+        if not lease:
+            raise LeaseError("no active lease")
+        if lease.get("token") != token:
+            raise LeaseError("lease token mismatch")
+        if lease.get("leased_by") != by:
+            raise LeaseError(f"lease held by {lease.get('leased_by')}")
+        lease["leased_at"] = now_iso()
+        save(file_path, doc)
+        return lease
 
 
 def snapshot_audit(

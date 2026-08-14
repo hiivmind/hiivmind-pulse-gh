@@ -25,6 +25,10 @@ class ApplyLock:
             os.close(self._fd)
             self._fd = None
             raise ApplyLockError(f"apply lock in use: {self.path}") from exc
+        except OSError:
+            os.close(self._fd)
+            self._fd = None
+            raise
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
