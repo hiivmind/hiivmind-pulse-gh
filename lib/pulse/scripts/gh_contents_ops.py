@@ -38,7 +38,7 @@ class GhContentsCliOps:
             return self._failure(result, "get file")
         try:
             data = json.loads(result.stdout)
-            content = base64.b64decode(data["content"], validate=True).decode("utf-8")
+            content = base64.b64decode(data["content"], validate=False).decode("utf-8")
             file_sha = data["sha"]
         except (KeyError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             return {"state": "failed", "reason": f"invalid get-file response: {exc}"}

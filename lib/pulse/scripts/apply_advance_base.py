@@ -61,7 +61,7 @@ def make_f8_advance_base(finalizer_record, contents_ops, gh_ops) -> Callable[[st
             return {"state": "failed", "reason": f"parse base document failed: {exc}"}
 
         pr = gh_ops.view_pr(repo, branch)
-        if current_blob == desired_blob or current_content == desired_content:
+        if current_blob == desired_blob:
             return {"state": "ok"}
 
         expected_prior = record.get("expected_prior_blob")

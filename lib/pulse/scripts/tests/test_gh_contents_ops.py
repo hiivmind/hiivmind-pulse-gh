@@ -187,3 +187,20 @@ def test_view_pr_reports_merged_and_unmerged_states():
         "--json",
         "state,mergedAt,mergeCommit",
     ]
+
+
+def test_get_file_tolerates_newline_wrapped_base64():
+    raw = b"# Plan\nbody line\n"
+    encoded = base64.b64encode(raw).decode("ascii")
+    wrapped = "\n".join(encoded[i : i + 60] for i in range(0, len(encoded), 60))
+
+    def run(cmd, **kwargs):
+        return Result(json.dumps({"content": wrapped, "sha": "file-sha-wrapped"}))
+
+    result = GhContentsCliOps(run=run).get_file("acme/plans", "p.md", "ref")
+
+    assert result == {
+        "state": "ok",
+        "content": "# Plan\nbody line\n",
+        "file_sha": "file-sha-wrapped",
+    }
