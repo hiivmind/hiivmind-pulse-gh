@@ -93,6 +93,14 @@ def _phase_reason(name, outcomes):
     return f"{name} failed" + (f": {'; '.join(details)}" if details else "")
 
 
+def _persist_finalizer(result_path, finalizer_record) -> None:
+    """Durably write the F8 finalizer record beside the result file, so the
+    reconcile step (a separate invocation) can load it via --finalizer-record."""
+    path = Path(f"{result_path}.finalizer.yaml")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump(finalizer_record, sort_keys=False))
+
+
 def run_apply(*, source_kind, binding_ref, recorded_summary, authorization_path, ledger_path,
               step_id, actor_id, runner, gh_ops, result_path, workspace) -> dict:
     """Run one single-repository apply; return apply-status or repo-mutation."""
@@ -121,6 +129,8 @@ def run_apply(*, source_kind, binding_ref, recorded_summary, authorization_path,
         base_refs = {repo: apply_reconcile.resolve_intended_base(
             rederived.source_kind, binding_ref, rederived.finalizer_record
         )}
+        if rederived.finalizer_record:
+            _persist_finalizer(result_path, rederived.finalizer_record)
     except (apply_rederive.RederiveError, apply_authorization.AuthorizationError,
             mutation_plan.MutationPlanError, ValueError) as exc:
         return _write_failure(
@@ -166,6 +176,37 @@ def run_apply(*, source_kind, binding_ref, recorded_summary, authorization_path,
             nave_version=nave_version, repo_outcomes=outcomes,
         )
 
+    def _finish_push(remote_sha):
+        """Durable pushed receipt + PR open — shared by the normal path and the
+        pushed-boundary crash-resume path."""
+        pushed_result = apply_reconcile.write_apply_status(
+            result_path, proposal_id=proposal.id, repo=repo, branch=apply_branch,
+            state="pushed", recorded_proposal_id=recorded_summary["proposal_id"],
+            proposal_digest=proposal_digest, authorization_digest=authorization_digest,
+            intended_base=base_refs[repo], expected_head_sha=remote_sha,
+            pushed_sha=remote_sha, workspace=workspace,
+            actor={"gh_login": actor.gh_login, "machine": actor.machine, "mode": actor.mode},
+        )
+        try:
+            resolve_run.renew_lease(ledger_path, step_id, actor_id, token)
+            journal.begin(repo, "pr_opened", token)
+            result = apply_reconcile.open_apply_pr(
+                ledger_path=ledger_path, step_id=step_id, proposal_id=proposal.id,
+                repo=repo, branch=apply_branch, base=base_refs[repo], pushed_sha=remote_sha,
+                title=f"pulse-apply {proposal.id}", body=f"Automated apply for proposal {proposal.id}.",
+                result_path=result_path, gh_ops=gh_ops,
+                recorded_proposal_id=recorded_summary["proposal_id"],
+                proposal_digest=proposal_digest, authorization_digest=authorization_digest,
+                intended_base=base_refs[repo], expected_head_sha=remote_sha,
+                token=token, actor_id=actor_id, workspace=workspace,
+            )
+            journal.complete(repo, "pr_opened", pr_url=result.get("pr_url"))
+            return result
+        except Exception:
+            # The pushed receipt is the crash-recovery input. Never replace it
+            # with a pre-push repo-mutation document when PR creation fails.
+            return pushed_result
+
     try:
         with ApplyLock(f"{ledger_path}.apply.lock"):
             resolve_run.renew_lease(ledger_path, step_id, actor_id, token)
@@ -174,18 +215,30 @@ def run_apply(*, source_kind, binding_ref, recorded_summary, authorization_path,
                 previous["in_progress"] == "transformed"
                 and journal.resume_action(repo) == RESET_AND_REEXEC_TRANSFORM
             )
-            if previous["in_progress"] and not resume_transform:
+            resume_pushed = (
+                previous["in_progress"] == "pushed" or previous["phase"] == "pushed"
+            )
+            if previous["in_progress"] and not (resume_transform or resume_pushed):
                 return failure(
                     "failed",
                     f"resume requires live remote reconciliation for in-progress "
                     f"{previous['in_progress']}; refusing blind reuse",
                 )
-            if previous["phase"] is not None and not resume_transform:
+            if previous["phase"] is not None and not (resume_transform or resume_pushed):
+                if previous["phase"] == "pr_opened":
+                    existing = apply_reconcile.load_apply_status(result_path)
+                    if existing and existing.get("state") in {"pr_opened", "applied", "rejected"}:
+                        return existing
                 return failure(
                     "failed",
                     f"resume requires live evidence for completed {previous['phase']}; "
                     "refusing blind reuse",
                 )
+            if resume_pushed:
+                remote_sha = previous["evidence"].get("remote_sha")
+                if not remote_sha:
+                    return failure("failed", "resume from pushed: missing remote_sha journal evidence")
+                return _finish_push(remote_sha)
             if resume_transform:
                 pen = {"name": pen_name, "repos": [{"repo": repo}]}
             else:
@@ -284,34 +337,47 @@ def run_apply(*, source_kind, binding_ref, recorded_summary, authorization_path,
                 return failure("failed", _phase_reason("push", outcomes), _failed_outcomes(outcomes, "failed"))
             remote_sha = outcomes[repo]["remote_sha"]
             journal.complete(repo, "pushed", remote_ref=outcomes[repo]["remote_ref"], remote_sha=remote_sha)
-            pushed_result = apply_reconcile.write_apply_status(
-                result_path, proposal_id=proposal.id, repo=repo, branch=apply_branch,
-                state="pushed", recorded_proposal_id=recorded_summary["proposal_id"],
-                proposal_digest=proposal_digest, authorization_digest=authorization_digest,
-                intended_base=base_refs[repo], expected_head_sha=remote_sha,
-                pushed_sha=remote_sha, workspace=workspace,
-                actor={"gh_login": actor.gh_login, "machine": actor.machine, "mode": actor.mode},
-            )
-            try:
-                resolve_run.renew_lease(ledger_path, step_id, actor_id, token)
-                journal.begin(repo, "pr_opened", token)
-                result = apply_reconcile.open_apply_pr(
-                    ledger_path=ledger_path, step_id=step_id, proposal_id=proposal.id,
-                    repo=repo, branch=apply_branch, base=base_refs[repo], pushed_sha=remote_sha,
-                    title=f"pulse-apply {proposal.id}", body=f"Automated apply for proposal {proposal.id}.",
-                    result_path=result_path, gh_ops=gh_ops,
-                    recorded_proposal_id=recorded_summary["proposal_id"],
-                    proposal_digest=proposal_digest, authorization_digest=authorization_digest,
-                    intended_base=base_refs[repo], expected_head_sha=remote_sha,
-                    token=token, actor_id=actor_id, workspace=workspace,
-                )
-                journal.complete(repo, "pr_opened", pr_url=result.get("pr_url"))
-                return result
-            except Exception:
-                # The pushed receipt is the crash-recovery input.  Never replace it
-                # with a pre-push repo-mutation document when PR creation fails.
-                return pushed_result
+            return _finish_push(remote_sha)
     except (resolve_run.LeaseError, ApplyLockError) as exc:
         return failure("blocked", f"fencing stopped apply: {exc}")
     except Exception as exc:
         return failure("failed", exc)
+
+
+def main(argv=None):
+    """CLI entry point: run one apply against the real Nave + gh binaries."""
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser(description="Run one apply-mode proposal")
+    parser.add_argument("--source-kind", required=True)
+    parser.add_argument("--binding-ref", required=True, help="JSON object")
+    parser.add_argument("--recorded-summary", required=True, help="JSON {binding, transformation, proposal_id}")
+    parser.add_argument("--authorization", required=True)
+    parser.add_argument("--ledger", required=True)
+    parser.add_argument("--step", required=True)
+    parser.add_argument("--actor", required=True, help="login@machine")
+    parser.add_argument("--result", required=True)
+    parser.add_argument("--workspace", required=True)
+    parser.add_argument("--fixtures", default=None, help="optional PULSE_NAVE_FIXTURES root")
+    args = parser.parse_args(argv)
+
+    runner = nave_adapter.NaveRunner(fixtures=args.fixtures)
+    result = run_apply(
+        source_kind=args.source_kind,
+        binding_ref=json.loads(args.binding_ref),
+        recorded_summary=json.loads(args.recorded_summary),
+        authorization_path=args.authorization,
+        ledger_path=args.ledger,
+        step_id=args.step,
+        actor_id=args.actor,
+        runner=runner,
+        gh_ops=apply_reconcile.GhCliOps(),
+        result_path=args.result,
+        workspace=args.workspace,
+    )
+    print(json.dumps(result))
+
+
+if __name__ == "__main__":
+    main()

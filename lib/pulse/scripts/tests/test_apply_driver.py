@@ -200,3 +200,17 @@ def test_resume_transformed_reset_failure_fails_closed(tmp_path, monkeypatch):
     assert result["state"] == "failed"
     assert "reset failed" in result["reason"]
     assert "commit" not in ops.calls and "push" not in ops.calls
+
+
+def test_resume_from_completed_push_reopens_pr_from_durable_evidence(tmp_path, monkeypatch):
+    kwargs, runner, _, result_path = setup_run(tmp_path, monkeypatch)
+    ops = install_happy(monkeypatch, runner)
+    journal = apply_driver.Journal(Path(f"{result_path}.journal"))
+    journal.begin(REPO, "pushed", "token", remote_sha="commit")
+    journal.complete(REPO, "pushed", remote_ref="pulse/apply/p1", remote_sha="commit")
+
+    result = apply_driver.run_apply(**kwargs)
+
+    assert result["state"] == "pr_opened"
+    assert result["pushed_sha"] == "commit"
+    assert "commit" not in ops.calls and "push" not in ops.calls

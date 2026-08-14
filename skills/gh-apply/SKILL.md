@@ -56,24 +56,14 @@ Invoke the driver (single repo per run — a multi-repo selection is blocked
 before mutation):
 
 ```bash
-uv run python -c '
-import json
-from lib.pulse.scripts.apply_driver import run_apply
-result = run_apply(
-    source_kind="<source_kind>",
-    binding_ref=<binding_ref_dict>,
-    recorded_summary={"binding": "<b>", "transformation": "<t>", "proposal_id": "<p>"},
-    authorization_path="<authorization_path>",
-    ledger_path="<ledger_path>",
-    step_id="<step_id>",
-    actor_id="<login>@<machine>",
-    runner=None,                      # production: omit → NaveRunner over `nave` on PATH
-    gh_ops=None,                      # production: omit → GhCliOps over `gh` on PATH
-    result_path="<result_path>",
-    workspace="<workspace>",
-)
-print(json.dumps(result))
-'
+uv run python lib/pulse/scripts/apply_driver.py \
+  --source-kind "<source_kind>" \
+  --binding-ref '<binding_ref_json>' \
+  --recorded-summary '{"binding":"<b>","transformation":"<t>","proposal_id":"<p>"}' \
+  --authorization "<authorization_path>" \
+  --ledger "<ledger_path>" --step "<step_id>" \
+  --actor "<login>@<machine>" \
+  --result "<result_path>" --workspace "<workspace>"
 ```
 
 The driver pre-mutation-gates (re-derive → authorize → single-repo → audit →
@@ -99,7 +89,9 @@ uv run python lib/pulse/scripts/apply_reconcile.py reconcile \
 ```
 
 - `--finalizer-record` is required only for `plan-sync` (the F8 doc-blob
-  finalizer); omit it for pure-neutral transformations, whose merge is terminal.
+  finalizer); the driver persists it to `<result_path>.finalizer.yaml` on a
+  successful run. Omit it for pure-neutral transformations, whose merge is
+  terminal.
 - The merge gate verifies BOTH base and head; a retargeted or force-pushed PR is
   rejected, never finalized. Pulse never merges — it only advances the base via
   a PR-gated bookkeeping PR (`blocked-on-gate` until that PR merges).
