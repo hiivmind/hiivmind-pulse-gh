@@ -775,6 +775,19 @@ def test_repo_mutation_allows_null_reason_when_proposed(tmp_path):
     assert result.returncode == 0, result.stderr
 
 
+def test_repo_mutation_allows_null_audit_fields(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "repo-mutation-valid.yaml").read_text())
+    doc["recorded_proposal_id"] = None
+    doc["proposal_digest"] = None
+    doc["authorization_digest"] = None
+    path = tmp_path / "repo-mutation.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "repo-mutation")
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_repo_mutation_rejects_invalid_repo_outcome_value(tmp_path):
     doc = yaml.safe_load((FIXTURES / "repo-mutation-valid.yaml").read_text())
     doc["repo_outcomes"]["testorg/core"] = "exploded"
@@ -1265,6 +1278,8 @@ def test_apply_status_accepts_valid_states(tmp_path, state):
         doc["pr_url"] = "https://github.com/testorg/widget/pull/42"
         doc["merged_sha"] = "fedcba9876543210fedcba9876543210fedcba98"
         doc["reason"] = None
+        doc["observed_base"] = "main"
+        doc["observed_head_sha"] = "fedcba9876543210fedcba9876543210fedcba98"
     elif state == "rejected":
         doc["pr_url"] = "https://github.com/testorg/widget/pull/42"
         doc["merged_sha"] = None
@@ -1300,6 +1315,24 @@ def test_apply_status_pr_opened_missing_pr_url(tmp_path):
     result = run_validator(path, "apply-status")
     assert result.returncode == 1
     assert "pr_url must not be null when state is pr_opened" in result.stderr
+
+
+@pytest.mark.parametrize("state", ["pr_opened", "applied"])
+def test_apply_status_rejects_empty_pr_url(tmp_path, state):
+    doc = yaml.safe_load((FIXTURES / "apply-status-valid.yaml").read_text())
+    doc["state"] = state
+    doc["pr_url"] = ""
+    if state == "applied":
+        doc["merged_sha"] = "fedcba9876543210fedcba9876543210fedcba98"
+        doc["observed_base"] = "main"
+        doc["observed_head_sha"] = "fedcba9876543210fedcba9876543210fedcba98"
+    path = tmp_path / "apply-status.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "apply-status")
+
+    assert result.returncode == 1
+    assert f"pr_url must not be empty when state is {state}" in result.stderr
 
 
 def test_apply_status_applied_missing_merged_sha(tmp_path):
@@ -1346,3 +1379,115 @@ def test_apply_status_kind_mismatch(tmp_path):
     assert result.returncode == 1
     assert "kind mismatch" in result.stderr
 
+
+@pytest.mark.parametrize(
+    "field", ["recorded_proposal_id", "proposal_digest", "authorization_digest"]
+)
+def test_apply_status_requires_audit_field(tmp_path, field):
+    doc = yaml.safe_load((FIXTURES / "apply-status-valid.yaml").read_text())
+    doc.pop(field)
+    path = tmp_path / "apply-status.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "apply-status")
+
+    assert result.returncode == 1
+    assert f"missing required key: {field}" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "field", ["recorded_proposal_id", "proposal_digest", "authorization_digest"]
+)
+def test_repo_mutation_requires_nullable_audit_field_key(tmp_path, field):
+    doc = yaml.safe_load((FIXTURES / "repo-mutation-valid.yaml").read_text())
+    doc.pop(field)
+    path = tmp_path / "repo-mutation.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "repo-mutation")
+
+    assert result.returncode == 1
+    assert f"missing required key: {field}" in result.stderr
+
+
+@pytest.mark.parametrize("state", ["pushed", "pr_opened", "applied", "rejected"])
+def test_apply_status_requires_intended_base_from_pushed_onward(tmp_path, state):
+    doc = yaml.safe_load((FIXTURES / "apply-status-valid.yaml").read_text())
+    doc["state"] = state
+    doc["intended_base"] = None
+    path = tmp_path / "apply-status.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "apply-status")
+
+    assert result.returncode == 1
+    assert f"intended_base must not be null when state is {state}" in result.stderr
+
+
+@pytest.mark.parametrize("state", ["pushed", "pr_opened", "applied", "rejected"])
+def test_apply_status_requires_expected_head_sha_from_pushed_onward(tmp_path, state):
+    doc = yaml.safe_load((FIXTURES / "apply-status-valid.yaml").read_text())
+    doc["state"] = state
+    doc["expected_head_sha"] = None
+    path = tmp_path / "apply-status.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "apply-status")
+
+    assert result.returncode == 1
+    assert f"expected_head_sha must not be null when state is {state}" in result.stderr
+
+
+def test_apply_status_applied_missing_observed_base(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "apply-status-valid.yaml").read_text())
+    doc["state"] = "applied"
+    doc["merged_sha"] = "fedcba9876543210fedcba9876543210fedcba98"
+    doc["observed_head_sha"] = "fedcba9876543210fedcba9876543210fedcba98"
+    doc["observed_base"] = None
+    path = tmp_path / "apply-status.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "apply-status")
+
+    assert result.returncode == 1
+    assert "observed_base must not be null when state is applied" in result.stderr
+
+
+def test_apply_status_applied_missing_observed_head_sha(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "apply-status-valid.yaml").read_text())
+    doc["state"] = "applied"
+    doc["merged_sha"] = "fedcba9876543210fedcba9876543210fedcba98"
+    doc["observed_base"] = "main"
+    doc["observed_head_sha"] = None
+    path = tmp_path / "apply-status.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "apply-status")
+
+    assert result.returncode == 1
+    assert "observed_head_sha must not be null when state is applied" in result.stderr
+
+
+def test_apply_status_pushed_sha_must_equal_expected_head_sha(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "apply-status-valid.yaml").read_text())
+    doc["expected_head_sha"] = "ffffffffffffffffffffffffffffffffffffffff"
+    path = tmp_path / "apply-status.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "apply-status")
+
+    assert result.returncode == 1
+    assert "pushed_sha != expected_head_sha" in result.stderr
+
+
+def test_apply_status_allows_null_observed_fields_when_not_applied(tmp_path):
+    doc = yaml.safe_load((FIXTURES / "apply-status-valid.yaml").read_text())
+    assert doc["state"] == "pr_opened"
+    assert doc["observed_base"] is None
+    assert doc["observed_head_sha"] is None
+    path = tmp_path / "apply-status.yaml"
+    path.write_text(yaml.safe_dump(doc))
+
+    result = run_validator(path, "apply-status")
+
+    assert result.returncode == 0, result.stderr

@@ -5,13 +5,14 @@
 # ///
 """Deterministic run-ledger operations. See lib/patterns/run-ledger.md.
 
-Subcommands: create, next, update, gate-result, lease.
+Subcommands: create, next, update, gate-result, lease, renew-lease.
 Exit codes: 0 ok, 1 validation/state error, 2 file missing/unparseable,
 3 lease actively held by someone else.
 """
 import argparse
 import json
 import sys
+import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -19,6 +20,7 @@ import yaml
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from lib.pulse.scripts import apply_lock as _apply_lock  # noqa: E402
 from lib.pulse.scripts import validate_result as _validate_result  # noqa: E402
 
 LEDGER_VERSION = 1
@@ -295,8 +297,8 @@ def evaluate_binding_edges_gate(result_path):
 def evaluate_merge_detected_gate(result_path):
     """`merge_detected` — fail-closed gate over an apply-status result (F11).
     Satisfied ONLY when the result file is present, validates cleanly as
-    kind `apply-status`, state is `applied`, and `merged_sha` is a
-    non-empty string."""
+    kind `apply-status`, state is `applied`, `merged_sha` is a non-empty
+    string, and the remotely observed base/head match their intended values."""
     data, errors = _load_result_kind(result_path, "apply-status")
     if data is None:
         return False, "; ".join(errors) or "invalid apply-status result"
@@ -305,6 +307,16 @@ def evaluate_merge_detected_gate(result_path):
     merged_sha = data.get("merged_sha")
     if not merged_sha or not isinstance(merged_sha, str):
         return False, "merged_sha missing or empty"
+    if data.get("observed_base") != data.get("intended_base"):
+        return False, (
+            f"observed_base mismatch: {data.get('observed_base')!r} != "
+            f"intended_base {data.get('intended_base')!r}"
+        )
+    if data.get("observed_head_sha") != data.get("expected_head_sha"):
+        return False, (
+            f"observed_head_sha mismatch: {data.get('observed_head_sha')!r} != "
+            f"expected_head_sha {data.get('expected_head_sha')!r}"
+        )
     return True, f"merge detected: {merged_sha}"
 
 
@@ -335,25 +347,86 @@ class LeaseError(Exception):
 
 
 def acquire_lease(file_path, step_id, by, ttl_minutes=120):
-    doc = load(file_path)
-    step = find_step(doc, step_id)
-    lease = step.get("lease")
-    ttl = timedelta(minutes=ttl_minutes)
-    if lease and lease.get("leased_by") != by:
-        age = datetime.now(timezone.utc) - parse_ts(lease["leased_at"])
-        if age < ttl:
-            raise LeaseError(
-                f"lease held by {lease['leased_by']} "
-                f"({int(age.total_seconds() // 60)} min old)"
-            )
-    step["lease"] = {"leased_by": by, "leased_at": now_iso()}
-    save(file_path, doc)
-    return step["lease"]
+    # Namespaced ".lease.lock", NOT ".lock": a future driver-owned fence
+    # spanning the whole mutation sequence (plan Global Constraints - "held
+    # across the whole mutation sequence ... never independently
+    # reacquired") may reasonably claim "{ledger_path}.lock" for itself;
+    # this lock only serializes THIS function's own read-modify-write and
+    # must never collide with that outer lock's path, or a driver holding
+    # its lock while calling into acquire_lease/renew_lease would
+    # self-deadlock (flock is per open-file-description, not reentrant
+    # across separate os.open() calls even from the same process).
+    with _apply_lock.ApplyLock(f"{file_path}.lease.lock"):
+        doc = load(file_path)
+        step = find_step(doc, step_id)
+        lease = step.get("lease")
+        ttl = timedelta(minutes=ttl_minutes)
+        if lease and lease.get("leased_by") != by:
+            age = datetime.now(timezone.utc) - parse_ts(lease["leased_at"])
+            if age < ttl:
+                raise LeaseError(
+                    f"lease held by {lease['leased_by']} "
+                    f"({int(age.total_seconds() // 60)} min old)"
+                )
+        step["lease"] = {
+            "leased_by": by,
+            "leased_at": now_iso(),
+            "token": uuid.uuid4().hex,
+        }
+        save(file_path, doc)
+        return step["lease"]
+
+
+def renew_lease(file_path, step_id, by, token) -> dict:
+    with _apply_lock.ApplyLock(f"{file_path}.lease.lock"):
+        doc = load(file_path)
+        step = find_step(doc, step_id)
+        lease = step.get("lease")
+        if not lease:
+            raise LeaseError("no active lease")
+        if lease.get("token") != token:
+            raise LeaseError("lease token mismatch")
+        if lease.get("leased_by") != by:
+            raise LeaseError(f"lease held by {lease.get('leased_by')}")
+        lease["leased_at"] = now_iso()
+        save(file_path, doc)
+        return lease
+
+
+def snapshot_audit(
+    ledger_path,
+    step_id,
+    *,
+    recorded_proposal_id,
+    proposal_digest,
+    authorization_digest,
+    policy_version="v1",
+):
+    doc = load(ledger_path)
+    find_step(doc, step_id)
+    doc.setdefault("state_snapshot", {})[step_id] = {
+        "recorded_proposal_id": recorded_proposal_id,
+        "proposal_digest": proposal_digest,
+        "authorization_digest": authorization_digest,
+        "policy_version": policy_version,
+        "run_at": now_iso(),
+        "actor": doc["actor"].copy(),
+    }
+    save(ledger_path, doc)
 
 
 def cmd_lease(args):
     try:
         lease = acquire_lease(args.file, args.step, args.by, args.ttl_minutes)
+        print(json.dumps(lease))
+    except LeaseError as e:
+        print(f"error: {e}", file=sys.stderr)
+        sys.exit(3)
+
+
+def cmd_renew_lease(args):
+    try:
+        lease = renew_lease(args.file, args.step, args.by, args.token)
         print(json.dumps(lease))
     except LeaseError as e:
         print(f"error: {e}", file=sys.stderr)
@@ -412,6 +485,13 @@ def main():
     l.add_argument("--by", required=True)
     l.add_argument("--ttl-minutes", type=int, default=120)
     l.set_defaults(fn=cmd_lease)
+
+    rl = sub.add_parser("renew-lease")
+    rl.add_argument("--file", required=True)
+    rl.add_argument("--step", required=True)
+    rl.add_argument("--by", required=True)
+    rl.add_argument("--token", required=True)
+    rl.set_defaults(fn=cmd_renew_lease)
 
     args = ap.parse_args()
     args.fn(args)

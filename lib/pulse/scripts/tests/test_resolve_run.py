@@ -103,16 +103,62 @@ def test_completion(tmp_path):
 
 def test_lease_conflict_and_steal(tmp_path):
     path = create(tmp_path)
-    assert run("lease", "--file", path, "--step", "tag-lib",
-               "--by", "octocat@mba-m4").returncode == 0
+    first = run("lease", "--file", path, "--step", "tag-lib",
+                "--by", "octocat@mba-m4")
+    assert first.returncode == 0
+    first_lease = json.loads(first.stdout)
+    assert len(first_lease["token"]) == 32
+    int(first_lease["token"], 16)
     r = run("lease", "--file", path, "--step", "tag-lib", "--by", "hubot@nuc-lab")
     assert r.returncode == 3                       # actively held
     r = run("lease", "--file", path, "--step", "tag-lib", "--by", "hubot@nuc-lab",
             "--ttl-minutes", "0")                  # everything is expired at ttl 0
     assert r.returncode == 0                       # stolen
+    stolen_lease = json.loads(r.stdout)
+    assert stolen_lease["token"] != first_lease["token"]
     doc = yaml.safe_load(open(path))
     step = [s for s in doc["steps"] if s["id"] == "tag-lib"][0]
     assert step["lease"]["leased_by"] == "hubot@nuc-lab"
+
+
+def test_renew_lease_requires_matching_token_and_actor(tmp_path):
+    path = create(tmp_path)
+    acquired = run("lease", "--file", path, "--step", "tag-lib",
+                   "--by", "octocat@mba-m4")
+    lease = json.loads(acquired.stdout)
+
+    renewed = run(
+        "renew-lease", "--file", path, "--step", "tag-lib",
+        "--by", "octocat@mba-m4", "--token", lease["token"],
+    )
+    assert renewed.returncode == 0, renewed.stderr
+    assert json.loads(renewed.stdout)["token"] == lease["token"]
+
+    wrong_token = run(
+        "renew-lease", "--file", path, "--step", "tag-lib",
+        "--by", "octocat@mba-m4", "--token", "0" * 32,
+    )
+    assert wrong_token.returncode == 3
+    assert "lease token mismatch" in wrong_token.stderr
+
+    wrong_actor = run(
+        "renew-lease", "--file", path, "--step", "tag-lib",
+        "--by", "hubot@nuc-lab", "--token", lease["token"],
+    )
+    assert wrong_actor.returncode == 3
+    assert "lease held by octocat@mba-m4" in wrong_actor.stderr
+
+
+def test_renew_lease_rejects_missing_lease(tmp_path):
+    path = create(tmp_path)
+
+    result = run(
+        "renew-lease", "--file", path, "--step", "tag-lib",
+        "--by", "octocat@mba-m4", "--token", "0" * 32,
+    )
+
+    assert result.returncode == 3
+    assert "no active lease" in result.stderr
 
 
 def test_gate_plus_workflow_step_runs_not_skipped(tmp_path):

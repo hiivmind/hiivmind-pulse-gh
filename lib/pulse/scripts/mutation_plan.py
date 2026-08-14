@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
+import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
@@ -378,6 +380,25 @@ def build_proposal(
                 _string(p, f"proposal.bound_paths[{repo_key}] entry") for p in path_list
             )
 
+    if policy == "allow-listed":
+        if not normalized_bound_paths:
+            raise MutationPlanError(
+                "proposal.bound_paths must be non-empty when mutation_policy is allow-listed"
+            )
+        missing_bounds = set(repos) - set(normalized_bound_paths)
+        if missing_bounds:
+            raise MutationPlanError(
+                f"proposal.bound_paths missing entry for: {sorted(missing_bounds)[0]}"
+            )
+        empty_bounds = [
+            repo for repo, paths in normalized_bound_paths.items() if not paths
+        ]
+        if empty_bounds:
+            raise MutationPlanError(
+                "proposal.bound_paths must be non-empty for: "
+                f"{sorted(empty_bounds)[0]}"
+            )
+
     proposal = Proposal(
         id=proposal_id,
         selection=repos,
@@ -417,3 +438,32 @@ def validate_proposal(proposal: Proposal, registry: TransformationRegistry) -> N
             raise MutationPlanError(
                 f"proposal.bound_paths has entry outside selection: {sorted(extra)[0]}"
             )
+
+
+def proposal_digest(proposal: Proposal) -> str:
+    """Deterministic, versioned digest identifying a proposal's content.
+
+    `"v1|"` domain-separates this digest space from any future version.
+    The payload spans every field that defines what the proposal actually
+    authorizes — transformation, selection, expected bases, bound paths,
+    mutation policy, id, actor — so a change to any of them changes the
+    digest. Key order and tuple-vs-list are normalized (`sort_keys=True`,
+    lists) so equal proposals always produce the same digest.
+    """
+    payload = {
+        "id": proposal.id,
+        "selection": list(proposal.selection),
+        "transformation": proposal.transformation,
+        "expected_shas": dict(proposal.expected_shas),
+        "mutation_policy": proposal.mutation_policy,
+        "bound_paths": {
+            repo: list(paths) for repo, paths in proposal.bound_paths.items()
+        },
+        "actor": {
+            "gh_login": proposal.actor.gh_login,
+            "machine": proposal.actor.machine,
+            "mode": proposal.actor.mode,
+        },
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return "v1|" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()

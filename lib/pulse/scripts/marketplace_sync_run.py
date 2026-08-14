@@ -6,9 +6,10 @@
 """Propose-only CLI driver for marketplace entry version drift audits.
 
 Consumes CONFIG_DIR/marketplace-sync.yaml bindings, fetches remote evidence
-(marketplace doc, release list, HEAD SHA) via a gh runner seam, and hands
-evidence to marketplace_sync.build_result to produce a kind: marketplace-sync
-result file. Self-validates using validate_result.py. Propose-only.
+(marketplace doc, release list, HEAD SHA, default branch) via a gh runner seam,
+and hands proposal evidence to marketplace_sync.build_result to produce a
+kind: marketplace-sync result file. Self-validates using validate_result.py.
+Propose-only.
 """
 
 from __future__ import annotations
@@ -88,10 +89,16 @@ def _build_abort_result(
 def fetch_remote_evidence(
     bindings: list[dict[str, Any]],
     runner: Runner,
-) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+) -> tuple[
+    dict[str, Any],
+    dict[str, Any],
+    dict[str, Any],
+    dict[str, str | None],
+]:
     releases_by_repo: dict[str, Any] = {}
     docs_by_repo: dict[str, Any] = {}
     head_shas: dict[str, Any] = {}
+    default_branches: dict[str, str | None] = {}
 
     for b in bindings:
         repo = b.get("repo")
@@ -152,7 +159,20 @@ def fetch_remote_evidence(
             else:
                 head_shas[marketplace_repo] = None
 
-    return releases_by_repo, docs_by_repo, head_shas
+        if (
+            isinstance(marketplace_repo, str) and marketplace_repo and
+            marketplace_repo not in default_branches
+        ):
+            branch_res = runner([
+                "gh", "api", f"repos/{marketplace_repo}", "--jq", ".default_branch",
+            ], None)
+            if not _failed(branch_res):
+                branch = _stdout(branch_res).strip()
+                default_branches[marketplace_repo] = branch if branch else None
+            else:
+                default_branches[marketplace_repo] = None
+
+    return releases_by_repo, docs_by_repo, head_shas, default_branches
 
 
 def load_transformation_registry(workspace: Path) -> mutation_plan.TransformationRegistry:
@@ -253,7 +273,9 @@ def run_driver(
             return 1
         bindings = matched
 
-    releases_by_repo, docs_by_repo, head_shas = fetch_remote_evidence(bindings, run)
+    releases_by_repo, docs_by_repo, head_shas, _default_branches = (
+        fetch_remote_evidence(bindings, run)
+    )
     registry = load_transformation_registry(workspace)
 
     result_data = marketplace_sync.build_result(

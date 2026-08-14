@@ -65,6 +65,8 @@ def make_entry(validation=None):
 
 
 def make_proposal(selection=("acme/api", "acme/web"), mutation_policy="propose", bound_paths=None):
+    if bound_paths is None and mutation_policy == "allow-listed":
+        bound_paths = {repo: ("**",) for repo in selection}
     return mutation_plan.build_proposal(
         id="run-1",
         selection=list(selection),

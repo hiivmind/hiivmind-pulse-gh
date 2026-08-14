@@ -148,7 +148,7 @@ created off its guarded base SHA (`expected_shas[repo]`).
   already exists locally from a previous run or a base SHA is missing), the per-repo status
   reports `"failed"` with the explicit reason so execution blocks before any push.
 
-## Pen clone reader & clone-root contract (C2)
+## Pen clone reader & clone-path-map identity contract (C2)
 
 The `pen_clone_reader` module (`lib/pulse/scripts/pen_clone_reader.py`) exposes real git and
 filesystem readers over local pen clones to satisfy `pen_orchestrator`'s injectable seams:
@@ -156,14 +156,35 @@ filesystem readers over local pen clones to satisfy `pen_orchestrator`'s injecta
 - `read_repo_file(repo, path)` -> file content bytes
 - `read_repo_changed_paths(repo)` -> repo-relative changed paths tuple (modified, added, deleted, untracked)
 
-### Clone-root contract
-- **Source Resolution:** Resolved in priority order via explicit `clone_root` factory argument
-  or the `PULSE_PEN_ROOT` environment variable.
-- **Per-repo Layout:** Selected repo `owner/name` lives at `{clone_root}/{owner}/{name}`.
-- **Fail-closed:** `make_pen_clone_reader(clone_root, selection)` validates the clone root
-  and every selected repo's checkout up front. If `clone_root` is unset or missing, or if any
-  selected repo's checkout path is absent or not a git worktree, `make_pen_clone_reader`
-  raises `PenCloneReaderError` immediately.
+### Clone-path-map contract
+- **Source:** `make_pen_clone_reader(clone_paths, selection, *, expected_remotes=None,
+  expected_branch=None, expected_heads=None)` takes the exact `repo -> clone path` map from the
+  caller directly — no clone-root derivation. In production the map comes from `pen_status`/
+  `pen_list --json`'s `clone_path` per repo entry.
+- **Exact-coverage check:** `set(clone_paths) == set(selection)` — missing or extra entries raise
+  `PenCloneReaderError`.
+- **Duplicate-path check:** two different repo keys resolving to the same canonical
+  (`Path(...).resolve()`) filesystem path raise `PenCloneReaderError` — dedup is on the resolved
+  path, not the raw string, so `a/./b` and `a/b` collide correctly.
+- **`.git`-absence check:** each selected repo's checkout path must exist and contain `.git`, or
+  `PenCloneReaderError` is raised — same failure mode as before.
+- **Remote-identity check (optional):** when `expected_remotes` is given, each repo's
+  `git remote get-url origin` is normalized (SSH `git@github.com:owner/name.git` and HTTPS
+  `https://github.com/owner/name.git` both reduce to `owner/name`) and compared against
+  `expected_remotes[repo]`; any mismatch, unreadable remote, or remote using any other host or
+  scheme raises `PenCloneReaderError`.
+- **Expected-map coverage (optional, fail-closed):** when `expected_remotes` or
+  `expected_heads` is supplied, every repo in `selection` must have an entry in that map, or
+  construction raises `PenCloneReaderError` before checking individual repo identities.
+- **Branch check (optional, envelope-level):** when `expected_branch` is given, every repo in
+  `selection` must report that branch via `git rev-parse --abbrev-ref HEAD`, or
+  `PenCloneReaderError` is raised.
+- **HEAD check (optional, post-commit):** when `expected_heads` is given, each repo's
+  `read_repo_head(repo)` must match `expected_heads[repo]`, or `PenCloneReaderError` is raised —
+  used by a caller after a commit lands, to verify local HEAD before push.
+- **Fail-closed, eager:** all of the above validation runs at construction time, before
+  `make_pen_clone_reader` returns `PenCloneReaders` — none of it is deferred into the returned
+  closures.
 
 
 ## Validation

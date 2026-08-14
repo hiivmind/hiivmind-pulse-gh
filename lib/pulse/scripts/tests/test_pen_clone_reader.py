@@ -1,13 +1,14 @@
-"""Tests for pen_clone_reader module — clone root contract and git seams."""
+"""Tests for pen_clone_reader module — identity-hardened clone-path-map contract and git seams."""
 
-import os
 import subprocess
 from pathlib import Path
+
 import pytest
 
 from lib.pulse.scripts.pen_clone_reader import (
     PenCloneReaderError,
     PenCloneReaders,
+    _normalize_remote_url,
     make_pen_clone_reader,
 )
 
@@ -25,21 +26,77 @@ def _init_git_repo(path: Path) -> str:
     return res.stdout.strip()
 
 
-def test_make_pen_clone_reader_unset_root(monkeypatch):
-    monkeypatch.delenv("PULSE_PEN_ROOT", raising=False)
-    with pytest.raises(PenCloneReaderError, match="PULSE_PEN_ROOT"):
-        make_pen_clone_reader(clone_root=None, selection=("owner/repo",))
+@pytest.mark.parametrize(
+    ("remote_url", "expected"),
+    [
+        ("git@github.com:acme/widget.git", "acme/widget"),
+        ("https://github.com/acme/widget.git", "acme/widget"),
+        ("https://github.com/acme/widget.git/", "acme/widget"),
+    ],
+)
+def test_normalize_remote_url_accepts_documented_github_forms(remote_url, expected):
+    assert _normalize_remote_url(remote_url) == expected
 
 
-def test_make_pen_clone_reader_missing_root_dir(tmp_path):
-    missing_dir = tmp_path / "nonexistent"
-    with pytest.raises(PenCloneReaderError, match="does not exist"):
-        make_pen_clone_reader(clone_root=missing_dir, selection=("owner/repo",))
+@pytest.mark.parametrize(
+    "remote_url",
+    [
+        "https://evil.example.com/acme/widget.git",
+        "git@evil.example.com:acme/widget.git",
+        "git://github.com/acme/widget.git",
+        "https://github.com/acme",
+    ],
+)
+def test_normalize_remote_url_rejects_unsupported_forms(remote_url):
+    with pytest.raises(PenCloneReaderError, match="remote"):
+        _normalize_remote_url(remote_url)
+
+
+def test_make_pen_clone_reader_missing_coverage(tmp_path):
+    """clone_paths missing a selected repo raises."""
+    repo_dir = tmp_path / "widget"
+    _init_git_repo(repo_dir)
+    with pytest.raises(PenCloneReaderError, match="not found"):
+        make_pen_clone_reader(
+            clone_paths={"acme/widget": str(repo_dir)},
+            selection=("acme/widget", "acme/other"),
+        )
+
+
+def test_make_pen_clone_reader_extra_coverage(tmp_path):
+    """clone_paths with an entry outside selection raises."""
+    repo_dir = tmp_path / "widget"
+    _init_git_repo(repo_dir)
+    other_dir = tmp_path / "other"
+    _init_git_repo(other_dir)
+    with pytest.raises(PenCloneReaderError, match="not found"):
+        make_pen_clone_reader(
+            clone_paths={"acme/widget": str(repo_dir), "acme/other": str(other_dir)},
+            selection=("acme/widget",),
+        )
+
+
+def test_make_pen_clone_reader_duplicate_canonical_path(tmp_path):
+    """Two repo keys resolving to the same canonical filesystem path raises."""
+    repo_dir = tmp_path / "widget"
+    _init_git_repo(repo_dir)
+    with pytest.raises(PenCloneReaderError, match="[Dd]uplicate"):
+        make_pen_clone_reader(
+            clone_paths={
+                "acme/widget": str(repo_dir),
+                "acme/widget-alias": str(tmp_path / "." / "widget"),
+            },
+            selection=("acme/widget", "acme/widget-alias"),
+        )
 
 
 def test_make_pen_clone_reader_absent_repo_checkout(tmp_path):
+    missing_dir = tmp_path / "nonexistent"
     with pytest.raises(PenCloneReaderError, match="not found"):
-        make_pen_clone_reader(clone_root=tmp_path, selection=("owner/repo",))
+        make_pen_clone_reader(
+            clone_paths={"owner/repo": str(missing_dir)},
+            selection=("owner/repo",),
+        )
 
 
 def test_make_pen_clone_reader_not_a_git_repo(tmp_path):
@@ -47,12 +104,150 @@ def test_make_pen_clone_reader_not_a_git_repo(tmp_path):
     repo_dir.mkdir(parents=True)
     (repo_dir / "somefile.txt").write_text("not git")
     with pytest.raises(PenCloneReaderError, match="not a git worktree"):
-        make_pen_clone_reader(clone_root=tmp_path, selection=("owner/repo",))
+        make_pen_clone_reader(
+            clone_paths={"owner/repo": str(repo_dir)},
+            selection=("owner/repo",),
+        )
 
 
-def test_make_pen_clone_reader_invalid_repo_format(tmp_path):
-    with pytest.raises(PenCloneReaderError, match="Invalid repo format"):
-        make_pen_clone_reader(clone_root=tmp_path, selection=("invalid-format",))
+def test_make_pen_clone_reader_expected_remotes_mismatch(tmp_path):
+    repo_dir = tmp_path / "acme" / "widget"
+    _init_git_repo(repo_dir)
+    subprocess.run(
+        ["git", "remote", "add", "origin", "https://github.com/acme/widget.git"],
+        cwd=repo_dir,
+        check=True,
+        capture_output=True,
+    )
+    with pytest.raises(PenCloneReaderError, match="acme/widget"):
+        make_pen_clone_reader(
+            clone_paths={"acme/widget": str(repo_dir)},
+            selection=("acme/widget",),
+            expected_remotes={"acme/widget": "someone-else/decoy"},
+        )
+
+
+def test_make_pen_clone_reader_rejects_non_github_decoy_remote(tmp_path):
+    repo_dir = tmp_path / "acme" / "widget"
+    _init_git_repo(repo_dir)
+    subprocess.run(
+        ["git", "remote", "add", "origin", "https://evil.example.com/acme/widget.git"],
+        cwd=repo_dir,
+        check=True,
+        capture_output=True,
+    )
+    with pytest.raises(PenCloneReaderError, match="acme/widget"):
+        make_pen_clone_reader(
+            clone_paths={"acme/widget": str(repo_dir)},
+            selection=("acme/widget",),
+            expected_remotes={"acme/widget": "acme/widget"},
+        )
+
+
+def test_make_pen_clone_reader_expected_remotes_require_full_coverage(tmp_path):
+    repo_dir = tmp_path / "acme" / "widget"
+    _init_git_repo(repo_dir)
+    with pytest.raises(PenCloneReaderError, match="acme/widget"):
+        make_pen_clone_reader(
+            clone_paths={"acme/widget": str(repo_dir)},
+            selection=("acme/widget",),
+            expected_remotes={},
+        )
+
+
+def test_make_pen_clone_reader_expected_remotes_ssh_form_matches(tmp_path):
+    repo_dir = tmp_path / "acme" / "widget"
+    _init_git_repo(repo_dir)
+    subprocess.run(
+        ["git", "remote", "add", "origin", "git@github.com:acme/widget.git"],
+        cwd=repo_dir,
+        check=True,
+        capture_output=True,
+    )
+    readers = make_pen_clone_reader(
+        clone_paths={"acme/widget": str(repo_dir)},
+        selection=("acme/widget",),
+        expected_remotes={"acme/widget": "acme/widget"},
+    )
+    assert isinstance(readers, PenCloneReaders)
+
+
+def test_make_pen_clone_reader_expected_remotes_missing_origin_raises(tmp_path):
+    repo_dir = tmp_path / "acme" / "widget"
+    _init_git_repo(repo_dir)
+    with pytest.raises(PenCloneReaderError, match="acme/widget"):
+        make_pen_clone_reader(
+            clone_paths={"acme/widget": str(repo_dir)},
+            selection=("acme/widget",),
+            expected_remotes={"acme/widget": "acme/widget"},
+        )
+
+
+def test_make_pen_clone_reader_expected_branch_mismatch(tmp_path):
+    repo_dir = tmp_path / "acme" / "widget"
+    _init_git_repo(repo_dir)
+    subprocess.run(
+        ["git", "checkout", "-b", "pulse/apply/other-proposal"],
+        cwd=repo_dir,
+        check=True,
+        capture_output=True,
+    )
+    with pytest.raises(PenCloneReaderError, match="branch"):
+        make_pen_clone_reader(
+            clone_paths={"acme/widget": str(repo_dir)},
+            selection=("acme/widget",),
+            expected_branch="pulse/apply/proposal-123",
+        )
+
+
+def test_make_pen_clone_reader_expected_branch_match(tmp_path):
+    repo_dir = tmp_path / "acme" / "widget"
+    _init_git_repo(repo_dir)
+    subprocess.run(
+        ["git", "checkout", "-b", "pulse/apply/proposal-123"],
+        cwd=repo_dir,
+        check=True,
+        capture_output=True,
+    )
+    readers = make_pen_clone_reader(
+        clone_paths={"acme/widget": str(repo_dir)},
+        selection=("acme/widget",),
+        expected_branch="pulse/apply/proposal-123",
+    )
+    assert isinstance(readers, PenCloneReaders)
+
+
+def test_make_pen_clone_reader_expected_heads_mismatch(tmp_path):
+    repo_dir = tmp_path / "acme" / "widget"
+    _init_git_repo(repo_dir)
+    with pytest.raises(PenCloneReaderError, match="HEAD"):
+        make_pen_clone_reader(
+            clone_paths={"acme/widget": str(repo_dir)},
+            selection=("acme/widget",),
+            expected_heads={"acme/widget": "0" * 40},
+        )
+
+
+def test_make_pen_clone_reader_expected_heads_match(tmp_path):
+    repo_dir = tmp_path / "acme" / "widget"
+    head_sha = _init_git_repo(repo_dir)
+    readers = make_pen_clone_reader(
+        clone_paths={"acme/widget": str(repo_dir)},
+        selection=("acme/widget",),
+        expected_heads={"acme/widget": head_sha},
+    )
+    assert isinstance(readers, PenCloneReaders)
+
+
+def test_make_pen_clone_reader_expected_heads_require_full_coverage(tmp_path):
+    repo_dir = tmp_path / "acme" / "widget"
+    _init_git_repo(repo_dir)
+    with pytest.raises(PenCloneReaderError, match="acme/widget"):
+        make_pen_clone_reader(
+            clone_paths={"acme/widget": str(repo_dir)},
+            selection=("acme/widget",),
+            expected_heads={},
+        )
 
 
 def test_pen_clone_reader_seams(tmp_path):
@@ -65,7 +260,10 @@ def test_pen_clone_reader_seams(tmp_path):
     subprocess.run(["git", "commit", "-m", "add unchanged"], cwd=repo_dir, check=True, capture_output=True)
     head_sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo_dir, check=True, capture_output=True, text=True).stdout.strip()
 
-    readers = make_pen_clone_reader(clone_root=tmp_path, selection=("acme/widget",))
+    readers = make_pen_clone_reader(
+        clone_paths={"acme/widget": str(repo_dir)},
+        selection=("acme/widget",),
+    )
     assert isinstance(readers, PenCloneReaders)
 
     # 1. read_repo_head
@@ -98,15 +296,6 @@ def test_pen_clone_reader_seams(tmp_path):
         readers.read_repo_changed_paths("unknown/repo")
 
 
-def test_make_pen_clone_reader_env_var_fallback(tmp_path, monkeypatch):
-    repo_dir = tmp_path / "org" / "project"
-    _init_git_repo(repo_dir)
-
-    monkeypatch.setenv("PULSE_PEN_ROOT", str(tmp_path))
-    readers = make_pen_clone_reader(selection=("org/project",))
-    assert readers.read_repo_head("org/project") is not None
-
-
 def test_read_repo_changed_paths_renames_and_deletions(tmp_path):
     repo_dir = tmp_path / "acme" / "widget"
     _init_git_repo(repo_dir)
@@ -116,7 +305,10 @@ def test_read_repo_changed_paths_renames_and_deletions(tmp_path):
     subprocess.run(["git", "add", "old.txt", "to_delete.txt"], cwd=repo_dir, check=True, capture_output=True)
     subprocess.run(["git", "commit", "-m", "add old and to_delete"], cwd=repo_dir, check=True, capture_output=True)
 
-    readers = make_pen_clone_reader(clone_root=tmp_path, selection=("acme/widget",))
+    readers = make_pen_clone_reader(
+        clone_paths={"acme/widget": str(repo_dir)},
+        selection=("acme/widget",),
+    )
 
     # 1. Test deletion via git rm
     subprocess.run(["git", "rm", "to_delete.txt"], cwd=repo_dir, check=True, capture_output=True)
@@ -134,4 +326,3 @@ def test_read_repo_changed_paths_renames_and_deletions(tmp_path):
     changed_after_edit = readers.read_repo_changed_paths("acme/widget")
     assert "old.txt" in changed_after_edit
     assert "new.txt" in changed_after_edit
-

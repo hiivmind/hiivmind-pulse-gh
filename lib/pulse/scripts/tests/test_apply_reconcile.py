@@ -8,13 +8,19 @@ from lib.pulse.scripts import apply_reconcile
 from lib.pulse.scripts import resolve_run
 from lib.pulse.scripts import validate_result
 
+PROPOSAL_DIGEST = "v1|" + "a" * 64
+AUTHORIZATION_DIGEST = "v1|" + "b" * 64
+
 
 class FakeGhOps(apply_reconcile.GhOps):
 
     def __init__(self):
         self.prs = {}
+        self.remote_refs = {}
         self.deleted_branches = []
+        self.delete_calls = []
         self.create_calls = 0
+        self.view_calls = []
 
     def create_or_get_pr(
         self, repo: str, branch: str, base: str, title: str, body: str
@@ -30,12 +36,14 @@ class FakeGhOps(apply_reconcile.GhOps):
             "merged": False,
             "merge_commit_sha": None,
             "base": base,
+            "head_ref": None,
             "title": title,
             "body": body,
         }
         return {"url": url, "created": True}
 
     def view_pr(self, repo: str, branch: str) -> dict:
+        self.view_calls.append((repo, branch))
         key = (repo, branch)
         if key not in self.prs:
             return {
@@ -43,6 +51,8 @@ class FakeGhOps(apply_reconcile.GhOps):
                 "merged": False,
                 "merge_commit_sha": None,
                 "url": "",
+                "observed_base": None,
+                "observed_head_sha": None,
             }
         pr = self.prs[key]
         if pr.get("state") == "ERROR":
@@ -52,17 +62,162 @@ class FakeGhOps(apply_reconcile.GhOps):
                 "merge_commit_sha": None,
                 "url": "",
                 "error": pr.get("error", "simulated gh view_pr execution failure"),
+                "observed_base": pr.get("base"),
+                "observed_head_sha": pr.get("head_ref"),
             }
         return {
             "state": pr["state"],
             "merged": pr["merged"],
             "merge_commit_sha": pr["merge_commit_sha"],
             "url": pr["url"],
+            "observed_base": pr.get("base"),
+            "observed_head_sha": pr.get("head_ref"),
         }
 
-    def delete_remote_branch(self, repo: str, branch: str) -> dict:
+    def delete_remote_branch(
+        self, repo: str, branch: str, expected_sha: str
+    ) -> dict:
+        self.delete_calls.append((repo, branch, expected_sha))
+        if not expected_sha:
+            return {
+                "state": "failed",
+                "reason": "missing expected ref sha, refusing to delete",
+            }
+        key = (repo, branch)
+        if key not in self.remote_refs:
+            return {"state": "ok"}
+        if self.remote_refs[key] != expected_sha:
+            return {
+                "state": "failed",
+                "reason": "ref sha changed since observation, refusing to delete",
+            }
+        del self.remote_refs[key]
         self.deleted_branches.append((repo, branch))
         return {"state": "ok"}
+
+
+def test_gh_cli_view_pr_returns_remote_base_and_head(monkeypatch):
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return type(
+            "Result",
+            (),
+            {
+                "returncode": 0,
+                "stdout": json.dumps(
+                    {
+                        "state": "MERGED",
+                        "mergedAt": "2026-07-30T00:00:00Z",
+                        "mergeCommit": {"oid": "merged_sha_999"},
+                        "url": "https://github.com/testorg/repo1/pull/1",
+                        "baseRefName": "develop",
+                        "headRefOid": "pushed_sha_111",
+                    }
+                ),
+                "stderr": "",
+            },
+        )()
+
+    monkeypatch.setattr(apply_reconcile.subprocess, "run", fake_run)
+
+    doc = apply_reconcile.GhCliOps().view_pr(
+        "testorg/repo1", "pulse/apply/prop-101"
+    )
+
+    json_fields = calls[0][0][calls[0][0].index("--json") + 1]
+    assert json_fields == (
+        "state,mergedAt,mergeCommit,url,baseRefName,headRefOid"
+    )
+    assert doc["observed_base"] == "develop"
+    assert doc["observed_head_sha"] == "pushed_sha_111"
+
+
+def test_gh_cli_delete_remote_branch_deletes_only_matching_ref(monkeypatch):
+    calls = []
+    responses = iter(
+        [
+            type(
+                "Result",
+                (),
+                {
+                    "returncode": 0,
+                    "stdout": json.dumps({"object": {"sha": "observed_sha"}}),
+                    "stderr": "",
+                },
+            )(),
+            type(
+                "Result",
+                (),
+                {"returncode": 0, "stdout": "", "stderr": ""},
+            )(),
+        ]
+    )
+
+    def fake_run(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return next(responses)
+
+    monkeypatch.setattr(apply_reconcile.subprocess, "run", fake_run)
+
+    result = apply_reconcile.GhCliOps().delete_remote_branch(
+        "testorg/repo1", "pulse/apply/prop-101", "observed_sha"
+    )
+
+    endpoint = "repos/testorg/repo1/git/refs/heads/pulse/apply/prop-101"
+    assert result == {"state": "ok"}
+    assert calls[0][0] == ["gh", "api", endpoint]
+    assert calls[1][0] == ["gh", "api", "-X", "DELETE", endpoint]
+
+
+def test_gh_cli_delete_remote_branch_refuses_changed_ref(monkeypatch):
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return type(
+            "Result",
+            (),
+            {
+                "returncode": 0,
+                "stdout": json.dumps({"object": {"sha": "replacement_sha"}}),
+                "stderr": "",
+            },
+        )()
+
+    monkeypatch.setattr(apply_reconcile.subprocess, "run", fake_run)
+
+    result = apply_reconcile.GhCliOps().delete_remote_branch(
+        "testorg/repo1", "pulse/apply/prop-101", "observed_sha"
+    )
+
+    assert result == {
+        "state": "failed",
+        "reason": "ref sha changed since observation, refusing to delete",
+    }
+    assert len(calls) == 1
+
+
+def test_gh_cli_delete_remote_branch_treats_missing_ref_as_success(monkeypatch):
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return type(
+            "Result",
+            (),
+            {"returncode": 1, "stdout": "", "stderr": "gh: Not Found (HTTP 404)"},
+        )()
+
+    monkeypatch.setattr(apply_reconcile.subprocess, "run", fake_run)
+
+    result = apply_reconcile.GhCliOps().delete_remote_branch(
+        "testorg/repo1", "pulse/apply/prop-101", "observed_sha"
+    )
+
+    assert result == {"state": "ok"}
+    assert len(calls) == 1
 
 
 def create_test_ledger(tmp_path, step_id="reconcile-repo1"):
@@ -112,6 +267,11 @@ def test_open_apply_pr_creates_and_reuses_pr(tmp_path):
         body="Automated apply PR",
         result_path=result_path,
         gh_ops=gh_ops,
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
         actor_id="octocat@mba-m4",
         workspace="testorg",
     )
@@ -134,6 +294,11 @@ def test_open_apply_pr_creates_and_reuses_pr(tmp_path):
         body="Automated apply PR",
         result_path=result_path,
         gh_ops=gh_ops,
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
         actor_id="octocat@mba-m4",
         workspace="testorg",
     )
@@ -144,6 +309,95 @@ def test_open_apply_pr_creates_and_reuses_pr(tmp_path):
     ledger_doc = resolve_run.load(ledger_path)
     step = resolve_run.find_step(ledger_doc, "reconcile-repo1")
     assert step["status"] == "blocked-on-gate"
+
+
+def test_open_apply_pr_rejects_mismatched_actual_and_audited_base(tmp_path):
+    ledger_path = create_test_ledger(tmp_path)
+    gh_ops = FakeGhOps()
+
+    with pytest.raises(
+        ValueError,
+        match="the PR's actual base must match the audited intended base",
+    ):
+        apply_reconcile.open_apply_pr(
+            ledger_path=ledger_path,
+            step_id="reconcile-repo1",
+            proposal_id="prop-101",
+            repo="testorg/repo1",
+            branch="pulse/apply/prop-101",
+            base="develop",
+            pushed_sha="pushed_sha_111",
+            title="Apply proposal prop-101",
+            body="Automated apply PR",
+            result_path=tmp_path / "apply-status-repo1.yaml",
+            gh_ops=gh_ops,
+            recorded_proposal_id="prop-101",
+            proposal_digest=PROPOSAL_DIGEST,
+            authorization_digest=AUTHORIZATION_DIGEST,
+            intended_base="main",
+            expected_head_sha="pushed_sha_111",
+            actor_id="octocat@mba-m4",
+            workspace="testorg",
+        )
+
+    assert gh_ops.create_calls == 0
+
+
+def test_open_apply_pr_uses_token_and_does_not_reacquire(tmp_path):
+    ledger_path = create_test_ledger(tmp_path)
+    result_path = tmp_path / "apply-status-repo1.yaml"
+    gh_ops = FakeGhOps()
+    lease = resolve_run.acquire_lease(
+        ledger_path, "reconcile-repo1", "octocat@mba-m4"
+    )
+
+    apply_reconcile.open_apply_pr(
+        ledger_path=ledger_path,
+        step_id="reconcile-repo1",
+        proposal_id="prop-101",
+        repo="testorg/repo1",
+        branch="pulse/apply/prop-101",
+        base="main",
+        pushed_sha="pushed_sha_111",
+        title="Apply proposal prop-101",
+        body="Automated apply PR",
+        result_path=result_path,
+        gh_ops=gh_ops,
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
+        token=lease["token"],
+        actor_id="octocat@mba-m4",
+        workspace="testorg",
+    )
+
+    ledger_doc = resolve_run.load(ledger_path)
+    step = resolve_run.find_step(ledger_doc, "reconcile-repo1")
+    assert step["lease"]["token"] == lease["token"]
+    assert gh_ops.create_calls == 1
+
+
+def test_snapshot_audit_writes_ledger_state_snapshot(tmp_path):
+    ledger_path = create_test_ledger(tmp_path)
+
+    resolve_run.snapshot_audit(
+        ledger_path,
+        "reconcile-repo1",
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+    )
+
+    ledger_doc = resolve_run.load(ledger_path)
+    snapshot = ledger_doc["state_snapshot"]["reconcile-repo1"]
+    assert snapshot["recorded_proposal_id"] == "prop-101"
+    assert snapshot["proposal_digest"] == PROPOSAL_DIGEST
+    assert snapshot["authorization_digest"] == AUTHORIZATION_DIGEST
+    assert snapshot["policy_version"] == "v1"
+    assert snapshot["run_at"]
+    assert snapshot["actor"] == ledger_doc["actor"]
 
 
 def test_reconcile_open_pr_withholds_base(tmp_path):
@@ -163,6 +417,11 @@ def test_reconcile_open_pr_withholds_base(tmp_path):
         body="Automated apply PR",
         result_path=result_path,
         gh_ops=gh_ops,
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
         actor_id="octocat@mba-m4",
         workspace="testorg",
     )
@@ -181,6 +440,11 @@ def test_reconcile_open_pr_withholds_base(tmp_path):
         branch="pulse/apply/prop-101",
         result_path=result_path,
         gh_ops=gh_ops,
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
         advance_base=advance_fake,
         actor_id="octocat@mba-m4",
         workspace="testorg",
@@ -215,6 +479,11 @@ def test_reconcile_gh_error_withholds_and_does_not_delete_branch(tmp_path):
         body="Automated apply PR",
         result_path=result_path,
         gh_ops=gh_ops,
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
         actor_id="octocat@mba-m4",
         workspace="testorg",
     )
@@ -239,6 +508,11 @@ def test_reconcile_gh_error_withholds_and_does_not_delete_branch(tmp_path):
         branch="pulse/apply/prop-101",
         result_path=result_path,
         gh_ops=gh_ops,
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
         advance_base=advance_fake,
         actor_id="octocat@mba-m4",
         workspace="testorg",
@@ -254,6 +528,40 @@ def test_reconcile_gh_error_withholds_and_does_not_delete_branch(tmp_path):
     assert step["status"] == "blocked-on-gate"
     assert ledger_doc["status"] == "blocked-on-gate"
     assert any("rate limit" in note for note in step["notes"])
+
+
+def test_reconcile_gh_error_without_status_fails_closed(tmp_path):
+    ledger_path = create_test_ledger(tmp_path)
+    result_path = tmp_path / "apply-status-repo1.yaml"
+    gh_ops = FakeGhOps()
+    gh_ops.prs[("testorg/repo1", "pulse/apply/prop-101")] = {
+        "state": "ERROR",
+        "error": "rate limit exceeded",
+    }
+
+    with pytest.raises(ValueError, match="cannot determine PR state"):
+        apply_reconcile.reconcile_apply(
+            ledger_path=ledger_path,
+            step_id="reconcile-repo1",
+            proposal_id="prop-101",
+            repo="testorg/repo1",
+            branch="pulse/apply/prop-101",
+            result_path=result_path,
+            gh_ops=gh_ops,
+            recorded_proposal_id="prop-101",
+            proposal_digest=PROPOSAL_DIGEST,
+            authorization_digest=AUTHORIZATION_DIGEST,
+            intended_base="main",
+            expected_head_sha="pushed_sha_111",
+            actor_id="octocat@mba-m4",
+            workspace="testorg",
+        )
+
+    ledger_doc = resolve_run.load(ledger_path)
+    step = resolve_run.find_step(ledger_doc, "reconcile-repo1")
+    assert not result_path.exists()
+    assert step["status"] == "blocked-on-gate"
+    assert any("rate limit exceeded" in note for note in step["notes"])
 
 
 def test_reconcile_merged_pr_advances_base_off_merged_sha(tmp_path):
@@ -273,18 +581,289 @@ def test_reconcile_merged_pr_advances_base_off_merged_sha(tmp_path):
         body="Automated apply PR",
         result_path=result_path,
         gh_ops=gh_ops,
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
         actor_id="octocat@mba-m4",
         workspace="testorg",
     )
 
-    gh_ops.prs[("testorg/repo1", "pulse/apply/prop-101")] = {
+    key = ("testorg/repo1", "pulse/apply/prop-101")
+    gh_ops.prs[key]["state"] = "MERGED"
+    gh_ops.prs[key]["merged"] = True
+    gh_ops.prs[key]["merge_commit_sha"] = "merged_commit_sha_999"
+    gh_ops.prs[key]["head_ref"] = "pushed_sha_111"
+
+    advance_calls = []
+
+    def advance_fake(r, s):
+        advance_calls.append((r, s))
+        return {"state": "ok"}
+
+    doc = apply_reconcile.reconcile_apply(
+        ledger_path=ledger_path,
+        step_id="reconcile-repo1",
+        proposal_id="prop-101",
+        repo="testorg/repo1",
+        branch="pulse/apply/prop-101",
+        result_path=result_path,
+        gh_ops=gh_ops,
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
+        advance_base=advance_fake,
+        actor_id="octocat@mba-m4",
+        workspace="testorg",
+    )
+
+    assert doc["state"] == "applied"
+    assert doc["merged_sha"] == "merged_commit_sha_999"
+    assert doc["observed_base"] == "main"
+    assert doc["observed_head_sha"] == "pushed_sha_111"
+    assert validate_result.validate(doc, "apply-status") == []
+
+    satisfied, detail = resolve_run.evaluate_merge_detected_gate(str(result_path))
+    assert satisfied is True
+    assert "merged_commit_sha_999" in detail
+
+    assert advance_calls == [("testorg/repo1", "merged_commit_sha_999")]
+
+    ledger_doc = resolve_run.load(ledger_path)
+    step = resolve_run.find_step(ledger_doc, "reconcile-repo1")
+    assert step["status"] == "done"
+
+
+def test_reconcile_merged_pr_wrong_base_rejects(tmp_path):
+    ledger_path = create_test_ledger(tmp_path)
+    result_path = tmp_path / "apply-status-repo1.yaml"
+    gh_ops = FakeGhOps()
+
+    apply_reconcile.open_apply_pr(
+        ledger_path=ledger_path,
+        step_id="reconcile-repo1",
+        proposal_id="prop-101",
+        repo="testorg/repo1",
+        branch="pulse/apply/prop-101",
+        base="main",
+        pushed_sha="pushed_sha_111",
+        title="Apply proposal prop-101",
+        body="Automated apply PR",
+        result_path=result_path,
+        gh_ops=gh_ops,
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
+        actor_id="octocat@mba-m4",
+        workspace="testorg",
+    )
+    key = ("testorg/repo1", "pulse/apply/prop-101")
+    gh_ops.prs[key]["state"] = "MERGED"
+    gh_ops.prs[key]["merged"] = True
+    gh_ops.prs[key]["merge_commit_sha"] = "merged_commit_sha_999"
+    gh_ops.prs[key]["base"] = "develop"
+    gh_ops.prs[key]["head_ref"] = "pushed_sha_111"
+    gh_ops.remote_refs[key] = "pushed_sha_111"
+    advance_calls = []
+
+    doc = apply_reconcile.reconcile_apply(
+        ledger_path=ledger_path,
+        step_id="reconcile-repo1",
+        proposal_id="prop-101",
+        repo="testorg/repo1",
+        branch="pulse/apply/prop-101",
+        result_path=result_path,
+        gh_ops=gh_ops,
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
+        advance_base=lambda repo, sha: advance_calls.append((repo, sha)),
+        actor_id="octocat@mba-m4",
+        workspace="testorg",
+    )
+
+    ledger_doc = resolve_run.load(ledger_path)
+    step = resolve_run.find_step(ledger_doc, "reconcile-repo1")
+    assert doc["state"] == "rejected"
+    assert "observed_base=develop" in doc["reason"]
+    assert gh_ops.deleted_branches == [("testorg/repo1", "pulse/apply/prop-101")]
+    assert gh_ops.delete_calls == [
+        ("testorg/repo1", "pulse/apply/prop-101", "pushed_sha_111")
+    ]
+    assert step["status"] == "failed"
+    assert any("deleted branch pulse/apply/prop-101" in note for note in step["notes"])
+    assert advance_calls == []
+
+
+def test_reconcile_merged_pr_wrong_head_rejects(tmp_path):
+    ledger_path = create_test_ledger(tmp_path)
+    result_path = tmp_path / "apply-status-repo1.yaml"
+    gh_ops = FakeGhOps()
+
+    apply_reconcile.open_apply_pr(
+        ledger_path=ledger_path,
+        step_id="reconcile-repo1",
+        proposal_id="prop-101",
+        repo="testorg/repo1",
+        branch="pulse/apply/prop-101",
+        base="main",
+        pushed_sha="pushed_sha_111",
+        title="Apply proposal prop-101",
+        body="Automated apply PR",
+        result_path=result_path,
+        gh_ops=gh_ops,
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
+        actor_id="octocat@mba-m4",
+        workspace="testorg",
+    )
+    key = ("testorg/repo1", "pulse/apply/prop-101")
+    gh_ops.prs[key]["state"] = "MERGED"
+    gh_ops.prs[key]["merged"] = True
+    gh_ops.prs[key]["merge_commit_sha"] = "merged_commit_sha_999"
+    gh_ops.prs[key]["head_ref"] = "other_sha"
+    gh_ops.remote_refs[key] = "replacement_sha"
+    advance_calls = []
+
+    doc = apply_reconcile.reconcile_apply(
+        ledger_path=ledger_path,
+        step_id="reconcile-repo1",
+        proposal_id="prop-101",
+        repo="testorg/repo1",
+        branch="pulse/apply/prop-101",
+        result_path=result_path,
+        gh_ops=gh_ops,
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
+        advance_base=lambda repo, sha: advance_calls.append((repo, sha)),
+        actor_id="octocat@mba-m4",
+        workspace="testorg",
+    )
+
+    ledger_doc = resolve_run.load(ledger_path)
+    step = resolve_run.find_step(ledger_doc, "reconcile-repo1")
+    assert doc["state"] == "rejected"
+    assert "observed_head_sha=other_sha" in doc["reason"]
+    assert gh_ops.delete_calls == [
+        ("testorg/repo1", "pulse/apply/prop-101", "other_sha")
+    ]
+    assert gh_ops.deleted_branches == []
+    assert step["status"] == "failed"
+    assert any("refused: sha mismatch" in note for note in step["notes"])
+    assert not any("deleted branch" in note for note in step["notes"])
+    assert advance_calls == []
+
+
+def test_reconcile_merge_gate_failure_rejects(tmp_path, monkeypatch):
+    ledger_path = create_test_ledger(tmp_path)
+    result_path = tmp_path / "apply-status-repo1.yaml"
+    gh_ops = FakeGhOps()
+
+    apply_reconcile.open_apply_pr(
+        ledger_path=ledger_path,
+        step_id="reconcile-repo1",
+        proposal_id="prop-101",
+        repo="testorg/repo1",
+        branch="pulse/apply/prop-101",
+        base="main",
+        pushed_sha="pushed_sha_111",
+        title="Apply proposal prop-101",
+        body="Automated apply PR",
+        result_path=result_path,
+        gh_ops=gh_ops,
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
+        actor_id="octocat@mba-m4",
+        workspace="testorg",
+    )
+    key = ("testorg/repo1", "pulse/apply/prop-101")
+    gh_ops.prs[key]["state"] = "MERGED"
+    gh_ops.prs[key]["merged"] = True
+    gh_ops.prs[key]["merge_commit_sha"] = "merged_commit_sha_999"
+    gh_ops.prs[key]["head_ref"] = "pushed_sha_111"
+    monkeypatch.setattr(
+        resolve_run,
+        "evaluate_merge_detected_gate",
+        lambda path: (False, "simulated merge gate failure"),
+    )
+    advance_calls = []
+
+    doc = apply_reconcile.reconcile_apply(
+        ledger_path=ledger_path,
+        step_id="reconcile-repo1",
+        proposal_id="prop-101",
+        repo="testorg/repo1",
+        branch="pulse/apply/prop-101",
+        result_path=result_path,
+        gh_ops=gh_ops,
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
+        advance_base=lambda repo, sha: advance_calls.append((repo, sha)),
+        actor_id="octocat@mba-m4",
+        workspace="testorg",
+    )
+
+    ledger_doc = resolve_run.load(ledger_path)
+    step = resolve_run.find_step(ledger_doc, "reconcile-repo1")
+    assert doc["state"] == "rejected"
+    assert doc["reason"] == "simulated merge gate failure"
+    assert step["status"] == "failed"
+    assert advance_calls == []
+
+
+def test_reconcile_applied_crash_recovery(tmp_path):
+    """Important 1 fix: crash after writing applied status but before advance_base finishes resume execution."""
+    ledger_path = create_test_ledger(tmp_path)
+    result_path = tmp_path / "apply-status-repo1.yaml"
+    gh_ops = FakeGhOps()
+
+    # Pre-write an applied status file, but ledger step is still blocked-on-gate (simulating a crash)
+    apply_reconcile.write_apply_status(
+        result_path,
+        proposal_id="prop-101",
+        repo="testorg/repo1",
+        branch="pulse/apply/prop-101",
+        state="applied",
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
+        observed_base="main",
+        observed_head_sha="pushed_sha_111",
+        pushed_sha="pushed_sha_111",
+        pr_url="https://github.com/testorg/repo1/pull/1",
+        merged_sha="merged_commit_sha_777",
+        workspace="testorg",
+    )
+
+    key = ("testorg/repo1", "pulse/apply/prop-101")
+    gh_ops.prs[key] = {
         "url": "https://github.com/testorg/repo1/pull/1",
         "state": "MERGED",
         "merged": True,
-        "merge_commit_sha": "merged_commit_sha_999",
+        "merge_commit_sha": "merged_commit_sha_777",
         "base": "main",
-        "title": "Apply proposal prop-101",
-        "body": "Automated apply PR",
+        "head_ref": "pushed_sha_111",
     }
 
     advance_calls = []
@@ -301,59 +880,11 @@ def test_reconcile_merged_pr_advances_base_off_merged_sha(tmp_path):
         branch="pulse/apply/prop-101",
         result_path=result_path,
         gh_ops=gh_ops,
-        advance_base=advance_fake,
-        actor_id="octocat@mba-m4",
-        workspace="testorg",
-    )
-
-    assert doc["state"] == "applied"
-    assert doc["merged_sha"] == "merged_commit_sha_999"
-    assert validate_result.validate(doc, "apply-status") == []
-
-    satisfied, detail = resolve_run.evaluate_merge_detected_gate(str(result_path))
-    assert satisfied is True
-    assert "merged_commit_sha_999" in detail
-
-    assert advance_calls == [("testorg/repo1", "merged_commit_sha_999")]
-
-    ledger_doc = resolve_run.load(ledger_path)
-    step = resolve_run.find_step(ledger_doc, "reconcile-repo1")
-    assert step["status"] == "done"
-
-
-def test_reconcile_applied_crash_recovery(tmp_path):
-    """Important 1 fix: crash after writing applied status but before advance_base finishes resume execution."""
-    ledger_path = create_test_ledger(tmp_path)
-    result_path = tmp_path / "apply-status-repo1.yaml"
-    gh_ops = FakeGhOps()
-
-    # Pre-write an applied status file, but ledger step is still blocked-on-gate (simulating a crash)
-    apply_reconcile.write_apply_status(
-        result_path,
-        proposal_id="prop-101",
-        repo="testorg/repo1",
-        branch="pulse/apply/prop-101",
-        state="applied",
-        pushed_sha="pushed_sha_111",
-        pr_url="https://github.com/testorg/repo1/pull/1",
-        merged_sha="merged_commit_sha_777",
-        workspace="testorg",
-    )
-
-    advance_calls = []
-
-    def advance_fake(r, s):
-        advance_calls.append((r, s))
-        return {"state": "ok"}
-
-    doc = apply_reconcile.reconcile_apply(
-        ledger_path=ledger_path,
-        step_id="reconcile-repo1",
-        proposal_id="prop-101",
-        repo="testorg/repo1",
-        branch="pulse/apply/prop-101",
-        result_path=result_path,
-        gh_ops=gh_ops,
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
         advance_base=advance_fake,
         actor_id="octocat@mba-m4",
         workspace="testorg",
@@ -361,6 +892,7 @@ def test_reconcile_applied_crash_recovery(tmp_path):
 
     assert doc["state"] == "applied"
     assert advance_calls == [("testorg/repo1", "merged_commit_sha_777")]
+    assert gh_ops.view_calls == [("testorg/repo1", "pulse/apply/prop-101")]
 
     ledger_doc = resolve_run.load(ledger_path)
     step = resolve_run.find_step(ledger_doc, "reconcile-repo1")
@@ -385,19 +917,20 @@ def test_reconcile_advance_base_failure_keeps_step_blocked(tmp_path):
         body="Automated apply PR",
         result_path=result_path,
         gh_ops=gh_ops,
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
         actor_id="octocat@mba-m4",
         workspace="testorg",
     )
 
-    gh_ops.prs[("testorg/repo1", "pulse/apply/prop-101")] = {
-        "url": "https://github.com/testorg/repo1/pull/1",
-        "state": "MERGED",
-        "merged": True,
-        "merge_commit_sha": "merged_commit_sha_999",
-        "base": "main",
-        "title": "Apply proposal prop-101",
-        "body": "Automated apply PR",
-    }
+    key = ("testorg/repo1", "pulse/apply/prop-101")
+    gh_ops.prs[key]["state"] = "MERGED"
+    gh_ops.prs[key]["merged"] = True
+    gh_ops.prs[key]["merge_commit_sha"] = "merged_commit_sha_999"
+    gh_ops.prs[key]["head_ref"] = "pushed_sha_111"
 
     def failing_advance(r, s):
         return {"state": "failed", "reason": "git push rejected"}
@@ -410,6 +943,11 @@ def test_reconcile_advance_base_failure_keeps_step_blocked(tmp_path):
         branch="pulse/apply/prop-101",
         result_path=result_path,
         gh_ops=gh_ops,
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
         advance_base=failing_advance,
         actor_id="octocat@mba-m4",
         workspace="testorg",
@@ -439,12 +977,19 @@ def test_reconcile_closed_unmerged_pr_rejects_and_deletes_branch(tmp_path):
         body="Automated apply PR",
         result_path=result_path,
         gh_ops=gh_ops,
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
         actor_id="octocat@mba-m4",
         workspace="testorg",
     )
 
-    gh_ops.prs[("testorg/repo1", "pulse/apply/prop-101")]["state"] = "CLOSED"
-    gh_ops.prs[("testorg/repo1", "pulse/apply/prop-101")]["merged"] = False
+    key = ("testorg/repo1", "pulse/apply/prop-101")
+    gh_ops.prs[key]["state"] = "CLOSED"
+    gh_ops.prs[key]["merged"] = False
+    gh_ops.remote_refs[key] = "pushed_sha_111"
 
     advance_calls = []
 
@@ -460,6 +1005,11 @@ def test_reconcile_closed_unmerged_pr_rejects_and_deletes_branch(tmp_path):
         branch="pulse/apply/prop-101",
         result_path=result_path,
         gh_ops=gh_ops,
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
         advance_base=advance_fake,
         actor_id="octocat@mba-m4",
         workspace="testorg",
@@ -470,6 +1020,9 @@ def test_reconcile_closed_unmerged_pr_rejects_and_deletes_branch(tmp_path):
     assert validate_result.validate(doc, "apply-status") == []
     assert advance_calls == []
     assert gh_ops.deleted_branches == [("testorg/repo1", "pulse/apply/prop-101")]
+    assert gh_ops.delete_calls == [
+        ("testorg/repo1", "pulse/apply/prop-101", "pushed_sha_111")
+    ]
 
     ledger_doc = resolve_run.load(ledger_path)
     step = resolve_run.find_step(ledger_doc, "reconcile-repo1")
@@ -494,19 +1047,20 @@ def test_reconcile_applied_step_is_idempotent_noop(tmp_path):
         body="Automated apply PR",
         result_path=result_path,
         gh_ops=gh_ops,
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
         actor_id="octocat@mba-m4",
         workspace="testorg",
     )
 
-    gh_ops.prs[("testorg/repo1", "pulse/apply/prop-101")] = {
-        "url": "https://github.com/testorg/repo1/pull/1",
-        "state": "MERGED",
-        "merged": True,
-        "merge_commit_sha": "merged_commit_sha_999",
-        "base": "main",
-        "title": "Apply proposal prop-101",
-        "body": "Automated apply PR",
-    }
+    key = ("testorg/repo1", "pulse/apply/prop-101")
+    gh_ops.prs[key]["state"] = "MERGED"
+    gh_ops.prs[key]["merged"] = True
+    gh_ops.prs[key]["merge_commit_sha"] = "merged_commit_sha_999"
+    gh_ops.prs[key]["head_ref"] = "pushed_sha_111"
 
     advance_calls = []
 
@@ -522,6 +1076,11 @@ def test_reconcile_applied_step_is_idempotent_noop(tmp_path):
         branch="pulse/apply/prop-101",
         result_path=result_path,
         gh_ops=gh_ops,
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
         advance_base=advance_fake,
         actor_id="octocat@mba-m4",
         workspace="testorg",
@@ -536,12 +1095,21 @@ def test_reconcile_applied_step_is_idempotent_noop(tmp_path):
         branch="pulse/apply/prop-101",
         result_path=result_path,
         gh_ops=gh_ops,
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
         advance_base=advance_fake,
         actor_id="octocat@mba-m4",
         workspace="testorg",
     )
     assert doc2["state"] == "applied"
     assert len(advance_calls) == 1  # Idempotent: no duplicate advance!
+    assert gh_ops.view_calls == [
+        ("testorg/repo1", "pulse/apply/prop-101"),
+        ("testorg/repo1", "pulse/apply/prop-101"),
+    ]
 
 
 def test_lease_concurrency_blocks_second_actor(tmp_path):
@@ -561,6 +1129,11 @@ def test_lease_concurrency_blocks_second_actor(tmp_path):
         body="Automated apply PR",
         result_path=result_path,
         gh_ops=gh_ops,
+        recorded_proposal_id="prop-101",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="pushed_sha_111",
         actor_id="actor1@machine1",
         workspace="testorg",
     )
@@ -574,10 +1147,177 @@ def test_lease_concurrency_blocks_second_actor(tmp_path):
             branch="pulse/apply/prop-101",
             result_path=result_path,
             gh_ops=gh_ops,
+            recorded_proposal_id="prop-101",
+            proposal_digest=PROPOSAL_DIGEST,
+            authorization_digest=AUTHORIZATION_DIGEST,
+            intended_base="main",
+            expected_head_sha="pushed_sha_111",
             advance_base=lambda repo, sha: {"state": "ok"},
             actor_id="actor2@machine2",
             workspace="testorg",
         )
+
+
+def test_resolve_intended_base_plan_sync_prefers_finalizer_record():
+    assert apply_reconcile.resolve_intended_base(
+        "plan-sync",
+        {"base_ref": "binding-base"},
+        {"base_ref": "finalizer-base"},
+    ) == "finalizer-base"
+    assert apply_reconcile.resolve_intended_base(
+        "plan-sync", {"base_ref": "binding-base"}
+    ) == "binding-base"
+
+
+def test_resolve_intended_base_generated_artifact_uses_branch():
+    assert apply_reconcile.resolve_intended_base(
+        "generated-artifact",
+        {"branch": "release"},
+    ) == "release"
+
+
+def test_resolve_intended_base_marketplace_sync_uses_finalizer_record():
+    assert apply_reconcile.resolve_intended_base(
+        "marketplace-sync", {}, {"base_ref": "develop"}
+    ) == "develop"
+
+
+@pytest.mark.parametrize(
+    "source_kind",
+    ["plan-sync", "generated-artifact", "marketplace-sync"],
+)
+def test_resolve_intended_base_rejects_missing_base(source_kind):
+    with pytest.raises(ValueError, match="cannot resolve intended base"):
+        apply_reconcile.resolve_intended_base(source_kind, {})
+
+
+def test_resolve_intended_base_rejects_unknown_source_kind():
+    with pytest.raises(ValueError):
+        apply_reconcile.resolve_intended_base("unknown", {"base": "main"})
+
+
+@pytest.mark.parametrize("contents", ["state: [\n", "- not\n- a mapping\n"])
+def test_load_apply_status_rejects_corrupt_or_non_mapping(tmp_path, contents):
+    result_path = tmp_path / "apply-status.yaml"
+    result_path.write_text(contents)
+
+    with pytest.raises(ValueError, match="could not load apply status"):
+        apply_reconcile.load_apply_status(result_path)
+
+
+def test_load_apply_status_rejects_valid_mapping_missing_required_fields(tmp_path):
+    """A valid-YAML, valid-dict document that is still schema-invalid (e.g.
+    truncated mid-write, or hand-edited) must fail closed the same as
+    malformed YAML - `isinstance(dict)` alone is not enough evidence to
+    trust a status document."""
+    result_path = tmp_path / "apply-status.yaml"
+    result_path.write_text(yaml.safe_dump({"state": "applied"}))
+
+    with pytest.raises(ValueError, match="could not load apply status"):
+        apply_reconcile.load_apply_status(result_path)
+
+
+def test_open_apply_pr_fails_closed_on_schema_invalid_existing_status(tmp_path):
+    """open_apply_pr must not treat a schema-invalid existing status as
+    proof a PR already exists and skip creating one."""
+    ledger_path = create_test_ledger(tmp_path)
+    result_path = tmp_path / "apply-status-repo1.yaml"
+    result_path.write_text(yaml.safe_dump({"state": "applied"}))
+    gh_ops = FakeGhOps()
+
+    with pytest.raises(ValueError, match="could not load apply status"):
+        apply_reconcile.open_apply_pr(
+            ledger_path=ledger_path,
+            step_id="reconcile-repo1",
+            proposal_id="prop-101",
+            repo="testorg/repo1",
+            branch="pulse/apply/prop-101",
+            base="main",
+            pushed_sha="pushed_sha_111",
+            title="Apply proposal prop-101",
+            body="Automated apply PR",
+            result_path=result_path,
+            gh_ops=gh_ops,
+            recorded_proposal_id="prop-101",
+            proposal_digest=PROPOSAL_DIGEST,
+            authorization_digest=AUTHORIZATION_DIGEST,
+            intended_base="main",
+            expected_head_sha="pushed_sha_111",
+            actor_id="octocat@mba-m4",
+            workspace="testorg",
+        )
+
+    assert gh_ops.create_calls == 0
+
+
+def test_reconcile_corrupt_status_fails_closed_before_remote_view(tmp_path):
+    ledger_path = create_test_ledger(tmp_path)
+    result_path = tmp_path / "apply-status-repo1.yaml"
+    result_path.write_text("state: [\n")
+    gh_ops = FakeGhOps()
+
+    with pytest.raises(ValueError, match="could not load apply status"):
+        apply_reconcile.reconcile_apply(
+            ledger_path=ledger_path,
+            step_id="reconcile-repo1",
+            proposal_id="prop-101",
+            repo="testorg/repo1",
+            branch="pulse/apply/prop-101",
+            result_path=result_path,
+            gh_ops=gh_ops,
+            recorded_proposal_id="prop-101",
+            proposal_digest=PROPOSAL_DIGEST,
+            authorization_digest=AUTHORIZATION_DIGEST,
+            intended_base="main",
+            expected_head_sha="pushed_sha_111",
+            actor_id="octocat@mba-m4",
+            workspace="testorg",
+        )
+
+    assert gh_ops.view_calls == []
+    assert result_path.read_text() == "state: [\n"
+
+
+def test_atomic_apply_status_write_fsyncs_file_and_directory(tmp_path, monkeypatch):
+    result_path = tmp_path / "apply-status.yaml"
+    fsync_calls = []
+    replace_calls = []
+    real_replace = apply_reconcile.os.replace
+
+    def record_fsync(fd):
+        fsync_calls.append(fd)
+
+    def record_replace(source, destination):
+        replace_calls.append((source, destination))
+        real_replace(source, destination)
+
+    monkeypatch.setattr(apply_reconcile.os, "fsync", record_fsync)
+    monkeypatch.setattr(apply_reconcile.os, "replace", record_replace)
+
+    apply_reconcile._atomic_write_yaml(result_path, {"state": "ok"})
+
+    assert yaml.safe_load(result_path.read_text()) == {"state": "ok"}
+    assert len(fsync_calls) == 2
+    assert replace_calls and replace_calls[0][1] == result_path
+    assert not list(tmp_path.glob(f".{result_path.name}.*.tmp"))
+
+
+def test_atomic_apply_status_write_preserves_existing_file_on_replace_error(
+    tmp_path, monkeypatch
+):
+    result_path = tmp_path / "apply-status.yaml"
+    result_path.write_text("state: old\n")
+
+    def fail_replace(source, destination):
+        raise OSError("simulated replace failure")
+
+    monkeypatch.setattr(apply_reconcile.os, "replace", fail_replace)
+
+    with pytest.raises(ValueError, match="could not write apply status"):
+        apply_reconcile._atomic_write_yaml(result_path, {"state": "new"})
+
+    assert result_path.read_text() == "state: old\n"
+    assert not list(tmp_path.glob(f".{result_path.name}.*.tmp"))
 
 
 def test_merge_detected_gate_evaluator_fail_closed(tmp_path):
@@ -592,6 +1332,11 @@ def test_merge_detected_gate_evaluator_fail_closed(tmp_path):
         repo="r1",
         branch="b1",
         state="pr_opened",
+        recorded_proposal_id="p1",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="sha1",
         pushed_sha="sha1",
         pr_url="https://pr1",
     )
@@ -604,6 +1349,11 @@ def test_merge_detected_gate_evaluator_fail_closed(tmp_path):
         repo="r1",
         branch="b1",
         state="rejected",
+        recorded_proposal_id="p1",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="sha1",
         reason="closed",
     )
     satisfied, detail = resolve_run.evaluate_merge_detected_gate(str(result_path))
@@ -615,6 +1365,13 @@ def test_merge_detected_gate_evaluator_fail_closed(tmp_path):
         repo="r1",
         branch="b1",
         state="applied",
+        recorded_proposal_id="p1",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="sha1",
+        observed_base="main",
+        observed_head_sha="sha1",
         pushed_sha="sha1",
         pr_url="https://pr1",
         merged_sha="sha_merged_456",
@@ -622,3 +1379,45 @@ def test_merge_detected_gate_evaluator_fail_closed(tmp_path):
     satisfied, detail = resolve_run.evaluate_merge_detected_gate(str(result_path))
     assert satisfied is True
     assert "sha_merged_456" in detail
+
+    apply_reconcile.write_apply_status(
+        result_path,
+        proposal_id="p1",
+        repo="r1",
+        branch="b1",
+        state="applied",
+        recorded_proposal_id="p1",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="sha1",
+        observed_base="develop",
+        observed_head_sha="sha1",
+        pushed_sha="sha1",
+        pr_url="https://pr1",
+        merged_sha="sha_merged_456",
+    )
+    satisfied, detail = resolve_run.evaluate_merge_detected_gate(str(result_path))
+    assert satisfied is False
+    assert "observed_base" in detail
+
+    apply_reconcile.write_apply_status(
+        result_path,
+        proposal_id="p1",
+        repo="r1",
+        branch="b1",
+        state="applied",
+        recorded_proposal_id="p1",
+        proposal_digest=PROPOSAL_DIGEST,
+        authorization_digest=AUTHORIZATION_DIGEST,
+        intended_base="main",
+        expected_head_sha="sha1",
+        observed_base="main",
+        observed_head_sha="other_sha",
+        pushed_sha="sha1",
+        pr_url="https://pr1",
+        merged_sha="sha_merged_456",
+    )
+    satisfied, detail = resolve_run.evaluate_merge_detected_gate(str(result_path))
+    assert satisfied is False
+    assert "observed_head_sha" in detail

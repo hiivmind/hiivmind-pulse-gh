@@ -297,6 +297,7 @@ def test_build_proposal_accepts_all_mutation_policy_values(policy):
         expected_shas={"acme/api": "abc123"},
         actor=minimal_actor(),
         mutation_policy=policy,
+        bound_paths={"acme/api": ["src/**"]},
     )
     assert proposal.mutation_policy == policy
 
@@ -515,6 +516,62 @@ def test_build_proposal_rejects_bound_paths_key_outside_selection():
         )
 
 
+def test_build_proposal_rejects_empty_bound_paths_when_allow_listed():
+    with pytest.raises(mutation_plan.MutationPlanError, match="bound_paths must be non-empty"):
+        mutation_plan.build_proposal(
+            id="run-1",
+            selection=["acme/api"],
+            transformation="format-python",
+            expected_shas={"acme/api": "abc123"},
+            actor=minimal_actor(),
+            mutation_policy="allow-listed",
+            bound_paths={},
+        )
+
+
+def test_build_proposal_rejects_empty_repo_path_list_when_allow_listed():
+    with pytest.raises(
+        mutation_plan.MutationPlanError,
+        match="bound_paths must be non-empty for: acme/api",
+    ):
+        mutation_plan.build_proposal(
+            id="run-1",
+            selection=["acme/api"],
+            transformation="format-python",
+            expected_shas={"acme/api": "abc123"},
+            actor=minimal_actor(),
+            mutation_policy="allow-listed",
+            bound_paths={"acme/api": []},
+        )
+
+
+def test_build_proposal_rejects_partial_bound_paths_coverage_when_allow_listed():
+    with pytest.raises(mutation_plan.MutationPlanError, match="bound_paths missing entry for"):
+        mutation_plan.build_proposal(
+            id="run-1",
+            selection=["acme/api", "acme/web"],
+            transformation="format-python",
+            expected_shas={"acme/api": "abc123", "acme/web": "def456"},
+            actor=minimal_actor(),
+            mutation_policy="allow-listed",
+            bound_paths={"acme/api": ["docs/a.md"]},
+        )
+
+
+def test_build_proposal_allows_omitted_bound_paths_for_non_allow_listed_policies():
+    # The mandatory-bounds check is scoped to allow-listed only; propose/allow
+    # never required bound_paths and must keep working without one.
+    proposal = mutation_plan.build_proposal(
+        id="run-1",
+        selection=["acme/api"],
+        transformation="format-python",
+        expected_shas={"acme/api": "abc123"},
+        actor=minimal_actor(),
+        mutation_policy="propose",
+    )
+    assert proposal.bound_paths == {}
+
+
 def test_validate_proposal_enforces_bound_paths_covers_selection_for_paths_changed():
     data = minimal_registry_data()
     data["transformations"]["format-python"]["validation"] = {"kind": "paths_changed"}
@@ -556,4 +613,53 @@ def test_validate_proposal_allows_absent_bound_paths_for_none_kind():
         registry=registry,
     )
     assert proposal.bound_paths == {}
+# --- proposal_digest --------------------------------------------------------
 
+
+def _digest_proposal(**overrides):
+    kwargs = dict(
+        id="run-1",
+        selection=["acme/api"],
+        transformation="format-python",
+        expected_shas={"acme/api": "abc123"},
+        actor=minimal_actor(),
+        mutation_policy="allow-listed",
+        bound_paths={"acme/api": ["docs/a.md"]},
+    )
+    kwargs.update(overrides)
+    return mutation_plan.build_proposal(**kwargs)
+
+
+def test_proposal_digest_is_deterministic_for_equal_proposals():
+    digest_a = mutation_plan.proposal_digest(_digest_proposal())
+    digest_b = mutation_plan.proposal_digest(_digest_proposal())
+
+    assert digest_a == digest_b
+
+
+def test_proposal_digest_is_versioned():
+    digest = mutation_plan.proposal_digest(_digest_proposal())
+
+    assert digest.startswith("v1|")
+    hex_part = digest.split("|", 1)[1]
+    assert len(hex_part) == 64
+    int(hex_part, 16)  # raises if not hex
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"selection": ["acme/web"], "expected_shas": {"acme/web": "abc123"}, "bound_paths": {"acme/web": ["docs/a.md"]}},
+        {"transformation": "regenerate-from-template"},
+        {"expected_shas": {"acme/api": "different-sha"}},
+        {"bound_paths": {"acme/api": ["docs/b.md"]}},
+        {"mutation_policy": "propose", "bound_paths": None},
+        {"id": "run-2"},
+        {"actor": {"gh_login": "someone-else", "machine": "laptop", "mode": "interactive"}},
+    ],
+)
+def test_proposal_digest_changes_when_any_covered_field_changes(overrides):
+    base_digest = mutation_plan.proposal_digest(_digest_proposal())
+    changed_digest = mutation_plan.proposal_digest(_digest_proposal(**overrides))
+
+    assert base_digest != changed_digest
