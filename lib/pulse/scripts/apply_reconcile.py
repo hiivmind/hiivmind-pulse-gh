@@ -143,6 +143,20 @@ class GhCliOps(GhOps):
     def delete_remote_branch(
         self, repo: str, branch: str, expected_sha: str
     ) -> dict:
+        """Delete `branch` only if its ref currently points at `expected_sha`.
+
+        This is a check-then-act CAS approximation, not atomic: the GitHub
+        REST API has no native conditional-delete for git refs. A force-push
+        landing between the GET and the DELETE below can still race past
+        this check (a narrow window, but real). The genuinely atomic fix is
+        a Nave `pen reset`-style CAS verb operating on the actual clone
+        (docs/superpowers/specs/2026-07-30-apply-mode-production-wiring-
+        design.md §5C) - out of scope for this branch (Nave fork work,
+        blocked on that repo). This check still closes the unconditional-
+        delete hazard this method had before: an already-observed-mismatched
+        ref, or one that changes between the two calls in the common case,
+        is refused rather than deleted blindly.
+        """
         if not expected_sha:
             return {
                 "state": "failed",
@@ -241,6 +255,12 @@ def load_apply_status(path: str | Path) -> dict | None:
     if not isinstance(data, dict):
         raise ApplyStatusError(
             f"could not load apply status {p}: expected a mapping"
+        )
+    schema_errors = validate_result.validate(data, "apply-status")
+    if schema_errors:
+        raise ApplyStatusError(
+            f"could not load apply status {p}: schema-invalid document: "
+            f"{'; '.join(schema_errors)}"
         )
     return data
 

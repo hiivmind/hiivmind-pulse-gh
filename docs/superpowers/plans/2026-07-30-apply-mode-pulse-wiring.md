@@ -50,8 +50,8 @@ RederivedProposal(binding_id: str, proposal: Proposal, source_kind: str, finaliz
 # Per-source typed input contexts carry the real evidence + injected I/O seams (NOT read_repo_head):
 #   PlanSyncProviderInputs(binding, document_snapshot, github_snapshot, actor, registry)
 #   GeneratedProviderInputs(generator, binding, snapshot, actor, registry)
-#   MarketplaceProviderInputs(binding, drift, head_sha, actor, registry)
-collect_inputs(source_kind, binding_ref, recorded_summary, *, io_seams) -> ProviderInputs   # fresh source collection, no pen
+#   MarketplaceProviderInputs(binding, drift, head_sha, default_branch, actor, registry)
+collect_inputs(source_kind, binding_ref, recorded_summary, *, actor, io_seams) -> ProviderInputs   # fresh source collection, no pen; recorded_summary is {binding, transformation, proposal_id} - actor is caller-supplied, never read off recorded_summary
 rederive(inputs: ProviderInputs) -> RederivedProposal   # calls the REAL builder (amended to take mutation_policy + bound_paths)
 mutation_plan.proposal_digest(proposal) -> str          # versioned, domain-separated
 apply_authorization.authorization_digest(auth) -> str    # versioned

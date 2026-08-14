@@ -1205,6 +1205,51 @@ def test_load_apply_status_rejects_corrupt_or_non_mapping(tmp_path, contents):
         apply_reconcile.load_apply_status(result_path)
 
 
+def test_load_apply_status_rejects_valid_mapping_missing_required_fields(tmp_path):
+    """A valid-YAML, valid-dict document that is still schema-invalid (e.g.
+    truncated mid-write, or hand-edited) must fail closed the same as
+    malformed YAML - `isinstance(dict)` alone is not enough evidence to
+    trust a status document."""
+    result_path = tmp_path / "apply-status.yaml"
+    result_path.write_text(yaml.safe_dump({"state": "applied"}))
+
+    with pytest.raises(ValueError, match="could not load apply status"):
+        apply_reconcile.load_apply_status(result_path)
+
+
+def test_open_apply_pr_fails_closed_on_schema_invalid_existing_status(tmp_path):
+    """open_apply_pr must not treat a schema-invalid existing status as
+    proof a PR already exists and skip creating one."""
+    ledger_path = create_test_ledger(tmp_path)
+    result_path = tmp_path / "apply-status-repo1.yaml"
+    result_path.write_text(yaml.safe_dump({"state": "applied"}))
+    gh_ops = FakeGhOps()
+
+    with pytest.raises(ValueError, match="could not load apply status"):
+        apply_reconcile.open_apply_pr(
+            ledger_path=ledger_path,
+            step_id="reconcile-repo1",
+            proposal_id="prop-101",
+            repo="testorg/repo1",
+            branch="pulse/apply/prop-101",
+            base="main",
+            pushed_sha="pushed_sha_111",
+            title="Apply proposal prop-101",
+            body="Automated apply PR",
+            result_path=result_path,
+            gh_ops=gh_ops,
+            recorded_proposal_id="prop-101",
+            proposal_digest=PROPOSAL_DIGEST,
+            authorization_digest=AUTHORIZATION_DIGEST,
+            intended_base="main",
+            expected_head_sha="pushed_sha_111",
+            actor_id="octocat@mba-m4",
+            workspace="testorg",
+        )
+
+    assert gh_ops.create_calls == 0
+
+
 def test_reconcile_corrupt_status_fails_closed_before_remote_view(tmp_path):
     ledger_path = create_test_ledger(tmp_path)
     result_path = tmp_path / "apply-status-repo1.yaml"

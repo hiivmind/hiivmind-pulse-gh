@@ -151,7 +151,9 @@ class FakeGhOps(apply_reconcile.GhOps):
             "observed_head_sha": pr.get("head_ref"),
         }
 
-    def delete_remote_branch(self, repo: str, branch: str) -> dict[str, object]:
+    def delete_remote_branch(
+        self, repo: str, branch: str, expected_sha: str
+    ) -> dict[str, object]:
         self.deleted_branches.append((repo, branch))
         return {"state": "ok"}
 
