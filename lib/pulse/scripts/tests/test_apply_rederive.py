@@ -785,3 +785,52 @@ def test_marketplace_real_result_summary_round_trips_through_authorization():
 def test_rederive_unsupported_inputs_type_raises():
     with pytest.raises(apply_rederive.RederiveError):
         apply_rederive.rederive(object())
+
+
+# --- neutral fixtures ---------------------------------------------------------
+
+NEUTRAL_REPO = "hiivmind/agent-kernel"
+NEUTRAL_HEAD = "d" * 40
+
+
+def neutral_binding(**overrides):
+    value = {
+        "repo": NEUTRAL_REPO,
+        "transformation": "format-python",
+        "base_ref": "main",
+        "bound_paths": ["src/**", "tests/**", "examples/**"],
+    }
+    value.update(overrides)
+    return value
+
+
+def test_neutral_proposal_id_is_deterministic():
+    assert apply_rederive.neutral_proposal_id(neutral_binding()) == (
+        "apply-format-python-hiivmind-agent-kernel"
+    )
+
+
+def test_neutral_proposal_id_rejects_missing_repo():
+    with pytest.raises(apply_rederive.RederiveError, match="repo"):
+        apply_rederive.neutral_proposal_id({"transformation": "format-python"})
+
+
+def test_neutral_proposal_id_rejects_slashless_repo():
+    with pytest.raises(apply_rederive.RederiveError, match="repo"):
+        apply_rederive.neutral_proposal_id(
+            {"repo": "agent-kernel", "transformation": "format-python"}
+        )
+
+
+def test_neutral_proposal_id_rejects_missing_transformation():
+    with pytest.raises(apply_rederive.RederiveError, match="transformation"):
+        apply_rederive.neutral_proposal_id({"repo": NEUTRAL_REPO})
+
+
+def test_neutral_summary_matches_binding_and_proposal_id():
+    summary = apply_rederive.neutral_summary(neutral_binding())
+    assert summary == {
+        "binding": NEUTRAL_REPO,
+        "transformation": "format-python",
+        "proposal_id": "apply-format-python-hiivmind-agent-kernel",
+    }
