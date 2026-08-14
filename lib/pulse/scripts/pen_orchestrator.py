@@ -18,15 +18,16 @@ binary or the network; `execute`'s second parameter is that runner
 with the statically-imported `nave_adapter` module it forms "the Nave
 adapter").
 
-This orchestrator is **propose-only, unconditionally**: it never emits
-`--commit`/`--push-changes` to `pen exec` regardless of a proposal's
-`mutation_policy`. Its terminal success state is always `proposed` — a
-commit/push/PR action for something else to apply later, never performed
-here. A proposal whose `mutation_policy` is not `propose`, or a `PenPlan`
-that explicitly requests a push, is a **forbidden push** and blocks
-before any Nave call. See `lib/patterns/repository-mutations.md` for the
-full mutation-policy vocabulary; Task 4 (F6 plan) is where a policy other
-than `propose` gets to actually authorize a later apply step.
+This orchestrator is **propose-only**: it never emits
+`--commit`/`--push-changes` to `pen exec`. Its terminal success state is
+always `proposed`. Allow-listed landing does NOT happen here — the
+allow-listed phase sequence (provision → exec → validate → commit → push →
+PR) lives in `lib/pulse/scripts/apply_phases.py`, sequenced by
+`lib/pulse/scripts/apply_driver.py` (`run_apply`); `execute()` blocks an
+allow-listed proposal with reason "use apply_driver". A `PenPlan` that
+explicitly requests a push is a **forbidden push** and blocks before any
+Nave call. See `lib/patterns/repository-mutations.md` for the full
+mutation-policy vocabulary.
 
 ## `validation.kind == "json_schema"`: injectable file reader
 
@@ -98,7 +99,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
-from typing import Any, Callable, Protocol
+from typing import Any, Callable
 
 from lib.pulse.scripts import nave_adapter
 from lib.pulse.scripts.mutation_plan import (
@@ -108,21 +109,6 @@ from lib.pulse.scripts.mutation_plan import (
     ValidationSpec,
     resolve_argv,
 )
-
-
-class ApplyOps(Protocol):
-    """Abstract protocol for git-on-clones operations during allow-listed apply mode."""
-
-    def provision_branch(
-        self, branch: str, base_shas: dict[str, str]
-    ) -> dict[str, dict[str, str]]:
-        ...
-
-    def commit_repos(self, message: str) -> dict[str, dict[str, str]]:
-        ...
-
-    def push_repos(self, branch: str) -> dict[str, dict[str, str]]:
-        ...
 
 
 class PenOrchestratorError(ValueError):
@@ -142,12 +128,12 @@ class PenPlan:
     are the caller's job; `execute` never loads a registry itself, it
     only requires `entry.id == proposal.transformation` (checked, raises
     `PenOrchestratorError` otherwise). `pen_name`/`query` are the pen
-    provisioning details only the orchestrator needs: the pen to
     create and the `PenQuery` used to seed it. `request_push` records an
-    explicit caller ask to commit/push; since this orchestrator's
-    terminal success state is always `proposed` (propose-only, never
-    pushes — see module docstring), `request_push=True` is always a
-    forbidden-push attempt and blocks before any Nave call.
+    explicit caller ask to commit/push; since this orchestrator's terminal
+    success state is always `proposed` (propose-only — allow-listed landing
+    lives in `apply_phases`/`apply_driver`, see module docstring),
+    `request_push=True` is always a forbidden-push attempt and blocks before
+    any Nave call.
     """
 
     proposal: Proposal
@@ -181,6 +167,7 @@ class PenRunResult:
     nave_version: str | None
     repo_outcomes: dict[str, str]
     reason: str | None = None
+    repo_landings: dict[str, dict] | None = None
 
 
 def _probe_version(runner) -> str | None:
@@ -205,6 +192,7 @@ def _result(plan: PenPlan, state: str, version: str | None, repo_outcomes: dict[
         nave_version=version,
         repo_outcomes=repo_outcomes,
         reason=reason,
+        repo_landings=None,
     )
 
 
@@ -377,7 +365,6 @@ def execute(
     read_repo_file: Callable[[str, str], bytes] | None = None,
     read_repo_head: Callable[[str], str] | None = None,
     read_repo_changed_paths: Callable[[str], tuple[str, ...]] | None = None,
-    apply_ops: ApplyOps | Any | None = None,
 ) -> PenRunResult:
     """Drive `plan` through the pen state machine using `nave_adapter_runner`.
 
@@ -395,9 +382,6 @@ def execute(
     to satisfy `proposal.expected_shas` verification — see the module
     docstring's "expected-SHA guard" section.
 
-    `apply_ops`, if supplied, is an object/dataclass exposing
-    `provision_branch(branch, base_shas)`, `commit_repos(message)`, and
-    `push_repos(branch)` for allow-listed apply mode.
     """
     proposal = plan.proposal
     entry = plan.entry
@@ -424,14 +408,13 @@ def execute(
                 f"request_push={plan.request_push!r}",
             )
     elif proposal.mutation_policy == "allow-listed":
-        if apply_ops is None:
-            return _result(
-                plan,
-                "blocked",
-                version,
-                {repo: "blocked" for repo in selection},
-                "mutation_policy 'allow-listed' requires apply_ops to be supplied to execute()",
-            )
+        return _result(
+            plan,
+            "blocked",
+            version,
+            {repo: "blocked" for repo in selection},
+            "mutation_policy 'allow-listed' must use apply_driver",
+        )
     elif proposal.mutation_policy == "allow":
         return _result(
             plan,
@@ -577,35 +560,6 @@ def execute(
                 reason,
             )
 
-    # --- provision apply branch (allow-listed mode) -----------------------
-    apply_branch = f"pulse/apply/{proposal.id}"
-    if proposal.mutation_policy == "allow-listed":
-        prov_results = apply_ops.provision_branch(apply_branch, expected_shas)
-        if not isinstance(prov_results, dict):
-            prov_results = {}
-        prov_failures: list[str] = []
-        prov_outcomes: dict[str, str] = {}
-        for repo in selection:
-            res = prov_results.get(repo)
-            if not isinstance(res, dict) or res.get("state") != "ok":
-                reason = (
-                    res.get("reason", "provision failed")
-                    if isinstance(res, dict)
-                    else "missing provision result"
-                )
-                prov_failures.append(f"{repo}: {reason}")
-                prov_outcomes[repo] = "blocked"
-            else:
-                prov_outcomes[repo] = "ok"
-        if prov_failures:
-            return _result(
-                plan,
-                "blocked",
-                version,
-                prov_outcomes,
-                f"provision apply branch failed: {'; '.join(prov_failures)}",
-            )
-
     # --- executed -----------------------------------------------------------
     argv = resolve_argv(entry)
     exec_result = nave_adapter.pen_exec(
@@ -638,69 +592,6 @@ def execute(
         repo_outcomes, reason, state = validation_failure
         return _result(plan, state, version, repo_outcomes, reason)
 
-    # --- landing (allow-listed mode: commit-all then push-all) --------------
-    if proposal.mutation_policy == "allow-listed":
-        message = f"pulse-apply {proposal.id} by {proposal.actor.gh_login}@{proposal.actor.machine}"
-        commit_results = apply_ops.commit_repos(message)
-        if not isinstance(commit_results, dict):
-            commit_results = {}
-        commit_failures: list[str] = []
-        commit_outcomes: dict[str, str] = {}
-        for repo in selection:
-            res = commit_results.get(repo)
-            if not isinstance(res, dict) or res.get("state") != "ok":
-                reason = (
-                    res.get("reason", "commit failed")
-                    if isinstance(res, dict)
-                    else "missing commit result"
-                )
-                commit_failures.append(f"{repo}: {reason}")
-                commit_outcomes[repo] = "failed"
-            else:
-                commit_outcomes[repo] = "ok"
-        if commit_failures:
-            return _result(
-                plan,
-                "failed",
-                version,
-                commit_outcomes,
-                f"commit failed: {'; '.join(commit_failures)}",
-            )
-
-        push_results = apply_ops.push_repos(apply_branch)
-        if not isinstance(push_results, dict):
-            push_results = {}
-        push_failures: list[str] = []
-        push_outcomes: dict[str, str] = {}
-        for repo in selection:
-            res = push_results.get(repo)
-            if not isinstance(res, dict) or res.get("state") != "ok":
-                reason = (
-                    res.get("reason", "push failed")
-                    if isinstance(res, dict)
-                    else "missing push result"
-                )
-                push_failures.append(f"{repo}: {reason}")
-                push_outcomes[repo] = "failed"
-            else:
-                push_outcomes[repo] = "ok"
-        if push_failures:
-            return _result(
-                plan,
-                "failed",
-                version,
-                push_outcomes,
-                f"push failed: {'; '.join(push_failures)}",
-            )
-
-        return _result(
-            plan,
-            "pushed",
-            version,
-            {repo: "ok" for repo in selection},
-            None,
-        )
-
     # --- proposed: terminal success, propose-only, never pushed -------------
     return _result(
         plan,
@@ -709,5 +600,4 @@ def execute(
         {repo: "ok" for repo in selection},
         None,
     )
-
 
