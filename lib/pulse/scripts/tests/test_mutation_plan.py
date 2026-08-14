@@ -529,6 +529,22 @@ def test_build_proposal_rejects_empty_bound_paths_when_allow_listed():
         )
 
 
+def test_build_proposal_rejects_empty_repo_path_list_when_allow_listed():
+    with pytest.raises(
+        mutation_plan.MutationPlanError,
+        match="bound_paths must be non-empty for: acme/api",
+    ):
+        mutation_plan.build_proposal(
+            id="run-1",
+            selection=["acme/api"],
+            transformation="format-python",
+            expected_shas={"acme/api": "abc123"},
+            actor=minimal_actor(),
+            mutation_policy="allow-listed",
+            bound_paths={"acme/api": []},
+        )
+
+
 def test_build_proposal_rejects_partial_bound_paths_coverage_when_allow_listed():
     with pytest.raises(mutation_plan.MutationPlanError, match="bound_paths missing entry for"):
         mutation_plan.build_proposal(

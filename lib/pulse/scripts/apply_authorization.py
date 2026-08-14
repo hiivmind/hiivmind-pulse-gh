@@ -16,7 +16,7 @@ Two independent things are checked, both required:
 
 1. **Recorded-summary identity** — the freshly re-derived proposal
    (`apply_rederive.RederivedProposal`) must be the SAME proposal the
-   caller previously recorded (`binding_id`/`transformation`/
+   caller previously recorded (`binding`/`transformation`/
    `proposal_id` all match `recorded_summary` exactly). A mismatch means
    re-derivation produced a different proposal than what was reviewed —
    the world moved since the recorded summary was written, and this run
@@ -55,7 +55,7 @@ class ApplyAuthorization:
 
     transformation: str
     mutation_policy: str
-    selection: tuple[str, ...]
+    permitted_repos: tuple[str, ...]
     bound_paths: dict[str, tuple[str, ...]]
 
 
@@ -91,13 +91,13 @@ def load_authorization(path: str | Path, transformation: str) -> ApplyAuthorizat
         authorizations:
           <transformation-id>:
             mutation_policy: allow-listed
-            selection: [owner/repo, ...]
+            permitted_repos: [owner/repo, ...]
             bound_paths:
               owner/repo: [path/glob, ...]
 
     Fails closed (raises `AuthorizationError`) on a missing file,
     malformed YAML, an unknown transformation id, an invalid
-    `mutation_policy`, an empty `selection`, or a malformed shape —
+    `mutation_policy`, empty `permitted_repos`, or a malformed shape —
     there is never an implicit "no authorization" pass-through.
     """
     p = Path(path)
@@ -120,17 +120,22 @@ def load_authorization(path: str | Path, transformation: str) -> ApplyAuthorizat
             f"{transformation!r}"
         )
     item = _mapping(entry_raw, label)
-    _only_keys(item, {"mutation_policy", "selection", "bound_paths"}, label)
+    _only_keys(
+        item, {"mutation_policy", "permitted_repos", "bound_paths"}, label
+    )
 
     mutation_policy = _string(item.get("mutation_policy"), f"{label}.mutation_policy")
     if mutation_policy not in mutation_plan.MUTATION_POLICIES:
         raise AuthorizationError(f"{label}.mutation_policy invalid: {mutation_policy}")
 
-    selection_raw = _list(item.get("selection"), f"{label}.selection")
-    if not selection_raw:
-        raise AuthorizationError(f"{label}.selection must be non-empty")
-    selection = tuple(
-        _string(repo, f"{label}.selection entry") for repo in selection_raw
+    permitted_repos_raw = _list(
+        item.get("permitted_repos"), f"{label}.permitted_repos"
+    )
+    if not permitted_repos_raw:
+        raise AuthorizationError(f"{label}.permitted_repos must be non-empty")
+    permitted_repos = tuple(
+        _string(repo, f"{label}.permitted_repos entry")
+        for repo in permitted_repos_raw
     )
 
     bound_paths_raw = _mapping(item.get("bound_paths") or {}, f"{label}.bound_paths")
@@ -145,7 +150,7 @@ def load_authorization(path: str | Path, transformation: str) -> ApplyAuthorizat
     return ApplyAuthorization(
         transformation=transformation,
         mutation_policy=mutation_policy,
-        selection=selection,
+        permitted_repos=permitted_repos,
         bound_paths=bound_paths,
     )
 
@@ -157,7 +162,7 @@ def authorization_digest(auth: ApplyAuthorization) -> str:
     payload = {
         "transformation": auth.transformation,
         "mutation_policy": auth.mutation_policy,
-        "selection": list(auth.selection),
+        "permitted_repos": list(auth.permitted_repos),
         "bound_paths": {
             repo: list(paths) for repo, paths in auth.bound_paths.items()
         },
@@ -172,15 +177,16 @@ def authorize(
     recorded_summary: Mapping[str, Any],
 ) -> None:
     """Raise `AuthorizationError` unless `rederived` both (1) matches its
-    `recorded_summary` identity exactly and (2) falls within `auth`'s
-    granted scope. Never returns a value or silently passes a mismatch —
-    the absence of an exception IS the authorization.
+    `recorded_summary` identity (`{binding, transformation, proposal_id}`)
+    exactly and (2) falls within `auth`'s granted scope. Never returns a
+    value or silently passes a mismatch — the absence of an exception IS
+    the authorization.
     """
-    recorded_binding_id = recorded_summary.get("binding_id")
-    if recorded_binding_id != rederived.binding_id:
+    recorded_binding = recorded_summary.get("binding")
+    if recorded_binding != rederived.binding_id:
         raise AuthorizationError(
             "apply_authorization: binding mismatch: recorded "
-            f"{recorded_binding_id!r} != rederived {rederived.binding_id!r}"
+            f"{recorded_binding!r} != rederived {rederived.binding_id!r}"
         )
     recorded_transformation = recorded_summary.get("transformation")
     if recorded_transformation != rederived.proposal.transformation:
@@ -208,11 +214,11 @@ def authorize(
             f"{rederived.proposal.mutation_policy!r} != authorized "
             f"{auth.mutation_policy!r}"
         )
-    if set(rederived.proposal.selection) != set(auth.selection):
+    outside_repos = set(rederived.proposal.selection) - set(auth.permitted_repos)
+    if outside_repos:
         raise AuthorizationError(
-            "apply_authorization: proposal selection "
-            f"{sorted(rederived.proposal.selection)} does not match authorized "
-            f"selection {sorted(auth.selection)}"
+            "apply_authorization: proposal selection contains repo outside "
+            f"permitted_repos: {sorted(outside_repos)[0]}"
         )
     for repo in rederived.proposal.selection:
         proposed = set(rederived.proposal.bound_paths.get(repo, ()))

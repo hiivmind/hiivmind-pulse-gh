@@ -110,11 +110,12 @@ class MarketplaceProviderInputs:
     """Fresh marketplace-sync evidence: `drift` is the pure decision from
     `marketplace_sync.compare` against a freshly fetched release list and
     marketplace document; `head_sha` is the marketplace repo's current
-    HEAD."""
+    HEAD; `default_branch` is its current default branch."""
 
     binding: Mapping[str, Any]
     drift: marketplace_sync.MarketplaceDrift
     head_sha: str | None
+    default_branch: str | None
     actor: Mapping[str, Any] | mutation_plan.Actor
     registry: mutation_plan.TransformationRegistry | None = None
 
@@ -125,11 +126,12 @@ ProviderInputs = PlanSyncProviderInputs | GeneratedProviderInputs | MarketplaceP
 @dataclass(frozen=True)
 class RederivedProposal:
     """The output of one re-derivation: a real, source-specific `Proposal`
-    plus enough context to authorize and (for plan-sync) finalize it.
+    plus enough context to authorize and finalize it.
 
     `binding_id` is carried here because `Proposal` itself has no binding
-    field. `finalizer_record` is only populated for `plan-sync` (the F8
-    finalize step needs it); the other two sources leave it `None`.
+    field. `finalizer_record` is populated for `plan-sync` with its F8
+    finalize inputs and for `marketplace-sync` with its intended base;
+    generated-artifact leaves it `None`.
     """
 
     binding_id: str
@@ -143,33 +145,34 @@ def collect_inputs(
     binding_ref: Mapping[str, Any],
     recorded_summary: Mapping[str, Any],
     *,
+    actor: Mapping[str, Any] | mutation_plan.Actor,
     io_seams: IoSeams,
 ) -> ProviderInputs:
     """Gather FRESH source-of-truth evidence for one binding, no pen.
 
     `recorded_summary` is the previously recorded proposal's summary
-    (`binding_id`, `transformation`, `proposal_id`, `actor`) — the same
-    shape `authorize` later re-validates against. Before doing any I/O,
-    this fails closed when `binding_ref`'s id disagrees with
-    `recorded_summary["binding_id"]`: collecting evidence for the wrong
-    binding would waste a network round trip on a re-derivation that can
-    never authorize. `recorded_summary["actor"]` supplies the actor block
-    every provider-input context carries.
+    (`binding`, `transformation`, `proposal_id`) — the same shape
+    `authorize` later re-validates against. Before doing any I/O, this
+    fails closed when the source-specific binding identity disagrees with
+    `recorded_summary["binding"]`: `id` identifies plan-sync and
+    generated-artifact bindings, while `plugin_id` identifies marketplace
+    bindings. `actor` is a separate caller-supplied runtime input threaded
+    into every provider-input context; it is not part of the persisted
+    proposal summary.
     """
     if source_kind not in SOURCE_KINDS:
         raise RederiveError(f"apply_rederive: unknown source_kind: {source_kind!r}")
 
-    binding_id = binding_ref.get("id")
-    recorded_binding_id = recorded_summary.get("binding_id")
-    if recorded_binding_id is not None and binding_id != recorded_binding_id:
+    binding_id = binding_ref.get(
+        "plugin_id" if source_kind == "marketplace-sync" else "id"
+    )
+    recorded_binding = recorded_summary.get("binding")
+    if recorded_binding is not None and binding_id != recorded_binding:
         raise RederiveError(
-            "apply_rederive: binding_ref id "
-            f"{binding_id!r} does not match recorded_summary binding_id "
-            f"{recorded_binding_id!r}"
+            "apply_rederive: binding_ref identity "
+            f"{binding_id!r} does not match recorded_summary binding "
+            f"{recorded_binding!r}"
         )
-    actor = recorded_summary.get("actor")
-    if actor is None:
-        raise RederiveError("apply_rederive: recorded_summary.actor is required")
 
     if source_kind == "plan-sync":
         return _collect_plan_sync(binding_ref, actor, io_seams)
@@ -244,8 +247,10 @@ def _collect_marketplace(
 ) -> MarketplaceProviderInputs:
     if io_seams.runner is None:
         raise RederiveError("apply_rederive: marketplace-sync requires io_seams.runner")
-    releases_by_repo, docs_by_repo, head_shas = marketplace_sync_run.fetch_remote_evidence(
-        [dict(binding_ref)], io_seams.runner
+    releases_by_repo, docs_by_repo, head_shas, default_branches = (
+        marketplace_sync_run.fetch_remote_evidence(
+            [dict(binding_ref)], io_seams.runner
+        )
     )
     plugin_repo = binding_ref.get("repo")
     marketplace_repo = binding_ref.get("marketplace_repo")
@@ -254,10 +259,12 @@ def _collect_marketplace(
     doc = docs_by_repo.get(f"{marketplace_repo}/{marketplace_file}")
     drift = marketplace_sync.compare(dict(binding_ref), releases, doc)
     head_sha = head_shas.get(marketplace_repo)
+    default_branch = default_branches.get(marketplace_repo)
     return MarketplaceProviderInputs(
         binding=binding_ref,
         drift=drift,
         head_sha=head_sha,
+        default_branch=default_branch,
         actor=actor,
         registry=io_seams.registry,
     )
@@ -380,6 +387,10 @@ def _rederive_marketplace(inputs: MarketplaceProviderInputs) -> RederivedProposa
         )
     if not isinstance(inputs.head_sha, str) or not inputs.head_sha:
         raise RederiveError("apply_rederive: marketplace-sync requires a resolved head_sha")
+    if not isinstance(inputs.default_branch, str) or not inputs.default_branch:
+        raise RederiveError(
+            "apply_rederive: marketplace-sync requires a resolved default_branch"
+        )
     try:
         proposal = marketplace_sync.build_marketplace_proposal(
             inputs.drift,
@@ -391,11 +402,9 @@ def _rederive_marketplace(inputs: MarketplaceProviderInputs) -> RederivedProposa
         )
     except mutation_plan.MutationPlanError as exc:
         raise RederiveError(f"apply_rederive: marketplace-sync build failed: {exc}") from exc
-    binding = inputs.binding if isinstance(inputs.binding, Mapping) else {}
-    binding_id = binding.get("id") or inputs.drift.plugin_id
     return RederivedProposal(
-        binding_id=str(binding_id),
+        binding_id=inputs.drift.plugin_id,
         proposal=proposal,
         source_kind="marketplace-sync",
-        finalizer_record=None,
+        finalizer_record={"base_ref": inputs.default_branch},
     )

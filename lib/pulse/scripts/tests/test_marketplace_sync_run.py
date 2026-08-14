@@ -115,6 +115,8 @@ def test_driver_valid_run_with_fake_runner(tmp_path):
             return subprocess.CompletedProcess(
                 argv, 0, stdout="deadbeef9999", stderr=""
             )
+        elif ".default_branch" in cmd:
+            return subprocess.CompletedProcess(argv, 0, stdout="main", stderr="")
         return subprocess.CompletedProcess(argv, 1, stdout="", stderr="command not found")
 
     rc = marketplace_sync_run.run_driver(
@@ -156,6 +158,7 @@ def test_fetch_remote_evidence_shared_repo_different_marketplace_files():
     ]
 
     fetched_files = []
+    default_branch_fetches = []
 
     def fake_runner(argv, cwd=None):
         cmd = " ".join(argv)
@@ -171,12 +174,67 @@ def test_fetch_remote_evidence_shared_repo_different_marketplace_files():
             return subprocess.CompletedProcess(argv, 0, stdout="[]", stderr="")
         elif "commits/HEAD" in cmd:
             return subprocess.CompletedProcess(argv, 0, stdout="sha123", stderr="")
+        elif ".default_branch" in cmd:
+            default_branch_fetches.append("acme/marketplace")
+            return subprocess.CompletedProcess(argv, 0, stdout="main", stderr="")
         return subprocess.CompletedProcess(argv, 1, stdout="", stderr="")
 
-    _, docs_by_repo, _ = marketplace_sync_run.fetch_remote_evidence(bindings, fake_runner)
+    _, docs_by_repo, _, default_branches = (
+        marketplace_sync_run.fetch_remote_evidence(bindings, fake_runner)
+    )
 
     assert len(fetched_files) == 2
+    assert default_branch_fetches == ["acme/marketplace"]
+    assert default_branches == {"acme/marketplace": "main"}
     assert ".claude-plugin/marketplace.json" in fetched_files
     assert ".cursor-plugin/marketplace.json" in fetched_files
     assert docs_by_repo["acme/marketplace/.claude-plugin/marketplace.json"]["plugins"][0]["name"] == "claude-addon"
     assert docs_by_repo["acme/marketplace/.cursor-plugin/marketplace.json"]["plugins"][0]["name"] == "cursor-addon"
+
+
+def test_fetch_remote_evidence_returns_default_branch():
+    from lib.pulse.scripts import marketplace_sync_run  # type: ignore
+
+    bindings = [
+        {
+            "plugin_id": "acme-addon",
+            "repo": "acme/acme-addon",
+            "marketplace_repo": "acme/marketplace",
+            "marketplace_file": ".claude-plugin/marketplace.json",
+        }
+    ]
+
+    def fake_runner(argv, cwd=None):
+        if argv == [
+            "gh", "api", "repos/acme/marketplace", "--jq", ".default_branch",
+        ]:
+            return subprocess.CompletedProcess(argv, 0, stdout="trunk\n", stderr="")
+        return subprocess.CompletedProcess(argv, 1, stdout="", stderr="unavailable")
+
+    _, _, _, default_branches = marketplace_sync_run.fetch_remote_evidence(
+        bindings, fake_runner
+    )
+
+    assert default_branches == {"acme/marketplace": "trunk"}
+
+
+def test_fetch_remote_evidence_records_none_when_default_branch_fetch_fails():
+    from lib.pulse.scripts import marketplace_sync_run  # type: ignore
+
+    bindings = [
+        {
+            "plugin_id": "acme-addon",
+            "repo": "acme/acme-addon",
+            "marketplace_repo": "acme/marketplace",
+            "marketplace_file": ".claude-plugin/marketplace.json",
+        }
+    ]
+
+    def failing_runner(argv, cwd=None):
+        return subprocess.CompletedProcess(argv, 1, stdout="", stderr="unavailable")
+
+    _, _, _, default_branches = marketplace_sync_run.fetch_remote_evidence(
+        bindings, failing_runner
+    )
+
+    assert default_branches == {"acme/marketplace": None}

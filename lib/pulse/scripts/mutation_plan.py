@@ -390,6 +390,14 @@ def build_proposal(
             raise MutationPlanError(
                 f"proposal.bound_paths missing entry for: {sorted(missing_bounds)[0]}"
             )
+        empty_bounds = [
+            repo for repo, paths in normalized_bound_paths.items() if not paths
+        ]
+        if empty_bounds:
+            raise MutationPlanError(
+                "proposal.bound_paths must be non-empty for: "
+                f"{sorted(empty_bounds)[0]}"
+            )
 
     proposal = Proposal(
         id=proposal_id,

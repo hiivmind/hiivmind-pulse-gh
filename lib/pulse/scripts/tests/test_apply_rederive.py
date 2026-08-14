@@ -16,15 +16,29 @@ from pathlib import Path
 import pytest
 
 from lib.pulse.scripts import (
+    apply_authorization,
     apply_rederive,
+    generated_artifacts,
     generator_dispatch,
     marketplace_sync,
     marketplace_sync_run,
     mutation_plan,
+    plan_sync,
     plan_sync_snapshot,
 )
 
 ACTOR = {"gh_login": "octocat", "machine": "laptop", "mode": "interactive"}
+
+
+def _authorization_for(
+    rederived: apply_rederive.RederivedProposal,
+) -> apply_authorization.ApplyAuthorization:
+    return apply_authorization.ApplyAuthorization(
+        transformation=rederived.proposal.transformation,
+        mutation_policy="allow-listed",
+        permitted_repos=rederived.proposal.selection,
+        bound_paths=dict(rederived.proposal.bound_paths),
+    )
 
 
 @dataclass
@@ -153,8 +167,8 @@ def _plan_runner(tmp_path):
     return RecordingRunner(responses)
 
 
-def _plan_recorded_summary(binding_id="release-plan"):
-    return {"binding_id": binding_id, "transformation": None, "proposal_id": None, "actor": ACTOR}
+def _plan_recorded_summary(binding="release-plan"):
+    return {"binding": binding, "transformation": None, "proposal_id": None}
 
 
 # --- plan-sync: collect_inputs -----------------------------------------------
@@ -167,7 +181,11 @@ def test_collect_inputs_plan_sync_returns_fresh_document_snapshot(tmp_path):
     )
 
     inputs = apply_rederive.collect_inputs(
-        "plan-sync", plan_binding(), _plan_recorded_summary(), io_seams=io_seams,
+        "plan-sync",
+        plan_binding(),
+        _plan_recorded_summary(),
+        actor=ACTOR,
+        io_seams=io_seams,
     )
 
     assert isinstance(inputs, apply_rederive.PlanSyncProviderInputs)
@@ -185,15 +203,16 @@ def test_collect_inputs_plan_sync_returns_fresh_document_snapshot(tmp_path):
     ) in fetch_argvs
 
 
-def test_collect_inputs_rejects_binding_id_mismatch_before_any_io(tmp_path):
+def test_collect_inputs_rejects_binding_mismatch_before_any_io(tmp_path):
     runner = _plan_runner(tmp_path)
     io_seams = apply_rederive.IoSeams(runner=runner, gh_api=_plan_gh_api, workdir=tmp_path)
 
-    with pytest.raises(apply_rederive.RederiveError, match="binding_id"):
+    with pytest.raises(apply_rederive.RederiveError, match="binding"):
         apply_rederive.collect_inputs(
             "plan-sync",
             plan_binding(),
-            _plan_recorded_summary(binding_id="some-other-binding"),
+            _plan_recorded_summary(binding="some-other-binding"),
+            actor=ACTOR,
             io_seams=io_seams,
         )
 
@@ -204,7 +223,11 @@ def test_collect_inputs_rejects_binding_id_mismatch_before_any_io(tmp_path):
 def test_collect_inputs_rejects_unknown_source_kind():
     with pytest.raises(apply_rederive.RederiveError, match="source_kind"):
         apply_rederive.collect_inputs(
-            "unknown-source", plan_binding(), _plan_recorded_summary(), io_seams=apply_rederive.IoSeams(),
+            "unknown-source",
+            plan_binding(),
+            _plan_recorded_summary(),
+            actor=ACTOR,
+            io_seams=apply_rederive.IoSeams(),
         )
 
 
@@ -217,7 +240,11 @@ def test_rederive_plan_sync_calls_real_build_apply_plans_allow_listed(tmp_path):
         runner=runner, gh_api=_plan_gh_api, workdir=tmp_path, registry=_plan_registry(),
     )
     inputs = apply_rederive.collect_inputs(
-        "plan-sync", plan_binding(), _plan_recorded_summary(), io_seams=io_seams,
+        "plan-sync",
+        plan_binding(),
+        _plan_recorded_summary(),
+        actor=ACTOR,
+        io_seams=io_seams,
     )
 
     rederived = apply_rederive.rederive(inputs)
@@ -267,11 +294,59 @@ def test_rederive_plan_sync_raises_when_document_is_in_sync(tmp_path):
         runner=runner, gh_api=gh_api_in_sync, workdir=tmp_path, registry=_plan_registry(),
     )
     inputs = apply_rederive.collect_inputs(
-        "plan-sync", plan_binding(), _plan_recorded_summary(), io_seams=io_seams,
+        "plan-sync",
+        plan_binding(),
+        _plan_recorded_summary(),
+        actor=ACTOR,
+        io_seams=io_seams,
     )
 
     with pytest.raises(apply_rederive.RederiveError, match="no repo proposal|in_sync"):
         apply_rederive.rederive(inputs)
+
+
+def test_plan_sync_real_result_summary_round_trips_through_authorization(tmp_path):
+    registry = _plan_registry()
+    snapshot = plan_sync_snapshot.collect(
+        [plan_binding()],
+        workdir=tmp_path,
+        runner=_plan_runner(tmp_path),
+        gh_api=_plan_gh_api,
+    )
+    result = plan_sync.build_result(
+        snapshot,
+        workspace="acme",
+        run_at="2026-08-14T00:00:00Z",
+        actor=ACTOR,
+        registry=registry,
+        mode="interactive",
+    )
+    recorded_summary = result["proposals"][0]
+
+    assert recorded_summary == {
+        "binding": "release-plan",
+        "transformation": "plan-sync-doc-patch",
+        "proposal_id": "plan-sync-doc-release-plan",
+    }
+    assert "actor" not in recorded_summary
+
+    inputs = apply_rederive.collect_inputs(
+        "plan-sync",
+        plan_binding(),
+        recorded_summary,
+        actor=result["actor"],
+        io_seams=apply_rederive.IoSeams(
+            runner=_plan_runner(tmp_path),
+            gh_api=_plan_gh_api,
+            workdir=tmp_path,
+            registry=registry,
+        ),
+    )
+    rederived = apply_rederive.rederive(inputs)
+
+    apply_authorization.authorize(
+        rederived, _authorization_for(rederived), recorded_summary
+    )
 
 
 # --- generated-artifact fixtures ---------------------------------------------
@@ -279,6 +354,9 @@ def test_rederive_plan_sync_raises_when_document_is_in_sync(tmp_path):
 GEN_SOURCE = "hiivmind/template-repo"
 GEN_BRANCH = "main"
 GEN_URL = "https://github.com/hiivmind/template-repo.git"
+GEN_TEMPLATE_PATH = "templates/repo-readme.md"
+GEN_STORED_TREE = "tree1111"
+GEN_CURRENT_TREE = "tree2222"
 
 
 def gen_registry():
@@ -317,14 +395,17 @@ def gen_binding(**overrides):
         "source": GEN_SOURCE,
         "branch": GEN_BRANCH,
         "generator": "readme-from-template",
-        "files": [{"path": "README.md"}],
+        "template_path": GEN_TEMPLATE_PATH,
+        "template_tree": GEN_STORED_TREE,
+        "files": [{"path": "README.md", "blob": "blob1111"}],
+        "generated_at": "2026-07-10T09:15:00Z",
     }
     value.update(overrides)
     return value
 
 
-def _gen_recorded_summary(binding_id="widget-readme"):
-    return {"binding_id": binding_id, "transformation": None, "proposal_id": None, "actor": ACTOR}
+def _gen_recorded_summary(binding="widget-readme"):
+    return {"binding": binding, "transformation": None, "proposal_id": None}
 
 
 def _gen_runner(tmp_path):
@@ -333,6 +414,9 @@ def _gen_runner(tmp_path):
         ("git", "init", "--bare", "-q", str(repo_dir)): Completed(),
         ("git", "fetch", "--filter=blob:none", "-q", "--", GEN_URL, GEN_BRANCH): Completed(),
         ("git", "rev-parse", "FETCH_HEAD"): Completed(0, "head999\n"),
+        ("git", "rev-parse", f"FETCH_HEAD:{GEN_TEMPLATE_PATH}"): Completed(
+            0, f"{GEN_CURRENT_TREE}\n"
+        ),
         ("git", "rev-parse", "FETCH_HEAD:README.md"): Completed(0, "blob1111\n"),
     }
     return RecordingRunner(responses)
@@ -347,12 +431,24 @@ def test_collect_inputs_generated_artifact_resolves_generator_and_snapshot(tmp_p
     )
 
     inputs = apply_rederive.collect_inputs(
-        "generated-artifact", gen_binding(), _gen_recorded_summary(), io_seams=io_seams,
+        "generated-artifact",
+        gen_binding(),
+        _gen_recorded_summary(),
+        actor=ACTOR,
+        io_seams=io_seams,
     )
 
     assert isinstance(inputs, apply_rederive.GeneratedProviderInputs)
     assert inputs.generator.id == "readme-from-template"
-    assert inputs.snapshot == {GEN_SOURCE: {GEN_BRANCH: {"head": "head999", "trees": {}, "blobs": {"README.md": "blob1111"}}}}
+    assert inputs.snapshot == {
+        GEN_SOURCE: {
+            GEN_BRANCH: {
+                "head": "head999",
+                "trees": {GEN_TEMPLATE_PATH: GEN_CURRENT_TREE},
+                "blobs": {"README.md": "blob1111"},
+            }
+        }
+    }
 
 
 def test_collect_inputs_generated_artifact_unknown_generator_fails_closed(tmp_path):
@@ -367,6 +463,7 @@ def test_collect_inputs_generated_artifact_unknown_generator_fails_closed(tmp_pa
             "generated-artifact",
             gen_binding(generator="does-not-exist"),
             _gen_recorded_summary(),
+            actor=ACTOR,
             io_seams=io_seams,
         )
 
@@ -378,7 +475,11 @@ def test_rederive_generated_artifact_calls_real_dispatch_allow_listed(tmp_path):
         runner=_gen_runner(tmp_path), workdir=tmp_path, generators=generators, registry=registry,
     )
     inputs = apply_rederive.collect_inputs(
-        "generated-artifact", gen_binding(), _gen_recorded_summary(), io_seams=io_seams,
+        "generated-artifact",
+        gen_binding(),
+        _gen_recorded_summary(),
+        actor=ACTOR,
+        io_seams=io_seams,
     )
 
     rederived = apply_rederive.rederive(inputs)
@@ -394,13 +495,7 @@ def test_rederive_generated_artifact_calls_real_dispatch_allow_listed(tmp_path):
 
 
 def test_rederive_generated_artifact_raises_for_out_of_allowlist_file(tmp_path):
-    """An empty `files: []` binding still produces a valid (if pointless)
-    proposal — `bound_paths={source: ()}` still covers the selected repo
-    exactly, so the mandatory allow-listed bounds check is satisfied. The
-    real fail-closed case is a binding file outside the generator's
-    `output_paths` allowlist, which `generator_dispatch.dispatch` itself
-    rejects; `rederive` wraps that `MutationPlanError` as `RederiveError`.
-    """
+    """The real dispatcher rejects a file outside its output allowlist."""
     registry = gen_registry()
     generators = gen_generators(registry)
     io_seams = apply_rederive.IoSeams(
@@ -410,11 +505,55 @@ def test_rederive_generated_artifact_raises_for_out_of_allowlist_file(tmp_path):
         "generated-artifact",
         gen_binding(files=[{"path": "not-allowed.txt"}]),
         _gen_recorded_summary(),
+        actor=ACTOR,
         io_seams=io_seams,
     )
 
     with pytest.raises(apply_rederive.RederiveError, match="allowlist"):
         apply_rederive.rederive(inputs)
+
+
+def test_generated_real_result_summary_round_trips_through_authorization(tmp_path):
+    registry = gen_registry()
+    generators = gen_generators(registry)
+    manifest = {"bindings": [gen_binding()]}
+    snapshot = generated_artifacts.collect(
+        manifest, workdir=tmp_path, runner=_gen_runner(tmp_path)
+    )
+    result = generated_artifacts.build_result(
+        manifest,
+        snapshot,
+        generators=generators,
+        registry=registry,
+        actor=ACTOR,
+        mode="interactive",
+    )
+    recorded_summary = result["proposals"][0]
+
+    assert recorded_summary == {
+        "binding": "widget-readme",
+        "transformation": "regenerate-from-template",
+        "proposal_id": "generate-readme-from-template-widget-readme",
+    }
+    assert "actor" not in recorded_summary
+
+    inputs = apply_rederive.collect_inputs(
+        "generated-artifact",
+        gen_binding(),
+        recorded_summary,
+        actor=result["actor"],
+        io_seams=apply_rederive.IoSeams(
+            runner=_gen_runner(tmp_path),
+            workdir=tmp_path,
+            generators=generators,
+            registry=registry,
+        ),
+    )
+    rederived = apply_rederive.rederive(inputs)
+
+    apply_authorization.authorize(
+        rederived, _authorization_for(rederived), recorded_summary
+    )
 
 
 # --- marketplace-sync fixtures ------------------------------------------------
@@ -423,11 +562,11 @@ PLUGIN_ID = "hiivmind-pulse-gh"
 PLUGIN_REPO = "hiivmind/hiivmind-pulse-gh"
 MARKETPLACE_REPO = "hiivmind/claude-marketplace"
 MARKETPLACE_FILE = ".claude-plugin/marketplace.json"
+MARKETPLACE_DEFAULT_BRANCH = "main"
 
 
 def mkt_binding(**overrides):
     value = {
-        "id": "hiivmind-pulse-gh-marketplace",
         "plugin_id": PLUGIN_ID,
         "repo": PLUGIN_REPO,
         "marketplace_repo": MARKETPLACE_REPO,
@@ -469,11 +608,16 @@ def mkt_registry():
     })
 
 
-def _mkt_recorded_summary(binding_id="hiivmind-pulse-gh-marketplace"):
-    return {"binding_id": binding_id, "transformation": None, "proposal_id": None, "actor": ACTOR}
+def _mkt_recorded_summary(binding=PLUGIN_ID):
+    return {"binding": binding, "transformation": None, "proposal_id": None}
 
 
-def _mkt_runner(current_version="v1.0.0", next_version="v2.0.0", head_sha="deadbeefcafe"):
+def _mkt_runner(
+    current_version="v1.0.0",
+    next_version="v2.0.0",
+    head_sha="deadbeefcafe",
+    default_branch=MARKETPLACE_DEFAULT_BRANCH,
+):
     releases = [{"tagName": next_version, "isPrerelease": False, "isDraft": False}]
     doc_bytes = jsonlib.dumps(mkt_doc(PLUGIN_ID, current_version)).encode()
     doc_b64 = base64.b64encode(doc_bytes).decode()
@@ -488,6 +632,9 @@ def _mkt_runner(current_version="v1.0.0", next_version="v2.0.0", head_sha="deadb
         (
             "gh", "api", f"repos/{MARKETPLACE_REPO}/commits/HEAD", "--jq", ".sha",
         ): Completed(0, f"{head_sha}\n", ""),
+        (
+            "gh", "api", f"repos/{MARKETPLACE_REPO}", "--jq", ".default_branch",
+        ): Completed(0, f"{default_branch}\n", ""),
     }
     return RecordingRunner(responses)
 
@@ -497,7 +644,11 @@ def test_collect_inputs_marketplace_sync_computes_fresh_drift_and_head_sha():
     io_seams = apply_rederive.IoSeams(runner=runner, registry=mkt_registry())
 
     inputs = apply_rederive.collect_inputs(
-        "marketplace-sync", mkt_binding(), _mkt_recorded_summary(), io_seams=io_seams,
+        "marketplace-sync",
+        mkt_binding(),
+        _mkt_recorded_summary(),
+        actor=ACTOR,
+        io_seams=io_seams,
     )
 
     assert isinstance(inputs, apply_rederive.MarketplaceProviderInputs)
@@ -505,19 +656,24 @@ def test_collect_inputs_marketplace_sync_computes_fresh_drift_and_head_sha():
     assert inputs.drift.current_version == "v1.0.0"
     assert inputs.drift.target_version == "v2.0.0"
     assert inputs.head_sha == "deadbeefcafe"
+    assert inputs.default_branch == MARKETPLACE_DEFAULT_BRANCH
 
 
 def test_rederive_marketplace_sync_calls_real_build_marketplace_proposal_allow_listed():
     io_seams = apply_rederive.IoSeams(runner=_mkt_runner(), registry=mkt_registry())
     inputs = apply_rederive.collect_inputs(
-        "marketplace-sync", mkt_binding(), _mkt_recorded_summary(), io_seams=io_seams,
+        "marketplace-sync",
+        mkt_binding(),
+        _mkt_recorded_summary(),
+        actor=ACTOR,
+        io_seams=io_seams,
     )
 
     rederived = apply_rederive.rederive(inputs)
 
     assert rederived.source_kind == "marketplace-sync"
-    assert rederived.binding_id == "hiivmind-pulse-gh-marketplace"
-    assert rederived.finalizer_record is None
+    assert rederived.binding_id == PLUGIN_ID
+    assert rederived.finalizer_record == {"base_ref": MARKETPLACE_DEFAULT_BRANCH}
     assert rederived.proposal.transformation == "marketplace-entry-update"
     assert rederived.proposal.mutation_policy == "allow-listed"
     assert rederived.proposal.selection == (MARKETPLACE_REPO,)
@@ -531,7 +687,11 @@ def test_rederive_marketplace_sync_raises_when_head_sha_unresolved():
     del runner.responses[("gh", "api", f"repos/{MARKETPLACE_REPO}/commits/HEAD", "--jq", ".sha")]
     io_seams = apply_rederive.IoSeams(runner=runner, registry=mkt_registry())
     inputs = apply_rederive.collect_inputs(
-        "marketplace-sync", mkt_binding(), _mkt_recorded_summary(), io_seams=io_seams,
+        "marketplace-sync",
+        mkt_binding(),
+        _mkt_recorded_summary(),
+        actor=ACTOR,
+        io_seams=io_seams,
     )
 
     assert inputs.head_sha is None
@@ -539,15 +699,87 @@ def test_rederive_marketplace_sync_raises_when_head_sha_unresolved():
         apply_rederive.rederive(inputs)
 
 
+def test_rederive_marketplace_sync_raises_when_default_branch_unresolved():
+    runner = _mkt_runner()
+    del runner.responses[
+        (
+            "gh",
+            "api",
+            f"repos/{MARKETPLACE_REPO}",
+            "--jq",
+            ".default_branch",
+        )
+    ]
+    io_seams = apply_rederive.IoSeams(runner=runner, registry=mkt_registry())
+    inputs = apply_rederive.collect_inputs(
+        "marketplace-sync",
+        mkt_binding(),
+        _mkt_recorded_summary(),
+        actor=ACTOR,
+        io_seams=io_seams,
+    )
+
+    assert inputs.default_branch is None
+    with pytest.raises(apply_rederive.RederiveError, match="default_branch"):
+        apply_rederive.rederive(inputs)
+
+
 def test_rederive_marketplace_sync_raises_for_in_sync_drift():
     runner = _mkt_runner(current_version="v2.0.0", next_version="v2.0.0")
     io_seams = apply_rederive.IoSeams(runner=runner, registry=mkt_registry())
     inputs = apply_rederive.collect_inputs(
-        "marketplace-sync", mkt_binding(), _mkt_recorded_summary(), io_seams=io_seams,
+        "marketplace-sync",
+        mkt_binding(),
+        _mkt_recorded_summary(),
+        actor=ACTOR,
+        io_seams=io_seams,
     )
 
     with pytest.raises(apply_rederive.RederiveError, match="not proposable"):
         apply_rederive.rederive(inputs)
+
+
+def test_marketplace_real_result_summary_round_trips_through_authorization():
+    registry = mkt_registry()
+    runner = _mkt_runner()
+    releases, docs, head_shas, _ = marketplace_sync_run.fetch_remote_evidence(
+        [mkt_binding()], runner
+    )
+    result = marketplace_sync.build_result(
+        [mkt_binding()],
+        releases_by_repo=releases,
+        docs_by_repo=docs,
+        head_shas=head_shas,
+        actor=ACTOR,
+        registry=registry,
+        mode="interactive",
+        workspace="acme",
+        run_at="2026-08-14T00:00:00Z",
+    )
+    recorded_summary = result["proposals"][0]
+
+    assert recorded_summary == {
+        "binding": PLUGIN_ID,
+        "transformation": "marketplace-entry-update",
+        "proposal_id": f"marketplace-{PLUGIN_ID}",
+    }
+    assert "actor" not in recorded_summary
+
+    inputs = apply_rederive.collect_inputs(
+        "marketplace-sync",
+        mkt_binding(),
+        recorded_summary,
+        actor=result["actor"],
+        io_seams=apply_rederive.IoSeams(
+            runner=_mkt_runner(),
+            registry=registry,
+        ),
+    )
+    rederived = apply_rederive.rederive(inputs)
+
+    apply_authorization.authorize(
+        rederived, _authorization_for(rederived), recorded_summary
+    )
 
 
 def test_rederive_unsupported_inputs_type_raises():
