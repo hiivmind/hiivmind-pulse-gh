@@ -206,12 +206,20 @@ unique per package per group. The driver accepts it as JSON:
    nave-scan change, zero evidence-schema change) and adds `observed_tree_sha: String` to
    `BranchRepoResult` — additive and non-breaking (no exact-key wire validation on this struct,
    unlike the evidence document's `REPO_KEYS`). `Proposal` gains a second, dependency-bump-only
-   field `expected_tree_shas: dict[str, str] | None = None`; `apply_phases.provision_phase` gains
-   one more `elif` mirroring its existing `observed_base_sha` check
+   field `expected_tree_shas: dict[str, str] | None = None`, populated **only** for repos whose F4
+   `tree_sha` is non-`None` — a repo with a `None` `tree_sha` is dropped from selection during
+   collect (§ 5 error table, "evidence `tree_sha` missing"), so `expected_tree_shas` never holds a
+   `None` value; a stray `None` compared as `observed_tree_sha != None` would misreport as
+   `stale-tree` when the real problem is missing evidence. `apply_phases.provision_phase` gains one
+   more `elif` mirroring its existing `observed_base_sha` check
    (`item.get("observed_tree_sha") != expected_tree_shas.get(repo)` → per-repo `blocked`,
    `stale-tree`), gated on `proposal.expected_tree_shas is not None` so every other proposal kind
-   is unaffected. A repo whose tree moved between evidence and apply is `blocked` (`stale-tree`)
-   instead of mutating a target that no longer matches the finding.
+   is unaffected. It is placed **after** the existing `observed_base_sha` check in the `elif`
+   chain: if the commit itself drifted, the operator sees `stale-base` (the more actionable
+   diagnosis) rather than a `stale-tree` message that would send them investigating evidence
+   staleness for what is actually a branch move. A repo whose tree moved between evidence and apply
+   — commit unchanged — is `blocked` (`stale-tree`) instead of mutating a target that no longer
+   matches the finding.
 8. **`bound_paths[repo]`** = the `PackageRecord.manifest_path` + `lock_path` for that repo (both
    repo-relative; `None` entries omitted). A mapped v1 manager (uv/poetry/npm/pnpm) is detected by
    lock presence, so a lockless repo never reaches a mapped manager in v1 — state this invariant,
