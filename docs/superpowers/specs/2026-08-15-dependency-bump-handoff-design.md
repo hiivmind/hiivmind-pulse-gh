@@ -59,9 +59,9 @@ Two properties of the current spine make this non-trivial, both settled in § 2:
 2. **Whitelisted argv templating**, not a bump-spec file or a first-class `nave pen bump` verb.
    The bump stays a plain `TransformationEntry` whose `command_argv` contains `{package}` /
    `{version}` placeholders; the driver expands them from a new `Proposal.transform_params` field.
-   Validation is **param-aware** (package-name vs version shapes differ — § 4.3). One small nave
-   change: scan records the default-branch `commit_sha` (§ 4.4 step 7); the bump command itself is
-   unchanged.
+   Validation is **param-aware** (package-name vs version shapes differ — § 4.3). One small,
+   additive nave change: `nave pen create` also reports a locally-computed `observed_tree_sha`
+   (§ 4.4 step 7); the bump command itself is unchanged.
 3. **New `dependency-bump` source kind** (not a neutral transformation + extended binding). A
    finding is derived, not authored, and the neutral binding shape cannot carry the derived target;
    the alternative still needs the `Proposal` extension, so it buys nothing.
@@ -84,7 +84,7 @@ Two properties of the current spine make this non-trivial, both settled in § 2:
 | `apply_rederive` sources | neutral / plan-sync / generated-artifact / marketplace-sync | **`dependency-bump` provider** (collect-once, rederive-many) |
 | `apply_driver` | `--binding-ref` (neutral) / `--recorded-summary` | **`--finding-ref`** + `bump_summary` synthesis |
 | fence / lease / journal / phases / PR / rollup | multi-repo already | none (per-proposal, looped — § 4.7) |
-| nave | owns clone writes | **scan records `commit_sha`** (evidence drift guard, § 4.4 step 7) |
+| nave | owns clone writes | provisioning also reports `observed_tree_sha` (local git, § 4.4 step 7) |
 
 ## 4. Design
 
@@ -185,16 +185,33 @@ unique per package per group. The driver accepts it as JSON:
    `(repo, ecosystem, name=package)` in the same F4 evidence and take its `manager`; group repos by
    manager. Each `(manager, repos)` group becomes one proposal. (The join is 1:1 — `PackageRecord`
    is "always exactly one per identity".)
-7. **`expected_shas` from the evidence snapshot's commit SHA, not a fresh HEAD fetch.** The
-   finding's versions came from an F4 materialization that records a per-repo `tree_sha` — the git
-   **tree** SHA (GitHub tree API), per `validate_dependency_evidence.py`. But `nave pen create`'s
-   `observed_base_sha` is `git rev-parse origin/{base_ref}` — a **commit** SHA (`apply_ops.rs`
-   `provision_one`). Tree ≠ commit, so `expected_shas` **must** be pinned to the *commit* SHA the
-   tree was materialized from. nave scan does not record that today; add a `commit_sha` (the
-   default-branch HEAD commit) to nave scan's `RepoMeta` and to the evidence snapshot's `REPO_KEYS`
-   — one extra GitHub ref/commit call at scan time. `tree_sha` stays as blob-level content
-   provenance; `commit_sha` is the drift guard. A repo that moved between evidence and apply then
-   fails the provision gate (per-repo `blocked`) instead of mutating a stale base.
+7. **Two independent drift guards — commit (branch-provisioning) and tree (finding-validity) — not
+   one.** `nave pen create`'s `observed_base_sha`/`expected_base_sha` gate is a hard **commit**-SHA
+   invariant: `provision_one` (`apply_ops.rs`) rejects a non-commit object outright (`cat-file -t`
+   must read `commit`) and then `checkout -B` from that exact SHA — it cannot be repurposed to carry
+   a tree SHA. So `expected_shas` (commit-level) is populated the **same way neutral proposals
+   already do it**: a fresh `GET /repos/{owner}/{name}/branches/{base_ref}` at collect-time (reuse
+   `_collect_neutral`'s `head_sha` loop), not pinned to evidence. This just answers "am I branching
+   off what's there right now" — the same short, already-accepted TOCTOU window every other
+   proposal kind lives with.
+
+   Separately, the thing that actually needs the evidence's `tree_sha` guard is **finding
+   validity**: has the tracked-file content this bump was computed from changed since F4 evidence
+   was materialized. That's a **tree**-SHA question (`validate_dependency_evidence.py`'s `tree_sha`
+   is the GitHub tree API's tree SHA, not a commit), and the commit-level gate above can't answer
+   it — a repo can gain new commits (docs, CI) whose tree is unchanged, or move to a different tree
+   on the same nominal branch. nave's provisioning already does `git fetch` + `rev-parse` locally
+   right before branching, so it reports the tree for free: `provision_one` additionally computes
+   `git rev-parse {observed}^{tree}` (a **local** git call — zero extra GitHub API cost, zero
+   nave-scan change, zero evidence-schema change) and adds `observed_tree_sha: String` to
+   `BranchRepoResult` — additive and non-breaking (no exact-key wire validation on this struct,
+   unlike the evidence document's `REPO_KEYS`). `Proposal` gains a second, dependency-bump-only
+   field `expected_tree_shas: dict[str, str] | None = None`; `apply_phases.provision_phase` gains
+   one more `elif` mirroring its existing `observed_base_sha` check
+   (`item.get("observed_tree_sha") != expected_tree_shas.get(repo)` → per-repo `blocked`,
+   `stale-tree`), gated on `proposal.expected_tree_shas is not None` so every other proposal kind
+   is unaffected. A repo whose tree moved between evidence and apply is `blocked` (`stale-tree`)
+   instead of mutating a target that no longer matches the finding.
 8. **`bound_paths[repo]`** = the `PackageRecord.manifest_path` + `lock_path` for that repo (both
    repo-relative; `None` entries omitted). A mapped v1 manager (uv/poetry/npm/pnpm) is detected by
    lock presence, so a lockless repo never reaches a mapped manager in v1 — state this invariant,
@@ -203,13 +220,14 @@ unique per package per group. The driver accepts it as JSON:
 **`_rederive_dependency_bump(...)`** builds, per manager group, a `Proposal`:
 
 ```
-transformation  = MANAGER_TRANSFORM[manager]           # § 4.5
-transform_params = {"package": finding.package, "version": target}
-selection       = tuple(sorted(group_repos))
-expected_shas   = {repo: evidence_commit_sha for repo in group_repos}   # step 7, not a HEAD fetch
-bound_paths     = {repo: (manifest_path, lock_path) present}
-mutation_policy = "allow-listed"
-id              = bump_proposal_id(ecosystem, package, manager, selection)   # § 4.6
+transformation     = MANAGER_TRANSFORM[manager]           # § 4.5
+transform_params   = {"package": finding.package, "version": target}
+selection          = tuple(sorted(group_repos))
+expected_shas      = {repo: fresh_head_sha for repo in group_repos}      # step 7, same as neutral
+expected_tree_shas = {repo: evidence_tree_sha for repo in group_repos}   # step 7, finding-validity
+bound_paths        = {repo: (manifest_path, lock_path) present}
+mutation_policy    = "allow-listed"
+id                 = bump_proposal_id(ecosystem, package, manager, selection)   # § 4.6
 ```
 
 `binding_id` for `authorize()` identity is the proposal id (as neutral's fleet id is).
@@ -295,8 +313,9 @@ per repo exactly as the neutral multi-repo path does.
 | selection empty (every repo already at target) | `RederiveError` ("nothing to do") |
 | repo's declaration is `dev`/`optional` | per-repo `blocked` (`non-main-group-package`) |
 | a manager has no transform entry | per-manager `blocked`; other managers proceed |
-| evidence `commit_sha` missing for a repo | per-repo `blocked` |
-| repo moved between evidence and apply | existing provision gate blocks per-repo |
+| evidence `tree_sha` missing for a repo | per-repo `blocked` |
+| repo's tree moved between evidence and apply | `stale-tree`: per-repo `blocked` (§ 4.4 step 7) |
+| repo's commit moved between collect and provision | existing `stale-base` provision gate blocks per-repo |
 | `transform_params` key/value fails validation | `RederiveError` (fail-closed) |
 
 ## 6. Testing
@@ -341,5 +360,6 @@ per repo exactly as the neutral multi-repo path does.
 - **Scheduled auto-apply / `allow`** — unchanged, still gated behind the `🔵 v2` confirmation-model
   design (dependency-bump inherits `mutation_policy="allow-listed"`, PR-gated).
 - **nave changes** — the bump itself is a `nave pen exec` command exactly like `format-python`;
-  the one nave change is **scan recording the default-branch `commit_sha`** (§ 4.4 step 7) for the
-  evidence drift guard.
+  the one nave change is **provisioning reporting a locally-computed `observed_tree_sha`**
+  alongside the existing `observed_base_sha` (§ 4.4 step 7) — additive, no new API calls, no
+  evidence-schema change.
