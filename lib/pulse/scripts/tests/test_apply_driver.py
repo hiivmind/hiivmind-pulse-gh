@@ -118,11 +118,65 @@ def test_unauthorized_blocks_before_pen_create(tmp_path, monkeypatch):
     assert not any(call[:2] == ["pen", "create"] for call in runner.calls)
 
 
-def test_multi_repo_blocks_before_pen_create(tmp_path, monkeypatch):
-    kwargs, runner, _, _ = setup_run(tmp_path, monkeypatch, (REPO, "acme/other"))
+def test_run_apply_multi_repo_one_repo_fails_others_continue(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    other = "acme/other"
+    kwargs, runner, _, _ = setup_run(tmp_path, monkeypatch, (REPO, other))
+
+    monkeypatch.setattr(
+        apply_driver.nave_adapter, "pen_capabilities",
+        lambda r: runner.calls.append(["pen", "capabilities"]) or {
+            "adapter_state": "ok", "protocol_version": 1},
+    )
+    monkeypatch.setattr(
+        apply_driver.nave_adapter, "pen_create",
+        lambda r, q, n: runner.calls.append(["pen", "create"]) or SimpleNamespace(
+            state="ok", pen={"name": n, "repos": [{"repo": REPO}, {"repo": other}]}, stderr=""),
+    )
+    monkeypatch.setattr(
+        apply_driver.nave_adapter, "pen_status", lambda r, n: {
+            "repos": [
+                {"owner": "acme", "repo": "widget", "clone_path": "/clone/widget"},
+                {"owner": "acme", "repo": "other", "clone_path": "/clone/other"},
+            ]},
+    )
+    reader = SimpleNamespace(
+        read_repo_head=lambda repo: "commit",
+        read_repo_file=lambda *a: b"",
+        read_repo_changed_paths=lambda *a: (),
+    )
+    monkeypatch.setattr(apply_driver.pen_clone_reader, "make_pen_clone_reader", lambda *a, **k: reader)
+    monkeypatch.setattr(
+        apply_driver.apply_phases, "preflight_phase",
+        lambda *a: {REPO: {"state": "ok"}, other: {"state": "ok"}},
+    )
+    monkeypatch.setattr(
+        apply_driver.apply_phases, "provision_phase",
+        lambda *a: {REPO: {"state": "ok", "observed_base_sha": "base"},
+                    other: {"state": "failed", "reason": "boom"}},
+    )
+    monkeypatch.setattr(apply_driver.apply_phases, "exec_phase", lambda *a: {REPO: {"state": "ok"}})
+    monkeypatch.setattr(apply_driver.apply_phases, "validate_phase", lambda *a: {REPO: {"state": "ok"}})
+
+    class MultiOps:
+        def __init__(self):
+            self.calls = []
+        def commit_repos(self, message, bounds):
+            self.calls.append("commit")
+            return {REPO: {"state": "ok", "local_commit_sha": "commit"}}
+        def push_repos(self, branch):
+            self.calls.append("push")
+            return {REPO: {"state": "ok", "remote_ref": branch, "remote_sha": "commit",
+                           "upstream": f"origin/{branch}"}}
+
+    monkeypatch.setattr(apply_driver.apply_ops, "make_apply_ops", lambda *a: MultiOps())
+
     result = apply_driver.run_apply(**kwargs)
-    assert result["state"] == "blocked" and "multi-repo apply is v2" in result["reason"]
-    assert not runner.calls
+    assert result["state"] == "pr_opened"
+    assert result["repos"][other]["state"] == "blocked"
+    assert "boom" in result["repos"][other]["reason"]
+    assert result["repos"][REPO]["state"] == "pr_opened"
 
 
 def test_summary_identity_mismatch_blocks_before_pen_create(tmp_path, monkeypatch):
@@ -181,7 +235,7 @@ def test_happy_path_persists_pushed_sha_before_opening_pr(tmp_path, monkeypatch)
     kwargs["gh_ops"] = gh
     result = apply_driver.run_apply(**kwargs)
     assert result["state"] == "pr_opened"
-    assert result["expected_head_sha"] == "commit" == result["pushed_sha"]
+    assert result["repos"][REPO]["expected_head_sha"] == "commit" == result["repos"][REPO]["pushed_sha"]
     assert gh.calls[0] == ("status", "pushed")
 
 
@@ -212,7 +266,7 @@ def test_resume_from_completed_push_reopens_pr_from_durable_evidence(tmp_path, m
     result = apply_driver.run_apply(**kwargs)
 
     assert result["state"] == "pr_opened"
-    assert result["pushed_sha"] == "commit"
+    assert result["repos"][REPO]["pushed_sha"] == "commit"
     assert "commit" not in ops.calls and "push" not in ops.calls
 
 
@@ -271,6 +325,7 @@ def test_run_apply_neutral_synthesizes_summary_and_threads_gh_api(tmp_path, monk
         "binding": "hiivmind/agent-kernel",
         "transformation": "format-python",
         "proposal_id": "apply-format-python-hiivmind-agent-kernel",
+        "selection": ["hiivmind/agent-kernel"],
     }
     assert captured["gh_api"] is fake_gh_api
 

@@ -212,7 +212,7 @@ def resolve_intended_base(
     source_kind: str,
     binding_ref: Mapping[str, Any],
     finalizer_record: Mapping[str, Any] | None = None,
-) -> str:
+) -> str | dict[str, str]:
     if source_kind == "plan-sync":
         if finalizer_record and finalizer_record.get("base_ref"):
             return finalizer_record["base_ref"]
@@ -235,10 +235,19 @@ def resolve_intended_base(
         )
 
     if source_kind == "neutral":
+        if binding_ref.get("repo") is not None:
+            repo = binding_ref["repo"]
+            base = binding_ref.get("base_ref")
+            if not isinstance(base, str) or not base:
+                raise ValueError("cannot resolve intended base for neutral: no base_ref")
+            return {repo: base}
+        repos = binding_ref.get("repos") or []
         base = binding_ref.get("base_ref")
         if not isinstance(base, str) or not base:
             raise ValueError("cannot resolve intended base for neutral: no base_ref")
-        return base
+        if not isinstance(repos, list) or not repos:
+            raise ValueError("cannot resolve intended base for neutral: no repos")
+        return {repo: base for repo in repos}
 
     raise ValueError(f"unknown source_kind: {source_kind}")
 
@@ -270,6 +279,24 @@ def load_apply_status(path: str | Path) -> dict | None:
             f"could not load apply status {p}: schema-invalid document: "
             f"{'; '.join(schema_errors)}"
         )
+    # Normalize a v1 single-repo doc (no `repos` map) to a one-element fleet in memory.
+    if "repos" not in data and data.get("selection"):
+        repo = data["selection"][0]
+        data = dict(data)
+        data["repos"] = {
+            repo: {
+                "branch": data.get("branch"),
+                "state": data.get("state"),
+                "intended_base": data.get("intended_base"),
+                "expected_head_sha": data.get("expected_head_sha"),
+                "pushed_sha": data.get("pushed_sha"),
+                "pr_url": data.get("pr_url"),
+                "merged_sha": data.get("merged_sha"),
+                "observed_base": data.get("observed_base"),
+                "observed_head_sha": data.get("observed_head_sha"),
+                "reason": data.get("reason"),
+            }
+        }
     return data
 
 
@@ -305,23 +332,30 @@ def _atomic_write_yaml(path: str | Path, doc: Mapping[str, Any]) -> None:
         raise ApplyStatusError(f"could not write apply status {p}: {exc}") from exc
 
 
+def rollup_state(repos: Mapping[str, Mapping[str, Any]]) -> str:
+    """Fleet rollup (spec § 6.2), total over every combination, first match wins."""
+    states = [r.get("state") for r in repos.values()]
+    if any(s in {"pr_opened", "pushed"} for s in states):
+        return "pr_opened"
+    if all(s == "applied" for s in states):
+        return "applied"
+    if all(s == "rejected" for s in states):
+        return "rejected"
+    if all(s in {"failed", "blocked"} for s in states):
+        return "failed"
+    return "partial"
+
+
 def write_apply_status(
     path: str | Path,
     *,
     proposal_id: str,
-    repo: str,
-    branch: str,
+    selection: list[str],
+    repos: Mapping[str, Mapping[str, Any]],
     state: str,
     recorded_proposal_id: str,
     proposal_digest: str,
     authorization_digest: str,
-    intended_base: str,
-    expected_head_sha: str,
-    observed_base: str | None = None,
-    observed_head_sha: str | None = None,
-    pushed_sha: str | None = None,
-    pr_url: str | None = None,
-    merged_sha: str | None = None,
     reason: str | None = None,
     workspace: str = "unknown",
     actor: dict | None = None,
@@ -340,17 +374,10 @@ def write_apply_status(
         "recorded_proposal_id": recorded_proposal_id,
         "proposal_digest": proposal_digest,
         "authorization_digest": authorization_digest,
-        "selection": [repo],
-        "branch": branch,
+        "selection": list(selection),
+        "repos": {repo: dict(entry) for repo, entry in repos.items()},
         "state": state,
-        "pushed_sha": pushed_sha,
-        "pr_url": pr_url,
-        "merged_sha": merged_sha,
         "reason": reason,
-        "intended_base": intended_base,
-        "expected_head_sha": expected_head_sha,
-        "observed_base": observed_base,
-        "observed_head_sha": observed_head_sha,
     }
     validation_errors = validate_result.validate(doc, "apply-status")
     if validation_errors:
@@ -362,6 +389,38 @@ def write_apply_status(
     p.parent.mkdir(parents=True, exist_ok=True)
     _atomic_write_yaml(p, doc)
     return doc
+
+
+def upsert_repo_status(
+    path: str | Path,
+    *,
+    proposal_id: str,
+    selection: list[str],
+    repo: str,
+    repo_doc: Mapping[str, Any],
+    recorded_proposal_id: str,
+    proposal_digest: str,
+    authorization_digest: str,
+    workspace: str = "unknown",
+    actor: dict | None = None,
+) -> dict:
+    """Load-modify-write one repo's entry; recompute the rollup."""
+    existing = load_apply_status(path) or {}
+    repos = dict(existing.get("repos") or {})
+    repos[repo] = dict(repo_doc)
+    return write_apply_status(
+        path,
+        proposal_id=proposal_id,
+        selection=selection,
+        repos=repos,
+        state=rollup_state(repos),
+        recorded_proposal_id=recorded_proposal_id,
+        proposal_digest=proposal_digest,
+        authorization_digest=authorization_digest,
+        workspace=workspace,
+        actor=actor,
+        errors=list(existing.get("errors") or []),
+    )
 
 
 def open_apply_pr(
@@ -382,10 +441,13 @@ def open_apply_pr(
     authorization_digest: str,
     intended_base: str,
     expected_head_sha: str,
+    selection: list[str] | None = None,
     token: str | None = None,
     actor_id: str = "octocat@mba-m4",
     workspace: str = "unknown",
 ) -> dict:
+    if selection is None:
+        selection = [repo]
     if base != intended_base:
         raise ValueError(
             f"open_apply_pr: base {base!r} != intended_base {intended_base!r} "
@@ -404,8 +466,10 @@ def open_apply_pr(
     )
 
     existing = load_apply_status(result_path)
-    if existing and existing.get("state") in {"pr_opened", "applied", "rejected"}:
-        return existing
+    if existing:
+        entry = (existing.get("repos") or {}).get(repo)
+        if entry and entry.get("state") in {"pr_opened", "applied", "rejected"}:
+            return existing
 
     pr_info = gh_ops.create_or_get_pr(
         repo=repo, branch=branch, base=base, title=title, body=body
@@ -417,19 +481,26 @@ def open_apply_pr(
     machine = actor_parts[1] if len(actor_parts) > 1 else ""
     actor_doc = {"gh_login": login, "machine": machine, "mode": "interactive"}
 
-    doc = write_apply_status(
+    doc = upsert_repo_status(
         result_path,
         proposal_id=proposal_id,
+        selection=selection,
         repo=repo,
-        branch=branch,
-        state="pr_opened",
+        repo_doc={
+            "branch": branch,
+            "state": "pr_opened",
+            "intended_base": intended_base,
+            "expected_head_sha": expected_head_sha,
+            "pushed_sha": pushed_sha,
+            "pr_url": pr_url,
+            "merged_sha": None,
+            "observed_base": None,
+            "observed_head_sha": None,
+            "reason": None,
+        },
         recorded_proposal_id=recorded_proposal_id,
         proposal_digest=proposal_digest,
         authorization_digest=authorization_digest,
-        intended_base=intended_base,
-        expected_head_sha=expected_head_sha,
-        pushed_sha=pushed_sha,
-        pr_url=pr_url,
         workspace=workspace,
         actor=actor_doc,
     )
@@ -453,11 +524,12 @@ def _branch_cleanup_note(branch: str, result: dict) -> str:
     return f"branch cleanup failed for {branch}: {reason}"
 
 
-def reconcile_apply(
+def _reconcile_one_repo(
     *,
     ledger_path: str | Path,
     step_id: str,
     proposal_id: str,
+    selection: list[str],
     repo: str,
     branch: str,
     result_path: str | Path,
@@ -468,32 +540,19 @@ def reconcile_apply(
     intended_base: str,
     expected_head_sha: str,
     advance_base: Callable[[str, str], dict] | None = None,
-    token: str | None = None,
     actor_id: str = "octocat@mba-m4",
     workspace: str = "unknown",
 ) -> dict:
-    """Reconcile a pushed apply branch against remote PR state and advance base off merged SHA.
+    """Reconcile one repo's pushed branch against remote PR state.
 
-    Note on bare CLI vs Python API: When advance_base is None (e.g. bare CLI execution
-    via main()), base advancement is deferred to the caller driver, and reconcile_apply
-    marks the step done once merge is detected. When advance_base is provided, base
-    advancement must be idempotent, and the step is marked done ONLY after advance_base
-    returns {"state": "ok"}.
+    Reads the repo's entry from the (normalized) multi-repo apply-status, views
+    the remote PR, and load-modify-writes that repo's updated entry via
+    `upsert_repo_status`. Returns the full updated document.
     """
-    if token is not None:
-        resolve_run.renew_lease(ledger_path, step_id, actor_id, token)
-    else:
-        resolve_run.acquire_lease(ledger_path, step_id, actor_id)
-    resolve_run.snapshot_audit(
-        ledger_path,
-        step_id,
-        recorded_proposal_id=recorded_proposal_id,
-        proposal_digest=proposal_digest,
-        authorization_digest=authorization_digest,
-    )
-
     existing = load_apply_status(result_path)
-    if existing and existing.get("state") == "rejected":
+    entry = (existing.get("repos") or {}).get(repo) if existing else None
+    repo_state = entry.get("state") if entry else None
+    if repo_state == "rejected":
         ledger_doc = resolve_run.load(ledger_path)
         step = resolve_run.find_step(ledger_doc, step_id)
         if step["status"] == "failed":
@@ -506,12 +565,35 @@ def reconcile_apply(
     machine = actor_parts[1] if len(actor_parts) > 1 else ""
     actor_doc = {"gh_login": login, "machine": machine, "mode": "interactive"}
 
-    pushed_sha = (
-        existing.get("pushed_sha")
-        if existing and existing.get("pushed_sha")
-        else expected_head_sha
-    )
-    pr_url = pr_info.get("url") or (existing.get("pr_url") if existing else None)
+    pushed_sha = (entry.get("pushed_sha") if entry and entry.get("pushed_sha") else expected_head_sha)
+    pr_url = pr_info.get("url") or (entry.get("pr_url") if entry else None)
+
+    def _upsert(state: str, **fields: Any) -> dict:
+        repo_doc = {
+            "branch": branch,
+            "state": state,
+            "intended_base": intended_base,
+            "expected_head_sha": expected_head_sha,
+            "pushed_sha": pushed_sha,
+            "pr_url": pr_url,
+            "merged_sha": None,
+            "observed_base": None,
+            "observed_head_sha": None,
+            "reason": None,
+        }
+        repo_doc.update(fields)
+        return upsert_repo_status(
+            result_path,
+            proposal_id=proposal_id,
+            selection=selection,
+            repo=repo,
+            repo_doc=repo_doc,
+            recorded_proposal_id=recorded_proposal_id,
+            proposal_digest=proposal_digest,
+            authorization_digest=authorization_digest,
+            workspace=workspace,
+            actor=actor_doc,
+        )
 
     if pr_info.get("merged") and pr_info.get("merge_commit_sha"):
         merged_sha = pr_info["merge_commit_sha"]
@@ -523,30 +605,14 @@ def reconcile_apply(
                 f"observed_base={observed_base} (want {intended_base}), "
                 f"observed_head_sha={observed_head_sha} (want {expected_head_sha})"
             )
-            doc = write_apply_status(
-                result_path,
-                proposal_id=proposal_id,
-                repo=repo,
-                branch=branch,
-                state="rejected",
-                recorded_proposal_id=recorded_proposal_id,
-                proposal_digest=proposal_digest,
-                authorization_digest=authorization_digest,
-                intended_base=intended_base,
-                expected_head_sha=expected_head_sha,
+            doc = _upsert(
+                "rejected",
                 observed_base=observed_base,
                 observed_head_sha=observed_head_sha,
-                pushed_sha=pushed_sha,
-                pr_url=pr_url or "",
                 merged_sha=merged_sha,
                 reason=reason,
-                workspace=workspace,
-                actor=actor_doc,
             )
-            cleanup_result = gh_ops.delete_remote_branch(
-                repo, branch, observed_head_sha
-            )
-
+            cleanup_result = gh_ops.delete_remote_branch(repo, branch, observed_head_sha)
             ledger_doc = resolve_run.load(ledger_path)
             step = resolve_run.find_step(ledger_doc, step_id)
             step["status"] = "failed"
@@ -558,47 +624,23 @@ def reconcile_apply(
             resolve_run.save(ledger_path, ledger_doc)
             return doc
 
-        doc = write_apply_status(
-            result_path,
-            proposal_id=proposal_id,
-            repo=repo,
-            branch=branch,
-            state="applied",
-            recorded_proposal_id=recorded_proposal_id,
-            proposal_digest=proposal_digest,
-            authorization_digest=authorization_digest,
-            intended_base=intended_base,
-            expected_head_sha=expected_head_sha,
+        doc = _upsert(
+            "applied",
             observed_base=observed_base,
             observed_head_sha=observed_head_sha,
-            pushed_sha=pushed_sha,
-            pr_url=pr_url or "",
             merged_sha=merged_sha,
-            workspace=workspace,
-            actor=actor_doc,
         )
 
-        satisfied, detail = resolve_run.evaluate_merge_detected_gate(str(result_path))
+        satisfied, detail = resolve_run.evaluate_merge_detected_gate(
+            str(result_path), repo=repo
+        )
         if not satisfied:
-            doc = write_apply_status(
-                result_path,
-                proposal_id=proposal_id,
-                repo=repo,
-                branch=branch,
-                state="rejected",
-                recorded_proposal_id=recorded_proposal_id,
-                proposal_digest=proposal_digest,
-                authorization_digest=authorization_digest,
-                intended_base=intended_base,
-                expected_head_sha=expected_head_sha,
+            doc = _upsert(
+                "rejected",
                 observed_base=observed_base,
                 observed_head_sha=observed_head_sha,
-                pushed_sha=pushed_sha,
-                pr_url=pr_url or "",
                 merged_sha=merged_sha,
                 reason=detail,
-                workspace=workspace,
-                actor=actor_doc,
             )
             ledger_doc = resolve_run.load(ledger_path)
             step = resolve_run.find_step(ledger_doc, step_id)
@@ -643,33 +685,16 @@ def reconcile_apply(
 
         return doc
 
-    elif pr_info.get("state") == "CLOSED" and not pr_info.get("merged"):
+    if pr_info.get("state") == "CLOSED" and not pr_info.get("merged"):
         reason = "PR closed without merging"
-        doc = write_apply_status(
-            result_path,
-            proposal_id=proposal_id,
-            repo=repo,
-            branch=branch,
-            state="rejected",
-            recorded_proposal_id=recorded_proposal_id,
-            proposal_digest=proposal_digest,
-            authorization_digest=authorization_digest,
-            intended_base=intended_base,
-            expected_head_sha=expected_head_sha,
+        doc = _upsert(
+            "rejected",
             observed_base=pr_info.get("observed_base"),
             observed_head_sha=pr_info.get("observed_head_sha"),
-            pushed_sha=pushed_sha,
-            pr_url=pr_url,
             reason=reason,
-            workspace=workspace,
-            actor=actor_doc,
         )
-
         cleanup_expected_sha = pr_info.get("observed_head_sha") or pushed_sha
-        cleanup_result = gh_ops.delete_remote_branch(
-            repo, branch, cleanup_expected_sha
-        )
-
+        cleanup_result = gh_ops.delete_remote_branch(repo, branch, cleanup_expected_sha)
         ledger_doc = resolve_run.load(ledger_path)
         step = resolve_run.find_step(ledger_doc, step_id)
         step["status"] = "failed"
@@ -679,7 +704,6 @@ def reconcile_apply(
         )
         resolve_run.recompute_status(ledger_doc)
         resolve_run.save(ledger_path, ledger_doc)
-
         return doc
 
     if pr_info.get("state") == "ERROR" and existing:
@@ -695,7 +719,7 @@ def reconcile_apply(
         resolve_run.save(ledger_path, ledger_doc)
         return existing
 
-    if existing and existing.get("state") in {"pr_opened", "applied"}:
+    if repo_state in {"pr_opened", "applied"}:
         return existing
 
     ledger_doc = resolve_run.load(ledger_path)
@@ -719,22 +743,117 @@ def reconcile_apply(
             f"cannot determine PR state for {repo} {branch}: no PR URL"
         )
 
-    return write_apply_status(
-        result_path,
+    return _upsert("pr_opened")
+
+
+def reconcile_apply(
+    *,
+    ledger_path: str | Path,
+    step_id: str,
+    proposal_id: str,
+    repo: str,
+    branch: str,
+    result_path: str | Path,
+    gh_ops: GhOps,
+    recorded_proposal_id: str,
+    proposal_digest: str,
+    authorization_digest: str,
+    intended_base: str,
+    expected_head_sha: str,
+    advance_base: Callable[[str, str], dict] | None = None,
+    token: str | None = None,
+    actor_id: str = "octocat@mba-m4",
+    workspace: str = "unknown",
+) -> dict:
+    """Reconcile one pushed apply branch (single-repo entry point; see docstring note below)."""
+    if token is not None:
+        resolve_run.renew_lease(ledger_path, step_id, actor_id, token)
+    else:
+        resolve_run.acquire_lease(ledger_path, step_id, actor_id)
+    resolve_run.snapshot_audit(
+        ledger_path,
+        step_id,
+        recorded_proposal_id=recorded_proposal_id,
+        proposal_digest=proposal_digest,
+        authorization_digest=authorization_digest,
+    )
+    return _reconcile_one_repo(
+        ledger_path=ledger_path,
+        step_id=step_id,
         proposal_id=proposal_id,
+        selection=[repo],
         repo=repo,
         branch=branch,
-        state="pr_opened",
+        result_path=result_path,
+        gh_ops=gh_ops,
         recorded_proposal_id=recorded_proposal_id,
         proposal_digest=proposal_digest,
         authorization_digest=authorization_digest,
         intended_base=intended_base,
         expected_head_sha=expected_head_sha,
-        pushed_sha=pushed_sha,
-        pr_url=pr_url,
+        advance_base=advance_base,
+        actor_id=actor_id,
         workspace=workspace,
-        actor=actor_doc,
     )
+
+
+def reconcile_repos(
+    *,
+    ledger_path: str | Path,
+    step_id: str,
+    result_path: str | Path,
+    gh_ops: GhOps,
+    recorded_proposal_id: str,
+    proposal_digest: str,
+    authorization_digest: str,
+    token: str | None = None,
+    actor_id: str = "octocat@mba-m4",
+    workspace: str = "unknown",
+) -> dict:
+    """Reconcile every repo in the result's `repos` map in one pass."""
+    if token is not None:
+        resolve_run.renew_lease(ledger_path, step_id, actor_id, token)
+    else:
+        resolve_run.acquire_lease(ledger_path, step_id, actor_id)
+    resolve_run.snapshot_audit(
+        ledger_path,
+        step_id,
+        recorded_proposal_id=recorded_proposal_id,
+        proposal_digest=proposal_digest,
+        authorization_digest=authorization_digest,
+    )
+
+    existing = load_apply_status(result_path)
+    if existing is None or "repos" not in existing:
+        raise ApplyStatusError(
+            "reconcile_repos requires a multi-repo apply-status document"
+        )
+    proposal_id = existing["proposal_id"]
+    selection = existing["selection"]
+    for repo, entry in list(existing["repos"].items()):
+        if entry.get("state") in {"applied", "rejected"}:
+            continue
+        updated = _reconcile_one_repo(
+            ledger_path=ledger_path,
+            step_id=step_id,
+            proposal_id=proposal_id,
+            selection=selection,
+            repo=repo,
+            branch=entry.get("branch"),
+            result_path=result_path,
+            gh_ops=gh_ops,
+            recorded_proposal_id=recorded_proposal_id,
+            proposal_digest=proposal_digest,
+            authorization_digest=authorization_digest,
+            intended_base=entry.get("intended_base"),
+            expected_head_sha=entry.get("expected_head_sha"),
+            advance_base=None,
+            actor_id=actor_id,
+            workspace=workspace,
+        )
+        if updated:
+            existing = updated
+    return existing
 
 
 def main():

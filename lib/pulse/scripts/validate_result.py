@@ -39,7 +39,9 @@ OUTCOMES = {"success", "failure", "skipped-cooldown", "aborted"}
 SEVERITIES = {"low", "medium", "high"}
 EDGE_STATES = {"current", "stale", "unknown"}
 REPO_MUTATION_STATES = {"proposed", "blocked", "failed"}
-APPLY_STATUS_STATES = {"pushed", "pr_opened", "applied", "rejected"}
+APPLY_STATUS_STATES = {
+    "pushed", "pr_opened", "applied", "rejected", "failed", "blocked", "partial",
+}
 
 REPO_OUTCOME_STATES = {"ok", "failed", "blocked"}
 
@@ -703,52 +705,90 @@ def validate(data, kind: str) -> list[str]:
             _require(proposal, "transformation", str, errors, ctx=ctx)
             _require(proposal, "proposal_id", str, errors, ctx=ctx)
         _validate_string_list(data, "proposed_actions", errors)
-
     elif kind == "apply-status":
-        state = _require_enum(data, "state", APPLY_STATUS_STATES, errors)
+        _require_enum(data, "state", APPLY_STATUS_STATES, errors)
         _require(data, "proposal_id", str, errors)
         _require(data, "recorded_proposal_id", str, errors)
         _require(data, "proposal_digest", str, errors)
         _require(data, "authorization_digest", str, errors)
         _validate_string_list(data, "selection", errors)
-        _require(data, "branch", str, errors)
-        _require_nullable(data, "pushed_sha", str, errors)
-        _require_nullable(data, "pr_url", str, errors)
-        _require_nullable(data, "merged_sha", str, errors)
-        _require_nullable(data, "reason", str, errors)
-        _require_nullable(data, "intended_base", str, errors)
-        _require_nullable(data, "expected_head_sha", str, errors)
-        _require_nullable(data, "observed_base", str, errors)
-        _require_nullable(data, "observed_head_sha", str, errors)
-        if state in {"pushed", "pr_opened", "applied"} and data.get("pushed_sha") is None:
-            _err(errors, f"pushed_sha must not be null when state is {state}")
-        if state in {"pr_opened", "applied"}:
-            if data.get("pr_url") is None:
-                _err(errors, f"pr_url must not be null when state is {state}")
-            elif data.get("pr_url") == "":
-                _err(errors, f"pr_url must not be empty when state is {state}")
-        if state == "applied" and data.get("merged_sha") is None:
-            _err(errors, "merged_sha must not be null when state is applied")
-        if state == "rejected" and data.get("reason") is None:
-            _err(errors, "reason must not be null when state is rejected")
-        if state in APPLY_STATUS_STATES and data.get("intended_base") is None:
-            _err(errors, f"intended_base must not be null when state is {state}")
-        if state in APPLY_STATUS_STATES and data.get("expected_head_sha") is None:
-            _err(errors, f"expected_head_sha must not be null when state is {state}")
-        if state == "applied" and data.get("observed_base") is None:
-            _err(errors, "observed_base must not be null when state is applied")
-        if state == "applied" and data.get("observed_head_sha") is None:
-            _err(errors, "observed_head_sha must not be null when state is applied")
-        pushed_sha_val = data.get("pushed_sha")
-        expected_head_sha_val = data.get("expected_head_sha")
-        if (
-            pushed_sha_val is not None
-            and expected_head_sha_val is not None
-            and pushed_sha_val != expected_head_sha_val
-        ):
-            _err(errors, "pushed_sha != expected_head_sha")
+        if "repos" in data:
+            # multi-repo shape
+            repos = data.get("repos")
+            if not isinstance(repos, dict) or not repos:
+                _err(errors, "repos must be a non-empty mapping")
+            else:
+                seen = set()
+                for repo, entry in repos.items():
+                    if not isinstance(repo, str) or "/" not in repo:
+                        _err(errors, f"repos key {repo!r} must be owner/name")
+                    if repo in seen:
+                        _err(errors, f"duplicate repo key {repo}")
+                    seen.add(repo)
+                    if not isinstance(entry, dict):
+                        _err(errors, f"repos[{repo}] must be a mapping")
+                        continue
+                    ctx = f"repos[{repo}]."
+                    _require(entry, "branch", str, errors, ctx=ctx)
+                    _require_enum(entry, "state", APPLY_STATUS_STATES, errors, ctx=ctx)
+                    _require_nullable(entry, "pushed_sha", str, errors, ctx=ctx)
+                    _require_nullable(entry, "pr_url", str, errors, ctx=ctx)
+                    _require_nullable(entry, "merged_sha", str, errors, ctx=ctx)
+                    _require_nullable(entry, "reason", str, errors, ctx=ctx)
+                    _require_nullable(entry, "intended_base", str, errors, ctx=ctx)
+                    _require_nullable(entry, "expected_head_sha", str, errors, ctx=ctx)
+                    _require_nullable(entry, "observed_base", str, errors, ctx=ctx)
+                    _require_nullable(entry, "observed_head_sha", str, errors, ctx=ctx)
+                    if entry.get("state") == "applied" and entry.get("merged_sha") is None:
+                        _err(errors, f"{ctx}merged_sha must not be null when state is applied")
+            # fleet invariants: `repos` keys may be a subset of `selection` during
+            # an in-progress run (repos not yet reached), but never contain a repo
+            # outside the selection.
+            selection = data.get("selection") or []
+            if not set(repos) <= set(selection):
+                _err(errors, "repos keys must be a subset of selection")
+        else:
+            # v1 scalar shape (legacy): keep the existing scalar checks.
+            _require(data, "branch", str, errors)
+            _require_nullable(data, "pushed_sha", str, errors)
+            _require_nullable(data, "pr_url", str, errors)
+            _require_nullable(data, "merged_sha", str, errors)
+            _require_nullable(data, "reason", str, errors)
+            _require_nullable(data, "intended_base", str, errors)
+            _require_nullable(data, "expected_head_sha", str, errors)
+            _require_nullable(data, "observed_base", str, errors)
+            _require_nullable(data, "observed_head_sha", str, errors)
+            state = data.get("state")
+            if state in {"pushed", "pr_opened", "applied"} and data.get("pushed_sha") is None:
+                _err(errors, f"pushed_sha must not be null when state is {state}")
+            if state in {"pr_opened", "applied"}:
+                if data.get("pr_url") is None:
+                    _err(errors, f"pr_url must not be null when state is {state}")
+                elif data.get("pr_url") == "":
+                    _err(errors, f"pr_url must not be empty when state is {state}")
+            if state == "applied" and data.get("merged_sha") is None:
+                _err(errors, "merged_sha must not be null when state is applied")
+            if state == "rejected" and data.get("reason") is None:
+                _err(errors, "reason must not be null when state is rejected")
+            if state in APPLY_STATUS_STATES and data.get("intended_base") is None:
+                _err(errors, f"intended_base must not be null when state is {state}")
+            if state in APPLY_STATUS_STATES and data.get("expected_head_sha") is None:
+                _err(errors, f"expected_head_sha must not be null when state is {state}")
+            if state == "applied" and data.get("observed_base") is None:
+                _err(errors, "observed_base must not be null when state is applied")
+            if state == "applied" and data.get("observed_head_sha") is None:
+                _err(errors, "observed_head_sha must not be null when state is applied")
+            pushed_sha_val = data.get("pushed_sha")
+            expected_head_sha_val = data.get("expected_head_sha")
+            if (
+                pushed_sha_val is not None
+                and expected_head_sha_val is not None
+                and pushed_sha_val != expected_head_sha_val
+            ):
+                _err(errors, "pushed_sha != expected_head_sha")
 
     return errors
+
 
 
 

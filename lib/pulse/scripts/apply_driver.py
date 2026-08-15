@@ -172,15 +172,17 @@ def run_apply(*, source_kind, binding_ref, recorded_summary=None, authorization_
         auth = apply_authorization.load_authorization(authorization_path, proposal.transformation)
         authorization_digest = apply_authorization.authorization_digest(auth)
         apply_authorization.authorize(rederived, auth, recorded_summary)
-        if len(proposal.selection) > 1:
-            raise apply_rederive.RederiveError("multi-repo apply is v2")
         if not proposal.selection:
             raise apply_rederive.RederiveError("apply proposal selection is empty")
-        repo = proposal.selection[0]
+        selection = proposal.selection
         entry = _entry(inputs, workspace, proposal.transformation)
-        base_refs = {repo: apply_reconcile.resolve_intended_base(
+        resolved_base = apply_reconcile.resolve_intended_base(
             rederived.source_kind, binding_ref, rederived.finalizer_record
-        )}
+        )
+        if isinstance(resolved_base, str):
+            base_refs = {repo: resolved_base for repo in selection}
+        else:
+            base_refs = resolved_base
         if rederived.finalizer_record:
             _persist_finalizer(result_path, rederived.finalizer_record)
     except (apply_rederive.RederiveError, apply_authorization.AuthorizationError,
@@ -228,16 +230,34 @@ def run_apply(*, source_kind, binding_ref, recorded_summary=None, authorization_
             nave_version=nave_version, repo_outcomes=outcomes,
         )
 
-    def _finish_push(remote_sha):
-        """Durable pushed receipt + PR open — shared by the normal path and the
-        pushed-boundary crash-resume path."""
+    def _finish_push(repo, remote_sha):
+        """Durable pushed receipt + PR open for one repo — shared by the normal
+        path and the pushed-boundary crash-resume path."""
+        actor_doc = {"gh_login": actor.gh_login, "machine": actor.machine, "mode": actor.mode}
         pushed_result = apply_reconcile.write_apply_status(
-            result_path, proposal_id=proposal.id, repo=repo, branch=apply_branch,
-            state="pushed", recorded_proposal_id=recorded_summary["proposal_id"],
-            proposal_digest=proposal_digest, authorization_digest=authorization_digest,
-            intended_base=base_refs[repo], expected_head_sha=remote_sha,
-            pushed_sha=remote_sha, workspace=workspace,
-            actor={"gh_login": actor.gh_login, "machine": actor.machine, "mode": actor.mode},
+            result_path,
+            proposal_id=proposal.id,
+            selection=list(selection),
+            repos={
+                repo: {
+                    "branch": apply_branch,
+                    "state": "pushed",
+                    "intended_base": base_refs[repo],
+                    "expected_head_sha": remote_sha,
+                    "pushed_sha": remote_sha,
+                    "pr_url": None,
+                    "merged_sha": None,
+                    "observed_base": None,
+                    "observed_head_sha": None,
+                    "reason": None,
+                },
+            },
+            state="pushed",
+            recorded_proposal_id=recorded_summary["proposal_id"],
+            proposal_digest=proposal_digest,
+            authorization_digest=authorization_digest,
+            workspace=workspace,
+            actor=actor_doc,
         )
         try:
             resolve_run.renew_lease(ledger_path, step_id, actor_id, token)
@@ -250,14 +270,24 @@ def run_apply(*, source_kind, binding_ref, recorded_summary=None, authorization_
                 recorded_proposal_id=recorded_summary["proposal_id"],
                 proposal_digest=proposal_digest, authorization_digest=authorization_digest,
                 intended_base=base_refs[repo], expected_head_sha=remote_sha,
-                token=token, actor_id=actor_id, workspace=workspace,
+                selection=list(selection), token=token, actor_id=actor_id, workspace=workspace,
             )
-            journal.complete(repo, "pr_opened", pr_url=result.get("pr_url"))
+            journal.complete(repo, "pr_opened", pr_url=result.get("repos", {}).get(repo, {}).get("pr_url"))
             return result
         except Exception:
             # The pushed receipt is the crash-recovery input. Never replace it
             # with a pre-push repo-mutation document when PR creation fails.
             return pushed_result
+    repo = selection[0]
+
+    if len(selection) > 1:
+        return _run_multi_repo(
+            ledger_path=ledger_path, step_id=step_id, actor_id=actor_id, token=token,
+            runner=runner, gh_ops=gh_ops, result_path=result_path, workspace=workspace,
+            proposal=proposal, selection=list(selection), base_refs=base_refs, entry=entry,
+            recorded_summary=recorded_summary, proposal_digest=proposal_digest,
+            authorization_digest=authorization_digest, actor=actor, nave_version=nave_version,
+        )
 
     try:
         with ApplyLock(f"{ledger_path}.apply.lock"):
@@ -290,7 +320,7 @@ def run_apply(*, source_kind, binding_ref, recorded_summary=None, authorization_
                 remote_sha = previous["evidence"].get("remote_sha")
                 if not remote_sha:
                     return failure("failed", "resume from pushed: missing remote_sha journal evidence")
-                return _finish_push(remote_sha)
+                return _finish_push(repo, remote_sha)
             if resume_transform:
                 pen = {"name": pen_name, "repos": [{"repo": repo}]}
             else:
@@ -394,11 +424,256 @@ def run_apply(*, source_kind, binding_ref, recorded_summary=None, authorization_
                 return failure("failed", _phase_reason("push", outcomes), _failed_outcomes(outcomes, "failed"))
             remote_sha = outcomes[repo]["remote_sha"]
             journal.complete(repo, "pushed", remote_ref=outcomes[repo]["remote_ref"], remote_sha=remote_sha)
-            return _finish_push(remote_sha)
+            return _finish_push(repo, remote_sha)
     except (resolve_run.LeaseError, ApplyLockError) as exc:
         return failure("blocked", f"fencing stopped apply: {exc}")
     except Exception as exc:
         return failure("failed", exc)
+
+def _run_multi_repo(
+    *,
+    ledger_path,
+    step_id,
+    actor_id,
+    token,
+    runner,
+    gh_ops,
+    result_path,
+    workspace,
+    proposal,
+    selection,
+    base_refs,
+    entry,
+    recorded_summary,
+    proposal_digest,
+    authorization_digest,
+    actor,
+    nave_version,
+) -> dict:
+    """Drive one proposal across N repos with per-repo independent outcomes."""
+    apply_branch = f"pulse/apply/{proposal.id}"
+    pen_name = f"pulse-apply-{proposal.id}"
+    journal = Journal(Path(f"{result_path}.journal"))
+    actor_doc = {"gh_login": actor.gh_login, "machine": actor.machine, "mode": actor.mode}
+
+    def _repo_doc(repo, state, reason=None, **fields):
+        doc = {
+            "branch": apply_branch,
+            "state": state,
+            "intended_base": base_refs.get(repo),
+            "expected_head_sha": proposal.expected_shas.get(repo),
+            "pushed_sha": None,
+            "pr_url": None,
+            "merged_sha": None,
+            "observed_base": None,
+            "observed_head_sha": None,
+            "reason": reason,
+        }
+        doc.update(fields)
+        return doc
+
+    def _subset_proposal(repos):
+        return mutation_plan.Proposal(
+            id=proposal.id,
+            selection=tuple(repos),
+            transformation=proposal.transformation,
+            expected_shas={r: proposal.expected_shas[r] for r in repos},
+            mutation_policy=proposal.mutation_policy,
+            actor=proposal.actor,
+            bound_paths={r: proposal.bound_paths[r] for r in repos},
+        )
+
+    def _subset_pen(pen, repos):
+        keep = {f"{item.get('owner')}/{item.get('repo')}" if item.get("owner") else item.get("repo")
+                for item in pen.get("repos", [])}
+        return {"name": pen.get("name"), "repos": [i for i in pen.get("repos", [])
+                                                  if (i.get("repo") or f"{i.get('owner')}/{i.get('repo')}") in set(repos)]}
+
+    def _write_fleet(repos_doc):
+        return apply_reconcile.write_apply_status(
+            result_path,
+            proposal_id=proposal.id,
+            selection=list(selection),
+            repos=repos_doc,
+            state=apply_reconcile.rollup_state(repos_doc),
+            recorded_proposal_id=recorded_summary["proposal_id"],
+            proposal_digest=proposal_digest,
+            authorization_digest=authorization_digest,
+            workspace=workspace,
+            actor=actor_doc,
+        )
+
+    def _finish(repo, remote_sha):
+        pushed = apply_reconcile.upsert_repo_status(
+            result_path,
+            proposal_id=proposal.id,
+            selection=list(selection),
+            repo=repo,
+            repo_doc=_repo_doc(repo, "pushed", pushed_sha=remote_sha),
+            recorded_proposal_id=recorded_summary["proposal_id"],
+            proposal_digest=proposal_digest,
+            authorization_digest=authorization_digest,
+            workspace=workspace,
+            actor=actor_doc,
+        )
+        try:
+            resolve_run.renew_lease(ledger_path, step_id, actor_id, token)
+            journal.begin(repo, "pr_opened", token)
+            result = apply_reconcile.open_apply_pr(
+                ledger_path=ledger_path, step_id=step_id, proposal_id=proposal.id,
+                repo=repo, branch=apply_branch, base=base_refs[repo], pushed_sha=remote_sha,
+                title=f"pulse-apply {proposal.id}", body=f"Automated apply for proposal {proposal.id}.",
+                result_path=result_path, gh_ops=gh_ops,
+                recorded_proposal_id=recorded_summary["proposal_id"],
+                proposal_digest=proposal_digest, authorization_digest=authorization_digest,
+                intended_base=base_refs[repo], expected_head_sha=remote_sha,
+                selection=list(selection), token=token, actor_id=actor_id, workspace=workspace,
+            )
+            journal.complete(repo, "pr_opened", pr_url=result.get("repos", {}).get(repo, {}).get("pr_url"))
+            return result
+        except Exception:
+            return pushed
+
+    try:
+        with ApplyLock(f"{ledger_path}.apply.lock"):
+            resolve_run.renew_lease(ledger_path, step_id, actor_id, token)
+            handle = nave_adapter.pen_create(
+                runner, nave_adapter.PenQuery(terms=list(proposal.selection)), pen_name
+            )
+            if handle.state != "ok":
+                return _write_failure(
+                    result_path, state="failed", reason=handle.stderr or "pen create failed",
+                    actor=actor, workspace=workspace, proposal=proposal,
+                    recorded_summary=recorded_summary, proposal_digest=proposal_digest,
+                    authorization_digest=authorization_digest, nave_version=nave_version,
+                )
+            pen = handle.pen
+            status = nave_adapter.pen_status(runner, pen_name)
+            clone_paths = {
+                f"{item['owner']}/{item['repo']}": item["clone_path"]
+                for item in status.get("repos", [])
+                if isinstance(item, dict) and item.get("owner") and item.get("repo") and item.get("clone_path")
+            }
+            try:
+                pen_clone_reader.make_pen_clone_reader(clone_paths, proposal.selection)
+            except Exception as exc:
+                return _write_failure(
+                    result_path, state="blocked", reason=f"clone identity preflight failed: {exc}",
+                    actor=actor, workspace=workspace, proposal=proposal,
+                    recorded_summary=recorded_summary, proposal_digest=proposal_digest,
+                    authorization_digest=authorization_digest, nave_version=nave_version,
+                )
+
+            outcomes = {}
+            preflight = apply_phases.preflight_phase(runner, pen, proposal, clone_paths)
+            for repo in proposal.selection:
+                o = preflight.get(repo, {})
+                if o.get("state") != "ok":
+                    outcomes[repo] = _repo_doc(repo, "blocked", o.get("reason") or "preflight failed")
+            pending = [r for r in proposal.selection if r not in outcomes]
+            if not pending:
+                return _write_fleet(outcomes)
+
+            ops = apply_ops.make_apply_ops(runner, pen_name, dict(proposal.bound_paths), base_refs)
+            for repo in pending:
+                journal.begin(repo, "branch_provisioned", token, apply_branch=apply_branch,
+                              expected_base_sha=proposal.expected_shas[repo], base_ref=base_refs[repo])
+            prov = apply_phases.provision_phase(runner, pen, ops, proposal, apply_branch, base_refs)
+            base_shas = {}
+            for repo in list(pending):
+                o = prov.get(repo, {})
+                if o.get("state") != "ok":
+                    outcomes[repo] = _repo_doc(repo, "blocked", o.get("reason") or "provision failed")
+                    pending.remove(repo)
+                else:
+                    base_shas[repo] = o["observed_base_sha"]
+                    journal.complete(repo, "branch_provisioned", observed_base_sha=o["observed_base_sha"])
+            if not pending:
+                return _write_fleet(outcomes)
+
+            reader = pen_clone_reader.make_pen_clone_reader(
+                clone_paths, tuple(pending), expected_branch=apply_branch,
+                expected_heads=base_shas, expected_remotes={r: r for r in pending},
+            )
+            for repo in pending:
+                journal.begin(repo, "transformed", token)
+            sub_pen = _subset_pen(pen, pending)
+            executed = apply_phases.exec_phase(runner, sub_pen, entry)
+            for repo in list(pending):
+                o = executed.get(repo, {})
+                if o.get("state") != "ok":
+                    outcomes[repo] = _repo_doc(repo, o.get("state", "failed") if o.get("state") in ("blocked", "failed") else "failed", o.get("reason") or "transform failed")
+                    pending.remove(repo)
+                else:
+                    journal.complete(repo, "transformed")
+            if not pending:
+                return _write_fleet(outcomes)
+
+            for repo in pending:
+                journal.begin(repo, "validated", token)
+            validated = apply_phases.validate_phase(entry, reader, _subset_proposal(pending))
+            for repo in list(pending):
+                o = validated.get(repo, {})
+                if o.get("state") != "ok":
+                    outcomes[repo] = _repo_doc(repo, o.get("state", "failed") if o.get("state") in ("blocked", "failed") else "failed", o.get("reason") or "validate failed")
+                    pending.remove(repo)
+                else:
+                    journal.complete(repo, "validated")
+            if not pending:
+                return _write_fleet(outcomes)
+
+            for repo in pending:
+                journal.begin(repo, "committed", token)
+            bound_paths = {
+                r: _expand_bound_globs(clone_paths[r], proposal.bound_paths.get(r, ()))
+                for r in pending
+            }
+            committed = apply_phases.commit_phase(
+                ops, _subset_proposal(pending),
+                f"pulse-apply {proposal.id} by {actor.gh_login}@{actor.machine}",
+                bound_paths=bound_paths,
+            )
+            local_shas = {}
+            for repo in list(pending):
+                o = committed.get(repo, {})
+                if o.get("state") != "ok":
+                    outcomes[repo] = _repo_doc(repo, "failed", o.get("reason") or "commit failed")
+                    pending.remove(repo)
+                else:
+                    local_shas[repo] = o["local_commit_sha"]
+                    journal.complete(repo, "committed", local_commit_sha=o["local_commit_sha"])
+            if not pending:
+                return _write_fleet(outcomes)
+
+            for repo in pending:
+                journal.begin(repo, "pushed", token, local_commit_sha=local_shas[repo])
+            pushed = apply_phases.push_phase(ops, reader, apply_branch, local_shas)
+            for repo in list(pending):
+                o = pushed.get(repo, {})
+                if o.get("state") != "ok":
+                    outcomes[repo] = _repo_doc(repo, "failed", o.get("reason") or "push failed")
+                    pending.remove(repo)
+                else:
+                    journal.complete(repo, "pushed", remote_ref=o["remote_ref"], remote_sha=o["remote_sha"])
+
+            for repo in pending:
+                final = _finish(repo, pushed[repo]["remote_sha"])
+                outcomes[repo] = final.get("repos", {}).get(repo, _repo_doc(repo, "pr_opened", pushed_sha=pushed[repo]["remote_sha"]))
+            return _write_fleet(outcomes)
+    except (resolve_run.LeaseError, ApplyLockError) as exc:
+        return _write_failure(
+            result_path, state="blocked", reason=f"fencing stopped apply: {exc}",
+            actor=actor, workspace=workspace, proposal=proposal,
+            recorded_summary=recorded_summary, proposal_digest=proposal_digest,
+            authorization_digest=authorization_digest, nave_version=nave_version,
+        )
+    except Exception as exc:
+        return _write_failure(
+            result_path, state="failed", reason=exc,
+            actor=actor, workspace=workspace, proposal=proposal,
+            recorded_summary=recorded_summary, proposal_digest=proposal_digest,
+            authorization_digest=authorization_digest, nave_version=nave_version,
+        )
 
 
 def main(argv=None):
