@@ -1,6 +1,6 @@
 # hiivmind-pulse-gh — fleet program roadmap & backlog index
 
-**Updated:** 2026-08-13 (F4 closed) · **One-page map of what is built, what is left, and where each item lives.**
+**Updated:** 2026-08-15 (F11 interactive apply + multi-repo apply v2 merged) · **One-page map of what is built, what is left, and where each item lives.**
 
 > Read in this order: **Status at a glance** (what shipped) → **Layer-completeness matrix**
 > (is it actually *runnable*) → **Cross-repo dependency map** (which repos an item spans) →
@@ -32,7 +32,7 @@ side (F11 production wiring).
 | F8 | Generic plan sync | ✅ merged (#134) |
 | F9 | Dogfood overlays (Claude plugin/corpus) | ✅ merged (#136) |
 | **F10** | **Runnable spine** (CLI drivers + triggers for F6–F9) | ✅ **complete** — spine #139; proposal fold #140; enrolled live (workspace #2). "Triggered end-to-end" gate **closed**. |
-| F11 | Apply-mode (land a validated proposal) | ✅ merged (#138) — **library+tests; production wiring open** |
+| F11 | Apply-mode (land a validated proposal) | ✅ merged (#138) — library+tests; **interactive driver + multi-repo apply v2 merged (#147), live-proven.** Scheduled/deployed apply, `advance_base`, and `allow` remain open. |
 
 > **What "merged ✅" does and does not mean.** It means layers 1–3 (library →
 > driver → skill) landed in **this repo**. It says nothing about whether the phase is
@@ -67,7 +67,7 @@ Every phase is a five-layer ladder. A phase **runs in production** only when all
 | F8 plan sync | ✅ | ✅ (F10) | ✅ (F10) | ✅ `periodic` | ✅ (#2) | ⚠️ enrolled; validated-abort until `plan-sync.yaml` binding exists |
 | F9 dogfood overlays | ✅ | ✅ (F10) | ✅ (F10) | ✅ `periodic` | ✅ (#2) | ✅ — via healthcheck + `marketplace-sync` |
 | **F10 runnable spine** | ✅ | ✅ | ✅ | ✅ `periodic` + 4 flips | ✅ (#2) | ✅ — **gate closed** (fold #140 + enroll #2) |
-| F11 apply-mode | ✅ | ❌ no prod driver | ⚠️ entry points | ❌ | ❌ | ❌ — seams ship; nothing assembles `execute → reconcile` |
+| F11 apply-mode | ✅ | ✅ `apply_driver` (interactive, multi-repo v2) | ⚠️ `gh-apply` (interactive, single-repo prose) | ❌ | ❌ | ⚠️ interactive proven live; scheduled sweep + `advance_base` open |
 
 **Legend:** ✅ built & deployed · ⚠️ exists but not fully exercised yet · ❌ absent.
 
@@ -75,7 +75,7 @@ Every phase is a five-layer ladder. A phase **runs in production** only when all
 enrollment `hiivmind/hiivmind-workspace` #2, both merged 2026-07-30). The remaining ⚠️ on F7/F8
 is a *data* gap, not a code gap — the trigger fires but there is no bound work until the
 `generated.yaml` / `plan-sync.yaml` binding files are added to the workspace (non-destructive
-validated-abort until then). F11 is the only phase still dark on the runnable ladder.
+validated-abort until then). F11's interactive driver is now lit (live-proven); only the scheduled/deployed apply layers remain dark.
 
 ### Two flow facts that broke specs on contact (record so they stop recurring)
 
@@ -127,7 +127,7 @@ graph LR
 | Open item | pulse-gh | scheduler | workspace | nave | The gotcha |
 |---|:--:|:--:|:--:|:--:|---|
 | **F10 triggered end-to-end** | ✅ **folding fix (real work)** | ○ generic already; doc-only | ✅ enroll list + deploy 4 YAMLs | — | list + deploy live in **workspace**; the code fix is in **pulse-gh** |
-| **Apply-mode production wiring** | ✅ assembly driver | — | ✅ real F5/F8 base-writer | ✅ pen-clone → `PULSE_PEN_ROOT/{owner}/{name}` bridge | 3-repo; no single-repo PR closes it |
+| **Apply-mode remaining: `advance_base` + scheduled deploy** | ✅ driver done (single + multi-repo, live-proven) | — | ⚠️ F5/F8 base-writer open | ✅ `nave pen create` owns clone writes (no `PULSE_PEN_ROOT` bridge) | interactive proven; base-writer + scheduled layers remain |
 | ~~**F4 dependency-coherence adapters**~~ ✅ **DONE** | ✅ adapters | — | ○ evidence already present | ○ evidence source | mostly pulse-gh; evidence already flows |
 | **`relationships.yaml` schema drift** | ✅ | — | — | — | 1-repo (needs schema-vs-evaluator ruling) |
 | **Stale workspace catalog** | — | — | ✅ data fix | — | 1-repo, **data not code** |
@@ -137,15 +137,19 @@ graph LR
 
 ## The open backlog, prioritized
 
-### 🔴 P1 — "Make it run in production" (the dominant gap)
-The libraries exist; the *propose* side now runs on cadence (F10 closed 2026-07-30). The
-**apply** side is the remaining production-wiring gap.
+### 🔴 P1 — "Make it run in production" (apply's scheduled/deployed + flagship-use-case gap)
+The libraries exist; the *propose* side runs on cadence (F10 closed 2026-07-30). The **apply**
+side's interactive path now runs too — the apply driver (single- and multi-repo) merged #147
+and was live-proven against real repos. What remains is making apply *scheduled + deployed*
+and wiring the flagship dependency-bump use-case.
 
 | Item | Why it matters | Source |
 |---|---|---|
 | ~~**F10 last mile: proposal folding + live enrollment**~~ ✅ **DONE 2026-07-30** | Proposal fold (#140) + live enrollment (workspace #2) merged; F10's "triggered end-to-end" gate is closed. The propose/mutate phases F5–F9 now run daily and surface proposals in the maintenance PR body. | `2026-07-29-f10-scheduler-composition.md` · `2026-07-30-f10-followups.md` |
-| **Apply-mode production wiring** | F11's apply side still has the gap: real seams ship (`apply_ops`, `advance_base`, clone reader, `gh` ops) but no driver assembles them into a live `execute → reconcile` run; no real F5/F8 base-writer; no bridge from Nave pen clones to the `PULSE_PEN_ROOT` contract. **The top P1.** A single-mutator (PR #141 decision, "Nave owns all clone writes") implementation plan for the pulse-gh half is written and reviewed: `2026-07-30-apply-mode-pulse-wiring.md`; the Nave-verb half is a separate `discreteds/nave` fork plan the pulse-gh plan's Task 1 contract is written against. | [`2026-07-30-apply-mode-pulse-wiring.md`](../superpowers/plans/2026-07-30-apply-mode-pulse-wiring.md) · [`2026-07-30-apply-mode-production-wiring-design.md`](../superpowers/specs/2026-07-30-apply-mode-production-wiring-design.md) · [`2026-07-30-f11-apply-git-consolidation-note.md`](../superpowers/specs/2026-07-30-f11-apply-git-consolidation-note.md) · [`2026-07-29-apply-mode-v2-deferrals.md`](2026-07-29-apply-mode-v2-deferrals.md) § A
-| ~~**F4 dependency-coherence adapters**~~ ✅ **DONE 2026-08-13** | Pre-F4 materialized the evidence; the coherence adapters that consume it are merged (#142). Closed the read-spine gap and unlocked the flagship neutral apply use-case (fleet-wide dependency bump + lockfile landing) as a future apply-mode consumer. | [`2026-07-13-f4-dependency-adapters.md`](../superpowers/plans/2026-07-13-f4-dependency-adapters.md) · [`2026-08-13-f4-deferred-scope.md`](2026-08-13-f4-deferred-scope.md)
+| ~~**Interactive apply driver + multi-repo apply v2**~~ ✅ **DONE 2026-08-15** | `apply_driver` assembles `execute → reconcile` end-to-end — one proposal → N repos, one pen/journal/rollup, per-repo independent outcomes. Live-proven (agent-kernel, then swingle + hiivmind-corpus). Fleet naming = explicit `repos` ∪ optional `repo_selector`. | [`2026-08-15-multi-repo-apply.md`](../superpowers/plans/2026-08-15-multi-repo-apply.md) · [`2026-08-15-multi-repo-apply-design.md`](../superpowers/specs/2026-08-15-multi-repo-apply-design.md) |
+| **Scheduled/deployed apply + real `advance_base`** | Interactive apply is proven; the *scheduled* sweep (layer-4 trigger + workspace deployment) and the real F5/F8 base-writer on the merged SHA remain open. Gated on the `allow` confirmation-model design (🔵 v2). | [`2026-07-29-apply-mode-v2-deferrals.md`](2026-07-29-apply-mode-v2-deferrals.md) § A.2 / § B |
+| ~~**F4 dependency-coherence adapters**~~ ✅ **DONE 2026-08-13** | Pre-F4 materialized the evidence; the coherence adapters that consume it are merged (#142). Closed the read-spine gap. | [`2026-07-13-f4-dependency-adapters.md`](../superpowers/plans/2026-07-13-f4-dependency-adapters.md) · [`2026-08-13-f4-deferred-scope.md`](2026-08-13-f4-deferred-scope.md) |
+| **F11 dependency-bump handoff object** | The flagship neutral apply use-case: turn an F4 `DivergenceFinding` into a guarded `Proposal` (`selection` / `expected_shas` / per-manager bump / `bound_paths`). Both halves now exist (F4 evidence + F11 apply); this is the **spec-first** link between them. **The top open item.** | [`2026-08-13-f4-deferred-scope.md`](2026-08-13-f4-deferred-scope.md) § C |
 
 ### 🟠 P2 — Correctness / data (cheap, one is a real bug)
 | Item | Why it matters | Source |
@@ -164,12 +168,14 @@ The libraries exist; the *propose* side now runs on cadence (F10 closed 2026-07-
 |---|---|
 | **F7 validator/manifest follow-ups** — 3a manifest-validity enforcement (best small cleanup), 3b–3d validator edge limits | [`2026-07-22-f1-f8-phase-deferrals.md`](2026-07-22-f1-f8-phase-deferrals.md) § 3 |
 | **F8 milestone dead-field** — cosmetic forward hook (dead-carried catalog tuple) | [`2026-07-22-f1-f8-phase-deferrals.md`](2026-07-22-f1-f8-phase-deferrals.md) § 4 |
+| **`gh-apply` skill drift** — the skill still documents single-repo v1 ("multi-repo blocked") and the pre-#147 driver CLI; update its phases to the multi-repo neutral flow | `skills/gh-apply/SKILL.md` |
 
 ### 🔵 v2 — deferred by design boundary
 | Item | Source |
 |---|---|
 | **`allow` (unattended direct push) + scheduled auto-apply** — behind `allow_scheduled` + a workspace apply policy; the confirmation model changes, so **design first** | [`2026-07-29-apply-mode-v2-deferrals.md`](2026-07-29-apply-mode-v2-deferrals.md) § B |
 | **Single-repo-atomic Path A push** — only if a future Nave surface yields per-repo exec signal | [`2026-07-29-apply-mode-v2-deferrals.md`](2026-07-29-apply-mode-v2-deferrals.md) § B |
+| **Non-neutral multi-repo** — plan-sync / generated-artifact / marketplace-sync remain single-repo; the driver/reconcile are source-agnostic but their fleet binding shapes need a spec | [`2026-08-15-multi-repo-apply-design.md`](../superpowers/specs/2026-08-15-multi-repo-apply-design.md) § 10 |
 
 ### ⚪ Non-goals & tooling (recorded so they aren't re-proposed)
 - **Auto-merge** — permanent non-goal; Pulse opens PRs and detects merges, never merges. ([apply-mode v2](2026-07-29-apply-mode-v2-deferrals.md) § C)
@@ -181,10 +187,12 @@ The libraries exist; the *propose* side now runs on cadence (F10 closed 2026-07-
 
 1. ~~**F10 last mile**~~ — ✅ done 2026-07-30 (fold #140 + enroll #2); the propose side runs on cadence.
 2. ~~**F4 adapters**~~ — ✅ done 2026-08-13 (#142); read-spine gap closed.
-3. **Apply-mode production wiring** — the apply-side spine (3-repo: pulse-gh driver + nave clone bridge + workspace base-writer). **The top open item.** The pulse-gh-half implementation plan is written and reviewed (`2026-07-30-apply-mode-pulse-wiring.md`); the Nave-verb half needs its own fork plan against that plan's Task 1 contract before the pulse-gh driver can land end-to-end.
-4. **`relationships.yaml` schema drift** — cheap, and the one live correctness bug.
-5. **Binding files for the enrolled F7/F8 audits** — add `generated.yaml` / `plan-sync.yaml` to the workspace so `generated-artifact-audit` / `plan-sync` have real work instead of validated-abort. Data, when there's something to bind.
-6. Everything else as its feature gains a real consumer.
+3. ~~**Interactive apply driver + multi-repo apply v2**~~ — ✅ done 2026-08-15 (#147); live-proven against real repos.
+4. **F11 dependency-bump handoff object** — spec-first; the flagship use-case link (F4 § C).
+5. **`relationships.yaml` schema drift** — cheap, and the one live correctness bug.
+6. **Scheduled/deployed apply + `advance_base`** — gated on the `allow` design (🔵 v2).
+7. **Binding files for the enrolled F7/F8 audits** — add `generated.yaml` / `plan-sync.yaml` to the workspace so `generated-artifact-audit` / `plan-sync` have real work instead of validated-abort. Data, when there's something to bind.
+8. Everything else as its feature gains a real consumer.
 
 > **Before branching any multi-repo item, decompose it through the Cross-repo dependency map
 > above** — which repos it spans, which sibling shape it assumes, and which branch flow each PR
@@ -192,6 +200,8 @@ The libraries exist; the *propose* side now runs on cadence (F10 closed 2026-07-
 > the wrong repo) both come from skipping this step.
 
 ## Backlog docs (full detail lives here)
+- [`2026-08-15-multi-repo-apply.md`](../superpowers/plans/2026-08-15-multi-repo-apply.md) — multi-repo apply v2 implementation plan
+- [`2026-08-15-multi-repo-apply-design.md`](../superpowers/specs/2026-08-15-multi-repo-apply-design.md) — multi-repo apply v2 design spec
 - [`2026-08-13-f4-deferred-scope.md`](2026-08-13-f4-deferred-scope.md) — F4 v1 scope cuts (Conda, cardinality, F11 handoff, per-package overrides) deferred from the post-review plan revision
 - [`2026-07-29-apply-mode-v2-deferrals.md`](2026-07-29-apply-mode-v2-deferrals.md) — apply-mode (F11) v2 / production-wiring / dependent items
 - [`2026-07-22-f1-f8-phase-deferrals.md`](2026-07-22-f1-f8-phase-deferrals.md) — F1–F8 roll-up (apply-mode #1 now ✅ resolved; #2–#4 open)
