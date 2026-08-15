@@ -144,19 +144,9 @@ async fn provision_one(
     // or GitHub-API cost. A failure here (should not happen for a verified
     // commit) is reported the same way a missing ref is: NotACommit with
     // an explicit reason, never a silent empty string passed downstream.
-    let observed_tree = match git_output(dir, &[&format!("{observed}^{{tree}}"), "--verify"]).await
+    let observed_tree = match git_output(dir, &["rev-parse", &format!("{observed}^{{tree}}")]).await
     {
-        Ok(_) => match git_output(dir, &["rev-parse", &format!("{observed}^{{tree}}")]).await {
-            Ok(tree_sha) => tree_sha,
-            Err(e) => {
-                return mk(
-                    nave_apply::BranchState::NotACommit,
-                    observed,
-                    String::new(),
-                    Some(&format!("resolved commit has no tree: {e}")),
-                );
-            }
-        },
+        Ok(tree_sha) => tree_sha,
         Err(e) => {
             return mk(
                 nave_apply::BranchState::NotACommit,
@@ -207,7 +197,7 @@ async fn provision_one(
 }
 ```
 
-Note: `git rev-parse` on `<commit>^{tree}` never fails for a resolved commit object in normal operation — the double-call (`--verify` probe then a plain `rev-parse`) is defensive parity with how `provision_one` already double-checks `cat-file -t` before trusting `observed`; if this proves redundant in review, collapse to one `git_output(dir, &["rev-parse", &format!("{observed}^{{tree}}")])` call with its `Err` arm reported as `NotACommit`. Either shape satisfies the interface — keep whichever the existing `git_util` helpers make cleaner to write correctly.
+Note: `git rev-parse {observed}^{tree}` is a single local call. The commit has already been verified by the preceding `cat-file -t` check, so a failure here is reported as `NotACommit` with the git error; there is no silent empty string passed downstream.
 
 Locate and update the final success-path `mk(...)` call (the branch after the successful `checkout -B`, at the end of the function body you read in Step 1) to also pass `observed_tree`.
 
@@ -933,14 +923,7 @@ Add to the `_digest_proposal` overrides parametrization (find the existing `@pyt
 
 ```python
 def test_proposal_digest_changes_when_transform_params_changes():
-    base = _digest_proposal()
-    changed = mutation_plan.build_proposal(
-        id="run-1", selection=["acme/api"], transformation="format-python",
-        expected_shas={"acme/api": "abc"}, actor=minimal_actor(),
-        transform_params={},
-    )
-    # Same shape as base but через a different target value once templated
-    # transformations exist — exercised directly against a templated entry:
+    # Same proposal id, different target version via templated argv:
     registry = mutation_plan.load_registry(registry_data_with_params())
     p1 = mutation_plan.build_proposal(
         id="apply-bump-python-requests-uv-abc123", selection=["acme/api"],
@@ -1540,9 +1523,10 @@ def test_collect_dependency_bump_resolves_finding_and_target():
         {"group": "core-runtime", "ecosystem": "python", "package": "requests"},
         actor=mutation_plan.Actor("octocat", "laptop", "interactive"),
         io_seams=io,
-        _fetch_records=lambda repos, io_seams: [
-            r for repo in repos for r in io.records_by_repo.get(repo, [])
-        ],
+        _fetch_records=lambda repos, io_seams: (
+            [r for repo in repos for r in io.records_by_repo.get(repo, [])],
+            {},
+        ),
         _load_groups=lambda io_seams: io.groups,
     )
     assert inputs.finding.package == "requests"
@@ -1562,7 +1546,7 @@ def test_collect_dependency_bump_rejects_unknown_finding_address():
         apply_rederive._collect_dependency_bump(
             {"group": "core-runtime", "ecosystem": "python", "package": "does-not-exist"},
             actor=mutation_plan.Actor("octocat", "laptop", "interactive"), io_seams=io,
-            _fetch_records=lambda repos, io_seams: io.records_by_repo["acme/api"],
+            _fetch_records=lambda repos, io_seams: (io.records_by_repo["acme/api"], {}),
             _load_groups=lambda io_seams: io.groups,
         )
 
@@ -1581,9 +1565,10 @@ def test_collect_dependency_bump_rejects_unresolved_distance():
         apply_rederive._collect_dependency_bump(
             {"group": "core-runtime", "ecosystem": "python", "package": "requests"},
             actor=mutation_plan.Actor("octocat", "laptop", "interactive"), io_seams=io,
-            _fetch_records=lambda repos, io_seams: [
-                r for repo in repos for r in io.records_by_repo.get(repo, [])
-            ],
+            _fetch_records=lambda repos, io_seams: (
+                [r for repo in repos for r in io.records_by_repo.get(repo, [])],
+                {},
+            ),
             _load_groups=lambda io_seams: io.groups,
         )
 
@@ -1601,11 +1586,12 @@ def test_collect_dependency_bump_drops_non_main_group_declaration():
     inputs = apply_rederive._collect_dependency_bump(
         {"group": "core-runtime", "ecosystem": "python", "package": "requests"},
         actor=mutation_plan.Actor("octocat", "laptop", "interactive"), io_seams=io,
-        _fetch_records=lambda repos, io_seams: [
-            r for repo in repos for r in io.records_by_repo.get(repo, [])
-        ],
+        _fetch_records=lambda repos, io_seams: (
+            [r for repo in repos for r in io.records_by_repo.get(repo, [])],
+            {},
+        ),
         _load_groups=lambda io_seams: io.groups,
-        _declarations_by_repo={"acme/api": {"requests": "dev"}, "acme/web": {"requests": "main"}},
+        _declarations_by_repo={"acme/api": {"python": {"requests": "dev"}}, "acme/web": {"python": {"requests": "main"}}},
     )
     assert inputs.selection == ()
     assert inputs.blocked == {"acme/api": "non-main-group-package"}
@@ -1625,9 +1611,10 @@ def test_collect_dependency_bump_rejects_empty_selection_when_all_at_target():
         apply_rederive._collect_dependency_bump(
             {"group": "core-runtime", "ecosystem": "python", "package": "requests"},
             actor=mutation_plan.Actor("octocat", "laptop", "interactive"), io_seams=io,
-            _fetch_records=lambda repos, io_seams: [
-                r for repo in repos for r in io.records_by_repo.get(repo, [])
-            ],
+            _fetch_records=lambda repos, io_seams: (
+                [r for repo in repos for r in io.records_by_repo.get(repo, [])],
+                {},
+            ),
             _load_groups=lambda io_seams: io.groups,
         )
 
@@ -1645,16 +1632,17 @@ def test_collect_dependency_bump_drops_repo_missing_evidence_tree_sha():
     inputs = apply_rederive._collect_dependency_bump(
         {"group": "core-runtime", "ecosystem": "python", "package": "requests"},
         actor=mutation_plan.Actor("octocat", "laptop", "interactive"), io_seams=io,
-        _fetch_records=lambda repos, io_seams: [
-            r for repo in repos for r in io.records_by_repo.get(repo, [])
-        ],
+        _fetch_records=lambda repos, io_seams: (
+            [r for repo in repos for r in io.records_by_repo.get(repo, [])],
+            {},
+        ),
         _load_groups=lambda io_seams: io.groups,
     )
     assert inputs.selection == ()
     assert inputs.blocked == {"acme/api": "evidence-tree-sha-missing"}
 ```
 
-(The exact keyword names `_fetch_records`/`_load_groups`/`_declarations_by_repo` are seams this step's implementation must expose as injectable — see Step 7's design; if the real implementation names them differently, update these test call sites to match, keeping the SAME test intent: fresh-records injection, coherence-group injection, and declaration-group injection are each independently fakeable without a real Nave/GitHub round-trip.)
+(The exact keyword names `_fetch_records` (returns `(records, declarations_by_repo)`), `_load_groups`, and `_declarations_by_repo` are seams this step's implementation must expose as injectable — see Step 7's design; if the real implementation names them differently, update these test call sites to match, keeping the SAME test intent: fresh-records injection, coherence-group injection, and declaration-group injection are each independently fakeable without a real Nave/GitHub round-trip.)
 
 - [ ] **Step 6: Run to confirm failure**
 
@@ -1718,12 +1706,16 @@ Add `_collect_dependency_bump`:
 ```python
 def _fetch_fresh_records(
     repos: tuple[str, ...], io_seams: IoSeams
-) -> list[deps_module.PackageRecord]:
+) -> tuple[list[deps_module.PackageRecord], dict[str, dict[str, dict[str, str]]]]:
     """The REAL fresh-evidence path: materialize F4 evidence for exactly
     the finding's group repos (never the whole fleet), then run the same
     typed evaluation the healthcheck fleet.dependencies.coherence check
-    uses. Not called `_collect_neutral`-style with a fake — production
-    callers pass no override; tests inject `_fetch_records` directly."""
+    uses. Returns both the fleet-comparison records and a mapping from
+    repo -> ecosystem -> package name -> declared group, so the bump
+    collect step can enforce main-group-only without a separate evidence
+    round-trip. Not called `_collect_neutral`-style with a fake —
+    production callers pass no override; tests inject `_fetch_records`
+    directly."""
     if io_seams.runner is None:
         raise RederiveError("apply_rederive: dependency-bump requires io_seams.runner")
     try:
@@ -1736,12 +1728,22 @@ def _fetch_fresh_records(
         ) from exc
     evidence_index = dependency_evidence.load_dependency_evidence(document)
     records: list[deps_module.PackageRecord] = []
+    declarations_by_repo: dict[str, dict[str, dict[str, str]]] = {}
     for repo in repos:
         evidence = evidence_index.get(repo)
         for ecosystem in ("python", "node"):
             evaluation = dependency_pipeline.evaluate_dependencies(repo, ecosystem, evidence)
             records.extend(evaluation.records)
-    return records
+            package_namespace = evaluation.records[0].ecosystem if evaluation.records else ecosystem
+            by_ecosystem = declarations_by_repo.setdefault(repo, {})
+            by_name = by_ecosystem.setdefault(package_namespace, {})
+            for decl in evaluation.declarations:
+                # A package may appear in more than one group; "main" wins
+                # over dev/optional because any main declaration makes the
+                # package safe to bump as fleet runtime surface.
+                if decl.name not in by_name or decl.group == "main":
+                    by_name[decl.name] = decl.group
+    return records, declarations_by_repo
 
 
 def _load_coherence_groups(io_seams: IoSeams) -> tuple[deps_module.CoherenceGroup, ...]:
@@ -1763,15 +1765,15 @@ def _collect_dependency_bump(
     *,
     _fetch_records=_fetch_fresh_records,
     _load_groups=_load_coherence_groups,
-    _declarations_by_repo: Mapping[str, Mapping[str, str]] | None = None,
+    _declarations_by_repo: Mapping[str, Mapping[str, Mapping[str, str]]] | None = None,
 ) -> DependencyBumpProviderInputs:
     """Collect-once: re-derive the finding fresh, compute its target,
     resolve selection (diverging + main-group-only), and resolve fresh
-    per-repo commit/tree/default-branch evidence. `_fetch_records`/
-    `_load_groups` are test seams (production callers never pass them);
-    `_declarations_by_repo` is a test-only override for the main-group
-    join (production reads it from the same evaluation pass `_fetch_records`
-    already ran, via `_declared_groups_by_repo` below)."""
+    per-repo commit/tree/default-branch evidence. `_fetch_records` returns
+    `(records, declarations_by_repo)` where declarations_by_repo is
+    `repo -> ecosystem -> package -> group`; `_load_groups` loads coherence
+    groups; `_declarations_by_repo` is an optional test-only override for
+    the main-group join."""
     group_id = finding_ref.get("group")
     ecosystem = finding_ref.get("ecosystem")
     package = finding_ref.get("package")
@@ -1785,7 +1787,7 @@ def _collect_dependency_bump(
     if group is None:
         raise RederiveError(f"apply_rederive: no coherence group named {group_id!r}")
 
-    records = _fetch_records(group.repos, io_seams)
+    records, fetched_declarations = _fetch_records(group.repos, io_seams)
     report = deps_module.compare(records, groups)
     matches = [
         f for f in (*report.findings, *report.unresolved)
@@ -1814,11 +1816,11 @@ def _collect_dependency_bump(
         )
 
     records_by_repo = {(r.repo, r.ecosystem, r.name): r for r in records}
-    declarations_by_repo = _declarations_by_repo or {}
+    declarations_by_repo = _declarations_by_repo if _declarations_by_repo is not None else fetched_declarations
     selection: list[str] = []
     blocked: dict[str, str] = {}
     for repo in diverging:
-        declared_group = declarations_by_repo.get(repo, {}).get(package, "main")
+        declared_group = declarations_by_repo.get(repo, {}).get(ecosystem, {}).get(package, "main")
         if declared_group != "main":
             blocked[repo] = "non-main-group-package"
             continue
@@ -1874,7 +1876,7 @@ def _collect_dependency_bump(
 - [ ] **Step 8: Run to confirm all 6 pass**
 
 Run: `uv run pytest lib/pulse/scripts/tests/test_apply_rederive.py -k collect_dependency_bump -v`
-Expected: PASS (6/6). If a test's exact seam-keyword name (`_fetch_records`/`_load_groups`/`_declarations_by_repo`) doesn't line up with the implementation above, fix the test call site to match — the implementation's seam names are authoritative since they're what production code (Step 7) also uses.
+Expected: PASS (6/6). If a test's exact seam-keyword name (`_fetch_records` returning `(records, declarations_by_repo)`, `_load_groups`, or `_declarations_by_repo`) doesn't line up with the implementation above, fix the test call site to match — the implementation's seam names are authoritative since they're what production code (Step 7) also uses.
 
 - [ ] **Step 9: Write the failing tests for `rederive_dependency_bump`**
 
@@ -3051,17 +3053,17 @@ def test_finding_with_dev_group_declaration_blocks_that_repo_without_promoting(m
     inputs = apply_rederive._collect_dependency_bump(
         FINDING_REF, actor=mutation_plan.Actor("octocat", "laptop", "interactive"),
         io_seams=apply_rederive.IoSeams(),
-        _fetch_records=lambda repos, io_seams: [
-            _record("acme/uv-repo", "uv", "2.28.0"),
-            _record("acme/leader", "uv", "2.31.0"),
-        ],
+        _fetch_records=lambda repos, io_seams: (
+            [_record("acme/uv-repo", "uv", "2.28.0"), _record("acme/leader", "uv", "2.31.0")],
+            {},
+        ),
         _load_groups=lambda io_seams: (
             apply_rederive.deps_module.CoherenceGroup(
                 id="core-runtime", repos=("acme/uv-repo", "acme/leader"),
                 packages=("python:requests",), exclude_packages=(), policy="exact",
             ),
         ),
-        _declarations_by_repo={"acme/uv-repo": {"requests": "dev"}},
+        _declarations_by_repo={"acme/uv-repo": {"python": {"requests": "dev"}}},
     )
     assert inputs.selection == ()
     assert inputs.blocked == {"acme/uv-repo": "non-main-group-package"}
