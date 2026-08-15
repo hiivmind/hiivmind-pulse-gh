@@ -41,7 +41,13 @@ from lib.pulse.scripts import (
     plan_sync_snapshot,
 )
 
-SOURCE_KINDS = ("plan-sync", "generated-artifact", "marketplace-sync")
+SOURCE_KINDS = ("plan-sync", "generated-artifact", "marketplace-sync", "neutral")
+
+# Neutral transformations are the standalone, self-contained executable
+# entries with no propose driver. `regenerate-from-template` (a `nave
+# generate --from-template` argv) belongs to generated-artifact, not here;
+# the F9 overlays are profile:claude-plugin, never neutral.
+NEUTRAL_TRANSFORMATIONS = ("format-python", "refresh-node-lockfile", "regenerate-docs-index")
 
 
 class RederiveError(ValueError):
@@ -120,7 +126,23 @@ class MarketplaceProviderInputs:
     registry: mutation_plan.TransformationRegistry | None = None
 
 
-ProviderInputs = PlanSyncProviderInputs | GeneratedProviderInputs | MarketplaceProviderInputs
+@dataclass(frozen=True)
+class NeutralProviderInputs:
+    """Fresh neutral evidence: `binding` is the caller-supplied `binding_ref`
+    (validated); `head_sha` is the live HEAD of the binding's `base_ref` branch."""
+
+    binding: Mapping[str, Any]
+    head_sha: str | None
+    actor: Mapping[str, Any] | mutation_plan.Actor
+    registry: mutation_plan.TransformationRegistry | None = None
+
+
+ProviderInputs = (
+    PlanSyncProviderInputs
+    | GeneratedProviderInputs
+    | MarketplaceProviderInputs
+    | NeutralProviderInputs
+)
 
 
 @dataclass(frozen=True)
@@ -138,6 +160,47 @@ class RederivedProposal:
     proposal: mutation_plan.Proposal
     source_kind: str
     finalizer_record: dict[str, Any] | None
+
+
+def _validate_neutral_binding(binding: Mapping[str, Any]) -> tuple[str, str]:
+    """Validate a neutral binding's `repo` + `transformation`; return (owner, name).
+
+    Raises `RederiveError` (never KeyError/ValueError) so a malformed binding
+    blocks (the driver turns it into a `blocked` result), never crashes.
+    """
+    repo = binding.get("repo")
+    if not isinstance(repo, str) or not repo or repo.count("/") != 1:
+        raise RederiveError(
+            f"apply_rederive: neutral binding requires repo 'owner/name', got {repo!r}"
+        )
+    transformation = binding.get("transformation")
+    if not isinstance(transformation, str) or not transformation:
+        raise RederiveError(
+            "apply_rederive: neutral binding requires a non-empty transformation, "
+            f"got {transformation!r}"
+        )
+    return repo.split("/", 1)
+
+
+def neutral_proposal_id(binding: Mapping[str, Any]) -> str:
+    """Deterministic neutral proposal id: `apply-{transformation}-{owner}-{name}`.
+
+    Single source of the id, shared by `neutral_summary` and `_rederive_neutral`
+    so the synthesized `recorded_summary.proposal_id` can never drift from the
+    re-derived proposal's id.
+    """
+    owner, name = _validate_neutral_binding(binding)
+    return f"apply-{binding['transformation']}-{owner}-{name}"
+
+
+def neutral_summary(binding: Mapping[str, Any]) -> dict[str, str]:
+    """Synthesize the `recorded_summary` for a neutral apply (no propose phase)."""
+    proposal_id = neutral_proposal_id(binding)  # validates repo + transformation first
+    return {
+        "binding": binding["repo"],
+        "transformation": binding["transformation"],
+        "proposal_id": proposal_id,
+    }
 
 
 def collect_inputs(
@@ -164,7 +227,9 @@ def collect_inputs(
         raise RederiveError(f"apply_rederive: unknown source_kind: {source_kind!r}")
 
     binding_id = binding_ref.get(
-        "plugin_id" if source_kind == "marketplace-sync" else "id"
+        "repo"
+        if source_kind == "neutral"
+        else ("plugin_id" if source_kind == "marketplace-sync" else "id")
     )
     recorded_binding = recorded_summary.get("binding")
     if recorded_binding is not None and binding_id != recorded_binding:
@@ -178,6 +243,8 @@ def collect_inputs(
         return _collect_plan_sync(binding_ref, actor, io_seams)
     if source_kind == "generated-artifact":
         return _collect_generated(binding_ref, actor, io_seams)
+    if source_kind == "neutral":
+        return _collect_neutral(binding_ref, actor, io_seams)
     return _collect_marketplace(binding_ref, actor, io_seams)
 
 
@@ -270,6 +337,42 @@ def _collect_marketplace(
     )
 
 
+def _collect_neutral(
+    binding_ref: Mapping[str, Any],
+    actor: Mapping[str, Any] | mutation_plan.Actor,
+    io_seams: IoSeams,
+) -> NeutralProviderInputs:
+    owner, name = _validate_neutral_binding(binding_ref)  # repo + transformation
+    base_ref = binding_ref.get("base_ref")
+    if not isinstance(base_ref, str) or not base_ref:
+        raise RederiveError(
+            f"apply_rederive: neutral binding requires a non-empty base_ref, got {base_ref!r}"
+        )
+    if io_seams.gh_api is None:
+        raise RederiveError("apply_rederive: neutral requires io_seams.gh_api")
+    try:
+        payload = io_seams.gh_api(f"repos/{owner}/{name}/branches/{base_ref}")
+    except Exception as exc:
+        raise RederiveError(
+            f"apply_rederive: neutral HEAD fetch failed for {owner}/{name}: {exc}"
+        ) from exc
+    head_sha = None
+    if isinstance(payload, Mapping):
+        commit = payload.get("commit")
+        if isinstance(commit, Mapping) and isinstance(commit.get("sha"), str):
+            head_sha = commit["sha"] or None
+    if head_sha is None:
+        raise RederiveError(
+            f"apply_rederive: neutral could not resolve HEAD for {owner}/{name}@{base_ref}"
+        )
+    return NeutralProviderInputs(
+        binding=binding_ref,
+        head_sha=head_sha,
+        actor=actor,
+        registry=io_seams.registry,
+    )
+
+
 def rederive(inputs: ProviderInputs) -> RederivedProposal:
     """Call the REAL source-specific proposal builder, allow-listed.
 
@@ -287,6 +390,8 @@ def rederive(inputs: ProviderInputs) -> RederivedProposal:
         return _rederive_generated(inputs)
     if isinstance(inputs, MarketplaceProviderInputs):
         return _rederive_marketplace(inputs)
+    if isinstance(inputs, NeutralProviderInputs):
+        return _rederive_neutral(inputs)
     raise RederiveError(f"apply_rederive: unsupported provider inputs: {type(inputs)!r}")
 
 
@@ -407,4 +512,35 @@ def _rederive_marketplace(inputs: MarketplaceProviderInputs) -> RederivedProposa
         proposal=proposal,
         source_kind="marketplace-sync",
         finalizer_record={"base_ref": inputs.default_branch},
+    )
+
+
+def _rederive_neutral(inputs: NeutralProviderInputs) -> RederivedProposal:
+    binding = inputs.binding
+    transformation = binding.get("transformation")
+    if transformation not in NEUTRAL_TRANSFORMATIONS:
+        raise RederiveError(
+            f"apply_rederive: transformation {transformation!r} is not a neutral transformation"
+        )
+    head_sha = inputs.head_sha
+    if not isinstance(head_sha, str) or not head_sha:
+        raise RederiveError("apply_rederive: neutral requires a resolved head_sha")
+    try:
+        proposal = mutation_plan.build_proposal(
+            id=neutral_proposal_id(binding),
+            selection=[binding["repo"]],
+            transformation=transformation,
+            expected_shas={binding["repo"]: head_sha},
+            actor=inputs.actor,
+            mutation_policy="allow-listed",
+            bound_paths={binding["repo"]: binding["bound_paths"]},
+            registry=inputs.registry,
+        )
+    except mutation_plan.MutationPlanError as exc:
+        raise RederiveError(f"apply_rederive: neutral build failed: {exc}") from exc
+    return RederivedProposal(
+        binding_id=str(binding["repo"]),
+        proposal=proposal,
+        source_kind="neutral",
+        finalizer_record=None,
     )

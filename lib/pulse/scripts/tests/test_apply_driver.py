@@ -214,3 +214,115 @@ def test_resume_from_completed_push_reopens_pr_from_durable_evidence(tmp_path, m
     assert result["state"] == "pr_opened"
     assert result["pushed_sha"] == "commit"
     assert "commit" not in ops.calls and "push" not in ops.calls
+
+
+def test_run_apply_neutral_synthesizes_summary_and_threads_gh_api(tmp_path, monkeypatch):
+    from lib.pulse.scripts.apply_authorization import AuthorizationError
+
+    captured = {}
+
+    def fake_collect(source_kind, binding_ref, recorded_summary, *, actor, io_seams):
+        captured["recorded_summary"] = recorded_summary
+        captured["gh_api"] = io_seams.gh_api
+        return SimpleNamespace(registry=None)
+
+    def fake_rederive(inputs):
+        prop = mutation_plan.build_proposal(
+            id="apply-format-python-hiivmind-agent-kernel",
+            selection=["hiivmind/agent-kernel"], transformation="format-python",
+            expected_shas={"hiivmind/agent-kernel": "e" * 40},
+            actor={"gh_login": "octocat", "machine": "host", "mode": "interactive"},
+            mutation_policy="allow-listed",
+            bound_paths={"hiivmind/agent-kernel": ("src/**",)},
+        )
+        return apply_rederive.RederivedProposal("hiivmind/agent-kernel", prop, "neutral", None)
+
+    monkeypatch.setattr(apply_driver.apply_rederive, "collect_inputs", fake_collect)
+    monkeypatch.setattr(apply_driver.apply_rederive, "rederive", fake_rederive)
+    monkeypatch.setattr(apply_driver.apply_authorization, "load_authorization", lambda *a: object())
+    monkeypatch.setattr(apply_driver.apply_authorization, "authorization_digest", lambda a: "v1|" + "b" * 64)
+    monkeypatch.setattr(apply_driver.apply_authorization, "authorize",
+                        lambda *a: (_ for _ in ()).throw(AuthorizationError("stop")))
+
+    ledger = tmp_path / "ledger.yaml"
+    ledger.write_text(yaml.safe_dump({
+        "ledger_version": 1, "run_id": "r", "workflow": "w", "status": "running",
+        "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z",
+        "actor": {"gh_login": "octocat", "machine": "host"}, "params": {},
+        "repos": ["hiivmind/agent-kernel"],
+        "steps": [{"id": "step", "repo": "hiivmind/agent-kernel", "depends_on": [],
+                   "gate": None, "status": "pending", "notes": []}],
+    }, sort_keys=False))
+    result = tmp_path / "result.yaml"
+    fake_gh_api = lambda path: {"commit": {"sha": "e" * 40}}
+
+    out = apply_driver.run_apply(
+        source_kind="neutral",
+        binding_ref={"repo": "hiivmind/agent-kernel", "transformation": "format-python",
+                     "base_ref": "main", "bound_paths": ["src/**"]},
+        recorded_summary=None,
+        authorization_path=tmp_path / "auth.yaml", ledger_path=ledger, step_id="step",
+        actor_id="octocat@host", runner=RecordingRunner(), gh_api=fake_gh_api,
+        gh_ops=FakeGhOps(), result_path=result, workspace=str(tmp_path),
+    )
+
+    assert out["state"] == "blocked"
+    assert captured["recorded_summary"] == {
+        "binding": "hiivmind/agent-kernel",
+        "transformation": "format-python",
+        "proposal_id": "apply-format-python-hiivmind-agent-kernel",
+    }
+    assert captured["gh_api"] is fake_gh_api
+
+
+def test_run_apply_rejects_missing_summary_for_non_neutral(tmp_path, monkeypatch):
+    monkeypatch.setattr(apply_driver.apply_rederive, "collect_inputs",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not collect")))
+    ledger = tmp_path / "ledger.yaml"
+    ledger.write_text(yaml.safe_dump({
+        "ledger_version": 1, "run_id": "r", "workflow": "w", "status": "running",
+        "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z",
+        "actor": {"gh_login": "octocat", "machine": "host"}, "params": {},
+        "repos": ["acme/widget"],
+        "steps": [{"id": "step", "repo": "acme/widget", "depends_on": [],
+                   "gate": None, "status": "pending", "notes": []}],
+    }, sort_keys=False))
+    result = tmp_path / "result.yaml"
+    out = apply_driver.run_apply(
+        source_kind="generated-artifact",
+        binding_ref={"id": "binding", "branch": "main"},
+        recorded_summary=None,
+        authorization_path=tmp_path / "auth.yaml", ledger_path=ledger, step_id="step",
+        actor_id="octocat@host", runner=RecordingRunner(), gh_ops=FakeGhOps(),
+        result_path=result, workspace=str(tmp_path),
+    )
+    assert out["state"] == "blocked"
+    assert "recorded_summary" in out["reason"]
+
+
+def test_expand_bound_globs_matches_tracked_and_untracked(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "examples").mkdir()
+    (tmp_path / "src").joinpath("a.py").write_text("x")
+    (tmp_path / "src").joinpath("b.py").write_text("y")
+    (tmp_path / "examples").joinpath("spinner.py").write_text("z")
+    (tmp_path / "src").joinpath("ignored.txt").write_text("i")
+    (tmp_path / ".gitignore").write_text("src/ignored.txt\n")
+    import subprocess
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "add", "src", "examples", ".gitignore"], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "commit", "-q", "-m", "seed", "--no-verify"],
+                   check=True, env={**__import__("os").environ,
+                                    "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+                                    "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"})
+    subprocess.run(["git", "-C", str(tmp_path), "check-ignore", "-q", "src/ignored.txt"], check=False)
+    (tmp_path / "src").joinpath("untracked.py").write_text("u")
+
+    expanded = apply_driver._expand_bound_globs(
+        str(tmp_path), ("src/**", "examples/**")
+    )
+    assert "src/a.py" in expanded
+    assert "src/b.py" in expanded
+    assert "src/untracked.py" in expanded
+    assert "examples/spinner.py" in expanded
+    assert not any("ignored" in p for p in expanded)

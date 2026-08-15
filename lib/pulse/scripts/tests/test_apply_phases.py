@@ -45,8 +45,28 @@ def test_exec_blocks_missing_tool_before_exec(monkeypatch):
 class Ops:
     def __init__(self, result): self.result, self.calls = result, []
     def provision_branch(self, branch, bases): self.calls.append((branch, bases)); return self.result
+    def commit_repos(self, message, bound_paths): self.calls.append((message, bound_paths)); return self.result
     def push_repos(self, branch): self.calls.append(branch); return self.result
     def reset_repos(self, branch, shas): self.calls.append((branch, shas)); return {}
+
+
+def test_commit_phase_passes_expanded_bound_paths():
+    ops = Ops({"acme/api": {"state": "ok", "local_commit_sha": "c1"}, "acme/web": {"state": "ok", "local_commit_sha": "c2"}})
+    result = apply_phases.commit_phase(
+        ops, proposal(), "msg",
+        bound_paths={"acme/api": ("src/a.py", "src/b.py"), "acme/web": ("src/c.py",)},
+    )
+    assert result["acme/api"]["state"] == "ok"
+    message, passed = ops.calls[0]
+    assert message == "msg"
+    assert passed == {"acme/api": ("src/a.py", "src/b.py"), "acme/web": ("src/c.py",)}
+
+
+def test_commit_phase_defaults_to_proposal_bound_paths():
+    ops = Ops({"acme/api": {"state": "ok", "local_commit_sha": "c1"}, "acme/web": {"state": "ok", "local_commit_sha": "c2"}})
+    apply_phases.commit_phase(ops, proposal(), "msg")
+    message, passed = ops.calls[0]
+    assert passed == proposal().bound_paths
 
 
 def provision_item(repo, **changes):

@@ -112,8 +112,10 @@ def validate_phase(entry, reader, proposal) -> dict[str, dict]:
     }
 
 
-def commit_phase(apply_ops, proposal, message) -> dict[str, dict]:
-    raw = _by_repo(apply_ops.commit_repos(message, proposal.bound_paths))
+def commit_phase(apply_ops, proposal, message, bound_paths=None) -> dict[str, dict]:
+    if bound_paths is None:
+        bound_paths = proposal.bound_paths
+    raw = _by_repo(apply_ops.commit_repos(message, bound_paths))
     outcomes = {}
     for repo in proposal.selection:
         item = raw.get(repo)

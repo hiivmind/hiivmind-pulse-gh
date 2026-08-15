@@ -234,6 +234,12 @@ def resolve_intended_base(
             "cannot resolve intended base for generated-artifact: no branch"
         )
 
+    if source_kind == "neutral":
+        base = binding_ref.get("base_ref")
+        if not isinstance(base, str) or not base:
+            raise ValueError("cannot resolve intended base for neutral: no base_ref")
+        return base
+
     raise ValueError(f"unknown source_kind: {source_kind}")
 
 
