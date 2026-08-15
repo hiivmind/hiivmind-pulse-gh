@@ -217,8 +217,8 @@ def _validate_neutral_binding(
 def _resolve_neutral_repos(
     binding: Mapping[str, Any], runner: Callable[..., Any] | None
 ) -> tuple[str, ...]:
-    """Union explicit `repos` with `repo_selector` results (via `nave fleet
-    list --json`), de-duplicated and sorted."""
+    """Union explicit `repos` with `repo_selector` results (resolved via
+    `nave fleet list --json --term <term>`), de-duplicated and sorted."""
     _, selection = _validate_neutral_binding(binding)
     selector = binding.get("repo_selector")
     if selector is not None:
@@ -232,10 +232,13 @@ def _resolve_neutral_repos(
             raise RederiveError(
                 f"apply_rederive: repo_selector must be {{term: str}}, got {selector!r}"
             )
-        proc = runner(["nave", "fleet", "list", "--json"], cwd=None)
+        proc = runner(
+            ["nave", "fleet", "list", "--json", "--term", selector["term"]],
+            cwd=None,
+        )
         if getattr(proc, "returncode", 0) != 0:
             raise RederiveError(
-                "apply_rederive: selector resolution failed (nave fleet list): "
+                "apply_rederive: selector resolution failed (nave fleet list --term): "
                 f"{getattr(proc, 'stderr', '') or getattr(proc, 'stdout', '')}"
             )
         raw = getattr(proc, "stdout", "")

@@ -1022,7 +1022,7 @@ def test_neutral_fleet_selector_unions_and_dedups():
     }
 
     def runner(argv, cwd):
-        assert argv[:3] == ["nave", "fleet", "list"]
+        assert argv == ["nave", "fleet", "list", "--json", "--term", "pyproject:true"]
         return Completed(
             stdout='[{"owner":"hiivmind","name":"b","default_branch":"main"},'
                    '{"owner":"hiivmind","name":"c","default_branch":"main"}]'
