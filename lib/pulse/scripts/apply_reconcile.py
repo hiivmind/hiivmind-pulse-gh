@@ -853,7 +853,19 @@ def reconcile_repos(
         )
         if updated:
             existing = updated
-    return existing
+    # Fleet terminal: the step is "done" only when every repo is applied.
+    final = load_apply_status(result_path) or existing
+    ledger_doc = resolve_run.load(ledger_path)
+    step = resolve_run.find_step(ledger_doc, step_id)
+    if final.get("state") == "applied":
+        satisfied, detail = resolve_run.evaluate_merge_detected_gate(str(result_path))
+        resolve_run._apply_gate_result(step, satisfied, detail)
+        step["status"] = "done" if satisfied else "blocked-on-gate"
+    else:
+        step["status"] = "blocked-on-gate"
+    resolve_run.recompute_status(ledger_doc)
+    resolve_run.save(ledger_path, ledger_doc)
+    return final
 
 
 def main():

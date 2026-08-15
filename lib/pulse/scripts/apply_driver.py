@@ -326,7 +326,7 @@ def run_apply(*, source_kind, binding_ref, recorded_summary=None, authorization_
             else:
                 journal.begin(repo, "pen_ready", token)
                 handle = nave_adapter.pen_create(
-                    runner, nave_adapter.PenQuery(terms=list(proposal.selection)), pen_name
+                    runner, nave_adapter.PenQuery(terms=["repo:" + "|".join(proposal.selection)]), pen_name
                 )
                 if handle.state != "ok":
                     return failure("failed", handle.stderr or "pen create failed")
@@ -484,10 +484,14 @@ def _run_multi_repo(
         )
 
     def _subset_pen(pen, repos):
-        keep = {f"{item.get('owner')}/{item.get('repo')}" if item.get("owner") else item.get("repo")
-                for item in pen.get("repos", [])}
-        return {"name": pen.get("name"), "repos": [i for i in pen.get("repos", [])
-                                                  if (i.get("repo") or f"{i.get('owner')}/{i.get('repo')}") in set(repos)]}
+        wanted = set(repos)
+        return {
+            "name": pen.get("name"),
+            "repos": [
+                i for i in pen.get("repos", [])
+                if (i.get("repo") or f"{i.get('owner')}/{i.get('name')}") in wanted
+            ],
+        }
 
     def _write_fleet(repos_doc):
         return apply_reconcile.write_apply_status(
@@ -538,7 +542,7 @@ def _run_multi_repo(
         with ApplyLock(f"{ledger_path}.apply.lock"):
             resolve_run.renew_lease(ledger_path, step_id, actor_id, token)
             handle = nave_adapter.pen_create(
-                runner, nave_adapter.PenQuery(terms=list(proposal.selection)), pen_name
+                runner, nave_adapter.PenQuery(terms=["repo:" + "|".join(proposal.selection)]), pen_name
             )
             if handle.state != "ok":
                 return _write_failure(

@@ -1508,3 +1508,6 @@ def test_reconcile_repos_iterates_and_rolls_up(tmp_path):
     assert doc["repos"]["testorg/repo1"]["merged_sha"] == "merge1"
     assert doc["repos"]["testorg/repo2"]["state"] == "pr_opened"
     assert doc["state"] == "pr_opened"
+    # Fleet terminal: the step is done only when every repo is applied.
+    step = resolve_run.find_step(resolve_run.load(ledger_path), "reconcile-repo1")
+    assert step["status"] == "blocked-on-gate"
