@@ -1,7 +1,7 @@
 # Dependency-Bump Apply Handoff (F11 ← F4) — Design Spec
 
 **Date:** 2026-08-15
-**Status:** Approved (brainstorm)
+**Status:** Approved (brainstorm); revised after GLM-5.2 adversarial review (BLOCK → addressed).
 **Origin:** `docs/backlogs/2026-08-13-f4-deferred-scope.md` § C — the F4 v1 plan deliberately
 materializes the evidence a later apply-mode consumer needs (`PackageRecord` identity/provenance,
 a `DivergenceFinding` per diverging package) but does **not** construct anything apply-mode-shaped
@@ -13,7 +13,8 @@ reconcile) can land.
 spine this reuses), `docs/superpowers/specs/2026-07-30-apply-mode-production-wiring-design.md`
 (authorization + fencing), `lib/pulse/scripts/dependencies.py` (`PackageRecord`,
 `DivergenceFinding`), `lib/pulse/scripts/mutation_plan.py` (`Proposal`, `TransformationEntry`,
-`resolve_argv`), `lib/pulse/scripts/apply_phases.py` (`exec_phase`).
+`resolve_argv`, `proposal_digest`), `lib/pulse/scripts/apply_phases.py` (`exec_phase`),
+`lib/pulse/scripts/apply_reconcile.py` (`resolve_intended_base`).
 
 ---
 
@@ -50,32 +51,37 @@ Two properties of the current spine make this non-trivial, both settled in § 2:
 ## 2. Decisions (settled in brainstorm)
 
 1. **Target = highest locked version in the group**, by **semantic version order** (the same
-   PEP 440 / semver comparator F4 already uses to compute `distance`) — not lexicographic string
-   order, which mis-orders `2.10.0` vs `2.9.0`. Deterministic, zero new config: the repo that was
+   PEP 440 / semver comparator F4 already uses to compute `distance`; `packaging.Version` orders
+   pre-releases before finals, so `2.0.0rc1 < 2.0.0` correctly) — not lexicographic string order,
+   which mis-orders `2.10.0` vs `2.9.0`. Deterministic, zero new config: the repo that was
    semantically ahead becomes the source of truth. No `target:` field in `dependencies.yaml` (a
    later, separable refinement if align-up proves wrong).
 2. **Whitelisted argv templating**, not a bump-spec file or a first-class `nave pen bump` verb.
    The bump stays a plain `TransformationEntry` whose `command_argv` contains `{package}` /
    `{version}` placeholders; the driver expands them from a new `Proposal.transform_params` field.
-   No nave change is required.
+   Validation is **param-aware** (package-name vs version shapes differ — § 4.3). No nave change.
 3. **New `dependency-bump` source kind** (not a neutral transformation + extended binding). A
    finding is derived, not authored, and the neutral binding shape cannot carry the derived target;
    the alternative still needs the `Proposal` extension, so it buys nothing.
-4. **One proposal per (finding, manager).** A finding's repos can span managers (uv / poetry /
-   npm / pnpm) whose bump commands differ; each manager group becomes its own homogeneous
-   proposal. v1 pins **exact** (`==V` / `@V --save-exact`); range preservation is a non-goal (§ 8).
+4. **One proposal per (finding, manager), restricted to `main`-group declarations in v1.** A
+   finding's repos can span managers (uv / poetry / npm / pnpm) whose bump commands differ; each
+   manager group becomes its own homogeneous proposal. A package declared in a `dev`/`optional`
+   group is `blocked` (never silently promoted to main — § 4.4 step 4). v1 pins **exact** (`==V` /
+   `@V --save-exact`); range preservation is a non-goal (§ 7).
 
 ## 3. Architecture — what reuses vs. what changes
 
 | Layer | Today | Change |
 |-------|-------|--------|
 | `mutation_plan.Proposal` | `transformation: str` only | **`transform_params: dict[str, str]`** |
+| `mutation_plan.proposal_digest` | payload omits params | **include canonicalized `transform_params`** |
 | `mutation_plan.TransformationEntry` | `command_argv` (strict) | **`params: tuple[str, ...]`** (declared placeholders) |
 | `mutation_plan.resolve_argv` | returns `command_argv` verbatim | **expands `{key}` from `transform_params`** |
 | `apply_phases.exec_phase` | `resolve_argv(entry)` | passes `proposal.transform_params` |
-| `apply_rederive` sources | neutral / plan-sync / generated-artifact / marketplace-sync | **`dependency-bump` provider** |
-| `apply_driver` | `--binding-ref` (neutral) / `--recorded-summary` | **`--finding-ref`** for `dependency-bump` |
-| fence / lease / journal / phases / PR / reconcile / rollup | multi-repo already | none |
+| `apply_reconcile.resolve_intended_base` | 4 source kinds | **`dependency-bump` branch** (§ 4.8) |
+| `apply_rederive` sources | neutral / plan-sync / generated-artifact / marketplace-sync | **`dependency-bump` provider** (collect-once, rederive-many) |
+| `apply_driver` | `--binding-ref` (neutral) / `--recorded-summary` | **`--finding-ref`** + `bump_summary` synthesis |
+| fence / lease / journal / phases / PR / rollup | multi-repo already | none (per-proposal, looped — § 4.7) |
 | nave | owns clone writes | none (this is pulse-gh only) |
 
 ## 4. Design
@@ -94,6 +100,11 @@ for entries with declared params — every declared key must be present (a templ
 its values is a `MutationPlanError`, fail-closed). Entries with empty `params` (all existing
 transforms) require `transform_params == {}`.
 
+**Digest:** `proposal_digest`'s payload (mutation_plan.py) **must** add `transform_params`,
+canonicalized (`dict` sorted by key, values as-is). This is what makes a target change visible to
+audit: § 4.6 makes the id target-independent on purpose, so the digest is the only place a target
+change is pinned. `bump_summary` (§ 4.7) additionally carries the human-readable `target`.
+
 ### 4.2 `TransformationEntry.params` + templated `resolve_argv` (mutation_plan.py)
 
 `TransformationEntry` gains `params: tuple[str, ...] = ()` — the set of `{placeholders}` an entry's
@@ -107,35 +118,41 @@ registry stays the single source of truth for what may be substituted.
   `proposal.transform_params`).
 - a `dict` → each element is scanned for `{key}`; a `{key}` not in `entry.params` is an error, a
   declared key missing from `params` is an error, and each substituted value is re-validated with
-  `_validate_param_value` before insertion. The result is a plain string tuple handed to
-  `subprocess.run(..., shell=False)` exactly as today.
+  `_validate_param_value(key, value)` before insertion. The result is a plain string tuple handed
+  to `subprocess.run(..., shell=False)` exactly as today.
 
 **Security rationale.** The strict-argv rule existed to prevent *flag injection* (runtime data
 being reinterpreted as argv flags) and, secondarily, shell metacharacter smuggling. Templating
 reopens only the first, so § 4.3's value validator is the compensating control: a value that
 cannot begin with `-` and cannot contain `=` / whitespace / shell metacharacters cannot become a
 flag or an argument separator. There is still no shell anywhere in the path (`shell=False` is
-unchanged).
+unchanged), and values are substituted into a single argv element (never split on whitespace).
 
-### 4.3 Parameter value validation (`_validate_param_value`)
+### 4.3 Parameter value validation (`_validate_param_value(key, value)`)
 
-One conservative validator for all params, in `mutation_plan.py`:
+Validation is **param-aware** because a normalized package name and a version have different legal
+shapes — one character class for both is wrong (it would reject every scoped npm package, whose
+normalized identity is `@scope/name`). In `mutation_plan.py`:
 
 ```
-value must be non-empty and match ^[A-Za-z0-9][A-Za-z0-9._+~-]*$
+package: ^(@[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*|[A-Za-z0-9][A-Za-z0-9._-]*)$
+version: ^[A-Za-z0-9][A-Za-z0-9._+~-]*$
 ```
 
-i.e. **first character alphanumeric** (no leading `-`), body limited to `[A-Za-z0-9._+~-]` (no
-`=`, no whitespace, no `;|&$\`"'<>()` or other metacharacters). Package names (normalized
-identities) and versions (PEP 440 / semver) satisfy this by construction; anything that does not
-is rejected at re-derive time (`RederiveError`), never at exec time.
+Both preserve the two security invariants: **first character alphanumeric** (no leading `-`), and
+body limited to characters with no argv meaning (`/` and `@` are inert in an argv element; `=`,
+whitespace, and `;|&$\`"'<>()` are excluded). A `version` with a PEP 440 epoch (`1!2.3.4`) is
+**rejected — epochs are unsupported in v1** (a `!` is not in the class; fail-closed, § 7). A value
+that fails is rejected at re-derive time (`RederiveError`), never at exec time.
 
 ### 4.4 The `dependency-bump` source kind (apply_rederive.py)
 
-Add `"dependency-bump"` to `SOURCE_KINDS` and a provider pair mirroring the neutral one:
+Add `"dependency-bump"` to `SOURCE_KINDS` and a provider pair mirroring the neutral one, with one
+structural difference (§ 4.7): `_collect` returns **one `ProviderInputs` carrying the resolved
+finding**, and `_rederive` returns **one proposal per (finding, manager)**.
 
 **Input / finding address.** A finding is addressed by the triple `(group, ecosystem, package)`,
-which is unique per package per group. The driver accepts it as JSON:
+unique per package per group. The driver accepts it as JSON:
 `--finding-ref '{"group":"core-runtime","ecosystem":"python","package":"requests"}'`.
 
 **`_collect_dependency_bump(finding_ref, io_seams)`** (pre-fence, whole-run gates):
@@ -145,20 +162,40 @@ which is unique per package per group. The driver accepts it as JSON:
    `(group, ecosystem, package)`. Missing finding → `RederiveError` ("nothing to do" is never a
    silent no-op). (Implementation detail: reuse the F4 fleet `compare` / evidence materialization;
    the contract is freshness + exact-address resolution, not the specific loader.)
-2. Compute `target` = the **semantically highest** `locked_version` among the finding's non-`None`
-   versions, reusing F4's version comparator (not `max()` over strings).
-3. **Selection** = `{repo for (repo, v) in finding.versions if v is not None and v != target}`
-   (only diverging repos; unresolved `None` repos are excluded, not bumped). Empty selection →
-   `RederiveError`.
-4. **Split by manager**: map each selected repo to the `PackageRecord` keyed by
+2. **Reject unresolved findings.** `compare()` emits either a divergence finding (all `versions`
+   non-`None`) **or** an unresolved entry (`distance == "unresolved"`, some `None`) per identity —
+   never both. A caller addressing an unresolved package must fail closed:
+   `distance == "unresolved"` → `RederiveError` (a partial proposal bumping only the resolved
+   repos would be semantically wrong). After this, every `locked_version` is non-`None`.
+3. Compute `target` = the **semantically highest** `locked_version` among the finding's versions,
+   reusing F4's version comparator (not `max()` over strings).
+4. **Selection** = `{repo for (repo, v) in finding.versions if v != target}` (only diverging
+   repos). Empty selection → `RederiveError`.
+5. **Main-group restriction.** A `DivergenceFinding` collapses all declarations of a package into
+   one finding keyed on `(repo, name)` — the `DeclaredRequirement.group` (`main`/`dev`/`optional`)
+   is lost. Bumping a dev/optional-declared package with `uv add`/`npm install` would **promote it
+   to main** (a duplicate, inconsistent declaration). v1 therefore restricts selection to repos
+   whose declaration for this package is `group == "main"` (joined via the
+   `DependencyRepoEvaluation.declarations` for that repo). A selected repo whose declaration is
+   `dev`/`optional` is dropped from selection with a per-repo `blocked` outcome
+   (`non-main-group-package`). Threading group through the finding is backlog (§ 7).
+6. **Split by manager**: map each selected repo to the `PackageRecord` keyed by
    `(repo, ecosystem, name=package)` in the same F4 evidence and take its `manager`; group repos by
-   manager. Each `(manager, repos)` group becomes one proposal (§ 4.5).
-5. **Per-repo HEAD** via `io_seams.gh_api(repos/{o}/{n}/branches/{base})`, base = each repo's
-   default branch (fleet meta), as in the neutral multi-repo path. Per-repo HEAD failure is a
-   per-repo blocked outcome (repo dropped from selection), not a whole-run abort.
-6. **`bound_paths[repo]`** = the `PackageRecord.manifest_path` + `lock_path` for that repo (both
-   repo-relative; `None` entries omitted). These are exactly the files the bump touches, so commit
-   and validation stay scoped.
+   manager. Each `(manager, repos)` group becomes one proposal. (The join is 1:1 — `PackageRecord`
+   is "always exactly one per identity".)
+7. **`expected_shas` from the evidence snapshot, not a fresh HEAD fetch.** The finding's versions
+   came from an F4 materialization that already recorded a per-repo `tree_sha`
+   (`validate_dependency_evidence.py` requires a 40/64-hex `tree_sha` per repo). `expected_shas`
+   **must** be pinned to that snapshot SHA, so the provision gate compares against the *same tree*
+   the target was computed from. A repo that moved between evidence and apply then fails the
+   existing provision gate (per-repo `blocked`) instead of mutating a stale base. *(Plan
+   checkpoint: confirm `nave pen create`'s `observed_base_sha` echo is the same SHA type — tree vs
+   commit — as `tree_sha`; if it echoes commit, the F4 evidence must additionally carry the commit
+   SHA, a small evidence-field addition.)*
+8. **`bound_paths[repo]`** = the `PackageRecord.manifest_path` + `lock_path` for that repo (both
+   repo-relative; `None` entries omitted). A mapped v1 manager (uv/poetry/npm/pnpm) is detected by
+   lock presence, so a lockless repo never reaches a mapped manager in v1 — state this invariant,
+   don't leave it implicit.
 
 **`_rederive_dependency_bump(...)`** builds, per manager group, a `Proposal`:
 
@@ -166,7 +203,7 @@ which is unique per package per group. The driver accepts it as JSON:
 transformation  = MANAGER_TRANSFORM[manager]           # § 4.5
 transform_params = {"package": finding.package, "version": target}
 selection       = tuple(sorted(group_repos))
-expected_shas   = {repo: head_sha for repo in group_repos}
+expected_shas   = {repo: evidence_tree_sha for repo in group_repos}   # step 7, not a HEAD fetch
 bound_paths     = {repo: (manifest_path, lock_path) present}
 mutation_policy = "allow-listed"
 id              = bump_proposal_id(ecosystem, package, manager, selection)   # § 4.6
@@ -186,10 +223,11 @@ workspace's deployed copy), each declaring `params: [package, version]`:
 | `bump-npm` | `["npm", "install", "--save-exact", "{package}@{version}"]` |
 | `bump-pnpm` | `["pnpm", "add", "--save-exact", "{package}@{version}"]` |
 
-`MANAGER_TRANSFORM` (a module-level map in `apply_rederive.py`) keys `PackageRecord.manager` →
-transformation id; a manager with no entry is a per-manager blocked outcome ("no bump transform
-for manager X"), so the rest of the finding still proceeds. (pip-tools / yarn are added the same
-way when a consumer exists; not in v1.)
+`MANAGER_TRANSFORM` keys `PackageRecord.manager` → transformation id. A manager with no entry is a
+per-manager `blocked` outcome, so the rest of the finding still proceeds. **v1 deliberately leaves
+unmapped** (and therefore per-manager-`blocked`) these managers F4 actually reports:
+`pdm`, `conda`, `pip-tools` (Python) and `yarn1` (Node). They are added the same way when a fleet
+consumer exists; the names are listed here so a reader does not infer they ship.
 
 ### 4.6 Deterministic proposal id (`bump_proposal_id`)
 
@@ -202,48 +240,85 @@ not part of the id** — it is a re-derived value. A changed target re-derives t
 and re-reconciles (consistent with "apply re-derives from fresh source state"); a membership or
 manager change yields a new id. Distinct from the neutral fleet id so the two never collide.
 
+**Cascading-bump semantics (documented, not accidental).** Because the id is target-independent,
+the branch is `pulse/apply/{id}` and `open_apply_pr` reuses the existing PR. An already-`applied`
+repo whose fleet max later rises above its merged version (its `locked_version` is now below the
+new target) re-enters selection and its PR re-opens; repos already at the new target are excluded
+by the divergence filter (§ 4.4 step 4). These are intended semantics, not a bug.
+
 ### 4.7 Driver + recorded summary + authorization (apply_driver.py)
 
 - `--source-kind dependency-bump` takes `--finding-ref` (JSON triple) instead of `--binding-ref`.
   `recorded_summary` is **synthesized** (`bump_summary(finding_ref, target, selection, manager)` →
-  `{binding: <finding_ref>, transformation: <bump transform>, proposal_id}`), matching how neutral
-  synthesizes its summary (no propose phase).
-- **Multi-manager fan-out**: `_collect` returns one proposal per manager group; the driver runs
-  each through the same fenced `run_apply` spine sequentially (one pen/journal per proposal id).
-  A manager group that is empty or has no transform is skipped with a recorded reason.
+  `{binding: <finding_ref>, transformation: <bump transform>, proposal_id, target}`), mirroring the
+  driver's existing `source_kind == "neutral"` synthesis branch (no propose phase). The `target` is
+  included for human review even though it is not in the id.
+- **Multi-manager fan-out is collect-once → rederive-many.** The existing spine is strictly
+  one-in/one-out (`collect_inputs → ProviderInputs` → `rederive → RederivedProposal` → `run_apply`
+  fences **one** proposal). `dependency-bump` must not silently paper over this:
+  `_collect` materializes F4 evidence **once** and resolves the finding **once**; `_rederive`
+  returns the list of per-manager proposals; the driver **authorizes each, then fences and runs
+  each sequentially** — one journal/ledger step per proposal id, a shared pen (manager groups are
+  disjoint repo sets with one argv each). N independent `run_apply` invocations are **not**
+  acceptable (they would re-materialize F4 evidence N× and race themselves).
 - **Authorization** is the existing `apply_authorization.authorize` over `permitted_repos` +
   per-repo `bound_paths`; the workspace `apply-authorization.yaml` must authorize the manifest/lock
   paths for the bump transformation (a data change in `hiivmind/hiivmind-workspace`, not code).
+- **Workspace absence by construction:** F4 v1 treats manager-declared workspaces as wholesale
+  `unsupported`, so workspace-member repos produce no comparable `PackageRecord` and never enter
+  findings or selection — no monorepo-member handling is needed in v1.
+
+### 4.8 `resolve_intended_base` branch (apply_reconcile.py)
+
+`run_apply` calls `apply_reconcile.resolve_intended_base(rederived.source_kind, …)`
+unconditionally; it currently raises `ValueError("unknown source_kind")` for anything outside the
+four known sources, which the driver converts into a whole-run `blocked`. **Without a branch,
+`dependency-bump` dies before the lease.** Add:
+
+```
+dependency-bump → dict[repo, default_branch] for the proposal's selection,
+                  from fleet meta (the same default-branch map § 4.4 already resolves)
+```
+
+Carry it through the same channel neutral uses (`finalizer_record`), so `base_refs` is populated
+per repo exactly as the neutral multi-repo path does.
 
 ## 5. Error handling
 
 | Condition | Outcome |
 |-----------|---------|
 | finding address resolves nothing | `RederiveError` (whole-run `blocked`) |
-| finding has zero non-`None` versions | `RederiveError` |
+| finding `distance == "unresolved"` | `RederiveError` (fail-closed) |
 | selection empty (every repo already at target) | `RederiveError` ("nothing to do") |
+| repo's declaration is `dev`/`optional` | per-repo `blocked` (`non-main-group-package`) |
 | a manager has no transform entry | per-manager `blocked`; other managers proceed |
-| per-repo HEAD fetch fails | per-repo `blocked`; repo dropped from selection |
+| evidence `tree_sha` missing for a repo | per-repo `blocked` |
+| repo moved between evidence and apply | existing provision gate blocks per-repo |
 | `transform_params` key/value fails validation | `RederiveError` (fail-closed) |
-| stale base (repo moved since evidence) | existing provision gate blocks per-repo |
 
 ## 6. Testing
 
 1. **`resolve_argv` templating** — declared-key expansion; undeclared `{key}` → error; missing
    declared value → error; value failing `_validate_param_value` (leading `-`, `=`, whitespace,
    metachar) → error; `None` params → verbatim argv (backward compat).
-2. **`build_proposal` `transform_params`** — unknown key rejected; missing declared key rejected;
-   empty for non-templated entries; round-trips into the proposal digest.
-3. **Target/selection** — max-locked target; only diverging repos selected; `None` versions
-   excluded; empty selection → error.
-4. **Manager split** — mixed-manager finding → N proposals with correct transforms/bound_paths;
-   unknown manager → blocked group.
-5. **`bump_proposal_id`** — deterministic over (ecosystem, package, manager, selection); distinct
-   from neutral fleet id.
-6. **Integration** — finding → proposal → driver with fake ops through `pr_opened`; reconcile
-   detects merge.
-7. **Live proof** — a 2-repo single-manager bump (one Python coherence group, e.g. two repos on
-   `uv` with a diverging package) → two branches → two PRs → merge → `applied`.
+2. **`_validate_param_value` param shapes** — scoped npm package `@scope/name` accepted;
+   bare name accepted; PEP 440 epoch `1!2.3.4` rejected; leading `-` rejected for both params.
+3. **`build_proposal` `transform_params`** — unknown key rejected; missing declared key rejected;
+   empty for non-templated entries; round-trips into `proposal_digest`.
+4. **Target/selection** — semantically-highest target (incl. `2.10.0 > 2.9.0`,
+   `2.0.0 > 2.0.0rc1`); only diverging repos selected; empty selection → error.
+5. **Unresolved rejection** — `distance == "unresolved"` → `RederiveError`.
+6. **Main-group restriction** — dev/optional-declared repo → per-repo `blocked`, not promoted.
+7. **Manager split** — mixed-manager finding → N proposals with correct transforms/bound_paths;
+   unmapped manager (pdm/conda/pip-tools/yarn1) → blocked group.
+8. **`bump_proposal_id`** — deterministic over (ecosystem, package, manager, selection); distinct
+   from neutral fleet id; target-independent.
+9. **`resolve_intended_base`** — `dependency-bump` returns the per-repo default-branch map; no
+   `ValueError`.
+10. **Integration** — finding → proposals → driver (collect-once, rederive-many, sequential
+    fenced runs) with fake ops through `pr_opened`; reconcile detects merge.
+11. **Live proof** — a 2-repo single-manager bump (one Python coherence group, two `uv` repos with
+    a diverging main-group package) → two branches → two PRs → merge → `applied`.
 
 ## 7. Non-goals (v1 scope guard)
 
@@ -251,9 +326,15 @@ manager change yields a new id. Distinct from the neutral fleet id so the two ne
   manifest range style (or honoring `same-major`/`same-minor` as a *constraint* target rather than
   a *check* policy) is a follow-up.
 - **Declared per-package targets** — target is always max-locked (§ 2.1); no `target:` config.
+- **`dev`/`optional`-group bumps** — v1 blocks them (§ 4.4 step 5); threading declaration group
+  through the finding and splitting per `(finding, manager, group)` with group-aware flags
+  (`uv add --group dev`, `npm i --save-dev`) is backlog — it requires the finding/selection shape
+  to carry group, a cross-cut into F4.
+- **PEP 440 epochs** — version strings containing `!` are rejected (fail-closed, § 4.3).
 - **Multi-package proposals** — one proposal per (finding, manager); batching N packages into one
   proposal/pen is out of scope.
-- **pip-tools / yarn** — manager transforms added only when a fleet consumer exists.
+- **pip-tools / pdm / conda / yarn1** — manager transforms added only when a fleet consumer exists
+  (§ 4.5).
 - **Scheduled auto-apply / `allow`** — unchanged, still gated behind the `🔵 v2` confirmation-model
   design (dependency-bump inherits `mutation_policy="allow-listed"`, PR-gated).
 - **nave changes** — none; the bump is a `nave pen exec` command exactly like `format-python`.
