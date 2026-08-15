@@ -434,7 +434,7 @@ class TestNeutralApplyAcceptanceSuite:
         )
 
         assert doc_pr["state"] == "pr_opened"
-        assert doc_pr["pushed_sha"] == "pushed_sha_base_100"
+        assert doc_pr["repos"]["acme/docs-repo"]["pushed_sha"] == "pushed_sha_base_100"
         assert validate_result.validate(doc_pr, "apply-status") == []
 
         # Gate check before merge: merge-detected gate is NOT satisfied
@@ -495,7 +495,7 @@ class TestNeutralApplyAcceptanceSuite:
 
         # Assert: state is "applied", validates schema, merged SHA is set
         assert doc_reconcile_merged["state"] == "applied"
-        assert doc_reconcile_merged["merged_sha"] == "merged_sha_docs_999"
+        assert doc_reconcile_merged["repos"]["acme/docs-repo"]["merged_sha"] == "merged_sha_docs_999"
         assert validate_result.validate(doc_reconcile_merged, "apply-status") == []
 
         # Gate check after merge: gate IS satisfied
@@ -667,7 +667,7 @@ class TestNeutralApplyAcceptanceSuite:
         )
 
         assert doc_final["state"] == "applied"
-        assert doc_final["merged_sha"] == "merged_sha_node_888"
+        assert doc_final["repos"]["acme/node-repo"]["merged_sha"] == "merged_sha_node_888"
         assert validate_result.validate(doc_final, "apply-status") == []
         assert advance_calls == [("acme/node-repo", "merged_sha_node_888")]
 
@@ -707,9 +707,9 @@ class TestRealApplyDriverAcceptance:
         result = apply_driver.run_apply(**kwargs)
 
         assert result["state"] == "pr_opened"
-        assert result["branch"] == "pulse/apply/p1"
-        assert result["expected_head_sha"] == result["pushed_sha"] == "remote-verb-sha"
-        assert result["expected_head_sha"] != "base"
+        assert result["repos"][_driver_support.REPO]["branch"] == "pulse/apply/p1"
+        assert result["repos"][_driver_support.REPO]["expected_head_sha"] == result["repos"][_driver_support.REPO]["pushed_sha"] == "remote-verb-sha"
+        assert result["repos"][_driver_support.REPO]["expected_head_sha"] != "base"
         assert gh_ops.calls[0] == ("status", "pushed")
 
     @pytest.mark.parametrize(
@@ -1016,7 +1016,7 @@ class TestOverlayApplySuite:
         )
 
         assert doc_final["state"] == "applied"
-        assert doc_final["merged_sha"] == "merged_sha_mkt_777"
+        assert doc_final["repos"]["acme/plugin-repo"]["merged_sha"] == "merged_sha_mkt_777"
         assert validate_result.validate(doc_final, "apply-status") == []
         assert advance_calls == [("acme/plugin-repo", "merged_sha_mkt_777")]
 

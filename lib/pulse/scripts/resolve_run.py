@@ -126,12 +126,22 @@ def recompute_status(doc):
         doc["status"] = "running"
 
 
+def _step_repos(s: dict) -> list[str]:
+    raw = s.get("repos")
+    if raw is None:
+        raw = s.get("repo") or ""
+    if isinstance(raw, list):
+        return [r for r in raw if isinstance(r, str) and r]
+    return [r for r in str(raw).split(",") if r]
+
+
 def cmd_create(args):
     steps_in = json.loads(args.steps) if args.steps else [{"id": "run", "repo": ""}]
     check_dag(steps_in)
     steps = [{
         "id": s["id"],
         "repo": s.get("repo", ""),
+        "repos": _step_repos(s),
         "depends_on": s.get("depends_on", []),
         "gate": s.get("gate"),
         "has_workflow": bool(s.get("workflow")),
@@ -294,14 +304,47 @@ def evaluate_binding_edges_gate(result_path):
     return True, f"{len(edges)} edge(s) current"
 
 
-def evaluate_merge_detected_gate(result_path):
+def evaluate_merge_detected_gate(result_path, repo=None):
     """`merge_detected` — fail-closed gate over an apply-status result (F11).
-    Satisfied ONLY when the result file is present, validates cleanly as
-    kind `apply-status`, state is `applied`, `merged_sha` is a non-empty
-    string, and the remotely observed base/head match their intended values."""
+
+    With `repo` it checks that one repo's entry is applied + merged with
+    matching observed base/head; without `repo` it checks the whole result
+    (a fleet requires every repo applied; a v1 scalar doc is checked as before).
+    """
     data, errors = _load_result_kind(result_path, "apply-status")
     if data is None:
         return False, "; ".join(errors) or "invalid apply-status result"
+    if repo is not None:
+        entry = (data.get("repos") or {}).get(repo)
+        if entry is None:
+            return False, f"repo {repo} missing from apply-status"
+        merged_sha = entry.get("merged_sha")
+        if not merged_sha or not isinstance(merged_sha, str):
+            return False, f"{repo} merged_sha missing or empty"
+        if entry.get("observed_base") != entry.get("intended_base"):
+            return False, (
+                f"{repo} observed_base mismatch: {entry.get('observed_base')!r} != "
+                f"intended_base {entry.get('intended_base')!r}"
+            )
+        if entry.get("observed_head_sha") != entry.get("expected_head_sha"):
+            return False, (
+                f"{repo} observed_head_sha mismatch: {entry.get('observed_head_sha')!r} != "
+                f"expected_head_sha {entry.get('expected_head_sha')!r}"
+            )
+        return True, f"merge detected: {merged_sha}"
+    if "repos" in data:
+        repos = data.get("repos") or {}
+        if data.get("state") != "applied":
+            return False, f"apply-status state is {data.get('state')!r}, expected 'applied'"
+        for r, entry in repos.items():
+            merged_sha = entry.get("merged_sha")
+            if not merged_sha or not isinstance(merged_sha, str):
+                return False, f"{r} merged_sha missing or empty"
+            if entry.get("observed_base") != entry.get("intended_base"):
+                return False, f"{r} observed_base mismatch"
+            if entry.get("observed_head_sha") != entry.get("expected_head_sha"):
+                return False, f"{r} observed_head_sha mismatch"
+        return True, f"merge detected: {', '.join(str(e.get('merged_sha')) for e in repos.values())}"
     if data.get("state") != "applied":
         return False, f"apply-status state is {data.get('state')!r}, expected 'applied'"
     merged_sha = data.get("merged_sha")

@@ -833,6 +833,7 @@ def test_neutral_summary_matches_binding_and_proposal_id():
         "binding": NEUTRAL_REPO,
         "transformation": "format-python",
         "proposal_id": "apply-format-python-hiivmind-agent-kernel",
+        "selection": [NEUTRAL_REPO],
     }
 
 
@@ -867,7 +868,8 @@ def test_collect_inputs_neutral_fetches_live_head():
         actor=ACTOR, io_seams=io_seams,
     )
     assert isinstance(inputs, apply_rederive.NeutralProviderInputs)
-    assert inputs.head_sha == NEUTRAL_HEAD
+    assert inputs.selection == (NEUTRAL_REPO,)
+    assert inputs.head_shas == {NEUTRAL_REPO: NEUTRAL_HEAD}
     assert inputs.registry is io_seams.registry
 
 
@@ -928,7 +930,7 @@ def test_rederive_neutral_builds_allow_listed_proposal():
 def test_rederive_neutral_rejects_non_neutral_transformation():
     inputs = apply_rederive.NeutralProviderInputs(
         binding=neutral_binding(transformation="plan-sync-doc-patch"),
-        head_sha=NEUTRAL_HEAD, actor=ACTOR,
+        selection=(NEUTRAL_REPO,), head_shas={NEUTRAL_REPO: NEUTRAL_HEAD}, actor=ACTOR,
     )
     with pytest.raises(apply_rederive.RederiveError, match="neutral transformation"):
         apply_rederive.rederive(inputs)
@@ -936,15 +938,16 @@ def test_rederive_neutral_rejects_non_neutral_transformation():
 
 def test_rederive_neutral_rejects_unresolved_head_sha():
     inputs = apply_rederive.NeutralProviderInputs(
-        binding=neutral_binding(), head_sha=None, actor=ACTOR,
+        binding=neutral_binding(), selection=(NEUTRAL_REPO,), head_shas={}, actor=ACTOR,
     )
-    with pytest.raises(apply_rederive.RederiveError, match="head_sha"):
+    with pytest.raises(apply_rederive.RederiveError, match="HEAD"):
         apply_rederive.rederive(inputs)
 
 
 def test_rederive_neutral_rejects_empty_bound_paths():
     inputs = apply_rederive.NeutralProviderInputs(
-        binding=neutral_binding(bound_paths=[]), head_sha=NEUTRAL_HEAD, actor=ACTOR,
+        binding=neutral_binding(bound_paths=[]),
+        selection=(NEUTRAL_REPO,), head_shas={NEUTRAL_REPO: NEUTRAL_HEAD}, actor=ACTOR,
     )
     with pytest.raises(apply_rederive.RederiveError, match="build failed"):
         apply_rederive.rederive(inputs)
@@ -983,3 +986,116 @@ def test_neutral_transformations_are_self_contained_in_template_registry():
         assert all(not p.startswith("profile:claude-plugin") for p in entry.applies_to), (
             f"{entry_id} must not carry a profile:claude-plugin predicate"
         )
+
+
+# --- neutral fleet (multi-repo) -------------------------------------------------
+
+
+def test_neutral_fleet_expands_explicit_repos_with_live_heads():
+    binding = {
+        "repos": ["hiivmind/a", "hiivmind/b"],
+        "transformation": "format-python",
+        "base_ref": "main",
+        "bound_paths": ["src/**"],
+    }
+
+    def gh_api(endpoint):
+        # endpoint == "repos/{owner}/{name}/branches/{base}"
+        parts = endpoint.split("/")
+        name = parts[2]
+        return {"commit": {"sha": {"a": "sha-a", "b": "sha-b"}[name]}}
+
+    inputs = apply_rederive._collect_neutral(
+        binding, ACTOR,
+        apply_rederive.IoSeams(runner=None, gh_api=gh_api),
+    )
+    assert inputs.selection == ("hiivmind/a", "hiivmind/b")
+
+
+def test_neutral_fleet_selector_unions_and_dedups():
+    binding = {
+        "repos": ["hiivmind/a", "hiivmind/b"],
+        "repo_selector": {"term": "pyproject:true"},
+        "base_ref": "main",
+        "transformation": "format-python",
+        "bound_paths": ["src/**"],
+    }
+
+    def runner(argv, cwd):
+        assert argv == ["nave", "fleet", "list", "--json", "--term", "pyproject:true"]
+        return Completed(
+            stdout='[{"owner":"hiivmind","name":"b","default_branch":"main"},'
+                   '{"owner":"hiivmind","name":"c","default_branch":"main"}]'
+        )
+
+    def gh_api(endpoint):
+        return {"commit": {"sha": "sha"}}
+
+    inputs = apply_rederive._collect_neutral(
+        binding, ACTOR,
+        apply_rederive.IoSeams(runner=runner, gh_api=gh_api),
+    )
+    # explicit [a, b] union selector [b, c] == [a, b, c], sorted
+    assert inputs.selection == ("hiivmind/a", "hiivmind/b", "hiivmind/c")
+
+
+def test_neutral_fleet_empty_selector_raises():
+    binding = {
+        "repo_selector": {"term": "nope:true"},
+        "transformation": "format-python",
+        "bound_paths": ["src/**"],
+    }
+
+    def runner(argv, cwd):
+        return Completed(stdout="[]")
+
+    with pytest.raises(apply_rederive.RederiveError, match="empty selection"):
+        apply_rederive._collect_neutral(
+            binding, ACTOR,
+            apply_rederive.IoSeams(runner=runner, gh_api=lambda e: {"commit": {"sha": "sha"}}),
+        )
+
+
+def test_neutral_fleet_proposal_id_is_deterministic_over_sorted_set():
+    binding = {
+        "repos": ["hiivmind/b", "hiivmind/a"],
+        "transformation": "format-python",
+        "bound_paths": ["src/**"],
+    }
+    id1 = apply_rederive.neutral_proposal_id(binding)
+    binding2 = dict(binding, repos=["hiivmind/a", "hiivmind/b"])
+    id2 = apply_rederive.neutral_proposal_id(binding2)
+    assert id1 == id2
+    assert id1.startswith("apply-format-python-hiivmind-")
+    assert len(id1.split("-")[-1]) == 12
+    # single-repo id is unchanged
+    single = {"repo": "hiivmind/agent-kernel", "transformation": "format-python"}
+    assert apply_rederive.neutral_proposal_id(single) == "apply-format-python-hiivmind-agent-kernel"
+
+
+def test_neutral_fleet_rederive_builds_multi_repo_proposal():
+    binding = {
+        "repos": ["hiivmind/a", "hiivmind/b"],
+        "transformation": "format-python",
+        "bound_paths": ["src/**"],
+    }
+    inputs = apply_rederive.NeutralProviderInputs(
+        binding=binding,
+        selection=("hiivmind/a", "hiivmind/b"),
+        head_shas={"hiivmind/a": "sha-a", "hiivmind/b": "sha-b"},
+        actor=ACTOR,
+        registry=neutral_registry(),
+    )
+    rederived = apply_rederive._rederive_neutral(inputs)
+    assert rederived.proposal.selection == ("hiivmind/a", "hiivmind/b")
+    assert rederived.proposal.expected_shas == {
+        "hiivmind/a": "sha-a",
+        "hiivmind/b": "sha-b",
+    }
+    assert rederived.proposal.bound_paths == {
+        "hiivmind/a": ("src/**",),
+        "hiivmind/b": ("src/**",),
+    }
+    assert rederived.source_kind == "neutral"
+    assert rederived.finalizer_record is None
+    assert rederived.binding_id == rederived.proposal.id

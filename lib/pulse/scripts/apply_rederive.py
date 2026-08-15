@@ -28,6 +28,8 @@ mirroring the seam-injection style already used across this codebase
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -125,14 +127,15 @@ class MarketplaceProviderInputs:
     actor: Mapping[str, Any] | mutation_plan.Actor
     registry: mutation_plan.TransformationRegistry | None = None
 
-
 @dataclass(frozen=True)
 class NeutralProviderInputs:
     """Fresh neutral evidence: `binding` is the caller-supplied `binding_ref`
-    (validated); `head_sha` is the live HEAD of the binding's `base_ref` branch."""
+    (validated); `selection` is the resolved, sorted repo set; `head_shas` maps
+    each selected repo to the live HEAD of its `base_ref` branch."""
 
     binding: Mapping[str, Any]
-    head_sha: str | None
+    selection: tuple[str, ...]
+    head_shas: dict[str, str]
     actor: Mapping[str, Any] | mutation_plan.Actor
     registry: mutation_plan.TransformationRegistry | None = None
 
@@ -160,46 +163,157 @@ class RederivedProposal:
     proposal: mutation_plan.Proposal
     source_kind: str
     finalizer_record: dict[str, Any] | None
-
-
-def _validate_neutral_binding(binding: Mapping[str, Any]) -> tuple[str, str]:
-    """Validate a neutral binding's `repo` + `transformation`; return (owner, name).
-
-    Raises `RederiveError` (never KeyError/ValueError) so a malformed binding
-    blocks (the driver turns it into a `blocked` result), never crashes.
-    """
-    repo = binding.get("repo")
-    if not isinstance(repo, str) or not repo or repo.count("/") != 1:
+def _repo_name(value: Any) -> str:
+    if not isinstance(value, str) or not value or value.count("/") != 1:
         raise RederiveError(
-            f"apply_rederive: neutral binding requires repo 'owner/name', got {repo!r}"
+            f"apply_rederive: repo must be 'owner/name', got {value!r}"
         )
+    return value
+
+
+def _validate_neutral_binding(
+    binding: Mapping[str, Any],
+) -> tuple[str, tuple[str, ...]]:
+    """Validate a neutral binding; return (transformation, resolved_selection).
+
+    A binding is exactly one of single-repo (`repo`) or fleet
+    (`repos` and/or `repo_selector`). Raises `RederiveError` (never
+    KeyError/ValueError) on any malformed shape.
+    """
     transformation = binding.get("transformation")
     if not isinstance(transformation, str) or not transformation:
         raise RederiveError(
             "apply_rederive: neutral binding requires a non-empty transformation, "
             f"got {transformation!r}"
         )
-    return repo.split("/", 1)
+    has_repo = binding.get("repo") is not None
+    has_repos = binding.get("repos") is not None
+    has_selector = binding.get("repo_selector") is not None
+    if has_repo and (has_repos or has_selector):
+        raise RederiveError(
+            "apply_rederive: neutral binding must be either single-repo (`repo`) "
+            "or fleet (`repos`/`repo_selector`), not both"
+        )
+    if not (has_repo or has_repos or has_selector):
+        raise RederiveError(
+            "apply_rederive: neutral binding requires `repo` or `repos`/`repo_selector`"
+        )
+    if has_repo:
+        return transformation, (_repo_name(binding.get("repo")),)
+    repos = binding.get("repos") or []
+    if not isinstance(repos, list) or any(
+        not isinstance(r, str) or not r for r in repos
+    ):
+        raise RederiveError(
+            "apply_rederive: neutral binding `repos` must be a list of 'owner/name', "
+            f"got {repos!r}"
+        )
+    selection = tuple(_repo_name(r) for r in repos)
+    if len(set(selection)) != len(selection):
+        raise RederiveError("apply_rederive: neutral binding `repos` has duplicates")
+    return transformation, selection
+
+
+def _resolve_neutral_repos(
+    binding: Mapping[str, Any], runner: Callable[..., Any] | None
+) -> tuple[str, ...]:
+    """Union explicit `repos` with `repo_selector` results (resolved via
+    `nave fleet list --json --term <term>`), de-duplicated and sorted."""
+    _, selection = _validate_neutral_binding(binding)
+    selector = binding.get("repo_selector")
+    if selector is not None:
+        if runner is None:
+            raise RederiveError(
+                "apply_rederive: neutral repo_selector requires io_seams.runner"
+            )
+        if not isinstance(selector, Mapping) or not isinstance(
+            selector.get("term"), str
+        ):
+            raise RederiveError(
+                f"apply_rederive: repo_selector must be {{term: str}}, got {selector!r}"
+            )
+        proc = runner(
+            ["nave", "fleet", "list", "--json", "--term", selector["term"]],
+            cwd=None,
+        )
+        if getattr(proc, "returncode", 0) != 0:
+            raise RederiveError(
+                "apply_rederive: selector resolution failed (nave fleet list --term): "
+                f"{getattr(proc, 'stderr', '') or getattr(proc, 'stdout', '')}"
+            )
+        raw = getattr(proc, "stdout", "")
+        try:
+            entries = json.loads(raw)
+        except (TypeError, ValueError) as exc:
+            raise RederiveError(
+                f"apply_rederive: selector resolution returned invalid JSON: {exc}"
+            ) from exc
+        if not isinstance(entries, list) or any(
+            not isinstance(e, Mapping)
+            or not isinstance(e.get("owner"), str)
+            or not isinstance(e.get("name"), str)
+            for e in entries
+        ):
+            raise RederiveError(
+                "apply_rederive: selector resolution returned a malformed fleet list"
+            )
+        selection = selection + tuple(f"{e['owner']}/{e['name']}" for e in entries)
+    selection = tuple(sorted(set(selection)))
+    if not selection:
+        raise RederiveError(
+            "apply_rederive: neutral binding resolved to an empty selection"
+        )
+    return selection
+
+
+def neutral_fleet_proposal_id(
+    transformation: str, selection: tuple[str, ...]
+) -> str:
+    """Fleet-scoped deterministic id: `apply-{t}-{owner}-{sha256(sorted repos)[:12]}`."""
+    owner = selection[0].split("/", 1)[0]
+    digest = hashlib.sha256(",".join(sorted(selection)).encode()).hexdigest()[:12]
+    return f"apply-{transformation}-{owner}-{digest}"
 
 
 def neutral_proposal_id(binding: Mapping[str, Any]) -> str:
-    """Deterministic neutral proposal id: `apply-{transformation}-{owner}-{name}`.
+    """Deterministic neutral proposal id. Single source of the id.
 
-    Single source of the id, shared by `neutral_summary` and `_rederive_neutral`
-    so the synthesized `recorded_summary.proposal_id` can never drift from the
-    re-derived proposal's id.
+    Single-repo (`repo`): `apply-{t}-{owner}-{name}` (stable, backward
+    compatible). Explicit-repos fleet: `neutral_fleet_proposal_id` over the
+    sorted set. A selector-only binding has no fixed id before resolution —
+    the driver resolves it and uses `neutral_fleet_proposal_id`.
     """
-    owner, name = _validate_neutral_binding(binding)
-    return f"apply-{binding['transformation']}-{owner}-{name}"
+    transformation = binding.get("transformation")
+    if not isinstance(transformation, str) or not transformation:
+        raise RederiveError(
+            "apply_rederive: neutral binding requires a non-empty transformation"
+        )
+    if binding.get("repo") is not None:
+        owner, name = _repo_name(binding["repo"]).split("/", 1)
+        return f"apply-{transformation}-{owner}-{name}"
+    repos = binding.get("repos")
+    if isinstance(repos, list) and repos:
+        selection = tuple(sorted({_repo_name(r) for r in repos}))
+        return neutral_fleet_proposal_id(transformation, selection)
+    if binding.get("repo_selector") is not None:
+        raise RederiveError(
+            "apply_rederive: selector-only binding has no fixed proposal id before resolution"
+        )
+    raise RederiveError("apply_rederive: neutral binding requires `repo` or `repos`")
 
 
-def neutral_summary(binding: Mapping[str, Any]) -> dict[str, str]:
+def neutral_summary(binding: Mapping[str, Any]) -> dict[str, Any]:
     """Synthesize the `recorded_summary` for a neutral apply (no propose phase)."""
-    proposal_id = neutral_proposal_id(binding)  # validates repo + transformation first
+    proposal_id = neutral_proposal_id(binding)
+    if binding.get("repo") is not None:
+        selection = [binding["repo"]]
+    else:
+        selection = sorted({_repo_name(r) for r in (binding.get("repos") or [])})
     return {
-        "binding": binding["repo"],
+        "binding": binding.get("repo") or proposal_id,
         "transformation": binding["transformation"],
         "proposal_id": proposal_id,
+        "selection": selection,
     }
 
 
@@ -226,11 +340,17 @@ def collect_inputs(
     if source_kind not in SOURCE_KINDS:
         raise RederiveError(f"apply_rederive: unknown source_kind: {source_kind!r}")
 
-    binding_id = binding_ref.get(
-        "repo"
-        if source_kind == "neutral"
-        else ("plugin_id" if source_kind == "marketplace-sync" else "id")
-    )
+    if source_kind == "neutral":
+        # Neutral identity is `repo` for single-repo bindings and the
+        # deterministic proposal id for explicit-repos fleet bindings
+        # (matches `neutral_summary`'s synthesized `binding`).
+        binding_id = binding_ref.get("repo")
+        if binding_id is None and binding_ref.get("repos"):
+            binding_id = neutral_proposal_id(binding_ref)
+    else:
+        binding_id = binding_ref.get(
+            "plugin_id" if source_kind == "marketplace-sync" else "id"
+        )
     recorded_binding = recorded_summary.get("binding")
     if recorded_binding is not None and binding_id != recorded_binding:
         raise RederiveError(
@@ -342,7 +462,8 @@ def _collect_neutral(
     actor: Mapping[str, Any] | mutation_plan.Actor,
     io_seams: IoSeams,
 ) -> NeutralProviderInputs:
-    owner, name = _validate_neutral_binding(binding_ref)  # repo + transformation
+    _validate_neutral_binding(binding_ref)  # fail closed on a malformed shape
+    selection = _resolve_neutral_repos(binding_ref, io_seams.runner)
     base_ref = binding_ref.get("base_ref")
     if not isinstance(base_ref, str) or not base_ref:
         raise RederiveError(
@@ -350,24 +471,30 @@ def _collect_neutral(
         )
     if io_seams.gh_api is None:
         raise RederiveError("apply_rederive: neutral requires io_seams.gh_api")
-    try:
-        payload = io_seams.gh_api(f"repos/{owner}/{name}/branches/{base_ref}")
-    except Exception as exc:
+    head_shas: dict[str, str] = {}
+    for repo in selection:
+        owner, name = repo.split("/", 1)
+        try:
+            payload = io_seams.gh_api(f"repos/{owner}/{name}/branches/{base_ref}")
+        except Exception:
+            # Per-repo collect failure: drop the repo; the driver records it as
+            # a blocked outcome. Never abort the whole fleet.
+            continue
+        head_sha = None
+        if isinstance(payload, Mapping):
+            commit = payload.get("commit")
+            if isinstance(commit, Mapping) and isinstance(commit.get("sha"), str):
+                head_sha = commit["sha"] or None
+        if head_sha is not None:
+            head_shas[repo] = head_sha
+    if not head_shas:
         raise RederiveError(
-            f"apply_rederive: neutral HEAD fetch failed for {owner}/{name}: {exc}"
-        ) from exc
-    head_sha = None
-    if isinstance(payload, Mapping):
-        commit = payload.get("commit")
-        if isinstance(commit, Mapping) and isinstance(commit.get("sha"), str):
-            head_sha = commit["sha"] or None
-    if head_sha is None:
-        raise RederiveError(
-            f"apply_rederive: neutral could not resolve HEAD for {owner}/{name}@{base_ref}"
+            "apply_rederive: neutral could not resolve HEAD for any selected repo"
         )
     return NeutralProviderInputs(
         binding=binding_ref,
-        head_sha=head_sha,
+        selection=tuple(repo for repo in selection if repo in head_shas),
+        head_shas=head_shas,
         actor=actor,
         registry=io_seams.registry,
     )
@@ -522,24 +649,32 @@ def _rederive_neutral(inputs: NeutralProviderInputs) -> RederivedProposal:
         raise RederiveError(
             f"apply_rederive: transformation {transformation!r} is not a neutral transformation"
         )
-    head_sha = inputs.head_sha
-    if not isinstance(head_sha, str) or not head_sha:
-        raise RederiveError("apply_rederive: neutral requires a resolved head_sha")
+    selection = inputs.selection
+    if not selection or set(selection) != set(inputs.head_shas):
+        raise RederiveError("apply_rederive: neutral requires a resolved HEAD per repo")
+    single_repo = len(selection) == 1 and binding.get("repo") == selection[0]
+    if single_repo:
+        proposal_id = neutral_proposal_id(binding)
+        binding_id = binding["repo"]  # single-repo keeps its repo identity
+    else:
+        proposal_id = neutral_fleet_proposal_id(transformation, selection)
+        binding_id = proposal_id  # fleet identity is the deterministic fleet id
+    bound_paths = binding.get("bound_paths")
     try:
         proposal = mutation_plan.build_proposal(
-            id=neutral_proposal_id(binding),
-            selection=[binding["repo"]],
+            id=proposal_id,
+            selection=list(selection),
             transformation=transformation,
-            expected_shas={binding["repo"]: head_sha},
+            expected_shas=dict(inputs.head_shas),
             actor=inputs.actor,
             mutation_policy="allow-listed",
-            bound_paths={binding["repo"]: binding["bound_paths"]},
+            bound_paths={repo: bound_paths for repo in selection},
             registry=inputs.registry,
         )
     except mutation_plan.MutationPlanError as exc:
         raise RederiveError(f"apply_rederive: neutral build failed: {exc}") from exc
     return RederivedProposal(
-        binding_id=str(binding["repo"]),
+        binding_id=binding_id,
         proposal=proposal,
         source_kind="neutral",
         finalizer_record=None,
