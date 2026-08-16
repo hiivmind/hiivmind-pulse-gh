@@ -26,6 +26,7 @@ from lib.pulse.scripts import (
     plan_sync,
     plan_sync_snapshot,
 )
+from lib.pulse.scripts.dependencies import CoherenceGroup, DivergenceFinding, PackageRecord
 
 ACTOR = {"gh_login": "octocat", "machine": "laptop", "mode": "interactive"}
 
@@ -1099,3 +1100,380 @@ def test_neutral_fleet_rederive_builds_multi_repo_proposal():
     assert rederived.source_kind == "neutral"
     assert rederived.finalizer_record is None
     assert rederived.binding_id == rederived.proposal.id
+
+
+# --- dependency-bump: bump_proposal_id ---------------------------------------
+
+
+def test_bump_proposal_id_deterministic_over_identity():
+    id1 = apply_rederive.bump_proposal_id("python", "requests", "uv", ("acme/api", "acme/web"))
+    id2 = apply_rederive.bump_proposal_id("python", "requests", "uv", ("acme/web", "acme/api"))
+    assert id1 == id2  # order-independent (selection is sorted before hashing)
+    assert id1.startswith("apply-bump-python-requests-uv-")
+
+
+def test_bump_proposal_id_distinct_from_neutral_fleet_id():
+    bump_id = apply_rederive.bump_proposal_id("python", "requests", "uv", ("acme/api",))
+    neutral_id = apply_rederive.neutral_fleet_proposal_id("format-python", ("acme/api",))
+    assert bump_id != neutral_id
+
+
+def test_bump_proposal_id_target_independent():
+    """The id must not encode the target version — a target change
+    re-derives through the same id (spec § 4.6 cascading-bump semantics)."""
+    id_a = apply_rederive.bump_proposal_id("python", "requests", "uv", ("acme/api",))
+    id_b = apply_rederive.bump_proposal_id("python", "requests", "uv", ("acme/api",))
+    assert id_a == id_b
+
+
+def test_bump_proposal_id_changes_with_membership():
+    id_a = apply_rederive.bump_proposal_id("python", "requests", "uv", ("acme/api",))
+    id_b = apply_rederive.bump_proposal_id("python", "requests", "uv", ("acme/api", "acme/web"))
+    assert id_a != id_b
+
+
+# --- dependency-bump: collect ------------------------------------------------
+
+
+def _package_record(repo, name="requests", locked_version="2.28.0", manager="uv", **overrides):
+    fields = dict(
+        repo=repo, ecosystem="python", name=name, resolution="single",
+        manifest_range=">=2.0", locked_version=locked_version,
+        unresolved_reason=None, manager=manager,
+        manifest_path="pyproject.toml", lock_path="uv.lock",
+        tree_sha="tree-" + repo.replace("/", "-"), provenance=(),
+    )
+    fields.update(overrides)
+    return PackageRecord(**fields)
+
+
+def _coherence_group(**overrides):
+    fields = dict(
+        id="core-runtime", repos=("acme/api", "acme/web"),
+        packages=("python:requests",), exclude_packages=(), policy="exact",
+    )
+    fields.update(overrides)
+    return CoherenceGroup(**fields)
+
+
+class FakeDependencyBumpIoSeams:
+    """Fakes the collaborators _collect_dependency_bump needs: fresh
+    PackageRecords per repo (bypassing real evidence materialization),
+    the coherence policy, and per-repo default_branch/HEAD sha resolution
+    via gh_api — the same seam neutral already uses."""
+
+    def __init__(self, records_by_repo, groups, branches_by_repo, heads_by_repo):
+        self.records_by_repo = records_by_repo
+        self.groups = groups
+        self.branches_by_repo = branches_by_repo
+        self.heads_by_repo = heads_by_repo
+        self.registry = None
+        self.gh_api_calls = []
+
+    def gh_api(self, endpoint):
+        self.gh_api_calls.append(endpoint)
+        parts = endpoint.split("/")
+        owner, name = parts[1], parts[2]
+        repo = f"{owner}/{name}"
+        if endpoint.endswith(f"repos/{owner}/{name}"):
+            return {"default_branch": self.branches_by_repo[repo]}
+        # .../branches/{branch}
+        return {"commit": {"sha": self.heads_by_repo[repo]}}
+
+
+def test_collect_dependency_bump_resolves_finding_and_target():
+    io = FakeDependencyBumpIoSeams(
+        records_by_repo={
+            "acme/api": [_package_record("acme/api", locked_version="2.28.0")],
+            "acme/web": [_package_record("acme/web", locked_version="2.31.0")],
+        },
+        groups=(_coherence_group(),),
+        branches_by_repo={"acme/api": "main", "acme/web": "main"},
+        heads_by_repo={"acme/api": "a" * 40, "acme/web": "b" * 40},
+    )
+    inputs = apply_rederive._collect_dependency_bump(
+        {"group": "core-runtime", "ecosystem": "python", "package": "requests"},
+        actor=mutation_plan.Actor("octocat", "laptop", "interactive"),
+        io_seams=io,
+        _fetch_records=lambda repos, io_seams: (
+            [r for repo in repos for r in io.records_by_repo.get(repo, [])],
+            {},
+        ),
+        _load_groups=lambda io_seams: io.groups,
+    )
+    assert inputs.finding.package == "requests"
+    assert inputs.target == "2.31.0"
+    assert inputs.selection == ("acme/api",)  # only the diverging repo
+    assert inputs.head_shas == {"acme/api": "a" * 40}
+    assert inputs.tree_shas == {"acme/api": "tree-acme-api"}
+
+
+def test_collect_dependency_bump_rejects_unknown_finding_address():
+    io = FakeDependencyBumpIoSeams(
+        records_by_repo={"acme/api": [_package_record("acme/api")]},
+        groups=(_coherence_group(),),
+        branches_by_repo={"acme/api": "main"}, heads_by_repo={"acme/api": "a" * 40},
+    )
+    with pytest.raises(apply_rederive.RederiveError, match="no finding"):
+        apply_rederive._collect_dependency_bump(
+            {"group": "core-runtime", "ecosystem": "python", "package": "does-not-exist"},
+            actor=mutation_plan.Actor("octocat", "laptop", "interactive"), io_seams=io,
+            _fetch_records=lambda repos, io_seams: (io.records_by_repo["acme/api"], {}),
+            _load_groups=lambda io_seams: io.groups,
+        )
+
+
+def test_collect_dependency_bump_rejects_unresolved_distance():
+    io = FakeDependencyBumpIoSeams(
+        records_by_repo={
+            "acme/api": [_package_record("acme/api", resolution="multiple", locked_version=None)],
+            "acme/web": [_package_record("acme/web", locked_version="2.31.0")],
+        },
+        groups=(_coherence_group(),),
+        branches_by_repo={"acme/api": "main", "acme/web": "main"},
+        heads_by_repo={"acme/api": "a" * 40, "acme/web": "b" * 40},
+    )
+    with pytest.raises(apply_rederive.RederiveError, match="unresolved"):
+        apply_rederive._collect_dependency_bump(
+            {"group": "core-runtime", "ecosystem": "python", "package": "requests"},
+            actor=mutation_plan.Actor("octocat", "laptop", "interactive"), io_seams=io,
+            _fetch_records=lambda repos, io_seams: (
+                [r for repo in repos for r in io.records_by_repo.get(repo, [])],
+                {},
+            ),
+            _load_groups=lambda io_seams: io.groups,
+        )
+
+
+def test_collect_dependency_bump_drops_non_main_group_declaration():
+    io = FakeDependencyBumpIoSeams(
+        records_by_repo={
+            "acme/api": [_package_record("acme/api", locked_version="2.28.0")],
+            "acme/web": [_package_record("acme/web", locked_version="2.31.0")],
+        },
+        groups=(_coherence_group(),),
+        branches_by_repo={"acme/api": "main", "acme/web": "main"},
+        heads_by_repo={"acme/api": "a" * 40, "acme/web": "b" * 40},
+    )
+    inputs = apply_rederive._collect_dependency_bump(
+        {"group": "core-runtime", "ecosystem": "python", "package": "requests"},
+        actor=mutation_plan.Actor("octocat", "laptop", "interactive"), io_seams=io,
+        _fetch_records=lambda repos, io_seams: (
+            [r for repo in repos for r in io.records_by_repo.get(repo, [])],
+            {},
+        ),
+        _load_groups=lambda io_seams: io.groups,
+        _declarations_by_repo={"acme/api": {"python": {"requests": "dev"}}, "acme/web": {"python": {"requests": "main"}}},
+    )
+    assert inputs.selection == ()
+    assert inputs.blocked == {"acme/api": "non-main-group-package"}
+
+
+def test_collect_dependency_bump_rejects_no_divergence_when_all_at_target():
+    """When every repo already shares the same locked_version, `compare()`
+    emits NO finding for that (group, ecosystem, package) at all (its
+    `reduced is None` -> "identical across every member" branch never
+    appends one) — so this fails closed via the earlier "no finding"
+    check, not a separate "nothing to do" guard. (`_collect_dependency_bump`
+    still carries its own defensive "has nothing to do" check for a
+    finding whose diverging set is somehow empty — belt-and-suspenders,
+    since a real `compare()` finding is by construction never coherent.)"""
+    io = FakeDependencyBumpIoSeams(
+        records_by_repo={
+            "acme/api": [_package_record("acme/api", locked_version="2.31.0")],
+            "acme/web": [_package_record("acme/web", locked_version="2.31.0")],
+        },
+        groups=(_coherence_group(),),
+        branches_by_repo={"acme/api": "main", "acme/web": "main"},
+        heads_by_repo={"acme/api": "a" * 40, "acme/web": "b" * 40},
+    )
+    with pytest.raises(apply_rederive.RederiveError, match="no finding"):
+        apply_rederive._collect_dependency_bump(
+            {"group": "core-runtime", "ecosystem": "python", "package": "requests"},
+            actor=mutation_plan.Actor("octocat", "laptop", "interactive"), io_seams=io,
+            _fetch_records=lambda repos, io_seams: (
+                [r for repo in repos for r in io.records_by_repo.get(repo, [])],
+                {},
+            ),
+            _load_groups=lambda io_seams: io.groups,
+        )
+
+
+def test_collect_dependency_bump_drops_repo_missing_evidence_tree_sha():
+    io = FakeDependencyBumpIoSeams(
+        records_by_repo={
+            "acme/api": [_package_record("acme/api", locked_version="2.28.0", tree_sha=None)],
+            "acme/web": [_package_record("acme/web", locked_version="2.31.0")],
+        },
+        groups=(_coherence_group(),),
+        branches_by_repo={"acme/api": "main", "acme/web": "main"},
+        heads_by_repo={"acme/api": "a" * 40, "acme/web": "b" * 40},
+    )
+    inputs = apply_rederive._collect_dependency_bump(
+        {"group": "core-runtime", "ecosystem": "python", "package": "requests"},
+        actor=mutation_plan.Actor("octocat", "laptop", "interactive"), io_seams=io,
+        _fetch_records=lambda repos, io_seams: (
+            [r for repo in repos for r in io.records_by_repo.get(repo, [])],
+            {},
+        ),
+        _load_groups=lambda io_seams: io.groups,
+    )
+    assert inputs.selection == ()
+    assert inputs.blocked == {"acme/api": "evidence-tree-sha-missing"}
+
+
+# --- dependency-bump: rederive (collect-once, rederive-many) ----------------
+
+
+def _bump_inputs(**overrides):
+    fields = dict(
+        finding_ref={"group": "core-runtime", "ecosystem": "python", "package": "requests"},
+        finding=DivergenceFinding(
+            group="core-runtime", ecosystem="python", package="requests",
+            versions=(("acme/api", "2.28.0"), ("acme/web", "2.31.0")), distance="minor",
+        ),
+        target="2.31.0",
+        selection=("acme/api",),
+        records_by_repo={
+            ("acme/api", "python", "requests"): _package_record("acme/api", manager="uv"),
+        },
+        head_shas={"acme/api": "a" * 40},
+        tree_shas={"acme/api": "tree-acme-api"},
+        default_branches={"acme/api": "main"},
+        blocked={},
+        actor=mutation_plan.Actor("octocat", "laptop", "interactive"),
+        registry=None,
+    )
+    fields.update(overrides)
+    return apply_rederive.DependencyBumpProviderInputs(**fields)
+
+
+def test_rederive_dependency_bump_builds_one_proposal_per_manager():
+    inputs = _bump_inputs(
+        selection=("acme/api", "acme/other"),
+        records_by_repo={
+            ("acme/api", "python", "requests"): _package_record("acme/api", manager="uv"),
+            ("acme/other", "python", "requests"): _package_record("acme/other", manager="poetry"),
+        },
+        head_shas={"acme/api": "a" * 40, "acme/other": "c" * 40},
+        tree_shas={"acme/api": "tree-acme-api", "acme/other": "tree-acme-other"},
+        default_branches={"acme/api": "main", "acme/other": "main"},
+    )
+    rederived = apply_rederive.rederive_dependency_bump(inputs)
+    assert len(rederived) == 2
+    by_transform = {rp.proposal.transformation: rp for rp in rederived}
+    assert by_transform["bump-python-uv"].proposal.selection == ("acme/api",)
+    assert by_transform["bump-python-poetry"].proposal.selection == ("acme/other",)
+    for rp in rederived:
+        assert rp.proposal.transform_params == {"package": "requests", "version": "2.31.0"}
+        assert rp.proposal.mutation_policy == "allow-listed"
+        assert rp.source_kind == "dependency-bump"
+
+
+def test_rederive_dependency_bump_proposal_expected_shas_and_tree_shas():
+    inputs = _bump_inputs()
+    [rp] = apply_rederive.rederive_dependency_bump(inputs)
+    assert rp.proposal.expected_shas == {"acme/api": "a" * 40}
+    assert rp.proposal.expected_tree_shas == {"acme/api": "tree-acme-api"}
+
+
+def test_rederive_dependency_bump_finalizer_record_carries_default_branches():
+    inputs = _bump_inputs()
+    [rp] = apply_rederive.rederive_dependency_bump(inputs)
+    assert rp.finalizer_record == {"base_refs": {"acme/api": "main"}}
+
+
+def test_rederive_dependency_bump_bound_paths_from_package_record():
+    inputs = _bump_inputs()
+    [rp] = apply_rederive.rederive_dependency_bump(inputs)
+    assert rp.proposal.bound_paths == {"acme/api": ("pyproject.toml", "uv.lock")}
+
+
+def test_rederive_dependency_bump_unmapped_manager_is_skipped_not_raised():
+    inputs = _bump_inputs(
+        records_by_repo={
+            ("acme/api", "python", "requests"): _package_record("acme/api", manager="pdm"),
+        },
+    )
+    rederived = apply_rederive.rederive_dependency_bump(inputs)
+    assert rederived == []  # unmapped manager -> no proposal, never a crash
+
+
+def test_rederive_dependency_bump_empty_selection_returns_empty_list():
+    inputs = _bump_inputs(selection=(), head_shas={}, tree_shas={}, default_branches={})
+    assert apply_rederive.rederive_dependency_bump(inputs) == []
+
+
+def test_rederive_dependency_bump_unmapped_manager_does_not_block_mapped_manager():
+    """One (finding, manager) group with no transform entry must not
+    prevent another (finding, manager) group in the SAME finding from
+    producing its proposal — 'a manager has no transform entry -> per-
+    manager blocked; other managers proceed' (spec error table)."""
+    inputs = _bump_inputs(
+        selection=("acme/api", "acme/other"),
+        records_by_repo={
+            ("acme/api", "python", "requests"): _package_record("acme/api", manager="uv"),
+            ("acme/other", "python", "requests"): _package_record("acme/other", manager="pdm"),
+        },
+        head_shas={"acme/api": "a" * 40, "acme/other": "c" * 40},
+        tree_shas={"acme/api": "tree-acme-api", "acme/other": "tree-acme-other"},
+        default_branches={"acme/api": "main", "acme/other": "main"},
+    )
+    rederived = apply_rederive.rederive_dependency_bump(inputs)
+    assert len(rederived) == 1
+    assert rederived[0].proposal.transformation == "bump-python-uv"
+    assert rederived[0].proposal.selection == ("acme/api",)
+
+
+def test_rederive_dependency_bump_wraps_invalid_transform_params_as_rederive_error():
+    """A version string mutation_plan._validate_param_value would reject
+    (here a PEP 440 epoch, unsupported in v1 per spec § 4.3/§ 7) must
+    surface as RederiveError, not a raw mutation_plan.MutationPlanError —
+    'transform_params key/value fails validation -> RederiveError
+    (fail-closed)' (spec error table). Requires a real registry: build_proposal
+    only runs _validate_param_value's param-aware regex check when a
+    registry is supplied (registry=None skips straight to a generic
+    non-empty-string check) — production's run_apply_dependency_bump
+    always loads one before calling rederive_dependency_bump, precisely
+    so this rejection happens at rederive time, not deep inside exec_phase."""
+    registry = mutation_plan.load_registry({"transformations": {"bump-python-uv": {
+        "id": "bump-python-uv", "command_argv": ["uv", "add", "{package}=={version}"],
+        "applies_to": ["always"], "validation": {"kind": "none"}, "allow_scheduled": False,
+        "params": ["package", "version"],
+    }}})
+    inputs = _bump_inputs(target="1!2.3.4", registry=registry)
+    with pytest.raises(apply_rederive.RederiveError, match="dependency-bump build failed"):
+        apply_rederive.rederive_dependency_bump(inputs)
+
+
+# --- dependency-bump: bump_summary -------------------------------------------
+
+
+def test_bump_summary_synthesizes_recorded_summary():
+    summary = apply_rederive.bump_summary(
+        {"group": "core-runtime", "ecosystem": "python", "package": "requests"},
+        selection=("acme/api",), manager="uv", target="2.31.0",
+    )
+    assert summary["binding"] == {"group": "core-runtime", "ecosystem": "python", "package": "requests"}
+    assert summary["transformation"] == "bump-python-uv"
+    assert summary["proposal_id"] == apply_rederive.bump_proposal_id(
+        "python", "requests", "uv", ("acme/api",)
+    )
+    assert summary["target"] == "2.31.0"
+
+
+# --- dependency-bump: collect_inputs dispatch --------------------------------
+
+
+def test_collect_inputs_dispatches_dependency_bump(monkeypatch):
+    sentinel = object()
+    monkeypatch.setattr(
+        apply_rederive, "_collect_dependency_bump",
+        lambda finding_ref, actor, io_seams: sentinel,
+    )
+    result = apply_rederive.collect_inputs(
+        "dependency-bump", {"group": "g", "ecosystem": "python", "package": "requests"},
+        {}, actor=mutation_plan.Actor("octocat", "laptop", "interactive"),
+        io_seams=apply_rederive.IoSeams(),
+    )
+    assert result is sentinel

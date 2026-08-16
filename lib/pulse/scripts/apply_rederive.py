@@ -42,8 +42,20 @@ from lib.pulse.scripts import (
     plan_sync,
     plan_sync_snapshot,
 )
+from lib.pulse.scripts import dependencies as deps_module
+from lib.pulse.scripts import dependency_evidence
+from lib.pulse.scripts import dependency_pipeline
+from lib.pulse.scripts import dependency_policy
+from lib.pulse.scripts.profile_dispatch import ConfigError
 
-SOURCE_KINDS = ("plan-sync", "generated-artifact", "marketplace-sync", "neutral")
+SOURCE_KINDS = ("plan-sync", "generated-artifact", "marketplace-sync", "neutral", "dependency-bump")
+
+MANAGER_TRANSFORM: dict[str, str] = {
+    "uv": "bump-python-uv",
+    "poetry": "bump-python-poetry",
+    "npm": "bump-npm",
+    "pnpm": "bump-pnpm",
+}
 
 # Neutral transformations are the standalone, self-contained executable
 # entries with no propose driver. `regenerate-from-template` (a `nave
@@ -136,6 +148,44 @@ class NeutralProviderInputs:
     binding: Mapping[str, Any]
     selection: tuple[str, ...]
     head_shas: dict[str, str]
+    actor: Mapping[str, Any] | mutation_plan.Actor
+    registry: mutation_plan.TransformationRegistry | None = None
+
+
+
+@dataclass(frozen=True)
+class DependencyBumpProviderInputs:
+    """Fresh dependency-bump evidence for ONE finding — the one structural
+    difference from every other source: `_collect` runs once per finding
+    (not once per proposal), and `rederive_dependency_bump` fans this ONE
+    input out into N per-manager proposals.
+
+    `finding` is the freshly re-derived DivergenceFinding (never the
+    caller-supplied finding_ref, which is only an address). `target` is
+    the semantically-highest locked_version among the finding's versions.
+    `selection` is every diverging, main-group-declared repo (dropped:
+    already-at-target repos, and non-main-group declarations — see
+    `blocked`). `records_by_repo` is `(repo, ecosystem, name) ->
+    PackageRecord`, used to split `selection` by manager. `head_shas` is
+    the FRESH per-repo commit SHA (branches/{base_ref} at collect-time,
+    same convention as neutral — never pinned to evidence). `tree_shas`
+    is the per-repo F4 evidence tree SHA (the finding-validity guard).
+    `default_branches` is per-repo, threaded to `resolve_intended_base`.
+    `blocked` names repos dropped from selection with their reason code
+    (e.g. `non-main-group-package`), carried through so the driver can
+    still report a per-repo blocked outcome instead of silently omitting
+    them.
+    """
+
+    finding_ref: Mapping[str, Any]
+    finding: deps_module.DivergenceFinding
+    target: str
+    selection: tuple[str, ...]
+    records_by_repo: dict[tuple[str, str, str], deps_module.PackageRecord]
+    head_shas: dict[str, str]
+    tree_shas: dict[str, str]
+    default_branches: dict[str, str]
+    blocked: dict[str, str]
     actor: Mapping[str, Any] | mutation_plan.Actor
     registry: mutation_plan.TransformationRegistry | None = None
 
@@ -275,6 +325,20 @@ def neutral_fleet_proposal_id(
     return f"apply-{transformation}-{owner}-{digest}"
 
 
+def bump_proposal_id(
+    ecosystem: str, package: str, manager: str, selection: tuple[str, ...]
+) -> str:
+    """Deterministic, target-independent proposal id for one (finding,
+    manager) group: `apply-bump-{ecosystem}-{package}-{manager}-{sha256(sorted selection)[:12]}`.
+    Distinct from every neutral/plan-sync/generated-artifact/marketplace-sync
+    id space. A target-version change re-derives through the SAME id
+    (cascading-bump semantics, spec § 4.6) — the target is never part of
+    the id, only of `transform_params` (which the digest, not the id,
+    makes visible)."""
+    digest = hashlib.sha256(",".join(sorted(selection)).encode()).hexdigest()[:12]
+    return f"apply-bump-{ecosystem}-{package}-{manager}-{digest}"
+
+
 def neutral_proposal_id(binding: Mapping[str, Any]) -> str:
     """Deterministic neutral proposal id. Single source of the id.
 
@@ -317,6 +381,24 @@ def neutral_summary(binding: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+
+def bump_summary(
+    finding_ref: Mapping[str, Any], *, selection: tuple[str, ...], manager: str, target: str
+) -> dict[str, Any]:
+    """Synthesize the `recorded_summary` for a dependency-bump apply (no
+    propose phase — mirrors `neutral_summary`). Included for human review
+    even though `target` is deliberately not part of the proposal id."""
+    ecosystem = finding_ref["ecosystem"]
+    package = finding_ref["package"]
+    transformation = MANAGER_TRANSFORM[manager]
+    return {
+        "binding": dict(finding_ref),
+        "transformation": transformation,
+        "proposal_id": bump_proposal_id(ecosystem, package, manager, selection),
+        "target": target,
+    }
+
+
 def collect_inputs(
     source_kind: str,
     binding_ref: Mapping[str, Any],
@@ -340,7 +422,11 @@ def collect_inputs(
     if source_kind not in SOURCE_KINDS:
         raise RederiveError(f"apply_rederive: unknown source_kind: {source_kind!r}")
 
-    if source_kind == "neutral":
+    if source_kind == "dependency-bump":
+        # Dependency-bump identity is the whole finding_ref triple, compared
+        # against `bump_summary`'s synthesized `binding` (== dict(finding_ref)).
+        binding_id = binding_ref
+    elif source_kind == "neutral":
         # Neutral identity is `repo` for single-repo bindings and the
         # deterministic proposal id for explicit-repos fleet bindings
         # (matches `neutral_summary`'s synthesized `binding`).
@@ -359,6 +445,8 @@ def collect_inputs(
             f"{recorded_binding!r}"
         )
 
+    if source_kind == "dependency-bump":
+        return _collect_dependency_bump(binding_ref, actor, io_seams)
     if source_kind == "plan-sync":
         return _collect_plan_sync(binding_ref, actor, io_seams)
     if source_kind == "generated-artifact":
@@ -497,6 +585,175 @@ def _collect_neutral(
         head_shas=head_shas,
         actor=actor,
         registry=io_seams.registry,
+    )
+
+
+def _fetch_fresh_records(
+    repos: tuple[str, ...], io_seams: IoSeams
+) -> tuple[list[deps_module.PackageRecord], dict[str, dict[str, dict[str, str]]]]:
+    """The REAL fresh-evidence path: materialize F4 evidence for exactly
+    the finding's group repos (never the whole fleet), then run the same
+    typed evaluation the healthcheck fleet.dependencies.coherence check
+    uses. Returns both the fleet-comparison records and a mapping from
+    repo -> ecosystem -> package name -> declared group, so the bump
+    collect step can enforce main-group-only without a separate evidence
+    round-trip. Not called `_collect_neutral`-style with a fake —
+    production callers pass no override; tests inject `_fetch_records`
+    directly."""
+    if io_seams.runner is None:
+        raise RederiveError("apply_rederive: dependency-bump requires io_seams.runner")
+    try:
+        document = dependency_pipeline.materialize_dependency_evidence(
+            list(repos), runner=io_seams.runner
+        )
+    except ConfigError as exc:
+        raise RederiveError(
+            f"apply_rederive: dependency-bump evidence materialization failed: {exc}"
+        ) from exc
+    evidence_index = dependency_evidence.load_dependency_evidence(document)
+    records: list[deps_module.PackageRecord] = []
+    declarations_by_repo: dict[str, dict[str, dict[str, str]]] = {}
+    for repo in repos:
+        evidence = evidence_index.get(repo)
+        for ecosystem in ("python", "node"):
+            evaluation = dependency_pipeline.evaluate_dependencies(repo, ecosystem, evidence)
+            records.extend(evaluation.records)
+            package_namespace = evaluation.records[0].ecosystem if evaluation.records else ecosystem
+            by_ecosystem = declarations_by_repo.setdefault(repo, {})
+            by_name = by_ecosystem.setdefault(package_namespace, {})
+            for decl in evaluation.declarations:
+                # A package may appear in more than one group; "main" wins
+                # over dev/optional because any main declaration makes the
+                # package safe to bump as fleet runtime surface.
+                if decl.name not in by_name or decl.group == "main":
+                    by_name[decl.name] = decl.group
+    return records, declarations_by_repo
+
+
+def _load_coherence_groups(io_seams: IoSeams) -> tuple[deps_module.CoherenceGroup, ...]:
+    if io_seams.workdir is None:
+        raise RederiveError("apply_rederive: dependency-bump requires io_seams.workdir (dependencies.yaml root)")
+    try:
+        policy = dependency_policy.load_dependency_policy(
+            str(Path(io_seams.workdir) / "dependencies.yaml")
+        )
+    except dependency_policy.DependencyPolicyError as exc:
+        raise RederiveError(f"apply_rederive: could not load dependencies.yaml: {exc}") from exc
+    return policy.groups
+
+
+def _collect_dependency_bump(
+    finding_ref: Mapping[str, Any],
+    actor: Mapping[str, Any] | mutation_plan.Actor,
+    io_seams: IoSeams,
+    *,
+    _fetch_records=_fetch_fresh_records,
+    _load_groups=_load_coherence_groups,
+    _declarations_by_repo: Mapping[str, Mapping[str, Mapping[str, str]]] | None = None,
+) -> DependencyBumpProviderInputs:
+    """Collect-once: re-derive the finding fresh, compute its target,
+    resolve selection (diverging + main-group-only), and resolve fresh
+    per-repo commit/tree/default-branch evidence. `_fetch_records` returns
+    `(records, declarations_by_repo)` where declarations_by_repo is
+    `repo -> ecosystem -> package -> group`; `_load_groups` loads coherence
+    groups; `_declarations_by_repo` is an optional test-only override for
+    the main-group join."""
+    group_id = finding_ref.get("group")
+    ecosystem = finding_ref.get("ecosystem")
+    package = finding_ref.get("package")
+    if not all(isinstance(v, str) and v for v in (group_id, ecosystem, package)):
+        raise RederiveError(
+            f"apply_rederive: finding_ref requires non-empty group/ecosystem/package, got {finding_ref!r}"
+        )
+
+    groups = _load_groups(io_seams)
+    group = next((g for g in groups if g.id == group_id), None)
+    if group is None:
+        raise RederiveError(f"apply_rederive: no coherence group named {group_id!r}")
+
+    records, fetched_declarations = _fetch_records(group.repos, io_seams)
+    report = deps_module.compare(records, groups)
+    matches = [
+        f for f in (*report.findings, *report.unresolved)
+        if f.group == group_id and f.ecosystem == ecosystem and f.package == package
+    ]
+    if not matches:
+        raise RederiveError(
+            f"apply_rederive: no finding for (group={group_id!r}, ecosystem={ecosystem!r}, package={package!r})"
+        )
+    finding = matches[0]
+    if finding.distance == "unresolved":
+        raise RederiveError(
+            f"apply_rederive: finding (group={group_id!r}, ecosystem={ecosystem!r}, package={package!r}) "
+            "is unresolved — refusing a partial bump"
+        )
+
+    target = max(
+        (v for _, v in finding.versions if v is not None),
+        key=lambda raw: deps_module._parse_version(ecosystem, raw),
+    )
+    diverging = tuple(sorted(repo for repo, v in finding.versions if v != target))
+    if not diverging:
+        raise RederiveError(
+            f"apply_rederive: finding (group={group_id!r}, ecosystem={ecosystem!r}, package={package!r}) "
+            "has nothing to do — every repo is already at the target"
+        )
+
+    records_by_repo = {(r.repo, r.ecosystem, r.name): r for r in records}
+    declarations_by_repo = _declarations_by_repo if _declarations_by_repo is not None else fetched_declarations
+    selection: list[str] = []
+    blocked: dict[str, str] = {}
+    for repo in diverging:
+        declared_group = declarations_by_repo.get(repo, {}).get(ecosystem, {}).get(package, "main")
+        if declared_group != "main":
+            blocked[repo] = "non-main-group-package"
+            continue
+        selection.append(repo)
+    selection = tuple(sorted(selection))
+    if not selection:
+        return DependencyBumpProviderInputs(
+            finding_ref=finding_ref, finding=finding, target=target, selection=(),
+            records_by_repo=records_by_repo, head_shas={}, tree_shas={},
+            default_branches={}, blocked=blocked, actor=actor, registry=io_seams.registry,
+        )
+
+    if io_seams.gh_api is None:
+        raise RederiveError("apply_rederive: dependency-bump requires io_seams.gh_api")
+    head_shas: dict[str, str] = {}
+    tree_shas: dict[str, str] = {}
+    default_branches: dict[str, str] = {}
+    resolved_selection: list[str] = []
+    for repo in selection:
+        record = records_by_repo.get((repo, ecosystem, package))
+        if record is None or record.tree_sha is None:
+            blocked[repo] = "evidence-tree-sha-missing"
+            continue
+        owner, name = repo.split("/", 1)
+        try:
+            meta = io_seams.gh_api(f"repos/{owner}/{name}")
+            default_branch = meta["default_branch"] if isinstance(meta, Mapping) else None
+            if not isinstance(default_branch, str) or not default_branch:
+                continue
+            branch_payload = io_seams.gh_api(f"repos/{owner}/{name}/branches/{default_branch}")
+            head_sha = None
+            if isinstance(branch_payload, Mapping):
+                commit = branch_payload.get("commit")
+                if isinstance(commit, Mapping) and isinstance(commit.get("sha"), str):
+                    head_sha = commit["sha"] or None
+        except Exception:
+            continue
+        if head_sha is None:
+            continue
+        head_shas[repo] = head_sha
+        tree_shas[repo] = record.tree_sha
+        default_branches[repo] = default_branch
+        resolved_selection.append(repo)
+
+    return DependencyBumpProviderInputs(
+        finding_ref=finding_ref, finding=finding, target=target,
+        selection=tuple(sorted(resolved_selection)), records_by_repo=records_by_repo,
+        head_shas=head_shas, tree_shas=tree_shas, default_branches=default_branches,
+        blocked=blocked, actor=actor, registry=io_seams.registry,
     )
 
 
@@ -679,3 +936,72 @@ def _rederive_neutral(inputs: NeutralProviderInputs) -> RederivedProposal:
         source_kind="neutral",
         finalizer_record=None,
     )
+
+
+def rederive_dependency_bump(
+    inputs: DependencyBumpProviderInputs,
+) -> list[RederivedProposal]:
+    """Rederive-many: split `inputs.selection` by manager, build one
+    `Proposal` per (finding, manager) group. A repo whose manager has no
+    entry in MANAGER_TRANSFORM is silently excluded from every proposal
+    (never raised — the rest of the finding still proceeds; the driver is
+    responsible for reporting the excluded repo as a per-manager
+    `blocked` outcome using `inputs.blocked`/the manager gap, not this
+    function, which only ever returns proposals it can actually build)."""
+    ecosystem = inputs.finding.ecosystem
+    package = inputs.finding.package
+    by_manager: dict[str, list[str]] = {}
+    for repo in inputs.selection:
+        record = inputs.records_by_repo.get((repo, ecosystem, package))
+        if record is None:
+            continue
+        transformation = MANAGER_TRANSFORM.get(record.manager)
+        if transformation is None:
+            continue
+        by_manager.setdefault(transformation, []).append(repo)
+
+    rederived: list[RederivedProposal] = []
+    for transformation, group_repos in by_manager.items():
+        group_repos = tuple(sorted(group_repos))
+        proposal_id = bump_proposal_id(ecosystem, package, _manager_for(transformation), group_repos)
+        try:
+            proposal = mutation_plan.build_proposal(
+                id=proposal_id,
+                selection=list(group_repos),
+                transformation=transformation,
+                expected_shas={repo: inputs.head_shas[repo] for repo in group_repos},
+                actor=inputs.actor,
+                mutation_policy="allow-listed",
+                bound_paths={
+                    repo: tuple(
+                        p for p in (
+                            inputs.records_by_repo[(repo, ecosystem, package)].manifest_path,
+                            inputs.records_by_repo[(repo, ecosystem, package)].lock_path,
+                        ) if p is not None
+                    )
+                    for repo in group_repos
+                },
+                transform_params={"package": package, "version": inputs.target},
+                expected_tree_shas={repo: inputs.tree_shas[repo] for repo in group_repos},
+                registry=inputs.registry,
+            )
+        except mutation_plan.MutationPlanError as exc:
+            raise RederiveError(f"apply_rederive: dependency-bump build failed: {exc}") from exc
+        rederived.append(
+            RederivedProposal(
+                binding_id=proposal_id,
+                proposal=proposal,
+                source_kind="dependency-bump",
+                finalizer_record={
+                    "base_refs": {repo: inputs.default_branches[repo] for repo in group_repos},
+                },
+            )
+        )
+    return rederived
+
+
+def _manager_for(transformation: str) -> str:
+    for manager, tid in MANAGER_TRANSFORM.items():
+        if tid == transformation:
+            return manager
+    raise RederiveError(f"apply_rederive: no manager maps to transformation {transformation!r}")
