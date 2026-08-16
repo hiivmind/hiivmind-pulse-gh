@@ -42,6 +42,45 @@ def test_exec_blocks_missing_tool_before_exec(monkeypatch):
     assert all(item["state"] == "blocked" for item in result.values())
 
 
+def entry_with_params():
+    return mutation_plan.load_registry({"transformations": {"bump-python-uv": {
+        "id": "bump-python-uv", "command_argv": ["uv", "add", "{package}=={version}"],
+        "applies_to": ["always"], "validation": {"kind": "none"}, "allow_scheduled": False,
+        "params": ["package", "version"],
+    }}}).get("bump-python-uv")
+
+
+def test_exec_passes_transform_params_to_resolve_argv(monkeypatch):
+    captured = {}
+
+    def fake_pen_exec(runner, pen_name, argv, **kwargs):
+        captured["argv"] = argv
+        return {"adapter_state": "ok"}
+
+    monkeypatch.setattr(apply_phases.nave_adapter, "pen_exec", fake_pen_exec)
+    monkeypatch.setattr(apply_phases.executor_probe, "probe_required_tool", lambda *_: {"state": "ok"})
+    pen = {"name": "pen", "repos": [{"repo": "acme/api"}]}
+    result = apply_phases.exec_phase(
+        None, pen, entry_with_params(), transform_params={"package": "requests", "version": "2.32.0"}
+    )
+    assert captured["argv"] == ["uv", "add", "requests==2.32.0"]
+    assert result["acme/api"]["state"] == "ok"
+
+
+def test_exec_none_transform_params_uses_verbatim_argv_backward_compat(monkeypatch):
+    captured = {}
+
+    def fake_pen_exec(runner, pen_name, argv, **kwargs):
+        captured["argv"] = argv
+        return {"adapter_state": "ok"}
+
+    monkeypatch.setattr(apply_phases.nave_adapter, "pen_exec", fake_pen_exec)
+    monkeypatch.setattr(apply_phases.executor_probe, "probe_required_tool", lambda *_: {"state": "ok"})
+    pen = {"name": "pen", "repos": [{"repo": "acme/api"}]}
+    apply_phases.exec_phase(None, pen, entry())
+    assert captured["argv"] == ["ruff", "format", "."]
+
+
 class Ops:
     def __init__(self, result): self.result, self.calls = result, []
     def provision_branch(self, branch, bases): self.calls.append((branch, bases)); return self.result
@@ -70,7 +109,11 @@ def test_commit_phase_defaults_to_proposal_bound_paths():
 
 
 def provision_item(repo, **changes):
-    item = {"state": "ok", "base_ref": "refs/heads/main", "expected_base_sha": "abc", "apply_ref": "pulse/apply/run-1", "observed_base_sha": "abc"}
+    item = {
+        "state": "ok", "base_ref": "refs/heads/main", "expected_base_sha": "abc",
+        "apply_ref": "pulse/apply/run-1", "observed_base_sha": "abc",
+        "observed_tree_sha": "tree-abc",
+    }
     item.update(changes)
     return item
 
@@ -80,6 +123,60 @@ def test_provision_blocks_drift_and_echo_mismatch():
     result = apply_phases.provision_phase(None, None, ops, proposal(), "pulse/apply/run-1", {repo: "refs/heads/main" for repo in REPOS})
     assert "stale-base" in result["acme/api"]["reason"]
     assert "apply_ref" in result["acme/web"]["reason"]
+
+
+def proposal_with_tree_shas(**tree_shas):
+    return mutation_plan.build_proposal(
+        id="run-1", selection=list(REPOS), transformation="format-python",
+        expected_shas={repo: "abc" for repo in REPOS},
+        actor={"gh_login": "octocat", "machine": "laptop", "mode": "interactive"},
+        mutation_policy="allow-listed", bound_paths={repo: ("src/**",) for repo in REPOS},
+        expected_tree_shas=tree_shas or {repo: "tree-abc" for repo in REPOS},
+    )
+
+
+def test_provision_blocks_stale_tree_when_commit_matches_but_tree_drifted():
+    ops = Ops({
+        "acme/api": provision_item("acme/api", observed_tree_sha="tree-DIFFERENT"),
+        "acme/web": provision_item("acme/web", observed_tree_sha="tree-abc"),
+    })
+    result = apply_phases.provision_phase(
+        None, None, ops, proposal_with_tree_shas(), "pulse/apply/run-1",
+        {repo: "refs/heads/main" for repo in REPOS},
+    )
+    assert "stale-tree" in result["acme/api"]["reason"]
+    assert result["acme/web"]["state"] == "ok"
+
+
+def test_provision_reports_stale_base_not_stale_tree_when_both_drift():
+    """Commit-level drift takes precedence in the reported reason — the
+    operator sees the more actionable stale-base diagnosis first."""
+    ops = Ops({
+        "acme/api": provision_item("acme/api", observed_base_sha="old", observed_tree_sha="tree-DIFFERENT"),
+        "acme/web": provision_item("acme/web", observed_tree_sha="tree-abc"),
+    })
+    result = apply_phases.provision_phase(
+        None, None, ops, proposal_with_tree_shas(), "pulse/apply/run-1",
+        {repo: "refs/heads/main" for repo in REPOS},
+    )
+    assert "stale-base" in result["acme/api"]["reason"]
+    assert "stale-tree" not in result["acme/api"]["reason"]
+
+
+def test_provision_ignores_tree_sha_when_expected_tree_shas_is_none():
+    """Every non-dependency-bump proposal (expected_tree_shas=None) is
+    unaffected even if the fake provision result's observed_tree_sha
+    doesn't match anything — the elif is never reached."""
+    ops = Ops({
+        "acme/api": provision_item("acme/api", observed_tree_sha="whatever"),
+        "acme/web": provision_item("acme/web", observed_tree_sha="anything"),
+    })
+    result = apply_phases.provision_phase(
+        None, None, ops, proposal(), "pulse/apply/run-1",
+        {repo: "refs/heads/main" for repo in REPOS},
+    )
+    assert result["acme/api"]["state"] == "ok"
+    assert result["acme/web"]["state"] == "ok"
 
 
 def test_push_checks_head_before_push_and_validates_remote_evidence():
