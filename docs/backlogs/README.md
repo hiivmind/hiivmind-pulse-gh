@@ -1,6 +1,6 @@
 # hiivmind-pulse-gh — fleet program roadmap & backlog index
 
-**Updated:** 2026-08-15 (F11 interactive apply + multi-repo apply v2 merged) · **One-page map of what is built, what is left, and where each item lives.**
+**Updated:** 2026-08-16 (F11 dependency-bump handoff merged) · **One-page map of what is built, what is left, and where each item lives.**
 
 > Read in this order: **Status at a glance** (what shipped) → **Layer-completeness matrix**
 > (is it actually *runnable*) → **Cross-repo dependency map** (which repos an item spans) →
@@ -11,8 +11,9 @@ The "F-series" fleet program built a control plane that reads/scores a repo flee
 guarded mutations, and (now) lands them. Most phases shipped as **tested libraries**; the
 open work is about **making those libraries actually run end-to-end in production**, not just
 pass in fixtures. The **propose** side now does (F10 closed 2026-07-30 — the F5–F9 audits run
-on cadence and surface proposals in the maintenance PR); the remaining gap is the **apply**
-side (F11 production wiring).
+on cadence and surface proposals in the maintenance PR). The **apply** side's interactive path
+(single-repo, multi-repo, and now dependency-bump) is merged and live-proven; only the
+**scheduled/deployed** apply layer remains dark.
 
 ---
 
@@ -32,7 +33,7 @@ side (F11 production wiring).
 | F8 | Generic plan sync | ✅ merged (#134) |
 | F9 | Dogfood overlays (Claude plugin/corpus) | ✅ merged (#136) |
 | **F10** | **Runnable spine** (CLI drivers + triggers for F6–F9) | ✅ **complete** — spine #139; proposal fold #140; enrolled live (workspace #2). "Triggered end-to-end" gate **closed**. |
-| F11 | Apply-mode (land a validated proposal) | ✅ merged (#138) — library+tests; **interactive driver + multi-repo apply v2 merged (#147), live-proven.** Scheduled/deployed apply, `advance_base`, and `allow` remain open. |
+| F11 | Apply-mode (land a validated proposal) | ✅ merged (#138) — library+tests; **interactive driver + multi-repo apply v2 merged (#147); dependency-bump handoff merged (#149), both live-proven.** Scheduled/deployed apply, `advance_base`, and `allow` remain open. |
 
 > **What "merged ✅" does and does not mean.** It means layers 1–3 (library →
 > driver → skill) landed in **this repo**. It says nothing about whether the phase is
@@ -67,7 +68,7 @@ Every phase is a five-layer ladder. A phase **runs in production** only when all
 | F8 plan sync | ✅ | ✅ (F10) | ✅ (F10) | ✅ `periodic` | ✅ (#2) | ⚠️ enrolled; validated-abort until `plan-sync.yaml` binding exists |
 | F9 dogfood overlays | ✅ | ✅ (F10) | ✅ (F10) | ✅ `periodic` | ✅ (#2) | ✅ — via healthcheck + `marketplace-sync` |
 | **F10 runnable spine** | ✅ | ✅ | ✅ | ✅ `periodic` + 4 flips | ✅ (#2) | ✅ — **gate closed** (fold #140 + enroll #2) |
-| F11 apply-mode | ✅ | ✅ `apply_driver` (interactive, multi-repo v2) | ⚠️ `gh-apply` (interactive, single-repo prose) | ❌ | ❌ | ⚠️ interactive proven live; scheduled sweep + `advance_base` open |
+| F11 apply-mode | ✅ | ✅ `apply_driver` (interactive, multi-repo v2, dependency-bump) | ⚠️ `gh-apply` (interactive, single-repo prose — now stale on 2 counts) | ❌ | ❌ | ⚠️ interactive proven live (incl. dependency-bump); scheduled sweep + `advance_base` open |
 
 **Legend:** ✅ built & deployed · ⚠️ exists but not fully exercised yet · ❌ absent.
 
@@ -75,7 +76,7 @@ Every phase is a five-layer ladder. A phase **runs in production** only when all
 enrollment `hiivmind/hiivmind-workspace` #2, both merged 2026-07-30). The remaining ⚠️ on F7/F8
 is a *data* gap, not a code gap — the trigger fires but there is no bound work until the
 `generated.yaml` / `plan-sync.yaml` binding files are added to the workspace (non-destructive
-validated-abort until then). F11's interactive driver is now lit (live-proven); only the scheduled/deployed apply layers remain dark.
+validated-abort until then). F11's interactive driver is now lit (live-proven, incl. the F11 dependency-bump handoff #149); only the scheduled/deployed apply layers remain dark.
 
 ### Two flow facts that broke specs on contact (record so they stop recurring)
 
@@ -127,8 +128,9 @@ graph LR
 | Open item | pulse-gh | scheduler | workspace | nave | The gotcha |
 |---|:--:|:--:|:--:|:--:|---|
 | **F10 triggered end-to-end** | ✅ **folding fix (real work)** | ○ generic already; doc-only | ✅ enroll list + deploy 4 YAMLs | — | list + deploy live in **workspace**; the code fix is in **pulse-gh** |
-| **Apply-mode remaining: `advance_base` + scheduled deploy** | ✅ driver done (single + multi-repo, live-proven) | — | ⚠️ F5/F8 base-writer open | ✅ `nave pen create` owns clone writes (no `PULSE_PEN_ROOT` bridge) | interactive proven; base-writer + scheduled layers remain |
+| **Apply-mode remaining: `advance_base` + scheduled deploy** | ✅ driver done (single + multi-repo + dependency-bump, live-proven) | — | ⚠️ F5/F8 base-writer open | ✅ `nave pen create` owns clone writes (no `PULSE_PEN_ROOT` bridge); reports `observed_tree_sha` (#7) | interactive proven; base-writer + scheduled layers remain |
 | ~~**F4 dependency-coherence adapters**~~ ✅ **DONE** | ✅ adapters | — | ○ evidence already present | ○ evidence source | mostly pulse-gh; evidence already flows |
+| ~~**F11 dependency-bump handoff**~~ ✅ **DONE** | ✅ source kind + driver | — | ○ n/a | ✅ tree_sha fix (#7) | live-proven end to end (hiivmind-corpus#58) |
 | **`relationships.yaml` schema drift** | ✅ | — | — | — | 1-repo (needs schema-vs-evaluator ruling) |
 | **Stale workspace catalog** | — | — | ✅ data fix | — | 1-repo, **data not code** |
 | **Nave lifecycle protocol** | — | — | — | ✅ upstream | 1-repo, gated on nave |
@@ -137,19 +139,19 @@ graph LR
 
 ## The open backlog, prioritized
 
-### 🔴 P1 — "Make it run in production" (apply's scheduled/deployed + flagship-use-case gap)
+### 🔴 P1 — "Make it run in production" (apply's scheduled/deployed gap)
 The libraries exist; the *propose* side runs on cadence (F10 closed 2026-07-30). The **apply**
-side's interactive path now runs too — the apply driver (single- and multi-repo) merged #147
-and was live-proven against real repos. What remains is making apply *scheduled + deployed*
-and wiring the flagship dependency-bump use-case.
+side's interactive path now runs too — single-repo, multi-repo (#147), and dependency-bump
+(#149) all merged and live-proven against real repos. What remains is making apply
+*scheduled + deployed*.
 
 | Item | Why it matters | Source |
 |---|---|---|
 | ~~**F10 last mile: proposal folding + live enrollment**~~ ✅ **DONE 2026-07-30** | Proposal fold (#140) + live enrollment (workspace #2) merged; F10's "triggered end-to-end" gate is closed. The propose/mutate phases F5–F9 now run daily and surface proposals in the maintenance PR body. | `2026-07-29-f10-scheduler-composition.md` · `2026-07-30-f10-followups.md` |
 | ~~**Interactive apply driver + multi-repo apply v2**~~ ✅ **DONE 2026-08-15** | `apply_driver` assembles `execute → reconcile` end-to-end — one proposal → N repos, one pen/journal/rollup, per-repo independent outcomes. Live-proven (agent-kernel, then swingle + hiivmind-corpus). Fleet naming = explicit `repos` ∪ optional `repo_selector`. | [`2026-08-15-multi-repo-apply.md`](../superpowers/plans/2026-08-15-multi-repo-apply.md) · [`2026-08-15-multi-repo-apply-design.md`](../superpowers/specs/2026-08-15-multi-repo-apply-design.md) |
-| **Scheduled/deployed apply + real `advance_base`** | Interactive apply is proven; the *scheduled* sweep (layer-4 trigger + workspace deployment) and the real F5/F8 base-writer on the merged SHA remain open. Gated on the `allow` confirmation-model design (🔵 v2). | [`2026-07-29-apply-mode-v2-deferrals.md`](2026-07-29-apply-mode-v2-deferrals.md) § A.2 / § B |
 | ~~**F4 dependency-coherence adapters**~~ ✅ **DONE 2026-08-13** | Pre-F4 materialized the evidence; the coherence adapters that consume it are merged (#142). Closed the read-spine gap. | [`2026-07-13-f4-dependency-adapters.md`](../superpowers/plans/2026-07-13-f4-dependency-adapters.md) · [`2026-08-13-f4-deferred-scope.md`](2026-08-13-f4-deferred-scope.md) |
-| **F11 dependency-bump handoff object** | The flagship neutral apply use-case: turn an F4 `DivergenceFinding` into a guarded `Proposal` (`selection` / `expected_shas` / per-manager bump / `bound_paths`). Both halves now exist (F4 evidence + F11 apply); this is the **spec-first** link between them. **The top open item.** | [`2026-08-13-f4-deferred-scope.md`](2026-08-13-f4-deferred-scope.md) § C |
+| ~~**F11 dependency-bump handoff object**~~ ✅ **DONE 2026-08-16** | The flagship neutral apply use-case: turns an F4 `DivergenceFinding` into a guarded `Proposal` (`selection` / `expected_shas` / per-manager bump / `bound_paths`). Merged #149, live-proven (`hiivmind-corpus#58`). Live-proof surfaced and fixed a real nave bug: `tree_sha` was sourced from the tree endpoint's own (commit) `sha`, not the actual tree object hash (nave #7). | [`2026-08-15-dependency-bump-handoff-design.md`](../superpowers/specs/2026-08-15-dependency-bump-handoff-design.md) · [`2026-08-15-dependency-bump-handoff.md`](../superpowers/plans/2026-08-15-dependency-bump-handoff.md) |
+| **Scheduled/deployed apply + real `advance_base`** | Interactive apply (all three source kinds) is proven; the *scheduled* sweep (layer-4 trigger + workspace deployment) and the real F5/F8 base-writer on the merged SHA remain open. Gated on the `allow` confirmation-model design (🔵 v2). **The top open item.** | [`2026-07-29-apply-mode-v2-deferrals.md`](2026-07-29-apply-mode-v2-deferrals.md) § A.2 / § B |
 
 ### 🟠 P2 — Correctness / data (cheap, one is a real bug)
 | Item | Why it matters | Source |
@@ -168,7 +170,7 @@ and wiring the flagship dependency-bump use-case.
 |---|---|
 | **F7 validator/manifest follow-ups** — 3a manifest-validity enforcement (best small cleanup), 3b–3d validator edge limits | [`2026-07-22-f1-f8-phase-deferrals.md`](2026-07-22-f1-f8-phase-deferrals.md) § 3 |
 | **F8 milestone dead-field** — cosmetic forward hook (dead-carried catalog tuple) | [`2026-07-22-f1-f8-phase-deferrals.md`](2026-07-22-f1-f8-phase-deferrals.md) § 4 |
-| **`gh-apply` skill drift** — the skill still documents single-repo v1 ("multi-repo blocked") and the pre-#147 driver CLI; update its phases to the multi-repo neutral flow | `skills/gh-apply/SKILL.md` |
+| **`gh-apply` skill drift** — the skill still documents single-repo v1 ("multi-repo blocked") and the pre-#147/#149 driver CLI; update its phases to the multi-repo + dependency-bump flow | `skills/gh-apply/SKILL.md` |
 
 ### 🔵 v2 — deferred by design boundary
 | Item | Source |
@@ -188,7 +190,7 @@ and wiring the flagship dependency-bump use-case.
 1. ~~**F10 last mile**~~ — ✅ done 2026-07-30 (fold #140 + enroll #2); the propose side runs on cadence.
 2. ~~**F4 adapters**~~ — ✅ done 2026-08-13 (#142); read-spine gap closed.
 3. ~~**Interactive apply driver + multi-repo apply v2**~~ — ✅ done 2026-08-15 (#147); live-proven against real repos.
-4. **F11 dependency-bump handoff object** — spec-first; the flagship use-case link (F4 § C).
+4. ~~**F11 dependency-bump handoff object**~~ — ✅ done 2026-08-16 (#149); live-proven, flagship use-case link closed (F4 § C).
 5. **`relationships.yaml` schema drift** — cheap, and the one live correctness bug.
 6. **Scheduled/deployed apply + `advance_base`** — gated on the `allow` design (🔵 v2).
 7. **Binding files for the enrolled F7/F8 audits** — add `generated.yaml` / `plan-sync.yaml` to the workspace so `generated-artifact-audit` / `plan-sync` have real work instead of validated-abort. Data, when there's something to bind.
@@ -202,6 +204,8 @@ and wiring the flagship dependency-bump use-case.
 ## Backlog docs (full detail lives here)
 - [`2026-08-15-multi-repo-apply.md`](../superpowers/plans/2026-08-15-multi-repo-apply.md) — multi-repo apply v2 implementation plan
 - [`2026-08-15-multi-repo-apply-design.md`](../superpowers/specs/2026-08-15-multi-repo-apply-design.md) — multi-repo apply v2 design spec
+- [`2026-08-15-dependency-bump-handoff-design.md`](../superpowers/specs/2026-08-15-dependency-bump-handoff-design.md) — F11 dependency-bump handoff design spec
+- [`2026-08-15-dependency-bump-handoff.md`](../superpowers/plans/2026-08-15-dependency-bump-handoff.md) — F11 dependency-bump handoff implementation plan
 - [`2026-08-13-f4-deferred-scope.md`](2026-08-13-f4-deferred-scope.md) — F4 v1 scope cuts (Conda, cardinality, F11 handoff, per-package overrides) deferred from the post-review plan revision
 - [`2026-07-29-apply-mode-v2-deferrals.md`](2026-07-29-apply-mode-v2-deferrals.md) — apply-mode (F11) v2 / production-wiring / dependent items
 - [`2026-07-22-f1-f8-phase-deferrals.md`](2026-07-22-f1-f8-phase-deferrals.md) — F1–F8 roll-up (apply-mode #1 now ✅ resolved; #2–#4 open)
