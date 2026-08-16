@@ -19,6 +19,7 @@ from fnmatch import fnmatchcase
 import hashlib
 import json
 from pathlib import Path
+import re
 from typing import Any
 
 import yaml
@@ -49,13 +50,15 @@ class ValidationSpec:
 
 @dataclass(frozen=True)
 class TransformationEntry:
-    """One registered, strict-argv repository transformation."""
+    """One registered repository transformation. `command_argv` is strict
+    unless `params` declares placeholders — see `resolve_argv`."""
 
     id: str
     command_argv: tuple[str, ...]
     applies_to: tuple[str, ...]
     validation: ValidationSpec
     allow_scheduled: bool
+    params: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -95,6 +98,60 @@ def _only_keys(data: dict[str, Any], allowed: set[str], label: str) -> None:
     unknown = set(data) - allowed
     if unknown:
         raise MutationPlanError(f"unknown {label} key: {sorted(unknown)[0]}")
+
+
+_PACKAGE_PARAM_PATTERN = re.compile(
+    r"^(@[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*|[A-Za-z0-9][A-Za-z0-9._-]*)$"
+)
+_VERSION_PARAM_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+~-]*$")
+_PLACEHOLDER_PATTERN = re.compile(r"\{([A-Za-z0-9_]+)\}")
+
+
+def _validate_param_value(key: str, value: str) -> str:
+    """Validate one templated argv substitution value.
+
+    Param-aware: `package` and `version` have different legal shapes (a
+    scoped npm package's normalized identity is `@scope/name`; one
+    character class for both would reject every scoped package). Both
+    patterns preserve the two security invariants strict argv relies on:
+    the first character is alphanumeric (never a leading `-`, so a
+    substituted value can never become a flag), and the body excludes
+    every character with argv/shell meaning (`=`, whitespace, and the
+    shell metacharacters `;`, `|`, `&`, `$`, backtick, quotes, `<`, `>`,
+    `(`, `)`) — `/` and `@` are inert in a single argv element. A
+    PEP 440 epoch (`1!2.3.4`) is rejected: `!` is not in either class,
+    v1 fail-closed.
+    """
+    if not isinstance(value, str):
+        raise MutationPlanError(f"transform_params[{key!r}] must be a string")
+    pattern = _PACKAGE_PARAM_PATTERN if key == "package" else _VERSION_PARAM_PATTERN
+    if not pattern.match(value):
+        raise MutationPlanError(f"transform_params[{key!r}] invalid value: {value!r}")
+    return value
+
+
+def _check_undeclared_placeholders(
+    command_argv: tuple[str, ...], params: tuple[str, ...], entry_id: str
+) -> None:
+    """Fail-closed check for entries that opt into templating (`params`
+    non-empty): every `{name}` in `command_argv` must be a declared param.
+
+    Entries that never declare `params` (the overwhelming majority — every
+    pre-dependency-bump transformation) skip this check entirely: their
+    `command_argv` may contain literal `{...}` text (e.g. shell brace
+    syntax) that is never templated and must survive `resolve_argv`
+    byte-identical, exactly as before this feature existed.
+    """
+    if not params:
+        return
+    declared = set(params)
+    for index, element in enumerate(command_argv):
+        for name in _PLACEHOLDER_PATTERN.findall(element):
+            if name not in declared:
+                raise MutationPlanError(
+                    f"transformation {entry_id}.command_argv[{index}] has undeclared "
+                    f"placeholder {{{name}}}: not in params"
+                )
 
 
 def _argv(value: Any, label: str) -> tuple[str, ...]:
@@ -162,7 +219,7 @@ def _load_transformation(raw: Any, entry_id: str) -> TransformationEntry:
     item = _mapping(raw, f"transformation {entry_id}")
     _only_keys(
         item,
-        {"id", "command_argv", "applies_to", "validation", "allow_scheduled"},
+        {"id", "command_argv", "applies_to", "validation", "allow_scheduled", "params"},
         f"transformation {entry_id}",
     )
     declared_id = _string(item.get("id"), f"transformation {entry_id}.id")
@@ -175,6 +232,16 @@ def _load_transformation(raw: Any, entry_id: str) -> TransformationEntry:
         validate_command_argv(command_argv, entry_id)
     except ValueError as exc:
         raise MutationPlanError(str(exc)) from exc
+    params_raw = item.get("params")
+    params = (
+        tuple(
+            _string(p, f"transformation {entry_id}.params entry")
+            for p in _list(params_raw, f"transformation {entry_id}.params")
+        )
+        if params_raw is not None
+        else ()
+    )
+    _check_undeclared_placeholders(command_argv, params, entry_id)
     applies_to_raw = _list(item.get("applies_to"), f"transformation {entry_id}.applies_to")
     if not applies_to_raw:
         raise MutationPlanError(f"transformation {entry_id}.applies_to must be non-empty")
@@ -193,6 +260,7 @@ def _load_transformation(raw: Any, entry_id: str) -> TransformationEntry:
         applies_to=applies_to,
         validation=validation,
         allow_scheduled=allow_scheduled,
+        params=params,
     )
 
 
@@ -228,14 +296,43 @@ def load_registry(source: str | Path | dict[str, Any]) -> TransformationRegistry
     return TransformationRegistry(transformations)
 
 
-def resolve_argv(entry: TransformationEntry) -> tuple[str, ...]:
-    """Return a registered transformation's exact argv, verbatim.
+def resolve_argv(
+    entry: TransformationEntry, params: dict[str, str] | None = None
+) -> tuple[str, ...]:
+    """Return a registered transformation's argv, optionally with declared
+    placeholders expanded from `params`.
 
-    No templating, no interpolation of proposal fields, no shell
-    interpretation of any element — the returned tuple is byte-identical to
-    `entry.command_argv`.
+    `params is None` (all callers before this change, and every entry with
+    no declared `params`) returns `entry.command_argv` verbatim — byte-
+    identical, no interpolation, matching the original strict-argv
+    contract. A `dict` expands every `{key}` the registry already
+    validated as declared at load time (re-checked here too, fail-closed
+    defense in depth); every substituted value is re-validated with
+    `_validate_param_value` immediately before insertion. The substitution
+    still lands in a single argv element handed to
+    `subprocess.run(..., shell=False)` — no shell, no splitting, no
+    reinterpretation of any element boundary.
     """
-    return entry.command_argv
+    if params is None:
+        return entry.command_argv
+    missing = [key for key in entry.params if key not in params]
+    if missing:
+        raise MutationPlanError(
+            f"resolve_argv: missing declared param(s) for {entry.id}: {', '.join(missing)}"
+        )
+
+    def _substitute(element: str) -> str:
+        def _sub_one(match: re.Match[str]) -> str:
+            key = match.group(1)
+            if key not in entry.params:
+                raise MutationPlanError(
+                    f"resolve_argv: undeclared placeholder {{{key}}} in {entry.id}"
+                )
+            return _validate_param_value(key, params[key])
+
+        return _PLACEHOLDER_PATTERN.sub(_sub_one, element)
+
+    return tuple(_substitute(element) for element in entry.command_argv)
 
 
 def transformation_applies(
@@ -283,10 +380,15 @@ class Proposal:
     """A validated repository-mutation proposal.
 
     `selection` is the list of `owner/name` repositories this proposal
-    targets. `expected_shas` is the expected-base guard: the SHA each
-    selected repo must currently be at before the orchestrator (F6 Task 3)
-    proceeds — a mismatch means the remote moved since the proposal was
-    built and the run must block rather than mutate a stale base.
+    targets. `expected_shas` is the expected-base guard: the commit SHA
+    each selected repo must currently be at before the orchestrator (F6
+    Task 3) proceeds — a mismatch means the remote moved since the
+    proposal was built and the run must block rather than mutate a stale
+    base. `transform_params` templates `command_argv` placeholders
+    (dependency-bump only; empty for every other source). `expected_tree_shas`
+    is a second, independent drift guard on the *tree* SHA the proposal's
+    target was computed from (dependency-bump only; `None` for every other
+    source, which never populates or checks it).
     """
 
     id: str
@@ -296,6 +398,8 @@ class Proposal:
     mutation_policy: str
     actor: Actor
     bound_paths: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    transform_params: dict[str, str] = field(default_factory=dict)
+    expected_tree_shas: dict[str, str] | None = None
 
 
 def _repo_name(value: Any, label: str) -> str:
@@ -325,6 +429,8 @@ def build_proposal(
     actor: dict[str, Any] | Actor,
     mutation_policy: str = "propose",
     bound_paths: dict[str, list[str] | tuple[str, ...]] | None = None,
+    transform_params: dict[str, str] | None = None,
+    expected_tree_shas: dict[str, str] | None = None,
     registry: TransformationRegistry | None = None,
 ) -> Proposal:
     """Construct and validate a `Proposal`.
@@ -399,6 +505,56 @@ def build_proposal(
                 f"{sorted(empty_bounds)[0]}"
             )
 
+    normalized_transform_params: dict[str, str] = {}
+    if transform_params is not None:
+        raw_params = _mapping(transform_params, "proposal.transform_params")
+        if registry is not None:
+            entry = registry.get(transformation_id)
+            if not entry.params and raw_params:
+                raise MutationPlanError(
+                    f"proposal.transform_params must be empty for {transformation_id!r} "
+                    "(no declared params)"
+                )
+            unknown_keys = set(raw_params) - set(entry.params)
+            if unknown_keys:
+                raise MutationPlanError(
+                    f"unknown transform_params key: {sorted(unknown_keys)[0]}"
+                )
+            missing_keys = set(entry.params) - set(raw_params)
+            if entry.params and missing_keys:
+                raise MutationPlanError(
+                    "missing declared transform_params key(s): "
+                    f"{', '.join(sorted(missing_keys))}"
+                )
+            normalized_transform_params = {
+                key: _validate_param_value(key, value) for key, value in raw_params.items()
+            }
+        else:
+            normalized_transform_params = {
+                _string(key, "proposal.transform_params key"): _string(
+                    value, f"proposal.transform_params[{key}]"
+                )
+                for key, value in raw_params.items()
+            }
+
+    normalized_expected_tree_shas: dict[str, str] | None = None
+    if expected_tree_shas is not None:
+        tree_shas = _mapping(expected_tree_shas, "proposal.expected_tree_shas")
+        missing_tree = set(repos) - set(tree_shas)
+        if missing_tree:
+            raise MutationPlanError(
+                f"proposal.expected_tree_shas missing entry for: {sorted(missing_tree)[0]}"
+            )
+        extra_tree = set(tree_shas) - set(repos)
+        if extra_tree:
+            raise MutationPlanError(
+                f"proposal.expected_tree_shas has entry outside selection: {sorted(extra_tree)[0]}"
+            )
+        normalized_expected_tree_shas = {
+            repo: _string(tree_shas[repo], f"proposal.expected_tree_shas[{repo}]")
+            for repo in repos
+        }
+
     proposal = Proposal(
         id=proposal_id,
         selection=repos,
@@ -407,6 +563,8 @@ def build_proposal(
         mutation_policy=policy,
         actor=actor_block,
         bound_paths=normalized_bound_paths,
+        transform_params=normalized_transform_params,
+        expected_tree_shas=normalized_expected_tree_shas,
     )
 
     if registry is not None:
@@ -455,10 +613,11 @@ def proposal_digest(proposal: Proposal) -> str:
         "selection": list(proposal.selection),
         "transformation": proposal.transformation,
         "expected_shas": dict(proposal.expected_shas),
-        "mutation_policy": proposal.mutation_policy,
         "bound_paths": {
             repo: list(paths) for repo, paths in proposal.bound_paths.items()
         },
+        "transform_params": dict(sorted(proposal.transform_params.items())),
+        "expected_tree_shas": dict(sorted((proposal.expected_tree_shas or {}).items())),
         "actor": {
             "gh_login": proposal.actor.gh_login,
             "machine": proposal.actor.machine,
