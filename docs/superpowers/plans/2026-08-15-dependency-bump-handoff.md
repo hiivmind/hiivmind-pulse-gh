@@ -2860,7 +2860,7 @@ git commit -m "feat(apply): --finding-ref CLI + shared-pen sequential dependency
 - Consumes: every interface produced by Tasks 1-8.
 - Produces: an in-process, fake-seam acceptance test proving finding → N proposals → driver (collect-once, rederive-many, sequential fenced runs) → `pr_opened` end to end; a documented, executable live-proof procedure against 2 real repos.
 
-- [ ] **Step 1: Write the integration test**
+- [x] **Step 1: Write the integration test**
 
 Create `lib/pulse/scripts/tests/test_dependency_bump_acceptance.py`. Model it closely on `test_apply_acceptance.py`'s existing `QueuedRunner`/`RecordingApplyOps` fakes (reuse those exact classes via `from lib.pulse.scripts.tests.test_apply_acceptance import QueuedRunner, RecordingApplyOps` if that module exposes them at module scope — confirm by reading its top-level names first; if they're not directly importable, copy their minimal shape locally rather than reaching into another test module's internals):
 
@@ -2972,26 +2972,26 @@ def test_finding_with_dev_group_declaration_blocks_that_repo_without_promoting(m
     assert apply_rederive.rederive_dependency_bump(inputs) == []
 ```
 
-- [ ] **Step 2: Run to confirm it fails for the right reason, then implement any gap it surfaces**
+- [x] **Step 2: Run to confirm it fails for the right reason, then implement any gap it surfaces**
 
 Run: `uv run pytest lib/pulse/scripts/tests/test_dependency_bump_acceptance.py -v`
 Expected: this test exercises ONLY code already implemented in Tasks 1-8, so a failure here means either (a) a mismatch between this test's fixture-construction and an interface decided during Task 6/8 (fix the test to match the real interface), or (b) a genuine gap Task 6/8 missed (fix the implementation). Do not proceed to Step 3 until this passes for the right reason — read the failure's traceback fully before changing anything.
 
 Expected once correct: PASS (2/2).
 
-- [ ] **Step 3: Run the complete pulse-gh suite**
+- [x] **Step 3: Run the complete pulse-gh suite**
 
 Run: `uv run pytest lib/pulse/scripts/tests/ -q`
 Expected: all pass — this is the full-suite gate the spec's testing plan item 10 (integration) requires.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add lib/pulse/scripts/tests/test_dependency_bump_acceptance.py
 git commit -m "test(apply): dependency-bump end-to-end acceptance (finding -> 2 proposals -> pr_opened)"
 ```
 
-- [ ] **Step 5: Live-proof runbook (spec § 6 testing plan item 11 — real 2-repo bump)**
+- [x] **Step 5: Live-proof runbook (spec § 6 testing plan item 11 — real 2-repo bump)**
 
 This step is executed against the real fleet, not the automated suite — read and follow it at execution time rather than pre-authoring fixed repo names, since the correct pilot pair depends on the fleet's ACTUAL current dependency-coherence state at the time this plan runs.
 
@@ -3021,14 +3021,74 @@ This step is executed against the real fleet, not the automated suite — read a
 
 Do not mark this step done until the real PRs have been observed opened and merged — a green automated suite alone does not satisfy this step.
 
+**Actual execution record** (2026-08-16): the real fleet had no natural
+multi-manager (uv+poetry) diverging pair, so per step 3's "if multi-manager"
+conditionality this ran single-manager (uv only). No natural single-manager
+pair existed either — surveyed the full `mountainash-io` and `hiivmind`
+orgs' `uv.lock`-bearing repos; every genuine divergence found was either a
+dev-group-only dependency (F4 already excludes those) or belonged to repos
+with no shared `main`-group package. Per user decision, manufactured one:
+added `pydantic` as a real main dependency to `hiivmind/hiivmind-corpus`
+(PR #57, matching `hiivmind/agent-kernel`'s pre-existing locked
+`pydantic==2.13.4`), authored `dependencies.yaml`'s `core-runtime` group,
+and authorized `bump-python-uv`.
+
+First run surfaced a real, previously undetected bug: nave's `materialize`
+reported `tree_sha` from the tree endpoint's own `sha` field, which GitHub
+echoes as the **commit** SHA (not a tree object hash) when fetched by
+branch name — so `resolve_intended_base`'s tree-drift check (§ 4.4 step 7)
+always failed closed. Root-caused, fixed in nave (`fix/commit-tree-sha-
+github-quirk`, PR discreteds/nave#7, merged), release binary rebuilt and
+reinstalled. Re-run succeeded: `hiivmind/hiivmind-corpus#58` opened with
+the correct `pydantic==2.13.4` bump (target = highest locked in group, per
+§ 2.2 policy), CI green, merged, `apply_reconcile reconcile` confirmed
+`state: applied` with the real `merged_sha`.
+
+Step 7 cleanup: per user decision ("revert everything" — the pair was a
+proof vehicle, not a genuine ongoing coherence policy), reverted
+`hiivmind-corpus`'s pydantic dependency to `[]` (PR #59, merged), deleted
+`hiivmind-workspace/dependencies.yaml` (was untracked — never committed),
+and reverted `apply-authorization.yaml`'s `bump-python-uv` entry (was
+uncommitted — discarded via `git checkout`). `agent-kernel`'s pydantic
+dependency and its now-committed `uv.lock` were left untouched: that
+dependency predates this session (bootstrap commit) and the lockfile
+commit fixed a genuine pre-existing hygiene bug (an untracked `uv.lock`
+alongside a lock-requiring `pyproject.toml`), not a live-proof artifact.
+
+**Deviation from spec § 6 item 11's literal "two uv repos" phrasing:** the
+manufactured pair had exactly one repo below target (`agent-kernel` was
+already at the fleet-max `2.13.4`, so it was never in `selection` —
+`hiivmind-corpus` alone was bumped), producing one branch/one PR, not two.
+A second real diverging repo would need a third, artificially-ahead leader
+repo to manufacture — more fleet churn the user's Step 7 decision argued
+against. The N-repo-per-proposal code path this would have proven
+(`_rederive_dependency_bump`'s per-repo dict construction across 2+
+selected repos in one manager group) is instead covered at the fake-seam
+layer by `test_rederive_dependency_bump_groups_multiple_repos_same_manager
+_into_one_proposal` (new, Final Verification pass), and the shared
+N-repos/N-branches/N-PRs mechanics it drives (`_run_multi_repo`) were
+already proven live by the earlier multi-repo apply design's live-proof
+(`hiivmind/swingle` + `hiivmind/hiivmind-corpus`, neutral source kind).
+
+**Final Verification coverage audit** (2026-08-16): re-read spec § 5 and
+§ 6 line by line against the test suite. Two additional gaps found and
+closed: (1) the N-repos-per-proposal case above; (2) § 6 item 4's
+"semantically-highest, not lexicographic" target claim had no test where
+the two orderings disagree — added `test_collect_dependency_bump_target_
+uses_semantic_not_lexicographic_order` (`2.10.0` vs `2.9.0`) and
+`test_collect_dependency_bump_target_orders_final_above_prerelease`
+(`2.0.0` vs `2.0.0rc1`). Every other § 5 row and § 6 item (1-3, 5-10) had
+existing, correctly-targeted coverage confirmed by direct inspection.
+Full suite green (1597 pulse-gh, full nave workspace) after both additions.
+
 ---
 
 ## Final verification (after Task 9)
 
-- [ ] `uv run pytest lib/pulse/scripts/tests/ -q` — full pulse-gh suite green.
-- [ ] `cargo test` in `~/git/discreteds/nave` — full nave workspace suite green.
-- [ ] Live-proof runbook (Task 9 Step 5) executed against real repos: one pen created per manager-group proposal (never shared), two PRs opened, both merged, both reconciled to `applied`.
-- [ ] Re-read `docs/superpowers/specs/2026-08-15-dependency-bump-handoff-design.md` § 5 (error handling table) and § 6 (testing plan) line by line, confirming every row has a corresponding test written in Tasks 1-9. If any row is uncovered, add the missing test before declaring this plan complete.
+- [x] `uv run pytest lib/pulse/scripts/tests/ -q` — full pulse-gh suite green.
+- [x] `cargo test` in `~/git/discreteds/nave` — full nave workspace suite green.
+- [x] Live-proof runbook (Task 9 Step 5) executed against real repos: one repo bumped (selection had exactly one diverging repo, per the deviation note above), PR opened, merged, reconciled to `applied`.
+- [x] Re-read `docs/superpowers/specs/2026-08-15-dependency-bump-handoff-design.md` § 5 (error handling table) and § 6 (testing plan) line by line, confirming every row has a corresponding test written in Tasks 1-9. Two gaps found and closed (see coverage audit note above).
 
 ## Execution Handoff
 

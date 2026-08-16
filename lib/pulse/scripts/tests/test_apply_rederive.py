@@ -1208,6 +1208,57 @@ def test_collect_dependency_bump_resolves_finding_and_target():
     assert inputs.tree_shas == {"acme/api": "tree-acme-api"}
 
 
+def test_collect_dependency_bump_target_uses_semantic_not_lexicographic_order():
+    """Spec § 6 item 4: target must be the semantically-highest locked
+    version, not the lexicographically-greatest string. `2.9.0` sorts
+    ABOVE `2.10.0` as a string (`'2.9' > '2.10'` character-by-character)
+    but below it semantically — a `max()` over raw strings would pick the
+    wrong target and, worse, never select `acme/lower` for bumping."""
+    io = FakeDependencyBumpIoSeams(
+        records_by_repo={
+            "acme/lower": [_package_record("acme/lower", locked_version="2.9.0")],
+            "acme/higher": [_package_record("acme/higher", locked_version="2.10.0")],
+        },
+        groups=(_coherence_group(repos=("acme/lower", "acme/higher")),),
+        branches_by_repo={"acme/lower": "main", "acme/higher": "main"},
+        heads_by_repo={"acme/lower": "a" * 40, "acme/higher": "b" * 40},
+    )
+    inputs = apply_rederive._collect_dependency_bump(
+        {"group": "core-runtime", "ecosystem": "python", "package": "requests"},
+        actor=mutation_plan.Actor("octocat", "laptop", "interactive"), io_seams=io,
+        _fetch_records=lambda repos, io_seams: (
+            [r for repo in repos for r in io.records_by_repo.get(repo, [])], {},
+        ),
+        _load_groups=lambda io_seams: io.groups,
+    )
+    assert inputs.target == "2.10.0"
+    assert inputs.selection == ("acme/lower",)  # only the semantically-lower repo
+
+
+def test_collect_dependency_bump_target_orders_final_above_prerelease():
+    """`2.0.0` must outrank `2.0.0rc1` (PEP 440 pre-release ordering),
+    not a string comparison where `'rc1'` sorts after nothing lexically."""
+    io = FakeDependencyBumpIoSeams(
+        records_by_repo={
+            "acme/pre": [_package_record("acme/pre", locked_version="2.0.0rc1")],
+            "acme/final": [_package_record("acme/final", locked_version="2.0.0")],
+        },
+        groups=(_coherence_group(repos=("acme/pre", "acme/final")),),
+        branches_by_repo={"acme/pre": "main", "acme/final": "main"},
+        heads_by_repo={"acme/pre": "a" * 40, "acme/final": "b" * 40},
+    )
+    inputs = apply_rederive._collect_dependency_bump(
+        {"group": "core-runtime", "ecosystem": "python", "package": "requests"},
+        actor=mutation_plan.Actor("octocat", "laptop", "interactive"), io_seams=io,
+        _fetch_records=lambda repos, io_seams: (
+            [r for repo in repos for r in io.records_by_repo.get(repo, [])], {},
+        ),
+        _load_groups=lambda io_seams: io.groups,
+    )
+    assert inputs.target == "2.0.0"
+    assert inputs.selection == ("acme/pre",)
+
+
 def test_collect_dependency_bump_rejects_unknown_finding_address():
     io = FakeDependencyBumpIoSeams(
         records_by_repo={"acme/api": [_package_record("acme/api")]},
@@ -1368,6 +1419,44 @@ def test_rederive_dependency_bump_builds_one_proposal_per_manager():
         assert rp.proposal.transform_params == {"package": "requests", "version": "2.31.0"}
         assert rp.proposal.mutation_policy == "allow-listed"
         assert rp.source_kind == "dependency-bump"
+
+
+def test_rederive_dependency_bump_groups_multiple_repos_same_manager_into_one_proposal():
+    """Regression: the real live-proof (F11 dependency-bump handoff, Task 9
+    Step 5) only ever had ONE repo diverging within its single `uv` manager
+    group, so the multi-repo-per-proposal path (N repos sharing one fenced
+    run, N branches/PRs) was never exercised against real data for
+    dependency-bump specifically — only proven live for the neutral source
+    kind. This closes that gap at the fake-seam layer: two repos, same
+    manager, must land in ONE proposal whose per-repo dicts
+    (`expected_shas`/`expected_tree_shas`/`bound_paths`) both carry two
+    entries — proving `_rederive_dependency_bump`'s dict comprehensions are
+    correct for N>1, not just N==1."""
+    inputs = _bump_inputs(
+        selection=("acme/api", "acme/web"),
+        records_by_repo={
+            ("acme/api", "python", "requests"): _package_record("acme/api", manager="uv"),
+            ("acme/web", "python", "requests"): _package_record(
+                "acme/web", manager="uv", manifest_path="backend/pyproject.toml",
+                lock_path="backend/uv.lock",
+            ),
+        },
+        head_shas={"acme/api": "a" * 40, "acme/web": "b" * 40},
+        tree_shas={"acme/api": "tree-acme-api", "acme/web": "tree-acme-web"},
+        default_branches={"acme/api": "main", "acme/web": "develop"},
+    )
+    [rp] = apply_rederive.rederive_dependency_bump(inputs)
+    assert rp.proposal.transformation == "bump-python-uv"
+    assert rp.proposal.selection == ("acme/api", "acme/web")
+    assert rp.proposal.expected_shas == {"acme/api": "a" * 40, "acme/web": "b" * 40}
+    assert rp.proposal.expected_tree_shas == {
+        "acme/api": "tree-acme-api", "acme/web": "tree-acme-web",
+    }
+    assert rp.proposal.bound_paths == {
+        "acme/api": ("pyproject.toml", "uv.lock"),
+        "acme/web": ("backend/pyproject.toml", "backend/uv.lock"),
+    }
+    assert rp.finalizer_record == {"base_refs": {"acme/api": "main", "acme/web": "develop"}}
 
 
 def test_rederive_dependency_bump_proposal_expected_shas_and_tree_shas():
