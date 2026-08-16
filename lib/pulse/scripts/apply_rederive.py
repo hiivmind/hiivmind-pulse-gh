@@ -386,15 +386,25 @@ def bump_summary(
     finding_ref: Mapping[str, Any], *, selection: tuple[str, ...], manager: str, target: str
 ) -> dict[str, Any]:
     """Synthesize the `recorded_summary` for a dependency-bump apply (no
-    propose phase — mirrors `neutral_summary`). Included for human review
-    even though `target` is deliberately not part of the proposal id."""
+    propose phase — mirrors `neutral_summary`). `binding` is the proposal's
+    OWN deterministic id (matching `RederivedProposal.binding_id`, which
+    `rederive_dependency_bump` also sets to the same `bump_proposal_id`) —
+    never the whole `finding_ref`. One finding fans out into N per-manager
+    proposals with N distinct identities; `authorize()` validates the
+    SPECIFIC proposal about to run, not the finding it came from (mirrors
+    `neutral_summary`'s fleet case, where `binding` and `proposal_id` are
+    the same value for the identical reason: no independent stable
+    identity exists below the deterministic id). Included for human
+    review even though `target` is deliberately not part of the id
+    itself."""
     ecosystem = finding_ref["ecosystem"]
     package = finding_ref["package"]
     transformation = MANAGER_TRANSFORM[manager]
+    proposal_id = bump_proposal_id(ecosystem, package, manager, selection)
     return {
-        "binding": dict(finding_ref),
+        "binding": proposal_id,
         "transformation": transformation,
-        "proposal_id": bump_proposal_id(ecosystem, package, manager, selection),
+        "proposal_id": proposal_id,
         "target": target,
     }
 
@@ -423,8 +433,14 @@ def collect_inputs(
         raise RederiveError(f"apply_rederive: unknown source_kind: {source_kind!r}")
 
     if source_kind == "dependency-bump":
-        # Dependency-bump identity is the whole finding_ref triple, compared
-        # against `bump_summary`'s synthesized `binding` (== dict(finding_ref)).
+        # Dependency-bump identity pre-rederive is the whole finding_ref
+        # triple (there is no per-proposal identity yet — that only exists
+        # once rederive_dependency_bump fans out into N per-manager
+        # proposals). In practice this never fires: the only caller
+        # (run_apply_dependency_bump) always passes an empty recorded_summary
+        # here, so the check below is skipped; the real per-proposal
+        # identity check happens later, inside authorize(), against
+        # bump_summary's `binding` (== that proposal's own bump_proposal_id).
         binding_id = binding_ref
     elif source_kind == "neutral":
         # Neutral identity is `repo` for single-repo bindings and the

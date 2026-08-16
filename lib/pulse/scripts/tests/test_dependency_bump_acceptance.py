@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from lib.pulse.scripts import apply_driver, apply_rederive, mutation_plan
+from lib.pulse.scripts import apply_authorization, apply_driver, apply_rederive, mutation_plan
 
 
 FINDING_REF = {"group": "core-runtime", "ecosystem": "python", "package": "requests"}
@@ -98,3 +98,32 @@ def test_finding_with_dev_group_declaration_blocks_that_repo_without_promoting(m
     assert inputs.selection == ()
     assert inputs.blocked == {"acme/uv-repo": "non-main-group-package"}
     assert apply_rederive.rederive_dependency_bump(inputs) == []
+
+
+def test_bump_summary_and_authorize_agree_on_binding_identity():
+    """Regression: `run_apply`'s real `apply_authorization.authorize()` call
+    was never exercised end-to-end by the fake-seam tests above (they all
+    stub `run_apply` itself), so a mismatch between `bump_summary`'s
+    synthesized `binding` and `RederivedProposal.binding_id` went
+    undetected by the automated suite — caught only by the live-proof
+    against the real Nave binary (spec Task 9 Step 5). This test drives
+    the real `rederive_dependency_bump` -> `bump_summary` ->
+    `apply_authorization.authorize` path with nothing stubbed for BOTH
+    manager-group proposals a finding fans out into, proving the two
+    functions agree on what each proposal's identity is."""
+    rederived = apply_rederive.rederive_dependency_bump(_inputs())
+    assert len(rederived) == 2
+    for rp in rederived:
+        manager = apply_rederive._manager_for(rp.proposal.transformation)
+        summary = apply_rederive.bump_summary(
+            FINDING_REF, selection=rp.proposal.selection, manager=manager,
+            target=rp.proposal.transform_params["version"],
+        )
+        auth = apply_authorization.ApplyAuthorization(
+            transformation=rp.proposal.transformation,
+            mutation_policy="allow-listed",
+            permitted_repos=rp.proposal.selection,
+            bound_paths=dict(rp.proposal.bound_paths),
+        )
+
+        apply_authorization.authorize(rp, auth, summary)  # must not raise

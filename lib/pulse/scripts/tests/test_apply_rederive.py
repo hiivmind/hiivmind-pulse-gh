@@ -1454,11 +1454,13 @@ def test_bump_summary_synthesizes_recorded_summary():
         {"group": "core-runtime", "ecosystem": "python", "package": "requests"},
         selection=("acme/api",), manager="uv", target="2.31.0",
     )
-    assert summary["binding"] == {"group": "core-runtime", "ecosystem": "python", "package": "requests"}
-    assert summary["transformation"] == "bump-python-uv"
-    assert summary["proposal_id"] == apply_rederive.bump_proposal_id(
-        "python", "requests", "uv", ("acme/api",)
+    expected_id = apply_rederive.bump_proposal_id("python", "requests", "uv", ("acme/api",))
+    assert summary["binding"] == expected_id, (
+        "binding must equal the proposal's own id, matching RederivedProposal.binding_id "
+        "(rederive_dependency_bump), not the whole finding_ref — see bump_summary docstring"
     )
+    assert summary["transformation"] == "bump-python-uv"
+    assert summary["proposal_id"] == expected_id
     assert summary["target"] == "2.31.0"
 
 
