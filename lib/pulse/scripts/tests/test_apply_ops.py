@@ -19,7 +19,7 @@ def response(repo, state="ok", **fields):
 def test_make_apply_ops_builds_all_apply_verb_requests():
     repo, branch = "acme/api", "pulse/apply/run-1"
     runner = RecordingRunner([
-        response(repo, base_ref="refs/heads/main", expected_base_sha="abc", apply_ref=branch, observed_base_sha="abc"),
+        response(repo, base_ref="refs/heads/main", expected_base_sha="abc", apply_ref=branch, observed_base_sha="abc", observed_tree_sha="tree-abc"),
         response(repo, local_commit_sha="def"),
         response(repo, remote_ref=branch, remote_sha="def", upstream=f"origin/{branch}"),
         response(repo, local_reset=True, remote_deleted=False),

@@ -249,14 +249,22 @@ def test_materialize_listed_without_json_stays_protocol_one(tmp_path):
     assert "materialize_json" not in result["capabilities"]
 
 
-def test_materialize_requires_request_flag_argument():
-    runner = RecordingRunner()
+def test_materialize_writes_request_to_file_not_inline_argument():
+    """`nave materialize --request` reads the request body only from a file
+    (confirmed against the real CLI: 'Request JSON is only ever read from
+    this file, never from a command-line argument') — passing it inline, as
+    this adapter function used to, always fails against the real binary."""
+    runner = RequestFileRunner([nave_adapter.Completed(0, "{}", "")])
 
-    nave_adapter.materialize(runner, "/tmp/request.json")
+    nave_adapter.materialize(runner, json.dumps({"contract_version": 1, "repos": []}))
 
-    assert runner.calls == [
-        ["materialize", "--request", "/tmp/request.json", "--json"]
-    ]
+    call = runner.calls[0]
+    assert call[0] == "materialize"
+    assert "--request" in call
+    request_path = Path(call[call.index("--request") + 1])
+    assert request_path.is_absolute()
+    assert call[-1] == "--json"
+    assert runner.request_bodies[0] == {"contract_version": 1, "repos": []}
 
 
 def test_fixture_materialize_decodes_json():
@@ -803,6 +811,7 @@ def _branch_repo_result(
     base_ref="develop",
     expected_base_sha="a" * 40,
     observed_base_sha="a" * 40,
+    observed_tree_sha="c" * 40,
     apply_ref="pulse/apply/p1",
     state="ok",
     **extra,
@@ -812,6 +821,7 @@ def _branch_repo_result(
         "base_ref": base_ref,
         "expected_base_sha": expected_base_sha,
         "observed_base_sha": observed_base_sha,
+        "observed_tree_sha": observed_tree_sha,
         "apply_ref": apply_ref,
         "state": state,
     }
@@ -851,6 +861,19 @@ def test_pen_branch_rejects_missing_required_field():
 
     assert result["adapter_state"] == "error"
     assert "observed_base_sha" in result["reason"]
+    assert result["repos"] == []
+
+
+def test_pen_branch_rejects_result_missing_observed_tree_sha():
+    entry = _branch_repo_result()
+    del entry["observed_tree_sha"]
+    payload = {"protocol_version": 1, "adapter_state": "ok", "repos": [entry]}
+    runner = RequestFileRunner([_json_ok(payload)])
+
+    result = nave_adapter.pen_branch(runner, "pen1", "pulse/apply/p1", _BRANCH_REQUEST)
+
+    assert result["adapter_state"] == "error"
+    assert "observed_tree_sha" in result["reason"]
     assert result["repos"] == []
 
 

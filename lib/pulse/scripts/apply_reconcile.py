@@ -249,6 +249,14 @@ def resolve_intended_base(
             raise ValueError("cannot resolve intended base for neutral: no repos")
         return {repo: base for repo in repos}
 
+    if source_kind == "dependency-bump":
+        base_refs = (finalizer_record or {}).get("base_refs")
+        if not isinstance(base_refs, dict) or not base_refs:
+            raise ValueError(
+                "cannot resolve intended base for dependency-bump: no base_refs in finalizer_record"
+            )
+        return dict(base_refs)
+
     raise ValueError(f"unknown source_kind: {source_kind}")
 
 

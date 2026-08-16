@@ -57,6 +57,7 @@ def preflight_phase(runner, pen, proposal, clone_paths) -> dict[str, dict]:
 def provision_phase(runner, pen, apply_ops, proposal, apply_branch, base_refs) -> dict[str, dict]:
     del runner, pen
     expected_shas = proposal.expected_shas
+    expected_tree_shas = proposal.expected_tree_shas
     raw = _by_repo(apply_ops.provision_branch(apply_branch, expected_shas))
     outcomes = {}
     for repo in proposal.selection:
@@ -74,12 +75,14 @@ def provision_phase(runner, pen, apply_ops, proposal, apply_branch, base_refs) -
             reason = "provision echoed base_ref mismatch"
         elif item.get("observed_base_sha") != expected_shas.get(repo):
             reason = "stale-base: observed base SHA drifted from expected base SHA"
+        elif expected_tree_shas is not None and item.get("observed_tree_sha") != expected_tree_shas.get(repo):
+            reason = "stale-tree: observed tree SHA drifted from evidence tree SHA"
         outcomes[repo] = ({"state": "blocked", "reason": reason} if reason else {"state": "ok", "observed_base_sha": item["observed_base_sha"]})
     return outcomes
 
 
-def exec_phase(runner, pen, entry) -> dict[str, dict]:
-    argv = resolve_argv(entry)
+def exec_phase(runner, pen, entry, transform_params=None) -> dict[str, dict]:
+    argv = resolve_argv(entry, transform_params)
     probe = executor_probe.probe_required_tool(argv[0])
     selection = tuple(
         item.get("repo") or f"{item.get('owner')}/{item.get('name')}"

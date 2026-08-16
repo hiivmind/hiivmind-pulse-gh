@@ -148,25 +148,46 @@ def _persist_finalizer(result_path, finalizer_record) -> None:
 
 
 def run_apply(*, source_kind, binding_ref, recorded_summary=None, authorization_path, ledger_path,
-              step_id, actor_id, runner, gh_api=None, gh_ops, result_path, workspace) -> dict:
-    """Run one single-repository apply; return apply-status or repo-mutation."""
+              step_id, actor_id, runner, gh_api=None, gh_ops, result_path, workspace,
+              inputs_override=None, rederived_override=None) -> dict:
+    """Run one single-repository (or, via _run_multi_repo, multi-repo)
+    apply; return apply-status or repo-mutation.
+
+    `inputs_override`/`rederived_override`: when BOTH are supplied, the
+    internal `collect_inputs`+`rederive` call is skipped entirely and
+    these are used directly — the collect-once/rederive-many caller
+    (`run_apply_dependency_bump`) already performed that work once for
+    every proposal in a finding. Pen acquisition is UNCHANGED by this:
+    each call to `run_apply` still creates (or resumes) its own pen the
+    existing way, named `pulse-apply-{proposal.id}` — proposal ids are
+    already unique per manager group (`bump_proposal_id` embeds
+    `{manager}`), so there is no name-collision risk to guard against,
+    and no reason to share a pen across proposals (spec § 4.7: sharing
+    would actively break execution scoping, since `nave pen exec --only`
+    restricts to a single repo, not a repo list). Both parameters default
+    to `None`; every existing caller (all four original source kinds) is
+    unaffected."""
     proposal = None
     proposal_digest = None
     authorization_digest = None
     actor = _actor(actor_id)
 
     try:
-        if source_kind == "neutral":
-            recorded_summary = apply_rederive.neutral_summary(binding_ref)
-        elif not recorded_summary:
-            raise apply_rederive.RederiveError(
-                f"recorded_summary is required for source_kind={source_kind!r}"
+        if inputs_override is not None and rederived_override is not None:
+            inputs = inputs_override
+            rederived = rederived_override
+        else:
+            if source_kind == "neutral":
+                recorded_summary = apply_rederive.neutral_summary(binding_ref)
+            elif not recorded_summary:
+                raise apply_rederive.RederiveError(
+                    f"recorded_summary is required for source_kind={source_kind!r}"
+                )
+            inputs = apply_rederive.collect_inputs(
+                source_kind, binding_ref, recorded_summary, actor=actor,
+                io_seams=apply_rederive.IoSeams(runner=runner, gh_api=gh_api, registry=None),
             )
-        inputs = apply_rederive.collect_inputs(
-            source_kind, binding_ref, recorded_summary, actor=actor,
-            io_seams=apply_rederive.IoSeams(runner=runner, gh_api=gh_api, registry=None),
-        )
-        rederived = apply_rederive.rederive(inputs)
+            rederived = apply_rederive.rederive(inputs)
         proposal = rederived.proposal
         proposal_digest = mutation_plan.proposal_digest(proposal)
         auth = apply_authorization.load_authorization(authorization_path, proposal.transformation)
@@ -376,7 +397,7 @@ def run_apply(*, source_kind, binding_ref, recorded_summary=None, authorization_
 
             if resume_transform:
                 resolve_run.renew_lease(ledger_path, step_id, actor_id, token)
-                outcomes = apply_phases.exec_phase(runner, pen, entry)
+                outcomes = apply_phases.exec_phase(runner, pen, entry, proposal.transform_params)
                 if any(item.get("state") != "ok" for item in outcomes.values()):
                     resolve_run.renew_lease(ledger_path, step_id, actor_id, token)
                     apply_phases.cleanup(ops, apply_branch, {repo: None})
@@ -384,7 +405,7 @@ def run_apply(*, source_kind, binding_ref, recorded_summary=None, authorization_
                     return failure(state, _phase_reason("transformed", outcomes), _failed_outcomes(outcomes, state))
                 journal.complete(repo, "transformed")
             phases = (("validated", lambda: apply_phases.validate_phase(entry, reader, proposal)),) if resume_transform else (
-                ("transformed", lambda: apply_phases.exec_phase(runner, pen, entry)),
+                ("transformed", lambda: apply_phases.exec_phase(runner, pen, entry, proposal.transform_params)),
                 ("validated", lambda: apply_phases.validate_phase(entry, reader, proposal)),
             )
             for phase, operation in phases:
@@ -602,7 +623,7 @@ def _run_multi_repo(
             for repo in pending:
                 journal.begin(repo, "transformed", token)
             sub_pen = _subset_pen(pen, pending)
-            executed = apply_phases.exec_phase(runner, sub_pen, entry)
+            executed = apply_phases.exec_phase(runner, sub_pen, entry, proposal.transform_params)
             for repo in list(pending):
                 o = executed.get(repo, {})
                 if o.get("state") != "ok":
@@ -680,6 +701,82 @@ def _run_multi_repo(
         )
 
 
+def run_apply_dependency_bump(
+    *, finding_ref, authorization_path, ledger_path, step_id, actor_id, runner,
+    gh_api=None, gh_ops, result_path, workspace,
+) -> dict:
+    """Collect-once, rederive-many, sequential fenced runs — one per
+    manager-group proposal. Fences and journals EACH proposal
+    independently (its own step_id, its own result_path, its own pen) —
+    never one `run_apply` per finding, since that would collapse N
+    proposals' independent journals into one, AND never a pen shared
+    across proposals: `nave pen exec --only` restricts execution to a
+    single repo, not a repo list, so a pen spanning two disjoint manager
+    groups would have no way to keep one group's command_argv off the
+    other's clones (spec § 4.7). Each `run_apply` call below creates its
+    own pen via its existing, unmodified logic (`pulse-apply-{proposal.id}`);
+    proposal ids already differ per manager (`bump_proposal_id` embeds
+    `{manager}`), so there is no name collision to guard against by
+    sharing, and a pen-create failure for one manager group only blocks
+    that group's own result — the others still run.
+
+    Unlike the 4 pre-existing source kinds (which pass `io_seams.registry
+    =None` and defer registry loading to `_entry`, right before exec),
+    dependency-bump loads its registry HERE, before rederive — spec § 5's
+    error table requires `transform_params key/value fails validation ->
+    RederiveError (fail-closed)`, i.e. rejected before the fence/lease/pen
+    ever gets touched, not discovered deep inside `exec_phase`. Reuses
+    `_entry`'s exact fallback: the workspace's configured registry if
+    present, else the bundled template.
+    """
+    actor = _actor(actor_id)
+    configured = Path(workspace) / ".hiivmind" / "github" / "transformations.yaml"
+    template = Path(__file__).resolve().parents[3] / "templates" / "transformations.yaml.template"
+    try:
+        registry = mutation_plan.load_registry(configured if configured.exists() else template)
+    except mutation_plan.MutationPlanError as exc:
+        return _write_failure(
+            result_path, state="blocked", reason=f"could not load transformation registry: {exc}",
+            actor=actor, workspace=workspace,
+        )
+    io_seams = apply_rederive.IoSeams(runner=runner, gh_api=gh_api, registry=registry, workdir=workspace)
+    try:
+        inputs = apply_rederive.collect_inputs(
+            "dependency-bump", finding_ref, {}, actor=actor, io_seams=io_seams,
+        )
+        rederived_list = apply_rederive.rederive_dependency_bump(inputs)
+    except (apply_rederive.RederiveError, mutation_plan.MutationPlanError, ValueError) as exc:
+        return _write_failure(
+            result_path, state="blocked", reason=exc, actor=actor, workspace=workspace,
+        )
+    if not rederived_list:
+        return _write_failure(
+            result_path, state="blocked",
+            reason="dependency-bump: no manager-mapped proposal could be built for this finding",
+            actor=actor, workspace=workspace,
+        )
+
+    results: dict[str, dict] = {}
+    for rederived in rederived_list:
+        manager = apply_rederive._manager_for(rederived.proposal.transformation)
+        summary = apply_rederive.bump_summary(
+            finding_ref, selection=rederived.proposal.selection, manager=manager,
+            target=rederived.proposal.transform_params["version"],
+        )
+        results[rederived.proposal.id] = run_apply(
+            source_kind="dependency-bump", binding_ref=finding_ref, recorded_summary=summary,
+            authorization_path=authorization_path, ledger_path=ledger_path,
+            step_id=f"{step_id}.{rederived.proposal.id}", actor_id=actor_id, runner=runner,
+            gh_api=gh_api, gh_ops=gh_ops, result_path=f"{result_path}.{manager}",
+            workspace=workspace, inputs_override=inputs, rederived_override=rederived,
+        )
+
+    rollup = apply_reconcile.rollup_state(
+        {pid: {"state": r.get("state")} for pid, r in results.items()}
+    )
+    return {"state": rollup, "proposals": results}
+
+
 def main(argv=None):
     """CLI entry point: run one apply against the real Nave + gh binaries."""
     import argparse
@@ -687,9 +784,10 @@ def main(argv=None):
 
     parser = argparse.ArgumentParser(description="Run one apply-mode proposal")
     parser.add_argument("--source-kind", required=True)
-    parser.add_argument("--binding-ref", required=True, help="JSON object")
+    parser.add_argument("--binding-ref", required=False, default=None, help="JSON object; required unless --source-kind dependency-bump")
+    parser.add_argument("--finding-ref", required=False, default=None, help="JSON {group,ecosystem,package}; only for --source-kind dependency-bump")
     parser.add_argument("--recorded-summary", required=False, default=None,
-                        help="JSON {binding, transformation, proposal_id}; omit for --source-kind neutral")
+                        help="JSON {binding, transformation, proposal_id}; omit for --source-kind neutral or dependency-bump")
     parser.add_argument("--authorization", required=True)
     parser.add_argument("--ledger", required=True)
     parser.add_argument("--step", required=True)
@@ -699,24 +797,46 @@ def main(argv=None):
     parser.add_argument("--fixtures", default=None, help="optional PULSE_NAVE_FIXTURES root")
     args = parser.parse_args(argv)
 
-    if args.source_kind != "neutral" and not args.recorded_summary:
-        parser.error("--recorded-summary is required unless --source-kind is neutral")
+    if args.source_kind == "dependency-bump":
+        if not args.finding_ref:
+            parser.error("--finding-ref is required when --source-kind is dependency-bump")
+        if args.binding_ref:
+            parser.error("--binding-ref is not used with --source-kind dependency-bump; use --finding-ref")
+    else:
+        if not args.binding_ref:
+            parser.error("--binding-ref is required unless --source-kind is dependency-bump")
+        if args.source_kind != "neutral" and not args.recorded_summary:
+            parser.error("--recorded-summary is required unless --source-kind is neutral or dependency-bump")
 
     runner = nave_adapter.NaveRunner(fixtures=args.fixtures)
-    result = run_apply(
-        source_kind=args.source_kind,
-        binding_ref=json.loads(args.binding_ref),
-        recorded_summary=json.loads(args.recorded_summary) if args.recorded_summary else None,
-        authorization_path=args.authorization,
-        ledger_path=args.ledger,
-        step_id=args.step,
-        actor_id=args.actor,
-        runner=runner,
-        gh_api=_default_gh_api,
-        gh_ops=apply_reconcile.GhCliOps(),
-        result_path=args.result,
-        workspace=args.workspace,
-    )
+    if args.source_kind == "dependency-bump":
+        result = run_apply_dependency_bump(
+            finding_ref=json.loads(args.finding_ref),
+            authorization_path=args.authorization,
+            ledger_path=args.ledger,
+            step_id=args.step,
+            actor_id=args.actor,
+            runner=runner,
+            gh_api=_default_gh_api,
+            gh_ops=apply_reconcile.GhCliOps(),
+            result_path=args.result,
+            workspace=args.workspace,
+        )
+    else:
+        result = run_apply(
+            source_kind=args.source_kind,
+            binding_ref=json.loads(args.binding_ref),
+            recorded_summary=json.loads(args.recorded_summary) if args.recorded_summary else None,
+            authorization_path=args.authorization,
+            ledger_path=args.ledger,
+            step_id=args.step,
+            actor_id=args.actor,
+            runner=runner,
+            gh_api=_default_gh_api,
+            gh_ops=apply_reconcile.GhCliOps(),
+            result_path=args.result,
+            workspace=args.workspace,
+        )
     print(json.dumps(result))
 
 

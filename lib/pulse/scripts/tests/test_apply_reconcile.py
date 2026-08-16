@@ -1402,6 +1402,23 @@ def test_resolve_intended_base_neutral_rejects_missing_base_ref():
         apply_reconcile.resolve_intended_base("neutral", {"repos": ["hiivmind/a"]}, None)
 
 
+def test_resolve_intended_base_dependency_bump_returns_per_repo_map():
+    result = apply_reconcile.resolve_intended_base(
+        "dependency-bump", {}, {"base_refs": {"acme/api": "main", "acme/web": "develop"}},
+    )
+    assert result == {"acme/api": "main", "acme/web": "develop"}
+
+
+def test_resolve_intended_base_dependency_bump_raises_without_finalizer_record():
+    with pytest.raises(ValueError, match="dependency-bump"):
+        apply_reconcile.resolve_intended_base("dependency-bump", {}, None)
+
+
+def test_resolve_intended_base_dependency_bump_raises_on_empty_base_refs():
+    with pytest.raises(ValueError, match="dependency-bump"):
+        apply_reconcile.resolve_intended_base("dependency-bump", {}, {"base_refs": {}})
+
+
 def test_rollup_state_precedence():
     def repo(state):
         return {"state": state, "branch": "b", "intended_base": "main",

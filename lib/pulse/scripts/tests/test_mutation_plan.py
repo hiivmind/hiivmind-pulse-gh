@@ -1,5 +1,7 @@
 """Tests for the mutation proposal shape and transformation registry."""
 
+from pathlib import Path
+
 import pytest
 
 from lib.pulse.scripts import mutation_plan
@@ -663,3 +665,235 @@ def test_proposal_digest_changes_when_any_covered_field_changes(overrides):
     changed_digest = mutation_plan.proposal_digest(_digest_proposal(**overrides))
 
     assert base_digest != changed_digest
+
+
+
+# --- transform_params: templated argv & param-aware validation --------------
+
+
+def test_validate_param_value_accepts_bare_package_name():
+    assert mutation_plan._validate_param_value("package", "requests") == "requests"
+
+
+def test_validate_param_value_accepts_scoped_npm_package():
+    assert mutation_plan._validate_param_value("package", "@acme/widget") == "@acme/widget"
+
+
+def test_validate_param_value_accepts_version():
+    assert mutation_plan._validate_param_value("version", "2.32.0") == "2.32.0"
+
+
+def test_validate_param_value_rejects_leading_dash():
+    with pytest.raises(mutation_plan.MutationPlanError, match="invalid value"):
+        mutation_plan._validate_param_value("version", "-rf")
+
+
+def test_validate_param_value_rejects_pep440_epoch():
+    with pytest.raises(mutation_plan.MutationPlanError, match="invalid value"):
+        mutation_plan._validate_param_value("version", "1!2.3.4")
+
+
+def test_validate_param_value_rejects_equals_sign():
+    with pytest.raises(mutation_plan.MutationPlanError, match="invalid value"):
+        mutation_plan._validate_param_value("version", "2.3.4=malicious")
+
+
+def test_validate_param_value_rejects_whitespace():
+    with pytest.raises(mutation_plan.MutationPlanError, match="invalid value"):
+        mutation_plan._validate_param_value("package", "requests malicious")
+
+
+def test_validate_param_value_rejects_shell_metacharacters():
+    with pytest.raises(mutation_plan.MutationPlanError, match="invalid value"):
+        mutation_plan._validate_param_value("version", "2.3.4;rm -rf /")
+
+
+def registry_data_with_params():
+    data = minimal_registry_data()
+    data["transformations"]["bump-python-uv"] = {
+        "id": "bump-python-uv",
+        "command_argv": ["uv", "add", "{package}=={version}"],
+        "applies_to": ["always"],
+        "validation": {"kind": "none"},
+        "allow_scheduled": False,
+        "params": ["package", "version"],
+    }
+    return data
+
+
+def test_loads_registry_entry_with_declared_params():
+    registry = mutation_plan.load_registry(registry_data_with_params())
+    entry = registry.get("bump-python-uv")
+    assert entry.params == ("package", "version")
+    assert entry.command_argv == ("uv", "add", "{package}=={version}")
+
+
+def test_registry_defaults_params_to_empty_tuple_when_omitted():
+    registry = mutation_plan.load_registry(minimal_registry_data())
+    assert registry.get("format-python").params == ()
+
+
+def test_registry_rejects_undeclared_placeholder_in_command_argv():
+    data = registry_data_with_params()
+    data["transformations"]["bump-python-uv"]["params"] = ["package"]  # omit "version"
+    with pytest.raises(mutation_plan.MutationPlanError, match="undeclared placeholder"):
+        mutation_plan.load_registry(data)
+
+
+def test_registry_rejects_non_list_params():
+    data = registry_data_with_params()
+    data["transformations"]["bump-python-uv"]["params"] = "package"
+    with pytest.raises(mutation_plan.MutationPlanError, match="must be a list"):
+        mutation_plan.load_registry(data)
+
+
+def test_resolve_argv_expands_declared_params():
+    registry = mutation_plan.load_registry(registry_data_with_params())
+    entry = registry.get("bump-python-uv")
+    argv = mutation_plan.resolve_argv(entry, {"package": "requests", "version": "2.32.0"})
+    assert argv == ("uv", "add", "requests==2.32.0")
+
+
+def test_resolve_argv_none_params_returns_verbatim_argv_backward_compat():
+    registry = mutation_plan.load_registry(minimal_registry_data())
+    entry = registry.get("format-python")
+    assert mutation_plan.resolve_argv(entry) == entry.command_argv
+    assert mutation_plan.resolve_argv(entry, None) == entry.command_argv
+
+
+def test_resolve_argv_rejects_missing_declared_param():
+    registry = mutation_plan.load_registry(registry_data_with_params())
+    entry = registry.get("bump-python-uv")
+    with pytest.raises(mutation_plan.MutationPlanError, match="missing declared param"):
+        mutation_plan.resolve_argv(entry, {"package": "requests"})
+
+
+def test_resolve_argv_rejects_invalid_substituted_value():
+    registry = mutation_plan.load_registry(registry_data_with_params())
+    entry = registry.get("bump-python-uv")
+    with pytest.raises(mutation_plan.MutationPlanError, match="invalid value"):
+        mutation_plan.resolve_argv(entry, {"package": "requests", "version": "-rf"})
+
+
+def test_resolve_argv_scoped_npm_package_round_trips():
+    data = registry_data_with_params()
+    data["transformations"]["bump-npm"] = {
+        "id": "bump-npm",
+        "command_argv": ["npm", "install", "--save-exact", "{package}@{version}"],
+        "applies_to": ["always"],
+        "validation": {"kind": "none"},
+        "allow_scheduled": False,
+        "params": ["package", "version"],
+    }
+    registry = mutation_plan.load_registry(data)
+    entry = registry.get("bump-npm")
+    argv = mutation_plan.resolve_argv(entry, {"package": "@acme/widget", "version": "1.2.3"})
+    assert argv == ("npm", "install", "--save-exact", "@acme/widget@1.2.3")
+
+
+def test_build_proposal_accepts_transform_params_with_registry_validation():
+    registry = mutation_plan.load_registry(registry_data_with_params())
+    proposal = mutation_plan.build_proposal(
+        id="apply-bump-python-requests-uv-abc123",
+        selection=["acme/api"],
+        transformation="bump-python-uv",
+        expected_shas={"acme/api": "a" * 40},
+        actor=minimal_actor(),
+        mutation_policy="allow-listed",
+        bound_paths={"acme/api": ("pyproject.toml", "uv.lock")},
+        transform_params={"package": "requests", "version": "2.32.0"},
+        registry=registry,
+    )
+    assert proposal.transform_params == {"package": "requests", "version": "2.32.0"}
+
+
+def test_build_proposal_defaults_transform_params_to_empty_dict():
+    proposal = mutation_plan.build_proposal(
+        id="p1", selection=["acme/api"], transformation="format-python",
+        expected_shas={"acme/api": "abc"}, actor=minimal_actor(),
+    )
+    assert proposal.transform_params == {}
+
+
+def test_build_proposal_rejects_unknown_transform_params_key():
+    registry = mutation_plan.load_registry(registry_data_with_params())
+    with pytest.raises(mutation_plan.MutationPlanError, match="unknown transform_params key"):
+        mutation_plan.build_proposal(
+            id="p1", selection=["acme/api"], transformation="bump-python-uv",
+            expected_shas={"acme/api": "a" * 40}, actor=minimal_actor(),
+            mutation_policy="allow-listed", bound_paths={"acme/api": ("pyproject.toml",)},
+            transform_params={"package": "requests", "version": "2.32.0", "extra": "x"},
+            registry=registry,
+        )
+
+
+def test_build_proposal_rejects_missing_declared_transform_params_key():
+    registry = mutation_plan.load_registry(registry_data_with_params())
+    with pytest.raises(mutation_plan.MutationPlanError, match="missing declared transform_params"):
+        mutation_plan.build_proposal(
+            id="p1", selection=["acme/api"], transformation="bump-python-uv",
+            expected_shas={"acme/api": "a" * 40}, actor=minimal_actor(),
+            mutation_policy="allow-listed", bound_paths={"acme/api": ("pyproject.toml",)},
+            transform_params={"package": "requests"},
+            registry=registry,
+        )
+
+
+def test_build_proposal_rejects_nonempty_transform_params_for_untemplated_entry():
+    registry = mutation_plan.load_registry(minimal_registry_data())
+    with pytest.raises(mutation_plan.MutationPlanError, match="transform_params must be empty"):
+        mutation_plan.build_proposal(
+            id="p1", selection=["acme/api"], transformation="format-python",
+            expected_shas={"acme/api": "abc"}, actor=minimal_actor(),
+            transform_params={"unexpected": "value"},
+            registry=registry,
+        )
+
+
+def test_build_proposal_rejects_invalid_transform_params_value():
+    registry = mutation_plan.load_registry(registry_data_with_params())
+    with pytest.raises(mutation_plan.MutationPlanError, match="invalid value"):
+        mutation_plan.build_proposal(
+            id="p1", selection=["acme/api"], transformation="bump-python-uv",
+            expected_shas={"acme/api": "a" * 40}, actor=minimal_actor(),
+            mutation_policy="allow-listed", bound_paths={"acme/api": ("pyproject.toml",)},
+            transform_params={"package": "requests", "version": "-rf"},
+            registry=registry,
+        )
+
+
+def test_proposal_digest_changes_when_transform_params_changes():
+    # Same proposal id, different target version via templated argv:
+    registry = mutation_plan.load_registry(registry_data_with_params())
+    p1 = mutation_plan.build_proposal(
+        id="apply-bump-python-requests-uv-abc123", selection=["acme/api"],
+        transformation="bump-python-uv", expected_shas={"acme/api": "a" * 40},
+        actor=minimal_actor(), mutation_policy="allow-listed",
+        bound_paths={"acme/api": ("pyproject.toml",)},
+        transform_params={"package": "requests", "version": "2.32.0"},
+        registry=registry,
+    )
+    p2 = mutation_plan.build_proposal(
+        id="apply-bump-python-requests-uv-abc123", selection=["acme/api"],
+        transformation="bump-python-uv", expected_shas={"acme/api": "a" * 40},
+        actor=minimal_actor(), mutation_policy="allow-listed",
+        bound_paths={"acme/api": ("pyproject.toml",)},
+        transform_params={"package": "requests", "version": "2.33.0"},
+        registry=registry,
+    )
+    assert mutation_plan.proposal_digest(p1) != mutation_plan.proposal_digest(p2)
+
+
+def test_transformations_template_loads_bump_entries():
+    template_path = Path(__file__).resolve().parents[4] / "templates" / "transformations.yaml.template"
+    registry = mutation_plan.load_registry(template_path)
+    for tid, argv in [
+        ("bump-python-uv", ("uv", "add", "{package}=={version}")),
+        ("bump-python-poetry", ("poetry", "add", "{package}=={version}")),
+        ("bump-npm", ("npm", "install", "--save-exact", "{package}@{version}")),
+        ("bump-pnpm", ("pnpm", "add", "--save-exact", "{package}@{version}")),
+    ]:
+        entry = registry.get(tid)
+        assert entry.command_argv == argv
+        assert entry.params == ("package", "version")
+        assert entry.allow_scheduled is False

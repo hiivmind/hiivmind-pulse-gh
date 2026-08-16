@@ -191,3 +191,75 @@ transformations:
     validation:
       kind: paths_changed
     allow_scheduled: true
+
+  # F11 dependency-bump handoff: one entry per package manager the F4
+  # DivergenceFinding -> Proposal handoff (apply_rederive.py's
+  # dependency-bump source kind) can target. `{package}`/`{version}` are
+  # whitelisted argv placeholders (declared via `params`), expanded by
+  # `mutation_plan.resolve_argv` from `Proposal.transform_params` and
+  # re-validated by `_validate_param_value` before substitution — never
+  # shell-interpreted, never split, never reused for anything but these
+  # two declared slots. Never allowed to run unattended: a dependency
+  # bump always needs human review of the resulting lockfile diff before
+  # it lands (mirrors refresh-node-lockfile's allow_scheduled: false).
+  bump-python-uv:
+    id: bump-python-uv
+    command_argv:
+      - uv
+      - add
+      - "{package}=={version}"
+    applies_to:
+      - always
+    validation:
+      kind: none
+    allow_scheduled: false
+    params:
+      - package
+      - version
+
+  bump-python-poetry:
+    id: bump-python-poetry
+    command_argv:
+      - poetry
+      - add
+      - "{package}=={version}"
+    applies_to:
+      - always
+    validation:
+      kind: none
+    allow_scheduled: false
+    params:
+      - package
+      - version
+
+  bump-npm:
+    id: bump-npm
+    command_argv:
+      - npm
+      - install
+      - --save-exact
+      - "{package}@{version}"
+    applies_to:
+      - always
+    validation:
+      kind: none
+    allow_scheduled: false
+    params:
+      - package
+      - version
+
+  bump-pnpm:
+    id: bump-pnpm
+    command_argv:
+      - pnpm
+      - add
+      - --save-exact
+      - "{package}@{version}"
+    applies_to:
+      - always
+    validation:
+      kind: none
+    allow_scheduled: false
+    params:
+      - package
+      - version
