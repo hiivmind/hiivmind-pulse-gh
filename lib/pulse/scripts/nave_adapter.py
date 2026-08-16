@@ -549,6 +549,7 @@ _BRANCH_REQUIRED_FIELDS = (
     "base_ref",
     "expected_base_sha",
     "observed_base_sha",
+    "observed_tree_sha",
     "apply_ref",
     "state",
 )

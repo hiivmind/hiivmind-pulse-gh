@@ -803,6 +803,7 @@ def _branch_repo_result(
     base_ref="develop",
     expected_base_sha="a" * 40,
     observed_base_sha="a" * 40,
+    observed_tree_sha="c" * 40,
     apply_ref="pulse/apply/p1",
     state="ok",
     **extra,
@@ -812,6 +813,7 @@ def _branch_repo_result(
         "base_ref": base_ref,
         "expected_base_sha": expected_base_sha,
         "observed_base_sha": observed_base_sha,
+        "observed_tree_sha": observed_tree_sha,
         "apply_ref": apply_ref,
         "state": state,
     }
@@ -851,6 +853,19 @@ def test_pen_branch_rejects_missing_required_field():
 
     assert result["adapter_state"] == "error"
     assert "observed_base_sha" in result["reason"]
+    assert result["repos"] == []
+
+
+def test_pen_branch_rejects_result_missing_observed_tree_sha():
+    entry = _branch_repo_result()
+    del entry["observed_tree_sha"]
+    payload = {"protocol_version": 1, "adapter_state": "ok", "repos": [entry]}
+    runner = RequestFileRunner([_json_ok(payload)])
+
+    result = nave_adapter.pen_branch(runner, "pen1", "pulse/apply/p1", _BRANCH_REQUEST)
+
+    assert result["adapter_state"] == "error"
+    assert "observed_tree_sha" in result["reason"]
     assert result["repos"] == []
 
 
