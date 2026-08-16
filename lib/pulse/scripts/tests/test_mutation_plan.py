@@ -1,5 +1,7 @@
 """Tests for the mutation proposal shape and transformation registry."""
 
+from pathlib import Path
+
 import pytest
 
 from lib.pulse.scripts import mutation_plan
@@ -880,3 +882,18 @@ def test_proposal_digest_changes_when_transform_params_changes():
         registry=registry,
     )
     assert mutation_plan.proposal_digest(p1) != mutation_plan.proposal_digest(p2)
+
+
+def test_transformations_template_loads_bump_entries():
+    template_path = Path(__file__).resolve().parents[4] / "templates" / "transformations.yaml.template"
+    registry = mutation_plan.load_registry(template_path)
+    for tid, argv in [
+        ("bump-python-uv", ("uv", "add", "{package}=={version}")),
+        ("bump-python-poetry", ("poetry", "add", "{package}=={version}")),
+        ("bump-npm", ("npm", "install", "--save-exact", "{package}@{version}")),
+        ("bump-pnpm", ("pnpm", "add", "--save-exact", "{package}@{version}")),
+    ]:
+        entry = registry.get(tid)
+        assert entry.command_argv == argv
+        assert entry.params == ("package", "version")
+        assert entry.allow_scheduled is False
