@@ -360,9 +360,18 @@ def check(runner: NaveRunner) -> dict:
 
 
 def materialize(runner: NaveRunner, request: str) -> dict:
-    """Materialize requested content using Nave's protocol-2 JSON contract."""
-    args = ["materialize", "--request", request, "--json"]
-    return _decode_json("materialize", runner.run(args))
+    """Materialize requested content using Nave's protocol-2 JSON contract.
+
+    `--request` always names a file path — `nave materialize --request`
+    reads the request body only from that file, never from a command-line
+    argument (mirrors `_run_apply_verb`'s identical convention). `request`
+    is the already-serialized JSON body; the temp file is removed once the
+    process returns."""
+    with tempfile.TemporaryDirectory(prefix="pulse-nave-materialize-") as tmp_dir:
+        request_path = Path(tmp_dir) / "request.json"
+        request_path.write_text(request)
+        args = ["materialize", "--request", str(request_path), "--json"]
+        return _decode_json("materialize", runner.run(args))
 
 
 def _decode_json_list(command: str, completed: Completed) -> dict:
