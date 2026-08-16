@@ -964,6 +964,7 @@ In `lib/pulse/scripts/mutation_plan.py`, `proposal_digest`'s payload dict gains 
             repo: list(paths) for repo, paths in proposal.bound_paths.items()
         },
         "transform_params": dict(sorted(proposal.transform_params.items())),
+        "expected_tree_shas": dict(sorted((proposal.expected_tree_shas or {}).items())),
         "actor": {
             "gh_login": proposal.actor.gh_login,
             "machine": proposal.actor.machine,
@@ -972,13 +973,9 @@ In `lib/pulse/scripts/mutation_plan.py`, `proposal_digest`'s payload dict gains 
     }
 ```
 
-(`expected_tree_shas` is deliberately **not** added to the digest payload — it is a drift guard the proposal is re-validated against at provision time, not proposal content the digest identifies; the existing `expected_shas` sets the precedent that base-SHA guards live outside the identity digest... re-check this decision against the existing `expected_shas` treatment: `expected_shas` **is** already in the digest payload above. For consistency, `expected_tree_shas` should be too — add it:)
-
-```python
-        "expected_tree_shas": dict(sorted((proposal.expected_tree_shas or {}).items())),
-```
-
-Add this line to the payload dict (after `"transform_params"`), so a tree-drift-guard change is also digest-visible, consistent with how `expected_shas` is already covered.
+`expected_tree_shas` is included for the same reason `expected_shas` already is above: both are
+drift guards the digest must make visible, so a tree-drift-guard change (not just a target-version
+change) is also digest-visible.
 
 - [ ] **Step 20: Run to confirm pass**
 
