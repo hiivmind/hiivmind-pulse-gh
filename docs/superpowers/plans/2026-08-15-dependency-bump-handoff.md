@@ -2258,7 +2258,7 @@ git commit -m "feat(apply): resolve_intended_base dependency-bump branch (per-re
 
 ---
 
-### Task 8: pulse-gh — driver: `--finding-ref`, shared-pen sequential orchestration (`apply_driver.py`)
+### Task 8: pulse-gh — driver: `--finding-ref`, per-proposal sequential orchestration (`apply_driver.py`)
 
 **Files:**
 - Modify: `lib/pulse/scripts/apply_driver.py`
@@ -2267,9 +2267,8 @@ git commit -m "feat(apply): resolve_intended_base dependency-bump branch (per-re
 **Interfaces:**
 - Consumes: Task 6's `apply_rederive.{collect_inputs, rederive_dependency_bump, bump_summary, DependencyBumpProviderInputs}`; Task 7's `resolve_intended_base("dependency-bump", ...)`.
 - Produces:
-  - `run_apply(..., inputs_override: apply_rederive.ProviderInputs | None = None, rederived_override: apply_rederive.RederivedProposal | None = None, pen_name: str | None = None)` — three new optional keyword-only params, all defaulting to `None` (existing 4-source-kind behavior byte-identical when omitted).
-  - `_run_multi_repo(..., pen_name: str | None = None)` — one new optional param, threaded from `run_apply`.
-  - `run_apply_dependency_bump(*, finding_ref, authorization_path, ledger_path, step_id, actor_id, runner, gh_api, gh_ops, result_path, workspace) -> dict` — the new top-level orchestrator: collect-once, rederive-many, one shared pen, sequential fenced runs (one journal per proposal id).
+  - `run_apply(..., inputs_override: apply_rederive.ProviderInputs | None = None, rederived_override: apply_rederive.RederivedProposal | None = None)` — two new optional keyword-only params, both defaulting to `None` (existing 4-source-kind behavior byte-identical when omitted). Pen acquisition is otherwise untouched: each call still creates (or resumes) its own pen the existing way, named `pulse-apply-{proposal.id}` by default — never shared, never passed in from a caller.
+  - `run_apply_dependency_bump(*, finding_ref, authorization_path, ledger_path, step_id, actor_id, runner, gh_api, gh_ops, result_path, workspace) -> dict` — the new top-level orchestrator: collect-once, rederive-many, then loop `run_apply` once per manager-group proposal, each fenced/journaled/penned independently (one journal per proposal id, one pen per proposal id — never shared; spec § 4.7 explains why sharing is actively wrong: `nave pen exec --only` scopes to a single repo, not a repo list, so one pen spanning two disjoint manager groups has no way to keep one group's `command_argv` off the other's clones).
   - CLI `main()`: `--finding-ref` (mutually exclusive with `--binding-ref`, required exactly when `--source-kind dependency-bump`).
 
 - [ ] **Step 1: Write the failing test for `run_apply`'s `inputs_override`/`rederived_override` bypass and templated argv threading**
@@ -2366,14 +2365,14 @@ def test_run_apply_rederived_override_skips_collect_and_rederive_and_threads_tra
 Run: `uv run pytest lib/pulse/scripts/tests/test_apply_driver.py -k rederived_override -v`
 Expected: FAIL — `run_apply()` doesn't accept `inputs_override`/`rederived_override`.
 
-- [ ] **Step 3: Implement the `inputs_override`/`rederived_override`/`pen_name` parameters on `run_apply`**
+- [ ] **Step 3: Implement the `inputs_override`/`rederived_override` parameters on `run_apply`**
 
 In `lib/pulse/scripts/apply_driver.py`, change `run_apply`'s signature and its collect/rederive block:
 
 ```python
 def run_apply(*, source_kind, binding_ref, recorded_summary=None, authorization_path, ledger_path,
               step_id, actor_id, runner, gh_api=None, gh_ops, result_path, workspace,
-              inputs_override=None, rederived_override=None, pen_name=None) -> dict:
+              inputs_override=None, rederived_override=None) -> dict:
     """Run one single-repository (or, via _run_multi_repo, multi-repo)
     apply; return apply-status or repo-mutation.
 
@@ -2381,13 +2380,16 @@ def run_apply(*, source_kind, binding_ref, recorded_summary=None, authorization_
     internal `collect_inputs`+`rederive` call is skipped entirely and
     these are used directly — the collect-once/rederive-many caller
     (`run_apply_dependency_bump`) already performed that work once for
-    every proposal in a finding. `pen_name`: when supplied, pen
-    acquisition also skips `nave_adapter.pen_create` (which is NOT
-    idempotent — a second call with a colliding name silently creates
-    `{name}-2`, defeating a shared pen) and builds the `pen` dict directly
-    from `proposal.selection`, reusing the caller's already-created pen.
-    Both parameters default to `None`; every existing caller (all four
-    original source kinds) is unaffected."""
+    every proposal in a finding. Pen acquisition is UNCHANGED by this:
+    each call to `run_apply` still creates (or resumes) its own pen the
+    existing way, named `pulse-apply-{proposal.id}` — proposal ids are
+    already unique per manager group (`bump_proposal_id` embeds
+    `{manager}`), so there is no name-collision risk to guard against,
+    and no reason to share a pen across proposals (spec § 4.7: sharing
+    would actively break execution scoping, since `nave pen exec --only`
+    restricts to a single repo, not a repo list). Both parameters default
+    to `None`; every existing caller (all four original source kinds) is
+    unaffected."""
     proposal = None
     proposal_digest = None
     authorization_digest = None
@@ -2436,32 +2438,8 @@ def run_apply(*, source_kind, binding_ref, recorded_summary=None, authorization_
         )
 ```
 
-(Everything from `resolve_run.snapshot_audit(...)` onward is UNCHANGED except the two pen-acquisition and dispatch call sites below.)
-
-Change the `pen_name` local-variable line (originally `pen_name = f"pulse-apply-{proposal.id}"`) to:
-
-```python
-    effective_pen_name = pen_name or f"pulse-apply-{proposal.id}"
-```
-
-and every subsequent reference to the local `pen_name` in this function's single-repo body (the `nave_adapter.pen_create(...)`/`pen_status(runner, pen_name)`/`apply_ops.make_apply_ops(runner, pen_name, ...)` calls, and the `resume_transform` branch's `pen = {"name": pen_name, ...}`) to `effective_pen_name`.
-
-Change the pen-acquisition block (originally `if resume_transform: pen = {...} else: journal.begin(...); handle = pen_create(...); ...`) to a three-way branch:
-
-```python
-            if resume_transform:
-                pen = {"name": effective_pen_name, "repos": [{"repo": repo}]}
-            elif pen_name is not None:
-                pen = {"name": effective_pen_name, "repos": [{"repo": r} for r in proposal.selection]}
-            else:
-                journal.begin(repo, "pen_ready", token)
-                handle = nave_adapter.pen_create(
-                    runner, nave_adapter.PenQuery(terms=["repo:" + "|".join(proposal.selection)]), effective_pen_name
-                )
-                if handle.state != "ok":
-                    return failure("failed", handle.stderr or "pen create failed")
-                pen = handle.pen
-```
+(Everything from `resolve_run.snapshot_audit(...)` onward is UNCHANGED except the `transform_params`
+threading below — pen acquisition itself is not touched by this task at all.)
 
 **Critical:** `exec_phase` (Task 4) now accepts a `transform_params` argument that must be threaded through, or a dependency-bump proposal's `{package}`/`{version}` placeholders are never substituted (silently running the literal string `"{package}=={version}"`). This module already computes `entry.command_argv`-independent argv resolution via two call sites further down in this same single-repo body: the `resume_transform` branch's `outcomes = apply_phases.exec_phase(runner, pen, entry)`, and the `phases` tuple's `("transformed", lambda: apply_phases.exec_phase(runner, pen, entry))`. Change **both** to pass `proposal.transform_params`:
 
@@ -2478,71 +2456,13 @@ Change the pen-acquisition block (originally `if resume_transform: pen = {...} e
 
 (Passing `proposal.transform_params` unconditionally is safe for every existing source kind too: it defaults to `{}` for all four, and `resolve_argv(entry, {})` — an empty-but-not-`None` dict — produces byte-identical output to `resolve_argv(entry, None)` for any entry with no declared `params`, which is every pre-existing transformation. Verified by Task 3's `test_resolve_argv_none_params_returns_verbatim_argv_backward_compat`-adjacent reasoning: an empty-dict substitution pass over argv containing no `{...}` placeholders is a no-op.)
 
-Change the multi-repo dispatch call site to thread `pen_name` through:
+The multi-repo dispatch call site (`if len(selection) > 1: return _run_multi_repo(...)`) is **unchanged** — no `pen_name` to thread, since this task never introduces one.
 
-```python
-    if len(selection) > 1:
-        return _run_multi_repo(
-            ledger_path=ledger_path, step_id=step_id, actor_id=actor_id, token=token,
-            runner=runner, gh_ops=gh_ops, result_path=result_path, workspace=workspace,
-            proposal=proposal, selection=list(selection), base_refs=base_refs, entry=entry,
-            recorded_summary=recorded_summary, proposal_digest=proposal_digest,
-            authorization_digest=authorization_digest, actor=actor, nave_version=nave_version,
-            pen_name=pen_name,
-        )
-```
+- [ ] **Step 4: Thread `transform_params` through `_run_multi_repo`**
 
-- [ ] **Step 4: Thread `pen_name` through `_run_multi_repo`**
-
-Change `_run_multi_repo`'s signature to accept `pen_name=None`, rename its internal computed name to `effective_pen_name = pen_name or f"pulse-apply-{proposal.id}"`, update every reference (`apply_ops.make_apply_ops(runner, pen_name, ...)` → `effective_pen_name`, `nave_adapter.pen_status(runner, pen_name)` → `effective_pen_name`), and wrap the pen-acquisition block:
-
-```python
-def _run_multi_repo(
-    *,
-    ledger_path, step_id, actor_id, token, runner, gh_ops, result_path, workspace,
-    proposal, selection, base_refs, entry, recorded_summary, proposal_digest,
-    authorization_digest, actor, nave_version, pen_name=None,
-) -> dict:
-    """Drive one proposal across N repos with per-repo independent outcomes."""
-    apply_branch = f"pulse/apply/{proposal.id}"
-    effective_pen_name = pen_name or f"pulse-apply-{proposal.id}"
-    journal = Journal(Path(f"{result_path}.journal"))
-    actor_doc = {"gh_login": actor.gh_login, "machine": actor.machine, "mode": actor.mode}
-    # ... _repo_doc / _subset_proposal / _subset_pen / _write_fleet / _finish unchanged ...
-
-    try:
-        with ApplyLock(f"{ledger_path}.apply.lock"):
-            resolve_run.renew_lease(ledger_path, step_id, actor_id, token)
-            if pen_name is not None:
-                pen = {
-                    "name": effective_pen_name,
-                    "repos": [{"repo": r} for r in proposal.selection],
-                }
-            else:
-                handle = nave_adapter.pen_create(
-                    runner, nave_adapter.PenQuery(terms=["repo:" + "|".join(proposal.selection)]), effective_pen_name
-                )
-                if handle.state != "ok":
-                    return _write_failure(
-                        result_path, state="failed", reason=handle.stderr or "pen create failed",
-                        actor=actor, workspace=workspace, proposal=proposal,
-                        recorded_summary=recorded_summary, proposal_digest=proposal_digest,
-                        authorization_digest=authorization_digest, nave_version=nave_version,
-                    )
-                pen = handle.pen
-            status = nave_adapter.pen_status(runner, effective_pen_name)
-            clone_paths = {
-                f"{item['owner']}/{item['repo']}": item["clone_path"]
-                for item in status.get("repos", [])
-                if isinstance(item, dict) and item.get("owner") and item.get("repo") and item.get("clone_path")
-            }
-            # ... rest of the function body unchanged, except every remaining
-            # bare `pen_name` reference (there is one more: `ops =
-            # apply_ops.make_apply_ops(runner, pen_name, ...)`) becomes
-            # `effective_pen_name`.
-```
-
-**Same `transform_params` threading applies here.** `_run_multi_repo`'s own exec-phase line — `executed = apply_phases.exec_phase(runner, sub_pen, entry)` — must become:
+`_run_multi_repo` needs no `pen_name` parameter — it is untouched by this task except for the same
+`transform_params` threading Step 3 applied to `run_apply`'s single-repo body. Its own exec-phase
+line — `executed = apply_phases.exec_phase(runner, sub_pen, entry)` — must become:
 
 ```python
             executed = apply_phases.exec_phase(runner, sub_pen, entry, proposal.transform_params)
@@ -2556,36 +2476,22 @@ Expected: PASS.
 - [ ] **Step 6: Run the full driver test file to confirm zero regressions**
 
 Run: `uv run pytest lib/pulse/scripts/tests/test_apply_driver.py -v`
-Expected: every pre-existing test passes unchanged — `inputs_override`/`rederived_override`/`pen_name` all default to values reproducing the exact prior code path.
+Expected: every pre-existing test passes unchanged — `inputs_override`/`rederived_override` default to `None`, reproducing the exact prior code path.
 
 - [ ] **Step 7: Write the failing tests for `run_apply_dependency_bump`**
 
 ```python
-# --- run_apply_dependency_bump: collect-once, rederive-many, shared pen -----
+# --- run_apply_dependency_bump: collect-once, rederive-many, per-proposal pens ---
 
 
-class SharedPenRunner:
-    """Records every `nave` CLI call; asserts `pen create` fires exactly
-    once across the whole multi-proposal run."""
-
-    def __init__(self, responses):
-        self.calls = []
-        self._responses = list(responses)
-
-    def run(self, args):
-        self.calls.append(list(args))
-        return self._responses.pop(0)
-
-    def pen_create_call_count(self):
-        return sum(1 for c in self.calls if c[:2] == ["pen", "create"])
-
-
-def test_run_apply_dependency_bump_creates_exactly_one_shared_pen(monkeypatch, tmp_path):
-    """Two manager-group proposals for one finding must provision from a
-    SINGLE nave pen create call, not one per proposal — nave's `pen
-    create` silently suffixes a colliding name (`X-2`) rather than
-    erroring, so calling it twice would silently create TWO pens and
-    defeat the shared-pen requirement without any visible error."""
+def test_run_apply_dependency_bump_calls_run_apply_once_per_manager_group(monkeypatch, tmp_path):
+    """Two manager-group proposals for one finding must call `run_apply`
+    once EACH, never once for the whole finding — each carries its own
+    `rederived_override` (so its own pen, named `pulse-apply-{proposal.id}`
+    by run_apply's existing unchanged logic — never shared; proposal ids
+    already differ per manager, so there is no name collision to avoid by
+    sharing). No `pen_name` kwarg is passed to `run_apply` at all: this
+    task never introduces one."""
     finding_ref = {"group": "core-runtime", "ecosystem": "python", "package": "requests"}
     inputs = apply_rederive.DependencyBumpProviderInputs(
         finding_ref=finding_ref,
@@ -2614,17 +2520,13 @@ def test_run_apply_dependency_bump_creates_exactly_one_shared_pen(monkeypatch, t
         blocked={}, actor=mutation_plan.Actor("octocat", "laptop", "interactive"), registry=None,
     )
     monkeypatch.setattr(apply_driver.apply_rederive, "collect_inputs", lambda *a, **k: inputs)
-    monkeypatch.setattr(
-        apply_driver, "run_apply",
-        lambda **kwargs: {"state": "pr_opened", "proposal_id": kwargs["rederived_override"].proposal.id},
-    )
-    pen_create_calls = []
-    monkeypatch.setattr(
-        apply_driver.nave_adapter, "pen_create",
-        lambda runner, query, name: pen_create_calls.append((name, sorted(query.terms))) or SimpleNamespace(
-            state="ok", pen={"name": name, "repos": []}, stderr=None,
-        ),
-    )
+    run_apply_calls = []
+
+    def fake_run_apply(**kwargs):
+        run_apply_calls.append(kwargs)
+        return {"state": "pr_opened", "proposal_id": kwargs["rederived_override"].proposal.id}
+
+    monkeypatch.setattr(apply_driver, "run_apply", fake_run_apply)
     result = apply_driver.run_apply_dependency_bump(
         finding_ref=finding_ref, authorization_path="/does/not/matter",
         ledger_path=str(tmp_path / "ledger.yaml"), step_id="step-1", actor_id="octocat@laptop",
@@ -2632,8 +2534,15 @@ def test_run_apply_dependency_bump_creates_exactly_one_shared_pen(monkeypatch, t
         gh_ops=SimpleNamespace(), result_path=str(tmp_path / "result.yaml"),
         workspace=str(tmp_path),
     )
-    assert len(pen_create_calls) == 1
-    assert result["state"] in ("pr_opened", "applied", "partial")
+    assert len(run_apply_calls) == 2, "one run_apply call per manager-group proposal, never one per finding"
+    proposal_ids = {kwargs["rederived_override"].proposal.id for kwargs in run_apply_calls}
+    assert len(proposal_ids) == 2, "proposal ids (and therefore each run_apply call's own pen name) are distinct"
+    for kwargs in run_apply_calls:
+        assert "pen_name" not in kwargs
+        assert kwargs["inputs_override"] is inputs
+        pid = kwargs["rederived_override"].proposal.id
+        assert kwargs["step_id"] == f"step-1.{pid}"
+    assert result["state"] == "pr_opened"
     assert len(result["proposals"]) == 2
 
 
@@ -2660,10 +2569,6 @@ def test_run_apply_dependency_bump_rolls_up_worst_proposal_state(monkeypatch, tm
     )
     monkeypatch.setattr(apply_driver.apply_rederive, "collect_inputs", lambda *a, **k: inputs)
     monkeypatch.setattr(apply_driver, "run_apply", lambda **kwargs: {"state": "blocked"})
-    monkeypatch.setattr(
-        apply_driver.nave_adapter, "pen_create",
-        lambda runner, query, name: SimpleNamespace(state="ok", pen={"name": name, "repos": []}, stderr=None),
-    )
     result = apply_driver.run_apply_dependency_bump(
         finding_ref=finding_ref, authorization_path="/x", ledger_path=str(tmp_path / "l.yaml"),
         step_id="s", actor_id="octocat@laptop", runner=SimpleNamespace(run=lambda a: None),
@@ -2673,40 +2578,62 @@ def test_run_apply_dependency_bump_rolls_up_worst_proposal_state(monkeypatch, tm
     assert result["state"] == "failed"  # rollup_state: all-{failed,blocked} -> "failed"
 
 
-def test_run_apply_dependency_bump_pen_create_failure_blocks_whole_run(monkeypatch, tmp_path):
-    finding_ref = {"group": "g", "ecosystem": "python", "package": "requests"}
+def test_run_apply_dependency_bump_one_proposal_pen_failure_does_not_block_the_other(monkeypatch, tmp_path):
+    """A pen-create (or any other) failure inside ONE manager group's
+    run_apply call is now entirely internal to that call's own result —
+    there is no shared pre-loop pen-create step left to fail the whole
+    finding (spec § 4.7: pen creation is per-proposal, never shared).
+    The other manager group's run_apply call is independent and must
+    still be able to succeed; rollup_state's 'any pr_opened wins' rule
+    surfaces the still-progressing proposal at the top level while
+    `result['proposals']` keeps the failing one's own reason visible."""
+    finding_ref = {"group": "core-runtime", "ecosystem": "python", "package": "requests"}
     inputs = apply_rederive.DependencyBumpProviderInputs(
         finding_ref=finding_ref,
         finding=apply_rederive.deps_module.DivergenceFinding(
-            group="g", ecosystem="python", package="requests",
-            versions=(("acme/api", "1.0.0"), ("acme/other", "0.9.0")), distance="minor",
+            group="core-runtime", ecosystem="python", package="requests",
+            versions=(("acme/api", "2.28.0"), ("acme/other", "2.20.0")), distance="minor",
         ),
-        target="1.0.0", selection=("acme/other",),
+        target="2.31.0", selection=("acme/api", "acme/other"),
         records_by_repo={
+            ("acme/api", "python", "requests"): apply_rederive.deps_module.PackageRecord(
+                repo="acme/api", ecosystem="python", name="requests", resolution="single",
+                manifest_range=">=2", locked_version="2.28.0", unresolved_reason=None,
+                manager="uv", manifest_path="pyproject.toml", lock_path="uv.lock",
+                tree_sha="tree-api", provenance=(),
+            ),
             ("acme/other", "python", "requests"): apply_rederive.deps_module.PackageRecord(
                 repo="acme/other", ecosystem="python", name="requests", resolution="single",
-                manifest_range=">=0", locked_version="0.9.0", unresolved_reason=None,
-                manager="uv", manifest_path="pyproject.toml", lock_path="uv.lock",
+                manifest_range=">=2", locked_version="2.20.0", unresolved_reason=None,
+                manager="poetry", manifest_path="pyproject.toml", lock_path="poetry.lock",
                 tree_sha="tree-other", provenance=(),
             ),
         },
-        head_shas={"acme/other": "c" * 40}, tree_shas={"acme/other": "tree-other"},
-        default_branches={"acme/other": "main"}, blocked={},
-        actor=mutation_plan.Actor("octocat", "laptop", "interactive"), registry=None,
+        head_shas={"acme/api": "a" * 40, "acme/other": "c" * 40},
+        tree_shas={"acme/api": "tree-api", "acme/other": "tree-other"},
+        default_branches={"acme/api": "main", "acme/other": "main"},
+        blocked={}, actor=mutation_plan.Actor("octocat", "laptop", "interactive"), registry=None,
     )
     monkeypatch.setattr(apply_driver.apply_rederive, "collect_inputs", lambda *a, **k: inputs)
-    monkeypatch.setattr(
-        apply_driver.nave_adapter, "pen_create",
-        lambda runner, query, name: SimpleNamespace(state="error", pen=None, stderr="fleet cache empty"),
-    )
+
+    def fake_run_apply(**kwargs):
+        manager = apply_rederive._manager_for(kwargs["rederived_override"].proposal.transformation)
+        if manager == "poetry":
+            return {"state": "blocked", "reason": "pen create failed: fleet cache empty"}
+        return {"state": "pr_opened"}
+
+    monkeypatch.setattr(apply_driver, "run_apply", fake_run_apply)
     result = apply_driver.run_apply_dependency_bump(
         finding_ref=finding_ref, authorization_path="/x", ledger_path=str(tmp_path / "l.yaml"),
         step_id="s", actor_id="octocat@laptop", runner=SimpleNamespace(run=lambda a: None),
         gh_api=lambda ep: None, gh_ops=SimpleNamespace(), result_path=str(tmp_path / "r.yaml"),
         workspace=str(tmp_path),
     )
-    assert result["state"] == "blocked"
-    assert "pen create" in result["reason"] or "fleet cache empty" in result["reason"]
+    assert result["state"] == "pr_opened"  # the uv proposal still progressed
+    states = {pid: r["state"] for pid, r in result["proposals"].items()}
+    assert "blocked" in states.values() and "pr_opened" in states.values()
+    blocked_reasons = [r["reason"] for r in result["proposals"].values() if r["state"] == "blocked"]
+    assert blocked_reasons == ["pen create failed: fleet cache empty"]
 ```
 
 - [ ] **Step 8: Run to confirm failure**
@@ -2723,15 +2650,20 @@ def run_apply_dependency_bump(
     *, finding_ref, authorization_path, ledger_path, step_id, actor_id, runner,
     gh_api=None, gh_ops, result_path, workspace,
 ) -> dict:
-    """Collect-once, rederive-many, one shared pen, sequential fenced runs.
-    Fences and journals EACH manager-group proposal independently (its own
-    step_id, its own result_path) — never one `run_apply` per finding,
-    since that would collapse N proposals' independent journals into one.
-    Provisions exactly ONE Nave pen up front, covering the union of every
-    proposal's selection, because `nave pen create` is not idempotent: a
-    second call with a colliding name silently creates `{name}-2` rather
-    than erroring, which would silently defeat sharing without any visible
-    failure.
+    """Collect-once, rederive-many, sequential fenced runs — one per
+    manager-group proposal. Fences and journals EACH proposal
+    independently (its own step_id, its own result_path, its own pen) —
+    never one `run_apply` per finding, since that would collapse N
+    proposals' independent journals into one, AND never a pen shared
+    across proposals: `nave pen exec --only` restricts execution to a
+    single repo, not a repo list, so a pen spanning two disjoint manager
+    groups would have no way to keep one group's command_argv off the
+    other's clones (spec § 4.7). Each `run_apply` call below creates its
+    own pen via its existing, unmodified logic (`pulse-apply-{proposal.id}`);
+    proposal ids already differ per manager (`bump_proposal_id` embeds
+    `{manager}`), so there is no name collision to guard against by
+    sharing, and a pen-create failure for one manager group only blocks
+    that group's own result — the others still run.
 
     Unlike the 4 pre-existing source kinds (which pass `io_seams.registry
     =None` and defer registry loading to `_entry`, right before exec),
@@ -2769,18 +2701,6 @@ def run_apply_dependency_bump(
             actor=actor, workspace=workspace,
         )
 
-    union_repos = sorted({repo for rp in rederived_list for repo in rp.proposal.selection})
-    digest = hashlib.sha256(",".join(union_repos).encode()).hexdigest()[:12]
-    shared_pen_name = f"pulse-apply-bump-{digest}"
-    handle = nave_adapter.pen_create(
-        runner, nave_adapter.PenQuery(terms=["repo:" + "|".join(union_repos)]), shared_pen_name
-    )
-    if handle.state != "ok":
-        return _write_failure(
-            result_path, state="blocked",
-            reason=handle.stderr or "pen create failed", actor=actor, workspace=workspace,
-        )
-
     results: dict[str, dict] = {}
     for rederived in rederived_list:
         manager = apply_rederive._manager_for(rederived.proposal.transformation)
@@ -2794,7 +2714,6 @@ def run_apply_dependency_bump(
             step_id=f"{step_id}.{rederived.proposal.id}", actor_id=actor_id, runner=runner,
             gh_api=gh_api, gh_ops=gh_ops, result_path=f"{result_path}.{manager}",
             workspace=workspace, inputs_override=inputs, rederived_override=rederived,
-            pen_name=shared_pen_name,
         )
 
     rollup = apply_reconcile.rollup_state(
@@ -2802,8 +2721,6 @@ def run_apply_dependency_bump(
     )
     return {"state": rollup, "proposals": results}
 ```
-
-Add `import hashlib` to the top of `apply_driver.py` if not already imported (`bump_proposal_id`'s digest logic is already imported via `apply_rederive`, but this function's own `union_repos` digest needs it directly).
 
 - [ ] **Step 10: Run to confirm all 3 pass**
 
@@ -2949,7 +2866,7 @@ Create `lib/pulse/scripts/tests/test_dependency_bump_acceptance.py`. Model it cl
 
 ```python
 """Dependency-bump handoff acceptance test (F11 <- F4): one finding, two
-manager groups, one shared pen, two independent fenced proposal runs."""
+manager groups, two independent fenced proposal runs (each its own pen)."""
 
 from __future__ import annotations
 
@@ -2999,17 +2916,6 @@ def _inputs():
 def test_finding_to_two_manager_proposals_to_pr_opened(monkeypatch, tmp_path):
     monkeypatch.setattr(apply_driver.apply_rederive, "collect_inputs", lambda *a, **k: _inputs())
 
-    pen_create_calls = []
-
-    def fake_pen_create(runner, query, name):
-        pen_create_calls.append(name)
-        return SimpleNamespace(state="ok", pen={"name": name, "repos": [
-            {"owner": "acme", "repo": "uv-repo", "clone_path": str(tmp_path / "uv-repo")},
-            {"owner": "acme", "repo": "poetry-repo", "clone_path": str(tmp_path / "poetry-repo")},
-        ]}, stderr=None)
-
-    monkeypatch.setattr(apply_driver.nave_adapter, "pen_create", fake_pen_create)
-
     proposal_states = {}
 
     def fake_run_apply(**kwargs):
@@ -3032,14 +2938,13 @@ def test_finding_to_two_manager_proposals_to_pr_opened(monkeypatch, tmp_path):
         workspace=str(tmp_path),
     )
 
-    assert len(pen_create_calls) == 1, "exactly one shared pen across both manager groups"
     assert result["state"] == "pr_opened"
     assert len(result["proposals"]) == 2
     assert len(proposal_states) == 2
     for proposal_id, kwargs in proposal_states.items():
         rp = kwargs["rederived_override"]
         assert rp.proposal.transform_params == {"package": "requests", "version": "2.31.0"}
-        assert kwargs["pen_name"] == pen_create_calls[0]
+        assert "pen_name" not in kwargs, "each proposal must own its own pen — never shared"
         assert kwargs["step_id"] == f"dep-bump-1.{proposal_id}"
         assert kwargs["result_path"].endswith((".uv", ".poetry"))
     transforms = {kwargs["rederived_override"].proposal.transformation for kwargs in proposal_states.values()}
@@ -3110,7 +3015,7 @@ This step is executed against the real fleet, not the automated suite — read a
    ```
 
 4. **Run** `python -m lib.pulse.scripts.apply_driver --source-kind dependency-bump --finding-ref '{"group":"<group-id>","ecosystem":"python","package":"<package>"}' --authorization <path-to-apply-authorization.yaml> --ledger <tmp>/ledger.yaml --step live-proof-1 --actor <you>@<machine> --result <tmp>/result.yaml --workspace <hiivmind-workspace-checkout-path>` against the real Nave binary (no `--fixtures`).
-5. **Verify**: exactly one Nave pen was created (check `nave pen status --json` or the pen directory listing — no `-2`-suffixed sibling pen); two branches exist (`pulse/apply/apply-bump-python-<package>-uv-<hash>` and, if multi-manager, the `-poetry-<hash>` sibling); two PRs opened, each with the expected `{package}=={target}` diff in exactly its repo's manifest/lock; `result["state"] == "pr_opened"`.
+5. **Verify**: two independent Nave pens were created, one per manager group (check `nave pen status --json` or the pen directory listing — each pen's clones are disjoint from the other's, never combined); two branches exist (`pulse/apply/apply-bump-python-<package>-uv-<hash>` and, if multi-manager, the `-poetry-<hash>` sibling); two PRs opened, each with the expected `{package}=={target}` diff in exactly its repo's manifest/lock; `result["state"] == "pr_opened"`.
 6. **Merge** both PRs, then run `apply_reconcile.reconcile_apply` (or the existing `apply_reconcile.py` CLI) against each `result_path` to confirm both transition to `applied`.
 7. **Clean up**: this is a REAL mutation against REAL repos — do not leave the live-proof's `dependencies.yaml`/`apply-authorization.yaml` entries in place if the chosen pair was only a proof vehicle and not a genuine ongoing coherence policy; ask the user whether to keep or revert them before finishing this step.
 
@@ -3122,7 +3027,7 @@ Do not mark this step done until the real PRs have been observed opened and merg
 
 - [ ] `uv run pytest lib/pulse/scripts/tests/ -q` — full pulse-gh suite green.
 - [ ] `cargo test` in `~/git/discreteds/nave` — full nave workspace suite green.
-- [ ] Live-proof runbook (Task 9 Step 5) executed against real repos: pen created once, two PRs opened, both merged, both reconciled to `applied`.
+- [ ] Live-proof runbook (Task 9 Step 5) executed against real repos: one pen created per manager-group proposal (never shared), two PRs opened, both merged, both reconciled to `applied`.
 - [ ] Re-read `docs/superpowers/specs/2026-08-15-dependency-bump-handoff-design.md` § 5 (error handling table) and § 6 (testing plan) line by line, confirming every row has a corresponding test written in Tasks 1-9. If any row is uncovered, add the missing test before declaring this plan complete.
 
 ## Execution Handoff

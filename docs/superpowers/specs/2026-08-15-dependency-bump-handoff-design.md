@@ -282,14 +282,23 @@ by the divergence filter (§ 4.4 step 4). These are intended semantics, not a bu
   `{binding: <finding_ref>, transformation: <bump transform>, proposal_id, target}`), mirroring the
   driver's existing `source_kind == "neutral"` synthesis branch (no propose phase). The `target` is
   included for human review even though it is not in the id.
-- **Multi-manager fan-out is collect-once → rederive-many.** The existing spine is strictly
-  one-in/one-out (`collect_inputs → ProviderInputs` → `rederive → RederivedProposal` → `run_apply`
-  fences **one** proposal). `dependency-bump` must not silently paper over this:
-  `_collect` materializes F4 evidence **once** and resolves the finding **once**; `_rederive`
-  returns the list of per-manager proposals; the driver **authorizes each, then fences and runs
-  each sequentially** — one journal/ledger step per proposal id, a shared pen (manager groups are
-  disjoint repo sets with one argv each). N independent `run_apply` invocations are **not**
-  acceptable (they would re-materialize F4 evidence N× and race themselves).
+- **Multi-manager fan-out is collect-once → rederive-many, run independently per manager.** The
+  existing spine is strictly one-in/one-out (`collect_inputs → ProviderInputs` → `rederive →
+  RederivedProposal` → `run_apply` fences **one** proposal). `dependency-bump` must not silently
+  paper over this: `_collect` materializes F4 evidence **once** and resolves the finding **once**;
+  `_rederive` returns the list of per-manager proposals; the driver **authorizes each, then fences
+  and runs each sequentially** — one journal/ledger step per proposal id, one Nave pen per proposal
+  (never shared). N independent `run_apply` invocations that each re-collect are **not** acceptable
+  (they would re-materialize F4 evidence N× and race themselves) — but each already-collected
+  proposal still runs through its own pen, because `nave pen exec --only` restricts execution to a
+  **single** repo (matched by bare name or `owner/name`), not a repo list: a pen spanning two
+  disjoint manager groups has no way to scope one group's `command_argv` invocation away from the
+  other's clones, and running (say) `uv add` inside a `poetry`-managed clone that happens to share
+  the pen would corrupt it. `bump_proposal_id` already embeds `{manager}`, so each manager-group
+  proposal's id — and therefore its default pen name (`pulse-apply-{proposal.id}`, the existing
+  single-/multi-repo convention, unchanged) — is unique by construction; there is no `nave pen
+  create` name-collision risk to guard against, so nothing is gained by forcing proposals to share
+  one pen, and doing so would only reintroduce the cross-manager corruption risk above.
 - **Authorization** is the existing `apply_authorization.authorize` over `permitted_repos` +
   per-repo `bound_paths`; the workspace `apply-authorization.yaml` must authorize the manifest/lock
   paths for the bump transformation (a data change in `hiivmind/hiivmind-workspace`, not code).
