@@ -1,6 +1,6 @@
 # hiivmind-pulse-gh — fleet program roadmap & backlog index
 
-**Updated:** 2026-08-17 (agent-native fleet UI captured) · **One-page map of what is built, what is left, and where each item lives.**
+**Updated:** 2026-08-17 (Nave Python bindings item captured) · **One-page map of what is built, what is left, and where each item lives.**
 
 > Read in this order: **Status at a glance** (what shipped) → **Layer-completeness matrix**
 > (is it actually *runnable*) → **Cross-repo dependency map** (which repos an item spans) →
@@ -194,8 +194,9 @@ side's interactive path now runs too — single-repo, multi-repo (#147), and dep
 | **Single-repo-atomic Path A push** — only if a future Nave surface yields per-repo exec signal | [`2026-07-29-apply-mode-v2-deferrals.md`](2026-07-29-apply-mode-v2-deferrals.md) § B |
 | **Non-neutral multi-repo** — plan-sync / generated-artifact / marketplace-sync remain single-repo; the driver/reconcile are source-agnostic but their fleet binding shapes need a spec | [`2026-08-15-multi-repo-apply-design.md`](../superpowers/specs/2026-08-15-multi-repo-apply-design.md) § 10 |
 | **F8: GitHub Projects (v2) field sync** — sync a bound doc against a linked Project item's custom fields (Status, Priority, Iteration, arbitrary user fields), not just the issue's own title/state/assignees/milestone/body. GraphQL-only surface, no write path exists yet, issue↔project cardinality (0..N) needs resolving. Design first. | [`2026-08-17-f8-projects-v2-field-sync.md`](2026-08-17-f8-projects-v2-field-sync.md) |
-| **Extract `lib/pulse` as a standalone Python package** — 53 scripts invoked by `{PLUGIN_ROOT}`-relative path from every skill, no real install/version, only 2 of 53 have entry points. Concretizes audit F7's "neutral runtime root" recommendation; mirrors the Nave extraction precedent for the Python half. Design first (PEP-723-vs-installed-package fork). | [`2026-08-17-lib-pulse-package-extraction.md`](2026-08-17-lib-pulse-package-extraction.md) |
-| **Agent-native fleet UI** — a visual app (BuilderIO `agent-native`) presenting projects/statuses/workflows/issues, surfacing discrepancies (`findings`) and approvals from the existing typed result contracts, with an LLM agent panel that can invoke skills/`lib/pulse`/Nave tasks. Largest-scope open item; depends on `lib/pulse` extraction landing first. Design first. | [`2026-08-17-agent-native-fleet-ui.md`](2026-08-17-agent-native-fleet-ui.md) |
+| **Extract `lib/pulse` as a standalone Python package** — 53 scripts invoked by `{PLUGIN_ROOT}`-relative path from every skill, no real install/version, only 2 of 53 have entry points. Concretizes audit F7's "neutral runtime root" recommendation; mirrors the Nave extraction precedent for the Python half. **Amended:** must ship as an importable SDK (FastAPI-consumable in-process), not just a CLI — the layer-1/driver/skill split already exists in code. | [`2026-08-17-lib-pulse-package-extraction.md`](2026-08-17-lib-pulse-package-extraction.md) |
+| **Nave native Python bindings (PyO3)** — `discreteds/nave` already ships a Python wheel, but `bindings = "bin"` (wraps the CLI binary, still subprocess). Real in-process bindings would wrap the workspace's existing library crates (`nave_pen`, `nave_apply`, etc. — already `pub fn`/`pub struct`, already serde-typed). `nave`-repo scope; async (tokio) bridging and `bin`-vs-`pyo3` coexistence are open forks. Design first. | [`2026-08-17-nave-python-bindings.md`](2026-08-17-nave-python-bindings.md) |
+| **Agent-native fleet UI** — a visual app (BuilderIO `agent-native`) presenting projects/statuses/workflows/issues, surfacing discrepancies (`findings`) and approvals from the existing typed result contracts, with an LLM agent panel that can invoke skills/`lib/pulse`/Nave tasks. Largest-scope open item; resolved cross-language direction is a FastAPI service (not raw subprocess shell-out) fronting both the `lib/pulse` SDK and Nave bindings above. Design first. | [`2026-08-17-agent-native-fleet-ui.md`](2026-08-17-agent-native-fleet-ui.md) |
 
 ### ⚪ Non-goals & tooling (recorded so they aren't re-proposed)
 - **Auto-merge** — permanent non-goal; Pulse opens PRs and detects merges, never merges. ([apply-mode v2](2026-07-29-apply-mode-v2-deferrals.md) § C)
@@ -230,7 +231,8 @@ side's interactive path now runs too — single-repo, multi-repo (#147), and dep
 - [`2026-07-13-nave-json-lifecycle-protocol.md`](2026-07-13-nave-json-lifecycle-protocol.md) — upstream Nave protocol proposal
 - [`2026-07-11-relationships-schema-drift.md`](2026-07-11-relationships-schema-drift.md) — schema-drift correctness bug
 - [`2026-08-17-f8-projects-v2-field-sync.md`](2026-08-17-f8-projects-v2-field-sync.md) — F8 Projects (v2) custom-field sync, no-spec capability gap
-- [`2026-08-17-lib-pulse-package-extraction.md`](2026-08-17-lib-pulse-package-extraction.md) — extract `lib/pulse` as a standalone Python package, no-spec architectural item
+- [`2026-08-17-lib-pulse-package-extraction.md`](2026-08-17-lib-pulse-package-extraction.md) — extract `lib/pulse` as a standalone Python package (SDK-amended), no-spec architectural item
+- [`2026-08-17-nave-python-bindings.md`](2026-08-17-nave-python-bindings.md) — Nave native Python (PyO3) bindings, no-spec, `nave`-repo scope
 - [`2026-08-17-agent-native-fleet-ui.md`](2026-08-17-agent-native-fleet-ui.md) — agent-native visual fleet UI proposal, no-spec, largest open item
 - [`2026-07-11-workspace-config-stale-catalog.md`](2026-07-11-workspace-config-stale-catalog.md) — stale workspace data
 

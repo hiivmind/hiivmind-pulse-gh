@@ -104,6 +104,44 @@ artifact, consumed by the plugin rather than living inside it.
   patterns + a declared dependency on the extracted package, not a repo that
   vendors 53 implementation modules alongside its plugin surface.
 
+## Amendment (2026-08-17): must be designed as an SDK, not just a CLI
+
+Follow-up to `2026-08-17-agent-native-fleet-ui.md`'s cross-language action
+boundary: shelling out from a Node/FastAPI-adjacent service to an installed
+CLI and parsing stdout works, but it re-imposes a serialization/subprocess
+boundary on every call — exactly the cost a proper extraction should let
+consumers avoid for in-process (or same-host-HTTP) callers. The likely
+resolution is a **FastAPI service** sitting in front of `lib/pulse`, calling
+its functions **in-process** (`import`, not `subprocess`), with the
+CLI/`uv run` story remaining for direct human/script invocation. That means
+extraction's primary deliverable is an **importable SDK with stable,
+typed, keyword-argument function signatures** — CLI entry points become one
+consumer of that SDK, not the whole product.
+
+**This is closer than it looks.** The codebase already enforces exactly this
+separation as an internal convention — `README.md`'s layer-completeness
+ladder names it explicitly: *"1. Library — pure Python that owns the
+decisions... 2. Driver — an argparse CLI... 3. Skill."* Confirmed in code:
+`plan_sync.build_result(snapshot, *, workspace, ...)`,
+`apply_reconcile.reconcile_apply(*, ledger_path, step_id, ...)`,
+`apply_rederive.collect_inputs(source_kind, binding_ref, recorded_summary, ...)`
+are already pure, keyword-argument, argparse-free functions — the "driver"
+layer (`*_run.py`'s `main()`) already exists only to parse CLI args and call
+into them. A FastAPI layer's request handlers would call these same layer-1
+functions directly; the work is exporting them as a package's public API
+(real `__init__.py` surface, stable signatures, versioned) and giving FastAPI
+something importable to call — not rewriting the decision logic.
+
+**Consequence for the PEP-723-vs-installed-package fork above:** this
+resolves it rather than leaving it purely open — the package needs
+`[project.dependencies]` and to be pip/uv-installable **regardless**, because
+an in-process FastAPI import cannot rely on PEP 723's `uv run <file>.py`
+self-containment (that mechanism only helps a fresh subprocess invocation,
+not a long-lived service process holding an import). Whether PEP 723 headers
+are *additionally* kept per-script for standalone `uv run` ergonomics is now
+a secondary, non-blocking decision — the installed-package form is required
+either way once a FastAPI consumer exists.
+
 ## Evidence
 
 - `pyproject.toml` (root) — `name = "hiivmind-pulse-gh-dev"`, `version = "0.0.0"`,
@@ -121,6 +159,10 @@ artifact, consumed by the plugin rather than living inside it.
 - `~/git/discreteds/nave` (this workspace) — the working precedent: an
   extracted, independently released, subprocess-consumed engine already
   proven for the Rust half of this program.
+- `README.md` (this repo) — the layer-completeness ladder already documents
+  the library/driver/skill separation this amendment leans on; `plan_sync.py`,
+  `apply_reconcile.py`, `apply_rederive.py` confirm pure, typed, keyword-only
+  library-layer function signatures already exist independent of argparse.
 
 ## Notes
 
