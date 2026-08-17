@@ -1,3 +1,10 @@
+> **ARCHIVED 2026-08-17.** Implementation complete — kept for historical
+> reference only. See
+> `docs/superpowers/archive/specs/2026-07-10-workspace-root-and-headless-orchestration-design.md`
+> §8.9 for original phase tracking.
+>
+> ---
+
 # P5 — hiivmind-pulse-scheduler Implementation Plan (completes goal 1)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
