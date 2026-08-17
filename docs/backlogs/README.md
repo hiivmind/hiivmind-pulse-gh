@@ -1,6 +1,6 @@
 # hiivmind-pulse-gh — fleet program roadmap & backlog index
 
-**Updated:** 2026-08-17 (Nave Python bindings item captured) · **One-page map of what is built, what is left, and where each item lives.**
+**Updated:** 2026-08-17 (branch-governance, stale-branch, stale-release gaps captured) · **One-page map of what is built, what is left, and where each item lives.**
 
 > Read in this order: **Status at a glance** (what shipped) → **Layer-completeness matrix**
 > (is it actually *runnable*) → **Cross-repo dependency map** (which repos an item spans) →
@@ -197,6 +197,9 @@ side's interactive path now runs too — single-repo, multi-repo (#147), and dep
 | **Extract `lib/pulse` as a standalone Python package** — 53 scripts invoked by `{PLUGIN_ROOT}`-relative path from every skill, no real install/version, only 2 of 53 have entry points. Concretizes audit F7's "neutral runtime root" recommendation; mirrors the Nave extraction precedent for the Python half. **Amended:** must ship as an importable SDK (FastAPI-consumable in-process), not just a CLI — the layer-1/driver/skill split already exists in code. | [`2026-08-17-lib-pulse-package-extraction.md`](2026-08-17-lib-pulse-package-extraction.md) |
 | **Nave native Python bindings (PyO3)** — `discreteds/nave` already ships a Python wheel, but `bindings = "bin"` (wraps the CLI binary, still subprocess). Real in-process bindings would wrap the workspace's existing library crates (`nave_pen`, `nave_apply`, etc. — already `pub fn`/`pub struct`, already serde-typed). `nave`-repo scope; async (tokio) bridging and `bin`-vs-`pyo3` coexistence are open forks. Design first. | [`2026-08-17-nave-python-bindings.md`](2026-08-17-nave-python-bindings.md) |
 | **Agent-native fleet UI** — a visual app (BuilderIO `agent-native`) presenting projects/statuses/workflows/issues, surfacing discrepancies (`findings`) and approvals from the existing typed result contracts, with an LLM agent panel that can invoke skills/`lib/pulse`/Nave tasks. Largest-scope open item; resolved cross-language direction is a FastAPI service (not raw subprocess shell-out) fronting both the `lib/pulse` SDK and Nave bindings above. Design first. | [`2026-08-17-agent-native-fleet-ui.md`](2026-08-17-agent-native-fleet-ui.md) |
+| **Fleet-wide branch-protection / ruleset governance parity** (branch-name-filter drift across repos) — `gh-healthcheck` only audits the *default* branch per repo; ruleset glob-pattern matching already exists in code (`adapters/generic.py`) but only to confirm default-branch coverage, never surfaced as cross-repo protected-branch-pattern drift or reconciled against a declared standard. Captured as an unstarted shortlist entry, not previously linked from this index. Design first (needs a golden-governance-spec conversation). | [`governance-parity` § 3.6.3](../superpowers/specs/2026-07-10-lockstep-bindings-and-target-workflows-design.md) — status `proposed`, priority PR3 (do not start), gated on P3.2 + P4 |
+| **Stale merged branches** — a PR's branch can survive its own merge (delete-on-merge disabled, or merged outside the UI); nothing detects or cleans these up fleet-wide today. Disjoint from `stale-check.yaml` (which covers *open*, untouched PRs/issues, not already-merged branches). Design first. | [`2026-08-17-stale-merged-branches.md`](2026-08-17-stale-merged-branches.md) |
+| **Stale release-candidate releases/branches** — a GitHub Release stuck `prerelease`/`draft`, or a `release/*` branch whose PR into `main` stalls, both go unaudited today; `release-monitor.yaml` only reacts to newly-published releases, `release-train.yaml` has no abandonment/timeout handling. Design first. | [`2026-08-17-stale-release-candidates.md`](2026-08-17-stale-release-candidates.md) |
 
 ### ⚪ Non-goals & tooling (recorded so they aren't re-proposed)
 - **Auto-merge** — permanent non-goal; Pulse opens PRs and detects merges, never merges. ([apply-mode v2](2026-07-29-apply-mode-v2-deferrals.md) § C)
@@ -234,6 +237,9 @@ side's interactive path now runs too — single-repo, multi-repo (#147), and dep
 - [`2026-08-17-lib-pulse-package-extraction.md`](2026-08-17-lib-pulse-package-extraction.md) — extract `lib/pulse` as a standalone Python package (SDK-amended), no-spec architectural item
 - [`2026-08-17-nave-python-bindings.md`](2026-08-17-nave-python-bindings.md) — Nave native Python (PyO3) bindings, no-spec, `nave`-repo scope
 - [`2026-08-17-agent-native-fleet-ui.md`](2026-08-17-agent-native-fleet-ui.md) — agent-native visual fleet UI proposal, no-spec, largest open item
+- [`2026-08-17-agent-native-fleet-ui-prior-art.md`](2026-08-17-agent-native-fleet-ui-prior-art.md) — prior-art research (Cortex.io/Port.io/OpsLevel/Backstage): the fleet-UI job-to-be-done is already sold by agentic IDPs; surfaces a build-vs-buy-vs-wedge fork
+- [`2026-08-17-stale-merged-branches.md`](2026-08-17-stale-merged-branches.md) — detect/clean up already-merged, undeleted branches across the fleet, no-spec
+- [`2026-08-17-stale-release-candidates.md`](2026-08-17-stale-release-candidates.md) — detect stale prerelease/draft releases and stalled `release/*` branches, no-spec
 - [`2026-07-11-workspace-config-stale-catalog.md`](2026-07-11-workspace-config-stale-catalog.md) — stale workspace data
 
 > Design-of-record for built/planned phases lives under `../superpowers/plans/` and
