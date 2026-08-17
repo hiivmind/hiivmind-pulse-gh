@@ -30,7 +30,7 @@ on cadence and surface proposals in the maintenance PR). The **apply** side's in
 | F5 | Impact bindings / `integration_tested_sha` markers | ✅ merged (#129) |
 | F6 | Nave pen mutations (propose) | ✅ merged (#130/#132) |
 | F7 | Binding specializations / generated artifacts | ✅ merged (#133) |
-| F8 | Generic plan sync | ✅ merged (#134) |
+| F8 | Generic plan sync | ✅ merged (#134) — driver `gh_api` wiring bug found + fixed, reconciliation live-proven (#151, 2026-08-16) |
 | F9 | Dogfood overlays (Claude plugin/corpus) | ✅ merged (#136) |
 | **F10** | **Runnable spine** (CLI drivers + triggers for F6–F9) | ✅ **complete** — spine #139; proposal fold #140; enrolled live (workspace #2). "Triggered end-to-end" gate **closed**. |
 | F11 | Apply-mode (land a validated proposal) | ✅ merged (#138) — library+tests; **interactive driver + multi-repo apply v2 merged (#147); dependency-bump handoff merged (#149), both live-proven.** Scheduled/deployed apply, `advance_base`, and `allow` remain open. |
@@ -65,7 +65,7 @@ Every phase is a five-layer ladder. A phase **runs in production** only when all
 | F5 impact bindings | ✅ | ✅ | ✅ | ✅ `periodic` | ✅ (#2) | ✅ — `impact-audit` on cadence |
 | F6 pen mutations | ✅ | ✅ (F10) | ✅ (F10) | ✅ `periodic` | ✅ (#2) | ✅ — proposals fold to PR body (#140) |
 | F7 generated artifacts | ✅ | ✅ (F10) | ✅ (F10) | ✅ `periodic` | ✅ (#2) | ⚠️ enrolled; validated-abort until `generated.yaml` binding exists |
-| F8 plan sync | ✅ | ✅ (F10) | ✅ (F10) | ✅ `periodic` | ✅ (#2) | ⚠️ enrolled; validated-abort until `plan-sync.yaml` binding exists |
+| F8 plan sync | ✅ | ✅ (F10) | ✅ (F10) | ✅ `periodic` | ✅ (#2) | ⚠️ reconciliation live-proven (#151, `hiivmind-pulse-gh#152`); no permanent binding deployed |
 | F9 dogfood overlays | ✅ | ✅ (F10) | ✅ (F10) | ✅ `periodic` | ✅ (#2) | ✅ — via healthcheck + `marketplace-sync` |
 | **F10 runnable spine** | ✅ | ✅ | ✅ | ✅ `periodic` + 4 flips | ✅ (#2) | ✅ — **gate closed** (fold #140 + enroll #2) |
 | F11 apply-mode | ✅ | ✅ `apply_driver` (interactive, multi-repo v2, dependency-bump) | ⚠️ `gh-apply` (interactive, single-repo prose — now stale on 2 counts) | ❌ | ❌ | ⚠️ interactive proven live (incl. dependency-bump); scheduled sweep + `advance_base` open |
@@ -73,10 +73,24 @@ Every phase is a five-layer ladder. A phase **runs in production** only when all
 **Legend:** ✅ built & deployed · ⚠️ exists but not fully exercised yet · ❌ absent.
 
 **F10 is closed: F5–F10 column 5 is now live** (proposal fold `hiivmind-pulse-gh` #140 +
-enrollment `hiivmind/hiivmind-workspace` #2, both merged 2026-07-30). The remaining ⚠️ on F7/F8
-is a *data* gap, not a code gap — the trigger fires but there is no bound work until the
-`generated.yaml` / `plan-sync.yaml` binding files are added to the workspace (non-destructive
-validated-abort until then). F11's interactive driver is now lit (live-proven, incl. the F11 dependency-bump handoff #149); only the scheduled/deployed apply layers remain dark.
+enrollment `hiivmind/hiivmind-workspace` #2, both merged 2026-07-30). F7's remaining ⚠️ is
+a *data* gap, not a code gap — the trigger fires but there is no bound work until the
+`generated.yaml` binding file is added to the workspace (non-destructive validated-abort until
+then). **F8 is different**: a live-proof (2026-08-16) found and fixed a real driver bug —
+`plan_sync_run.py` never wired a real `gh_api` seam into its GitHub reads, so every scheduled
+run failed every issue fetch with "GitHub API reader is unavailable" regardless of binding
+config (PR #151). After the fix, all four reconciliation paths were proven against a real
+bound doc + issue (`hiivmind-pulse-gh#152`): in_sync, github-side field drift → doc-side F6
+proposal, doc-side drift → GitHub issue proposal, and a three-way conflict correctly
+fail-closing the whole document (not just the conflicting field). The proof-vehicle binding
+was removed afterward (`hiivmind-workspace`#4/#5) — no permanent `plan-sync.yaml` binding is
+deployed, so F8 still does no real work on cadence, but the driver itself is now proven
+correct. F11's interactive driver is now lit (live-proven, incl. the F11 dependency-bump
+handoff #149); only the scheduled/deployed apply layers remain dark. (The live-proof
+also found `~/git/hiivmind/.hiivmind/github` — the actual `CONFIG_DIR` root every driver
+reads — sitting on an already-merged branch tip several commits behind `origin/main`,
+distinct from the separate `~/git/hiivmind/hiivmind-workspace` checkout used for git
+operations; fast-forwarded it back onto `main` as part of the proof.)
 
 ### Two flow facts that broke specs on contact (record so they stop recurring)
 
@@ -157,6 +171,7 @@ side's interactive path now runs too — single-repo, multi-repo (#147), and dep
 | Item | Why it matters | Source |
 |---|---|---|
 | **`relationships.yaml` schema drift** | Produces a **wrong healthcheck result** — the only active correctness bug. Needs a decision on which side (schema vs `evaluate_checks.py`) is authoritative. | [`2026-07-11-relationships-schema-drift.md`](2026-07-11-relationships-schema-drift.md) |
+| ~~**F8 driver never fetched real GitHub evidence**~~ ✅ **FIXED 2026-08-16** | `plan_sync_run.py` never wired a real `gh_api` seam into its real (non-injected) collector call, so every scheduled run failed every issue read with "GitHub API reader is unavailable" — masked because the only end-to-end test injected a full `collector=` override. Found live-testing F8; fixed and all four reconciliation paths (in_sync, both patch directions, conflict fail-closed) proven against real data. | `hiivmind-pulse-gh#151` |
 | **Stale workspace repo catalog** | Wrong repo catalog in the dogfood workspace config (`~/git/hiivmind/.hiivmind/github/config.yaml`) — data, not code. | [`2026-07-11-workspace-config-stale-catalog.md`](2026-07-11-workspace-config-stale-catalog.md) |
 
 ### 🟡 P3 — Nave / upstream / installability
