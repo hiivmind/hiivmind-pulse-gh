@@ -74,16 +74,19 @@ story for the "projects, statuses" half of the ask.
 
 ## What this would require (real scope)
 
-- **A cross-language action boundary.** agent-native is TypeScript/Node;
-  `lib/pulse/scripts/*.py` and `nave` are Python and Rust, invoked today by
-  subprocess (`uv run <script>.py`, `nave <verb>`) from Bash-driven skills.
-  Each agent-native `defineAction()`'s `run()` body would shell out to those
-  same binaries/scripts — this is exactly the boundary
-  `2026-08-17-lib-pulse-package-extraction.md` is about cleaning up (real
-  console entry points, no `{PLUGIN_ROOT}`-relative path coupling). **This
-  item is a direct downstream consumer of that one** — a Node process has no
-  natural way to resolve a Claude-plugin-root-relative script path; it needs
-  an installed CLI to shell out to.
+- **A cross-language action boundary — resolved direction: FastAPI, not raw
+  subprocess shell-out.** agent-native is TypeScript/Node; `lib/pulse` is
+  Python, `nave` is Rust. Rather than each `defineAction()`'s `run()` body
+  shelling out to a CLI per call, the likely shape is agent-native calling a
+  **FastAPI service** fronting `lib/pulse` (in-process Python calls) and,
+  once bound, Nave (in-process Rust calls via PyO3) — see the amendment in
+  `2026-08-17-lib-pulse-package-extraction.md` and the new
+  `2026-08-17-nave-python-bindings.md`. This item still depends on both
+  landing first: a Node process has no natural way to resolve a
+  Claude-plugin-root-relative script path or reach into a Python/Rust
+  process's memory directly, so an HTTP boundary (FastAPI) is the
+  connecting layer regardless of whether the Python/Rust side is
+  subprocess- or import-based underneath it.
 - **A read model for existing result contracts and committed state.** Actions
   reading `*-result.yaml` (per-machine, gitignored, transient — see
   `workspace-detection.md` § multi-machine topology), the committed
@@ -127,7 +130,11 @@ story for the "projects, statuses" half of the ask.
   pipeline; the closest existing analog to "visually present projects,
   statuses" today, currently only consumed by `gh-heartbeat`'s text summary.
 - `docs/backlogs/2026-08-17-lib-pulse-package-extraction.md` — the
-  prerequisite cross-language boundary problem this item inherits directly.
+  prerequisite cross-language boundary problem this item inherits directly,
+  now amended with the FastAPI/SDK resolution direction.
+- `docs/backlogs/2026-08-17-nave-python-bindings.md` — the Rust-side
+  counterpart: native Nave bindings so the FastAPI layer can reach Nave
+  in-process too, not just `lib/pulse`.
 - `docs/superpowers/specs/2026-07-30-apply-mode-production-wiring-design.md`
   — the lease/fence/journal apply-mode machinery an "Approve" button must
   drive through, not bypass.
@@ -138,5 +145,6 @@ Design-first, and the largest single open item in this backlog by scope — a
 new application, a new hosting/identity model, and a cross-language action
 boundary, not a change inside `hiivmind-pulse-gh`. Should get its own
 `brainstorming` → spec pass, and its sequencing should be considered relative
-to `2026-08-17-lib-pulse-package-extraction.md` (this item's cleanest path
-runs through that one landing first).
+to `2026-08-17-lib-pulse-package-extraction.md` and
+`2026-08-17-nave-python-bindings.md` (this item's cleanest path runs through
+both landing first).
