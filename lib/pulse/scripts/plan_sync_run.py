@@ -31,6 +31,7 @@ from lib.pulse.scripts import (
     plan_sync_snapshot,
     validate_result,
 )
+from lib.pulse.scripts.overlay_content import default_gh_api
 
 Collector = Callable[..., Any]
 
@@ -177,7 +178,7 @@ def run_driver(
             return 1
         bindings = matched
 
-    snapshot = collect(bindings, workdir=workspace)
+    snapshot = collect(bindings, workdir=workspace, gh_api=default_gh_api)
     registry = load_transformation_registry(workspace)
 
     result_data = plan_sync.build_result(

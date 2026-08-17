@@ -194,3 +194,34 @@ def test_plan_sync_run_cli_abort_on_missing_plan_sync_yaml(tmp_path):
     assert "plan-sync.yaml not found" in data["errors"][0]
     assert str(config_dir / "plan-sync.yaml") in data["errors"][0]
     assert validate_result.validate(data, "plan-sync") == []
+
+
+def test_plan_sync_run_wires_real_gh_api_into_real_collector(tmp_path, monkeypatch):
+    """Regression: run_driver's real (non-injected) collector call must wire a
+    real gh_api seam. plan_sync_snapshot.collect() defaults gh_api to None,
+    and _github_snapshot() unconditionally fails every GitHub read with
+    "GitHub API reader is unavailable" when gh_api is None — so an unwired
+    driver can never fetch real issue evidence, regardless of how correct the
+    binding config is. Bindings themselves are irrelevant here: an empty
+    docs[] list still exercises the real collect() call and its gh_api kwarg.
+    """
+    config_dir = tmp_path / ".hiivmind" / "github"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config.yaml").write_text(yaml.dump({"workspace": {"login": "acme"}}))
+    (config_dir / "plan-sync.yaml").write_text(yaml.dump({"docs": []}))
+
+    captured = {}
+
+    def fake_collect(bindings, workdir=None, runner=None, gh_api=None):
+        captured["gh_api"] = gh_api
+        return plan_sync_snapshot.SyncSnapshot((), ())
+
+    monkeypatch.setattr(plan_sync_snapshot, "collect", fake_collect)
+
+    ret = plan_sync_run.run_driver(
+        workspace=tmp_path, repo_filter=None, result_path=tmp_path / "result.yaml",
+    )
+
+    assert ret == 0
+    assert captured["gh_api"] is not None
+    assert callable(captured["gh_api"])
