@@ -65,7 +65,9 @@ in trigger condition, data source, or remediation.
   file.
 - Grepped `stale_branch|merged_branch|delete_branch|branch_cleanup|dangling`
   across `lib/pulse/scripts/`, `skills/`, `docs/backlogs/`: zero matches.
-- `docs/superpowers/plans/2026-07-10-p5-pulse-scheduler.md:175-177` —
+- `docs/superpowers/archive/plans/2026-07-10-p5-pulse-scheduler.md:181-183`
+  (archived 2026-08-17; original path
+  `docs/superpowers/plans/2026-07-10-p5-pulse-scheduler.md:175-177`) —
   `stale_branches: [] # [{branch, pr_number, pr_age_days}] — unmerged
   {BRANCH_PREFIX}* branches` is the only near-hit in this repo's design
   history, but it's scoped exclusively to the pulse scheduler's own

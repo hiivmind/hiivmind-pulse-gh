@@ -1,3 +1,16 @@
+> **ARCHIVED 2026-08-17.** Retired — P0 through P6 all shipped (see this
+> doc's own §8.9 tracking table, and confirmed live in code:
+> `lib/pulse/scripts/resolve_run.py`, `workflow_lint.py`,
+> `templates/workflows/release-train.yaml`'s `steps:`/`gate:` DSL). P7
+> "Housekeeping" partially shipped (`workflow_lint.py`, P7.4) but never
+> finished its two documentation deliverables (P7.2 CLAUDE.md
+> cross-cutting-concerns table, P7.3 `lib/patterns/derivation-dag.md`) —
+> both captured in `docs/backlogs/2026-08-17-lockstep-catalog-remnants.md`
+> so they aren't lost. Kept here for historical reference only — nothing
+> below is current design-of-record.
+>
+> ---
+
 # Architectural Review: Workspace Root, Headless Skills, and Composable Orchestration
 
 **Date:** 2026-07-10

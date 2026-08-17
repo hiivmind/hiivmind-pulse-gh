@@ -1,3 +1,18 @@
+> **ARCHIVED 2026-08-17.** Retired — most of this catalog's entries (§3.1
+> plan-sync, §3.2 impact-audit, §3.3 dep-coherence, §3.5 scaffold-drift,
+> §3.6.1 marketplace-sync, §3.6.2 split-repo-currency, §3.6.4
+> contract-propagation, §3.6.7 claude-md-currency) shipped under F-series
+> numbers — see `docs/backlogs/README.md`'s Status-at-a-glance table for
+> current status. The two that didn't ship are captured live in
+> `docs/backlogs/2026-08-17-branch-protection-governance-parity.md`
+> (§3.6.3 governance-parity) and
+> `docs/backlogs/2026-08-17-lockstep-catalog-remnants.md` (§3.6.5
+> milestone-alignment, §3.6.6 changelog-rollup, the fleet-membership
+> onboarding cascade, and `watch_paths` dead-glob detection). Kept here for
+> historical reference only — nothing below is current design-of-record.
+>
+> ---
+
 # Target Workflows: Lockstep Bindings Across Repos, Docs, and GitHub State
 
 **Date:** 2026-07-10
