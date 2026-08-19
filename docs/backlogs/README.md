@@ -1,11 +1,15 @@
 # hiivmind-pulse-gh — fleet program roadmap & backlog index
 
-**Updated:** 2026-08-17 (branch-governance, stale-branch, stale-release gaps captured) · **One-page map of what is built, what is left, and where each item lives.**
+**Updated:** 2026-08-19 (platform roadmap design captured) · **One-page map of what is built, what is left, and where each item lives.**
 
 > Read in this order: **Status at a glance** (what shipped) → **Layer-completeness matrix**
 > (is it actually *runnable*) → **Cross-repo dependency map** (which repos an item spans) →
 > **prioritized backlog**. The two matrices exist because "merged" kept hiding unbuilt runnable
 > layers and cross-repo assumptions — see each section's callout.
+
+> **Platform roadmap:** [`2026-08-19-platform-development-roadmap-design.md`](../superpowers/specs/2026-08-19-platform-development-roadmap-design.md)
+> records the approved direction for architecture, CI, dependencies, decisions, and delivery sequence.
+> This backlog index still needs the Phase 0 normalization that the roadmap defines.
 
 The "F-series" fleet program built a control plane that reads/scores a repo fleet, proposes
 guarded mutations, and (now) lands them. Most phases shipped as **tested libraries**; the
