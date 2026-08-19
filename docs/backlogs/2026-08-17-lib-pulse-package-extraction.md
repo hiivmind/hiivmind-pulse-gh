@@ -142,6 +142,54 @@ are *additionally* kept per-script for standalone `uv run` ergonomics is now
 a secondary, non-blocking decision — the installed-package form is required
 either way once a FastAPI consumer exists.
 
+## Amendment (2026-08-17 #2): MCP as a fourth execution surface — model-provider agnosticism
+
+Prompted by `2026-08-17-agent-native-fleet-ui-prior-art.md`: every named competitor in that
+research (Cortex.io, Port.io, Backstage's `@backstage/plugin-mcp-actions-backend`) exposes its
+governed actions as **MCP tools**, not just an HTTP API — MCP is the de facto standard bridge
+between a fleet-governance engine and *any* agent runtime, not a Claude-Code-specific concern.
+agent-native itself auto-generates an MCP surface from every `defineAction()` for the same
+reason.
+
+Today this program's only executable-by-an-agent surface is a **Claude Code skill** —
+`SKILL.md` prose plus `{PLUGIN_ROOT}`-relative `uv run` invocation. That is not a Python
+packaging limitation extraction fixes on its own; it is a *distribution* limitation: even
+after `lib/pulse` becomes an installable SDK, invoking it from an agent still means "be a
+Claude Code session running this specific plugin." A Cursor session, a Windsurf session, a
+bare `claude` CLI without the plugin installed, or any other MCP-capable agent has no path in.
+
+**Consequence for scope:** extraction's importable SDK (the FastAPI amendment above) should
+ship a **first-class MCP server** as one of its consumers — the same layer-1 functions
+(`plan_sync.build_result`, `apply_reconcile.reconcile_apply`, `healthcheck_dispatch`'s
+dispatch entry points, etc.) registered as MCP tools with the same typed, keyword-argument
+signatures, not a second implementation. Concretely this adds a fourth column to the
+"consumer" list already established by the layer-completeness ladder:
+
+| Consumer | Surface | Status |
+|---|---|---|
+| Human / script | CLI (`uv run <file>.py` today, `pulse-<verb>` post-extraction) | exists |
+| Claude Code session | Skill (`SKILL.md` + `{PLUGIN_ROOT}`-relative invocation) | exists, Claude-Code-specific |
+| Fleet UI (`2026-08-17-agent-native-fleet-ui.md`) | FastAPI HTTP, in-process import | proposed |
+| **Any MCP-capable agent** (Cursor, Windsurf, bare Claude, others) | **MCP server** | **this amendment** |
+
+This does not replace the Claude Code skill surface — `SKILL.md`'s job is orchestration
+prose, discovery, and the headless-contract result-file convention, none of which MCP tool
+definitions carry — but it does mean the skill surface stops being the *only* way an agent
+reaches `lib/pulse`. It also gives the fleet UI's proposed "LLM agent panel"
+(`2026-08-17-agent-native-fleet-ui.md` § Proposal) a second option beyond a bespoke
+FastAPI-calling chat implementation: the panel can be, or embed, an MCP client pointed at this
+program's own MCP server, reusing the exact tool surface every other agent runtime would use
+rather than re-deriving one in TypeScript.
+
+**Open design questions this amendment does not resolve:** whether the MCP server is a
+separate process from the FastAPI service or the same process exposing two protocols; whether
+MCP tool-level auth/scoping reuses the apply-mode lease/fence gate directly or needs its own
+approval-required-vs-automatic execution mode (the Port.io pattern from the prior-art doc is
+the closest precedent); and whether every layer-1 function should be MCP-exposed by default or
+only an explicit allow-list (mutating actions in particular should not be casually exposed to
+an arbitrary MCP client without the same confirmation gate the interactive skills enforce
+today). Design-first, like the rest of this item.
+
 ## Evidence
 
 - `pyproject.toml` (root) — `name = "hiivmind-pulse-gh-dev"`, `version = "0.0.0"`,
@@ -163,6 +211,13 @@ either way once a FastAPI consumer exists.
   the library/driver/skill separation this amendment leans on; `plan_sync.py`,
   `apply_reconcile.py`, `apply_rederive.py` confirm pure, typed, keyword-only
   library-layer function signatures already exist independent of argparse.
+- [`2026-08-17-agent-native-fleet-ui-prior-art.md`](2026-08-17-agent-native-fleet-ui-prior-art.md)
+  — prior-art research: Cortex.io, Port.io, and Backstage's
+  `@backstage/plugin-mcp-actions-backend` all standardize on MCP as the
+  agent-bridge protocol for governed actions, motivating amendment #2 above.
+- [`BuilderIO/agent-native`](https://github.com/BuilderIO/agent-native) —
+  `defineAction()` auto-generates an MCP tool alongside UI/HTTP/CLI surfaces
+  from one definition, the same pattern amendment #2 proposes for `lib/pulse`.
 
 ## Notes
 
@@ -172,4 +227,9 @@ program's backlog convention (see `2026-08-13-f4-deferred-scope.md` /
 design-first, not implementation-first: the PEP-723-vs-installed-package fork
 above needs settling before any code moves, and it changes the shape of every
 skill in this repo, so it should get its own `brainstorming` → spec pass
-rather than being folded into an unrelated change.
+rather than being folded into an unrelated change. Amendment #2's MCP surface
+is the same design-first constraint: it decides whether this program remains
+reachable only from a Claude Code plugin session or becomes usable by any
+MCP-capable agent, which changes the shape of the extraction's public API
+surface (what's MCP-exposed vs. allow-listed) and should be settled in the
+same spec pass, not bolted on after the FastAPI boundary ships.
