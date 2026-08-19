@@ -160,6 +160,8 @@ Therefore, schema and command changes have cross-repository consumers.
 - Read and action surface inventory
 - Explicit product non-goals
 
+**Design specification:** [PF-09 fleet operations product contract](2026-08-20-pf09-fleet-operations-product-contract-design.md)
+
 **Output:** A product contract that provides consumer requirements to PF-01.
 
 ### 5.2 PF-01: Platform ownership and public SDK surface
