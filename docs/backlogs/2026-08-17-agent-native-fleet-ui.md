@@ -74,19 +74,27 @@ story for the "projects, statuses" half of the ask.
 
 ## What this would require (real scope)
 
-- **A cross-language action boundary — resolved direction: FastAPI, not raw
-  subprocess shell-out.** agent-native is TypeScript/Node; `lib/pulse` is
-  Python, `nave` is Rust. Rather than each `defineAction()`'s `run()` body
-  shelling out to a CLI per call, the likely shape is agent-native calling a
-  **FastAPI service** fronting `lib/pulse` (in-process Python calls) and,
-  once bound, Nave (in-process Rust calls via PyO3) — see the amendment in
-  `2026-08-17-lib-pulse-package-extraction.md` and the new
-  `2026-08-17-nave-python-bindings.md`. This item still depends on both
-  landing first: a Node process has no natural way to resolve a
-  Claude-plugin-root-relative script path or reach into a Python/Rust
-  process's memory directly, so an HTTP boundary (FastAPI) is the
-  connecting layer regardless of whether the Python/Rust side is
-  subprocess- or import-based underneath it.
+- **A cross-language action boundary — resolved direction: FastAPI for UI
+  data, MCP for agent execution.** agent-native is TypeScript/Node;
+  `lib/pulse` is Python, `nave` is Rust. Rather than each `defineAction()`'s
+  `run()` body shelling out to a CLI per call, the likely shape is agent-native
+  calling a **FastAPI service** fronting `lib/pulse` (in-process Python calls)
+  and, once bound, Nave (in-process Rust calls via PyO3) for the UI's own
+  reads/mutations — see the amendment in `2026-08-17-lib-pulse-package-extraction.md`
+  and the new `2026-08-17-nave-python-bindings.md`. **That same extraction's
+  amendment #2 adds an MCP server as a parallel consumer of the SDK** — the
+  proposed "LLM agent panel" (§ Proposal) does not need a bespoke
+  FastAPI-calling chat implementation of its own; it can be, or embed, an MCP
+  client against `lib/pulse`'s own MCP server, the same tool surface any other
+  MCP-capable agent (Cursor, Windsurf, a bare Claude session) would use. This
+  is also the change that makes the fleet program model-provider-agnostic:
+  today it is reachable only as a Claude Code plugin session; an MCP surface
+  makes the governed actions reachable from any MCP-capable agent, not just
+  this UI's embedded one. This item still depends on both landing first: a
+  Node process has no natural way to resolve a Claude-plugin-root-relative
+  script path or reach into a Python/Rust process's memory directly, so a
+  boundary (FastAPI and/or MCP) is the connecting layer regardless of whether
+  the Python/Rust side is subprocess- or import-based underneath it.
 - **A read model for existing result contracts and committed state.** Actions
   reading `*-result.yaml` (per-machine, gitignored, transient — see
   `workspace-detection.md` § multi-machine topology), the committed
@@ -138,6 +146,10 @@ story for the "projects, statuses" half of the ask.
 - `docs/superpowers/specs/2026-07-30-apply-mode-production-wiring-design.md`
   — the lease/fence/journal apply-mode machinery an "Approve" button must
   drive through, not bypass.
+- [`2026-08-17-agent-native-fleet-ui-prior-art.md`](2026-08-17-agent-native-fleet-ui-prior-art.md)
+  — prior-art research: this job-to-be-done is already sold by agentic-IDP
+  vendors (Cortex.io closest match, also Port.io/OpsLevel/Backstage); surfaces
+  a build-vs-buy-vs-wedge fork the brainstorming pass must resolve.
 
 ## Notes
 
