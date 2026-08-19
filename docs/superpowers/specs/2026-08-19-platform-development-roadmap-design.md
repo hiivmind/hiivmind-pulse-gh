@@ -1,7 +1,7 @@
 # Platform Development Roadmap Design
 
 **Date:** 2026-08-19  
-**Status:** Draft for written review  
+**Status:** Approved  
 **Decision:** The platform direction is committed  
 **Scope:** Architecture, test and CI strategy, dependency map, decision register, and delivery sequence
 
@@ -11,6 +11,9 @@ This document defines the development roadmap for the Hiivmind Pulse platform.
 It replaces backlog order with an evidence-based delivery sequence.
 It does not replace the detailed design for each program.
 Each program still needs its own design and implementation plan.
+
+The [platform foundation program map](2026-08-19-platform-foundation-program-decomposition-design.md)
+decomposes Phases 0 and 1 into separate review units.
 
 The roadmap uses the live code, workspace configuration, tests, and sibling repositories as evidence.
 Backlog labels alone are not evidence of implementation status.

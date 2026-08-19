@@ -1,15 +1,16 @@
 # hiivmind-pulse-gh — fleet program roadmap & backlog index
 
-**Updated:** 2026-08-19 (platform roadmap design captured) · **One-page map of what is built, what is left, and where each item lives.**
+**Updated:** 2026-08-19 (platform foundation programs decomposed) · **One-page map of what is built, what is left, and where each item lives.**
 
 > Read in this order: **Status at a glance** (what shipped) → **Layer-completeness matrix**
 > (is it actually *runnable*) → **Cross-repo dependency map** (which repos an item spans) →
 > **prioritized backlog**. The two matrices exist because "merged" kept hiding unbuilt runnable
 > layers and cross-repo assumptions — see each section's callout.
 
-> **Platform roadmap:** [`2026-08-19-platform-development-roadmap-design.md`](../superpowers/specs/2026-08-19-platform-development-roadmap-design.md)
-> records the approved direction for architecture, CI, dependencies, decisions, and delivery sequence.
-> This backlog index still needs the Phase 0 normalization that the roadmap defines.
+> **Platform designs:** The [platform roadmap](../superpowers/specs/2026-08-19-platform-development-roadmap-design.md)
+> defines the architecture and delivery sequence. The [platform foundation program map](../superpowers/specs/2026-08-19-platform-foundation-program-decomposition-design.md)
+> decomposes Phases 0 and 1 into nine separately reviewed programs.
+> This backlog index still needs the PF-02 and PF-03 Phase 0 normalization.
 
 The "F-series" fleet program built a control plane that reads/scores a repo fleet, proposes
 guarded mutations, and (now) lands them. Most phases shipped as **tested libraries**; the
@@ -229,6 +230,7 @@ side's interactive path now runs too — single-repo, multi-repo (#147), and dep
 > the wrong repo) both come from skipping this step.
 
 ## Backlog docs (full detail lives here)
+- [`2026-08-19-platform-foundation-program-decomposition-design.md`](../superpowers/specs/2026-08-19-platform-foundation-program-decomposition-design.md) — nine-program decomposition for platform roadmap Phases 0 and 1
 - [`2026-08-15-multi-repo-apply.md`](../superpowers/plans/2026-08-15-multi-repo-apply.md) — multi-repo apply v2 implementation plan
 - [`2026-08-15-multi-repo-apply-design.md`](../superpowers/specs/2026-08-15-multi-repo-apply-design.md) — multi-repo apply v2 design spec
 - [`2026-08-15-dependency-bump-handoff-design.md`](../superpowers/specs/2026-08-15-dependency-bump-handoff-design.md) — F11 dependency-bump handoff design spec
